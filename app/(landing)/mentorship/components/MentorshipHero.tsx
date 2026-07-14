@@ -13,7 +13,7 @@ export default function MentorshipHero() {
       >
         {/* Background Image using next/image */}
         <Image
-          src="https://images.unsplash.com/photo-1541888086425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop"
+          src="https://res.cloudinary.com/depeqzb6z/image/upload/v1784068947/mentorship_hero_cjqjy1.png"
           alt="Mentorship Background"
           fill
           priority
@@ -40,7 +40,7 @@ export default function MentorshipHero() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-5xl font-bold tracking-tight text-[#ffffff] leading-tight max-w-2xl font-sans"
+              className="text-2xl sm:text-4xl md:text-5xl lg:text-4xl font-bold tracking-tight text-[#ffffff] leading-tight max-w-2xl font-sans"
             >
               Construction Mentorship & <br className="hidden sm:block" />
               Professional Growth
