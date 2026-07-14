@@ -2,19 +2,23 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 export default function HeroSection() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <section
         className="relative w-full h-[540px] md:h-[620px] lg:h-[700px] rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500"
-        style={{
-          backgroundImage: `url('https://res.cloudinary.com/depeqzb6z/image/upload/f_auto,q_auto/v1779868806/Make_it_look_like_an_202605192308_1_rdayse.png')`,
-          backgroundPosition: "center",
-          backgroundSize: "cover",
-          backgroundRepeat: "no-repeat"
-        }}
       >
+        {/* Background Image using next/image */}
+        <Image
+          src="https://res.cloudinary.com/depeqzb6z/image/upload/f_auto,q_auto/v1779868806/Make_it_look_like_an_202605192308_1_rdayse.png"
+          alt="Hero Background"
+          fill
+          priority
+          className="object-cover z-0"
+        />
+
         {/* Overlay for optimal readability strictly using brand dark #0F181F */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#0F181F]/90 via-[#0F181F]/50 to-transparent z-10" />
 

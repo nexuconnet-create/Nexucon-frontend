@@ -2,6 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 export default function HowMentorshipWorks() {
   const steps = [
@@ -30,14 +31,15 @@ export default function HowMentorshipWorks() {
   return (
     <section className="relative w-full py-24">
       {/* Background Image */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: "url('https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=2000&auto=format&fit=crop')"
-        }}
-      >
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        <Image
+          src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=2000&auto=format&fit=crop"
+          alt="How Mentorship Works"
+          fill
+          className="object-cover"
+        />
         {/* Dark overlay */}
-        <div className="absolute inset-0 bg-[#0F181F]/80" />
+        <div className="absolute inset-0 bg-[#0F181F]/80 z-10" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
