@@ -31,15 +31,14 @@ export default function WhyNexuconSection() {
           className="lg:col-span-5 relative mt-8 lg:mt-0"
         >
           <div className="w-full h-full min-h-[400px] lg:min-h-0 relative">
-            <div
-              className="absolute inset-0 rounded-[2rem] shadow-xl overflow-hidden"
-              style={{
-                backgroundImage: `url('https://res.cloudinary.com/depeqzb6z/image/upload/f_auto,q_auto/v1783902995/imagesidesection_wtddix.png')`,
-                backgroundPosition: "center",
-                backgroundSize: "cover"
-              }}
-            >
-              <div className="absolute inset-0 bg-[#0F181F]/30" />
+            <div className="absolute inset-0 rounded-[2rem] shadow-xl overflow-hidden">
+              <Image
+                src="https://res.cloudinary.com/depeqzb6z/image/upload/f_auto,q_auto/v1783902995/imagesidesection_wtddix.png"
+                alt="Why Nexucon"
+                fill
+                className="object-cover z-0"
+              />
+              <div className="absolute inset-0 bg-[#0F181F]/30 z-10" />
             </div>
 
             {/* Floating Why Nexucon tag */}

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -20,13 +21,13 @@ export default function SecurePaymentsSection() {
   return (
     <section
       className="w-full py-16 lg:py-24 relative z-10 overflow-hidden bg-cover bg-center text-[#ffffff]"
-      style={{
-        backgroundImage: `url('https://res.cloudinary.com/depeqzb6z/image/upload/v1779946280/__1_1_yl2uli.png')`,
-        backgroundPosition: "center",
-        backgroundSize: "cover",
-        backgroundRepeat: "no-repeat"
-      }}
     >
+      <Image
+        src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779946280/__1_1_yl2uli.png"
+        alt="Secure Payments Background"
+        fill
+        className="object-cover z-0"
+      />
       {/* Strict Brand Dark Overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#0F181F]/95 via-[#022C4F]/90 to-[#0F181F]/90 z-10" />
 

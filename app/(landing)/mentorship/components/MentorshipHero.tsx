@@ -3,19 +3,23 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function MentorshipHero() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
       <section
         className="relative w-full h-[400px] md:h-[500px] lg:h-[600px] rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500"
-        style={{
-          backgroundImage: "url('https://images.unsplash.com/photo-1541888086425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop')",
-          backgroundPosition: "center",
-          backgroundSize: "cover",
-          backgroundRepeat: "no-repeat"
-        }}
       >
+        {/* Background Image using next/image */}
+        <Image
+          src="https://images.unsplash.com/photo-1541888086425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop"
+          alt="Mentorship Background"
+          fill
+          priority
+          className="object-cover z-0"
+        />
+
         {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#0F181F]/90 via-[#0F181F]/60 to-[#0F181F]/20 z-10" />
 
