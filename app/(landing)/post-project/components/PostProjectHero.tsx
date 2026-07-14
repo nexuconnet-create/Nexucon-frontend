@@ -39,7 +39,7 @@ export default function PostProjectHero() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-[#ffffff] leading-tight max-w-2xl font-sans"
+              className="text-2xl sm:text-4xl md:text-5xl lg:text-4xl font-bold tracking-tight text-[#ffffff] leading-tight max-w-2xl font-sans"
             >
               Post Your <br className="hidden sm:block" /> Construction Project
             </motion.h1>

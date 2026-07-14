@@ -17,7 +17,7 @@ export default function BecomeMentor() {
   return (
     <section className="w-full bg-[#ffffff] pb-12 px-4 sm:px-6 lg:px-8" id="become-mentor">
       <div className="max-w-7xl mx-auto">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -27,10 +27,10 @@ export default function BecomeMentor() {
           {/* Left Side: Image */}
           <div className="w-full md:w-1/2 relative min-h-[400px] md:min-h-auto">
             <Image
-              src="https://images.unsplash.com/photo-1504307651254-35680f356f27?q=80&w=2000&auto=format&fit=crop"
+              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1784069562/Create_a_male_similar_but_202605261102-Photoroom_1_cuwexr.png"
               alt="Construction Mentors"
               fill
-              className="object-cover"
+              className="object-contain object-bottom scale-110 md:scale-125 origin-bottom"
             />
           </div>
 
@@ -54,7 +54,7 @@ export default function BecomeMentor() {
                 ))}
               </ul>
             </div>
-            
+
             <div className="mt-8">
               <button className="bg-[#ffffff] hover:bg-gray-100 text-[#022C4F] px-8 py-3 rounded-xl font-bold transition-all w-fit shadow-md">
                 Apply to be a Mentor
