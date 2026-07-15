@@ -3,8 +3,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function MentorshipPlans() {
+  const { openAuthModal } = useAuthModal();
   return (
     <section className="w-full bg-[#ffffff] py-24 px-4 sm:px-6 lg:px-8" id="plans">
       <div className="max-w-7xl mx-auto">
@@ -56,7 +58,10 @@ export default function MentorshipPlans() {
               </ul>
             </div>
 
-            <button className="w-full bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] py-4 rounded-xl font-bold transition-all mt-auto shadow-md">
+            <button 
+              onClick={() => openAuthModal("register")}
+              className="w-full bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] py-4 rounded-xl font-bold transition-all mt-auto shadow-md"
+            >
               Get Started for Free
             </button>
           </motion.div>
@@ -80,7 +85,10 @@ export default function MentorshipPlans() {
                     ₦5,000 <span className="text-lg text-[#0F181F]/50 font-medium">/ month</span>
                   </div>
                 </div>
-                <button className="w-full md:w-auto bg-transparent border-2 border-[#022C4F] text-[#022C4F] hover:bg-[#022C4F] hover:text-[#ffffff] py-3 px-8 rounded-xl font-bold transition-all">
+                <button 
+                  onClick={() => openAuthModal("register")}
+                  className="w-full md:w-auto bg-transparent border-2 border-[#022C4F] text-[#022C4F] hover:bg-[#022C4F] hover:text-[#ffffff] py-3 px-8 rounded-xl font-bold transition-all"
+                >
                   Select Professional
                 </button>
               </div>

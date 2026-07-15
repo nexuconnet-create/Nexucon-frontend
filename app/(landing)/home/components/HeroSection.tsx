@@ -3,8 +3,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function HeroSection() {
+  const { openAuthModal } = useAuthModal();
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <section
@@ -67,7 +69,10 @@ export default function HeroSection() {
             >
 
               {/* Post a Project Button (glassmorphic dark #0F181F variant) */}
-              <button className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-[#ffffff] bg-[#0F181F]/80 hover:bg-[#0F181F] border border-[#ffffff]/15 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 active:scale-98 text-center flex items-center justify-center gap-2 group backdrop-blur-md">
+              <button 
+                onClick={() => openAuthModal("register")}
+                className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-[#ffffff] bg-[#0F181F]/80 hover:bg-[#0F181F] border border-[#ffffff]/15 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 active:scale-98 text-center flex items-center justify-center gap-2 group backdrop-blur-md"
+              >
                 Post a Project
                 <svg
                   className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
@@ -81,7 +86,10 @@ export default function HeroSection() {
               </button>
 
               {/* Find Construction Professionals Button (Solid brand blue #022C4F) */}
-              <button className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-[#ffffff] bg-[#022C4F] hover:bg-[#022C4F]/90 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 active:scale-98 text-center flex items-center justify-center gap-2 group">
+              <button 
+                onClick={() => openAuthModal("register")}
+                className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-[#ffffff] bg-[#022C4F] hover:bg-[#022C4F]/90 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 active:scale-98 text-center flex items-center justify-center gap-2 group"
+              >
                 Find Construction Professionals
                 <svg
                   className="w-4 h-4 text-[#ffffff] transition-transform duration-300 group-hover:translate-x-1"

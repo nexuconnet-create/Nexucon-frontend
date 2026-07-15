@@ -3,8 +3,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function MentorshipCta() {
+  const { openAuthModal } = useAuthModal();
   return (
     <section className="w-full bg-[#ffffff] py-24 px-4 sm:px-6 lg:px-8">
       <motion.div
@@ -26,7 +28,10 @@ export default function MentorshipCta() {
           <p className="text-sm md:text-base text-[#ffffff]/80 leading-relaxed mb-10 max-w-xl font-medium">
             Whether you are looking to accelerate your career or share your expertise, Nexucon Mentorship provides the perfect platform to connect, grow, and succeed.
           </p>
-          <button className="bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] text-[15px] font-bold px-12 py-4 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
+          <button 
+            onClick={() => openAuthModal("register")}
+            className="bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] text-[15px] font-bold px-12 py-4 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+          >
             Get Started
           </button>
         </div>

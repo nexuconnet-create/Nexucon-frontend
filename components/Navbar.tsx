@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useAuthModal } from "./AuthModalContext";
 
 const navLinks = [
   { name: "Home", href: "/home" },
@@ -16,6 +17,7 @@ const navLinks = [
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const { openAuthModal } = useAuthModal();
   const pathname = usePathname();
 
   // Close mobile menu when route changes
@@ -63,24 +65,22 @@ export default function Navbar() {
 
         {/* DESKTOP CTAs */}
         <div className="hidden lg:flex items-center gap-3">
-          <Link
-            href="/professionals"
-            className="w-[150px] h-[50px] flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-[#ffffff] bg-[#0F181F] rounded-lg transition-all duration-200 hover:bg-[#0F181F]/90 hover:shadow-md active:scale-95 text-center leading-none"
+          <button
+            onClick={() => {
+              openAuthModal("login");
+            }}
+            className="w-[100px] h-[50px] flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-[#022C4F] border-2 border-[#022C4F] bg-transparent rounded-lg transition-all duration-200 hover:bg-[#022C4F]/5 hover:shadow-md active:scale-95 text-center leading-none"
           >
-            Find Professionals
-          </Link>
-          <Link
-            href="/register"
-            className="w-[150px] h-[50px] flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-[#ffffff] bg-[#022C4F] rounded-lg transition-all duration-200 hover:bg-[#022C4F]/90 hover:shadow-md active:scale-95 text-center leading-none"
-          >
-            Get Started
-          </Link>
-          {/* <Link
-            href="/register"
-            className="w-[150px] h-[50px] flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-[#022C4F] border border-[#022C4F] bg-transparent rounded-lg transition-all duration-200 hover:bg-[#022C4F]/5 hover:shadow-md active:scale-95 text-center leading-none"
+            Log In
+          </button>
+          <button
+            onClick={() => {
+              openAuthModal("register");
+            }}
+            className="w-[130px] h-[50px] flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-[#ffffff] bg-[#022C4F] rounded-lg transition-all duration-200 hover:bg-[#022C4F]/90 hover:shadow-md active:scale-95 text-center leading-none"
           >
             Get Started
-          </Link> */}
+          </button>
         </div>
 
         {/* MOBILE MENU BUTTON */}
@@ -155,18 +155,24 @@ export default function Navbar() {
 
         {/* Buttons in Mobile Menu */}
         <div className="flex flex-col gap-3 pt-6 border-t border-[#0F181F]/10">
-          <Link
-            href="/professionals"
-            className="w-full py-3 text-center text-sm font-bold text-[#ffffff] bg-[#0F181F] rounded-xl transition-all hover:bg-[#0F181F]/90"
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              openAuthModal("login");
+            }}
+            className="w-full py-3 text-center text-sm font-bold text-[#022C4F] border-2 border-[#022C4F] bg-transparent rounded-xl transition-all hover:bg-[#022C4F]/5"
           >
-            Find Professionals
-          </Link>
-          <Link
-            href="/register"
+            Log In
+          </button>
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              openAuthModal("register");
+            }}
             className="w-full py-3 text-center text-sm font-bold text-[#ffffff] bg-[#022C4F] rounded-xl transition-all hover:bg-[#022C4F]/90"
           >
             Get Started
-          </Link>
+          </button>
         </div>
       </div>
     </nav>

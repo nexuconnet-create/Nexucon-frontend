@@ -3,8 +3,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function CtaSection() {
+  const { openAuthModal } = useAuthModal();
   return (
     <section className="w-full bg-[#ffffff] py-24 relative overflow-hidden">
       {/* Nexucon Watermark */}
@@ -41,10 +43,16 @@ export default function CtaSection() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-          <button className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-[#022C4F] hover:bg-[#022C4F]/90 text-[#ffffff] transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-98">
+          <button 
+            onClick={() => openAuthModal("register")}
+            className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-[#022C4F] hover:bg-[#022C4F]/90 text-[#ffffff] transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-98"
+          >
             Get Started Now
           </button>
-          <button className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-[#0F181F] hover:bg-[#0F181F]/90 text-[#ffffff] transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-98">
+          <button 
+            onClick={() => openAuthModal("register")}
+            className="w-full sm:w-auto px-8 py-4 rounded-xl font-bold bg-[#0F181F] hover:bg-[#0F181F]/90 text-[#ffffff] transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-98"
+          >
             Become a Verified Professional
           </button>
         </div>
