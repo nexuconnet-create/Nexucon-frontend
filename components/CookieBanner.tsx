@@ -10,6 +10,7 @@ export default function CookieBanner() {
     // Check if user has already accepted or declined cookies
     const cookiePreference = localStorage.getItem("cookie_preference");
     if (!cookiePreference) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(true);
     }
   }, []);
@@ -39,7 +40,7 @@ export default function CookieBanner() {
             <div className="flex-1">
               <h3 className="text-white font-bold text-lg mb-2">We value your privacy</h3>
               <p className="text-white/70 text-sm md:text-base leading-relaxed">
-                We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.
+                We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking &quot;Accept All&quot;, you consent to our use of cookies.
               </p>
             </div>
 
