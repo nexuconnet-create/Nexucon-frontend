@@ -3,8 +3,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function FindProfessionalsHero() {
+  const { openAuthModal } = useAuthModal();
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <section
@@ -62,11 +64,17 @@ export default function FindProfessionalsHero() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4"
             >
-              <button className="w-full sm:w-auto px-8 py-4 text-[14px] font-bold text-[#ffffff] bg-[#022C4F] hover:bg-[#022C4F]/90 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 text-center flex items-center justify-center">
+              <button 
+                onClick={() => openAuthModal("register")}
+                className="w-full sm:w-auto px-8 py-4 text-[14px] font-bold text-[#ffffff] bg-[#022C4F] hover:bg-[#022C4F]/90 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 text-center flex items-center justify-center"
+              >
                 Hire Professionals
               </button>
 
-              <button className="w-full sm:w-auto px-8 py-4 text-[14px] font-bold text-[#ffffff] bg-[#0F181F]/80 hover:bg-[#0F181F] border border-[#ffffff]/15 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 text-center flex items-center justify-center backdrop-blur-md">
+              <button 
+                onClick={() => openAuthModal("register")}
+                className="w-full sm:w-auto px-8 py-4 text-[14px] font-bold text-[#ffffff] bg-[#0F181F]/80 hover:bg-[#0F181F] border border-[#ffffff]/15 rounded-xl transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-0.5 text-center flex items-center justify-center backdrop-blur-md"
+              >
                 Post a Project
               </button>
             </motion.div>
