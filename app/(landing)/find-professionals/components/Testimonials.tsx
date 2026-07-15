@@ -109,7 +109,7 @@ export default function Testimonials() {
                   </svg>
                   
                   <p className="text-white/90 text-[14px] leading-relaxed mb-8 flex-grow">
-                    "{testimonial.quote}"
+                    &quot;{testimonial.quote}&quot;
                   </p>
                   
                   <div className="mt-auto">
