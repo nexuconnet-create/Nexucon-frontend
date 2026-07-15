@@ -2,8 +2,10 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function FindProfessionalsCta() {
+  const { openAuthModal } = useAuthModal();
   return (
     <section className="w-full bg-[#ffffff] pb-24 px-4 sm:px-6 lg:px-8">
       <motion.div
@@ -21,7 +23,10 @@ export default function FindProfessionalsCta() {
           <p className="text-[#ffffff]/80 text-[14px] leading-relaxed mb-8 max-w-md">
             Find experienced and verified construction experts for residential, commercial, and infrastructure projects through Nexucon.
           </p>
-          <button className="bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] text-[14px] font-bold px-10 py-4 rounded-xl transition-all shadow-lg hover:-translate-y-1">
+          <button 
+            onClick={() => openAuthModal("register")}
+            className="bg-[#022C4F] hover:bg-[#021c33] text-[#ffffff] text-[14px] font-bold px-10 py-4 rounded-xl transition-all shadow-lg hover:-translate-y-1"
+          >
             Get Started
           </button>
         </div>

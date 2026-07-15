@@ -4,8 +4,10 @@ import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { CheckCircle } from "lucide-react";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 export default function BecomeMentor() {
+  const { openAuthModal } = useAuthModal();
   const benefits = [
     "Share your industry expertise",
     "Build your professional brand",
@@ -56,7 +58,10 @@ export default function BecomeMentor() {
             </div>
 
             <div className="mt-8">
-              <button className="bg-[#ffffff] hover:bg-gray-100 text-[#022C4F] px-8 py-3 rounded-xl font-bold transition-all w-fit shadow-md">
+              <button 
+                onClick={() => openAuthModal("register")}
+                className="bg-[#ffffff] hover:bg-gray-100 text-[#022C4F] px-8 py-3 rounded-xl font-bold transition-all w-fit shadow-md"
+              >
                 Apply to be a Mentor
               </button>
             </div>

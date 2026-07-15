@@ -3,6 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useAuthModal } from "@/components/AuthModalContext";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -18,6 +19,7 @@ const tagVariants = {
 };
 
 export default function HireProfessionalsSection() {
+  const { openAuthModal } = useAuthModal();
   return (
     <section className="w-full bg-[#0F181F] text-[#ffffff] rounded-3xl pt-24 overflow-hidden relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
@@ -50,7 +52,10 @@ export default function HireProfessionalsSection() {
                 Connect with trusted contractors, engineers, architects, and construction specialists verified for quality, professionalism, and project delivery excellence.
               </p>
               <div className="pt-4">
-                <button className="w-full max-w-[305px] h-auto min-h-[78px] py-4 flex items-center justify-center rounded-xl text-lg font-bold bg-[#022C4F] hover:bg-[#022C4F]/90 text-[#ffffff] transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-1 active:scale-95">
+                <button 
+                  onClick={() => openAuthModal("register")}
+                  className="w-full max-w-[305px] h-auto min-h-[78px] py-4 flex items-center justify-center rounded-xl text-lg font-bold bg-[#022C4F] hover:bg-[#022C4F]/90 text-[#ffffff] transition-all duration-300 shadow-lg hover:shadow-2xl hover:-translate-y-1 active:scale-95"
+                >
                   Hire Now
                 </button>
               </div>
