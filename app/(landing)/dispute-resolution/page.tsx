@@ -30,7 +30,7 @@ export default function DisputeResolutionPage() {
 
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-[#0F181F]">4. Binding Decision</h2>
-          <p>The Nexucon mediation team will make a binding decision based on the evidence provided and the platform's Terms of Service. Funds held in escrow will be released according to this decision.</p>
+          <p>The Nexucon mediation team will make a binding decision based on the evidence provided and the platform&apos;s Terms of Service. Funds held in escrow will be released according to this decision.</p>
         </section>
       </div>
     </div>

@@ -17,6 +17,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
 
   // Reset mode if initialMode changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMode(initialMode);
   }, [initialMode, isOpen]);
 

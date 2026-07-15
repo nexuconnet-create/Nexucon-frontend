@@ -32,7 +32,7 @@ export default function MentorshipIntro() {
           className="flex-1"
         >
           <p className="text-[#0F181F]/70 text-base md:text-lg leading-relaxed mb-6 font-medium">
-            Nexucon's mentorship program connects emerging talent with seasoned industry veterans. Whether you're looking to accelerate your career or give back to the community, our platform provides the tools, structure, and network to make meaningful professional connections.
+            Nexucon&apos;s mentorship program connects emerging talent with seasoned industry veterans. Whether you&apos;re looking to accelerate your career or give back to the community, our platform provides the tools, structure, and network to make meaningful professional connections.
           </p>
           <p className="text-[#0F181F]/70 text-base md:text-lg leading-relaxed font-medium">
             Join a community dedicated to excellence, continuous learning, and shaping the future of the construction industry.
