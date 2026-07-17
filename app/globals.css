@@ -71,4 +71,10 @@ html, body {
   border: 1px solid rgba(15, 24, 31, 0.1);
 }
 
-
+@utility hide-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
