@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Building2, HardHat, GraduationCap } from "lucide-react";
+import { X, Building2, HardHat, GraduationCap, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface AuthRoleModalProps {
@@ -35,8 +35,8 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
 
   const handleRoleSelect = (role: string) => {
     onClose();
-    // Navigate to the appropriate auth page with the role as a query param
-    router.push(`/${mode}?role=${role}`);
+    // Navigate to the appropriate auth page based on the role and mode
+    router.push(`/${role}/${mode}`);
   };
 
   const roles = [
@@ -55,8 +55,15 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       color: "bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-500",
     },
     {
-      id: "junior",
-      title: "Junior Engineer",
+      id: "mentor",
+      title: "Mentor",
+      description: "Guide emerging talent, share industry expertise, and give back.",
+      icon: <Users size={24} />,
+      color: "bg-purple-50 text-purple-700 border-purple-200 hover:border-purple-500",
+    },
+    {
+      id: "mentee",
+      title: "Mentee",
       description: "Learn from mentors, build your skills, and start your career.",
       icon: <GraduationCap size={24} />,
       color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-500",
