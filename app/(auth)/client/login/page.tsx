@@ -3,9 +3,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
 
 export default function ClientLogin() {
+  const router = useRouter();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +33,12 @@ export default function ClientLogin() {
     if (Object.keys(newErrors).length === 0) {
       // Proceed with login
       console.log('Login successful', formData);
+      router.push("/client/dashboard");
     }
+  };
+
+  const handleGuestLogin = () => {
+    router.push("/client/dashboard");
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -189,6 +196,7 @@ export default function ClientLogin() {
               </button>
               <button
                 type="button"
+                onClick={handleGuestLogin}
                 className="w-full py-4 bg-[#0F181F] hover:bg-black text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
               >
                 Login as Guest
