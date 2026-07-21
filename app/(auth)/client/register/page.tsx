@@ -304,14 +304,16 @@ export default function ClientRegister() {
                   {errors.phone && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.phone}</span>}
                 </div>
 
-                <div className="flex flex-col gap-2 relative">
+                <div className="flex flex-col gap-2 relative z-50">
                   <label className="text-sm font-bold text-[#022C4F]">Select Roles</label>
                   <CustomSelect
                     value={formData.role}
                     onChange={(val) => handleInputChange('role', val)}
                     options={[
                       { value: "client", label: "Project Owner" },
-                      { value: "professional", label: "Client Representative" }
+                      { value: "professional", label: "Client Representative" },
+                      { value: "government", label: "Government Agency" },
+                      { value: "non-government", label: "NGOs"}
                     ]}
                     placeholder="Select Role"
                     error={errors.role}
@@ -779,7 +781,7 @@ export default function ClientRegister() {
             </p>
 
             <Link
-              href="/onboarding"
+              href="/client/onboarding"
               className="flex items-center justify-center w-full py-4 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl font-semibold transition-all shadow-md active:scale-[0.98]"
             >
               Start Onboarding
