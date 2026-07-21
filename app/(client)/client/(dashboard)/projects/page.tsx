@@ -7,6 +7,8 @@ import NotificationCenter from "@/components/dashboard/NotificationCenter";
 import ReviewDrawingDrawer from "@/components/dashboard/ReviewDrawingDrawer";
 import FinalApprovalDrawer from "@/components/dashboard/FinalApprovalDrawer";
 import ApprovalSuccessModal from "@/components/dashboard/ApprovalSuccessModal";
+import Button from "@/components/ui/Button"
+import ProfilePill from "@/components/ui/ProfilePill";
 
 export default function MyProjectsPage() {
   const router = useRouter();
@@ -81,10 +83,10 @@ export default function MyProjectsPage() {
 
   return (
     <div className="space-y-10 relative pb-12 w-full animate-in fade-in duration-500">
-      
+
       {/* Invisible Overlay for click outside */}
       {openDropdown !== null && (
-        <div 
+        <div
           className="fixed inset-0 z-40"
           onClick={() => setOpenDropdown(null)}
         />
@@ -115,23 +117,16 @@ export default function MyProjectsPage() {
             </button>
 
             {/* Profile Pill */}
-            <div className="flex items-center gap-3 px-3 py-1.5 rounded-full border border-[#022C4F] bg-white cursor-pointer hover:bg-gray-50 transition-colors shrink-0 min-w-[200px]">
-              <div className="w-8 h-8 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                JD
-              </div>
-              <div className="flex flex-col justify-center">
-                <span className="text-[11px] font-bold text-[#0F181F] leading-tight">John Doe</span>
-                <span className="text-[9px] font-medium text-[#0F181F] leading-tight mt-0.5">client@nexucon.tech</span>
-              </div>
-            </div>
+            <ProfilePill />
           </div>
 
-          <button
+          <Button
             onClick={() => router.push('/client/design-workspace')}
-            className="px-8 py-3.5 bg-[#022C4F] mt-10 text-white text-[13px] font-bold rounded-full shadow-md hover:bg-[#033A6B] hover:shadow-lg transition-all duration-300 ease-out"
+            variant="primary"
+            className="mt-10"
           >
             Go to Design Workspace
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -209,7 +204,7 @@ export default function MyProjectsPage() {
                   <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] text-center">{project.pendingReviews}</td>
                   <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.nextMilestone}</td>
                   <td className="py-5 px-4 text-center relative">
-                    <button 
+                    <button
                       onClick={() => setOpenDropdown(openDropdown === project.id ? null : project.id)}
                       className="text-[#022C4F] hover:bg-gray-100 rounded transition-colors p-1"
                     >
@@ -217,19 +212,19 @@ export default function MyProjectsPage() {
                     </button>
                     {openDropdown === project.id && (
                       <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 py-1.5 flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <button 
+                        <button
                           onClick={() => { setOpenDropdown(null); router.push('/client/design-workspace'); }}
                           className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
                         >
                           Go to Project Workspace
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setOpenDropdown(null); setIsReviewDrawerOpen(true); }}
                           className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
                         >
                           Review Drawings
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setOpenDropdown(null); setIsFinalApprovalDrawerOpen(true); }}
                           className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
                         >
@@ -245,14 +240,14 @@ export default function MyProjectsPage() {
         </div>
       </div>
 
-      <ReviewDrawingDrawer 
-        isOpen={isReviewDrawerOpen} 
-        onClose={() => setIsReviewDrawerOpen(false)} 
+      <ReviewDrawingDrawer
+        isOpen={isReviewDrawerOpen}
+        onClose={() => setIsReviewDrawerOpen(false)}
       />
 
-      <FinalApprovalDrawer 
-        isOpen={isFinalApprovalDrawerOpen} 
-        onClose={() => setIsFinalApprovalDrawerOpen(false)} 
+      <FinalApprovalDrawer
+        isOpen={isFinalApprovalDrawerOpen}
+        onClose={() => setIsFinalApprovalDrawerOpen(false)}
         onApprove={() => {
           setIsFinalApprovalDrawerOpen(false);
           setIsApprovalSuccessModalOpen(true);
