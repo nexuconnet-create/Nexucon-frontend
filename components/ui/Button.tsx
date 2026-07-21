@@ -15,7 +15,7 @@ export default function Button({
 }: ButtonProps) {
 
   // Base classes for the button, enforcing the 200x40px size
-  const baseClasses = 'w-[200px] h-[40px] rounded-full text-[11px] font-bold flex items-center justify-center transition-colors shadow-sm shrink-0 whitespace-nowrap';
+  const baseClasses = 'w-[200px] h-[40px] rounded-full text-[11px] px-5 py-8 font-bold flex items-center justify-center transition-colors shadow-sm shrink-0 whitespace-nowrap';
 
   // Variant-specific classes
   const variants = {
