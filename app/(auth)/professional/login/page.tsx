@@ -54,7 +54,7 @@ export default function ProfessionalLogin() {
         if (status === 'completed') {
           router.push('/professional/dashboard');
         } else {
-          router.push('/professional/verification');
+          router.push('/professional/onboarding');
         }
       }
     }

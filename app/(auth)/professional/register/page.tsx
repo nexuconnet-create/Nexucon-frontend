@@ -1053,10 +1053,10 @@ export default function ProfessionalRegister() {
               <div className="flex flex-col w-full gap-4 mt-auto">
                 <button
                   type="button"
-                  onClick={() => router.push('/professional/verification')}
+                  onClick={() => router.push('/professional/onboarding')}
                   className="w-full py-4 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
                 >
-                  Proceed to Verification
+                  Proceed to Onboarding
                 </button>
 
                 <button
