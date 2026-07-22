@@ -1,7 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
-import Button from '@/components/ui/Button';
 
 interface InviteTeamSuccessModalProps {
   isOpen: boolean;
@@ -10,68 +8,55 @@ interface InviteTeamSuccessModalProps {
 }
 
 export default function InviteTeamSuccessModal({ isOpen, onClose, onInviteAnother }: InviteTeamSuccessModalProps) {
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-[#0F181F]/60 backdrop-blur-sm"
-          />
-
-          {/* Modal Content */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl p-12 flex flex-col items-center text-center"
-          >
-            <h2 className="text-[24px] font-extrabold text-[#022C4F] mb-4">
-              Invitation Sent Successfully
-            </h2>
-            <p className="text-[13px] text-gray-600 font-medium max-w-md mx-auto leading-relaxed mb-10">
-              The invitation has been sent to the selected team member. Once accepted, they will be added to the project team with the assigned role, permissions, and access to the Design Workspace.
-            </p>
-
-            <div className="w-32 h-32 rounded-full border-4 border-[#4CAF50] flex items-center justify-center bg-[#4CAF50] mb-12 shadow-lg">
-              <Check size={64} className="text-white" strokeWidth={3} />
-            </div>
-
-            <div className="flex flex-col gap-4 w-full max-w-sm">
-              <Button 
-                variant="primary" 
-                className="!w-full h-[56px] text-[14px]"
-                onClick={() => {
-                  onClose();
-                  onInviteAnother();
-                }}
-              >
-                Invite Another Team Member
-              </Button>
-              <Button 
-                variant="outline" 
-                className="!w-full h-[56px] text-[14px] bg-[#0F181F] text-white hover:bg-black border-none"
-                onClick={onClose}
-              >
-                View Team Member
-              </Button>
-              <Button 
-                variant="primary" 
-                className="!w-full h-[56px] text-[14px] bg-[#005A9C] hover:bg-[#004A80] border-none"
-                onClick={onClose}
-              >
-                Resend Invitation
-              </Button>
-            </div>
-            
-          </motion.div>
+    <div className="fixed inset-0 bg-[#0F181F]/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+      <div 
+        className="bg-white rounded-[2rem] w-full max-w-[600px] p-12 flex flex-col items-center text-center shadow-2xl relative"
+      >
+        <h2 className="text-[24px] font-extrabold text-[#022C4F] mb-4">
+          Invitation Sent Successfully
+        </h2>
+        
+        <p className="text-[13px] text-gray-500 font-medium leading-relaxed mb-10 max-w-[450px]">
+          The invitation has been sent to the selected team member. Once accepted, they will automatically gain access to the assigned project workspaces and collaboration tools based on the selected permissions.
+        </p>
+        
+        <div className="w-28 h-28 bg-[#4CAF50] rounded-full flex items-center justify-center mb-10 border-[6px] border-white shadow-[0_0_0_2px_#4CAF50]">
+          <Check size={56} className="text-white" strokeWidth={3} />
         </div>
-      )}
-    </AnimatePresence>
+        
+        <div className="flex flex-col gap-3 w-full max-w-[400px]">
+          <button 
+            onClick={() => {
+              onClose();
+              onInviteAnother();
+            }}
+            className="w-full bg-[#022C4F] text-white py-4 rounded-xl text-[13px] font-bold hover:bg-[#033A6B] transition-colors"
+          >
+            Invite Another Member
+          </button>
+          <button 
+            onClick={onClose}
+            className="w-full bg-white border border-[#022C4F] text-[#022C4F] py-4 rounded-xl text-[13px] font-bold hover:bg-[#022C4F]/5 transition-colors"
+          >
+            View Team Members
+          </button>
+          <button 
+            onClick={onClose}
+            className="w-full bg-[#0F181F] text-white py-4 rounded-xl text-[13px] font-bold hover:bg-black transition-colors"
+          >
+            Edit Permissions
+          </button>
+          <button 
+            onClick={onClose}
+            className="w-full bg-[#0369a1] text-white py-4 rounded-xl text-[13px] font-bold hover:bg-[#0284c7] transition-colors"
+          >
+            Track Invitation Status
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { MoreHorizontal, Search, Bell, Sparkles } from 'lucide-react';
+import { MoreHorizontal, Search, Bell, Sparkles, ShieldCheck, HardHat, Landmark, Calendar, Truck, Wrench, Star } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 export default function ExecutionTeamBuilderPage() {
@@ -15,6 +15,13 @@ export default function ExecutionTeamBuilderPage() {
       projects: '190',
       teamSize: '220+ Professionals',
       location: 'Abuja',
+      clientSatisfaction: '98%',
+      insuranceVerified: true,
+      safetyRecord: '0 LTI - 5 Yrs',
+      financialStability: 'Audited Tier 1',
+      availability: 'Immediate',
+      mobileWorkforce: true,
+      equipmentOwned: true,
       logo: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784561128/Prime_it4p9t.png'
     },
     {
@@ -24,6 +31,13 @@ export default function ExecutionTeamBuilderPage() {
       projects: '117',
       teamSize: '135+ Professionals',
       location: 'Port Harcourt',
+      clientSatisfaction: '95%',
+      insuranceVerified: true,
+      safetyRecord: '1 LTI - 3 Yrs',
+      financialStability: 'Audited Tier 2',
+      availability: 'In 2 Weeks',
+      mobileWorkforce: true,
+      equipmentOwned: true,
       logo: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784561141/Vertex_ymna7a.png'
     },
     {
@@ -33,6 +47,13 @@ export default function ExecutionTeamBuilderPage() {
       projects: '142',
       teamSize: '175+ Professionals',
       location: 'Lagos',
+      clientSatisfaction: '96%',
+      insuranceVerified: true,
+      safetyRecord: '0 LTI - 4 Yrs',
+      financialStability: 'Audited Tier 1',
+      availability: 'Immediate',
+      mobileWorkforce: true,
+      equipmentOwned: false,
       logo: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784561113/BlueRock_pysprf.png'
     },
     {
@@ -42,6 +63,13 @@ export default function ExecutionTeamBuilderPage() {
       projects: '88',
       teamSize: '110+ Professionals',
       location: 'Ibadan',
+      clientSatisfaction: '92%',
+      insuranceVerified: false,
+      safetyRecord: '2 LTI - 2 Yrs',
+      financialStability: 'Audited Tier 2',
+      availability: 'In 1 Month',
+      mobileWorkforce: false,
+      equipmentOwned: true,
       logo: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784561113/Crestline_xy6pna.png'
     },
     {
@@ -51,9 +79,15 @@ export default function ExecutionTeamBuilderPage() {
       projects: '105',
       teamSize: '100+ Professionals',
       location: 'Lagos',
+      clientSatisfaction: '94%',
+      insuranceVerified: true,
+      safetyRecord: '0 LTI - 3 Yrs',
+      financialStability: 'Audited Tier 2',
+      availability: 'Immediate',
+      mobileWorkforce: true,
+      equipmentOwned: true,
       logo: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784561141/UrbanCore_xfsv4c.png'
     },
-
   ];
 
   const executionTeam = [
@@ -232,7 +266,7 @@ export default function ExecutionTeamBuilderPage() {
               <h4 className="text-[15px] font-extrabold text-[#022C4F] mb-1">{company.name}</h4>
               <p className="text-[11px] text-gray-500 font-medium mb-6">{company.subtitle}</p>
 
-              <div className="flex flex-col gap-2 mb-6">
+              <div className="flex flex-col gap-2 mb-5">
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="font-bold text-[#0F181F]">Experience:</span>
                   <span className="text-gray-600">{company.experience}</span>
@@ -248,6 +282,43 @@ export default function ExecutionTeamBuilderPage() {
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="font-bold text-[#0F181F]">Location:</span>
                   <span className="text-gray-600">{company.location}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-bold text-[#0F181F]">Client Satisfaction:</span>
+                  <span className="text-[#022C4F] font-bold flex items-center gap-1">
+                    <Star size={10} className="fill-[#022C4F] text-[#022C4F]" />
+                    {company.clientSatisfaction}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-wider">Compliance & Operations</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className={`flex items-center gap-1.5 p-1.5 rounded-lg border ${company.insuranceVerified ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                    <ShieldCheck size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold">{company.insuranceVerified ? 'Insured/Bonded' : 'Unverified Insurance'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-lg border bg-blue-50 border-blue-100 text-blue-700">
+                    <HardHat size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold line-clamp-1">{company.safetyRecord}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-lg border bg-purple-50 border-purple-100 text-purple-700">
+                    <Landmark size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold line-clamp-1">{company.financialStability}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-lg border bg-orange-50 border-orange-100 text-orange-700">
+                    <Calendar size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold line-clamp-1">{company.availability}</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 p-1.5 rounded-lg border ${company.mobileWorkforce ? 'bg-teal-50 border-teal-100 text-teal-700' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
+                    <Truck size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold">{company.mobileWorkforce ? 'Mobile Workforce' : 'Local Only'}</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 p-1.5 rounded-lg border ${company.equipmentOwned ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
+                    <Wrench size={12} className="shrink-0" />
+                    <span className="text-[9px] font-bold">{company.equipmentOwned ? 'Owns Equipment' : 'Rents Equipment'}</span>
+                  </div>
                 </div>
               </div>
 
