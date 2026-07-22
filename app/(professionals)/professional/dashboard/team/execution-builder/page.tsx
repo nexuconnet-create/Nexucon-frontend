@@ -196,7 +196,7 @@ export default function ExecutionTeamBuilderPage() {
             Build a verified construction team based on your approved project. Nexucon recommends experienced professionals tailored to your project type, scope, and location, helping you transition confidently from design into execution.
           </p>
         </div>
-        <Link href="/client/team/execution-builder/ai-assistant" className="w-full md:w-auto shrink-0">
+        <Link href="/professional/dashboard/team/execution-builder/ai-assistant" className="w-full md:w-auto shrink-0">
           <Button variant="outline" className="w-full md:w-auto px-8 py-5 cursor-pointer border-[#022C4F] text-[#022C4F] hover:bg-[#022C4F]/5 h-[44px] flex items-center justify-center gap-2">
             <Sparkles size={16} />
             Smart AI Assistant

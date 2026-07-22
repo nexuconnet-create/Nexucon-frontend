@@ -53,7 +53,7 @@ export default function ClientLayout({
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex text-[#0F181F]">
+    <div className="min-h-screen bg-[#DFDFDF] flex text-[#0F181F] p-4">
       {/* Desktop Sidebar */}
       <ClientSidebar 
         isCollapsed={isSidebarCollapsed} 
@@ -141,8 +141,8 @@ export default function ClientLayout({
 
       {/* Main Content */}
       <div 
-        className={`flex-1 flex flex-col min-w-0 bg-white lg:rounded-[30px] lg:my-4 lg:mr-4 shadow-sm transition-all duration-300 h-screen lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
-          isSidebarCollapsed ? "lg:ml-[136px]" : "lg:ml-[316px]"
+        className={`flex-1 flex flex-col min-w-0 bg-[#FAFAFA] lg:rounded-[30px] shadow-sm transition-all duration-300 h-screen lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
+          isSidebarCollapsed ? "lg:ml-[116px]" : "lg:ml-[316px]"
         }`}
       >
         {/* Mobile Header */}

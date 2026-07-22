@@ -45,13 +45,13 @@ export default function ClientSidebar({ isCollapsed, onToggleCollapse }: ClientS
 
   return (
     <aside
-      className={`fixed top-4 bottom-4 left-4 z-40 bg-[#022C4F] text-white flex flex-col hidden lg:flex rounded-[30px] shadow-2xl transition-all duration-300 ${isCollapsed ? "w-24" : "w-[280px]"
+      className={`fixed top-4 bottom-4 left-4 z-40 bg-[#022C4F] rounded-[30px] text-white flex flex-col hidden lg:flex transition-all duration-300 ${isCollapsed ? "w-[100px]" : "w-[300px]"
         }`}
     >
       {/* Top Area - Logo and Collapse Toggle */}
-      <div className={`flex items-center ${isCollapsed ? "justify-center h-28 border-b border-white/10" : "justify-between px-6 h-28 border-b border-white/10"}`}>
+      <div className={`flex items-center ${isCollapsed ? "justify-center pt-8 pb-12" : "justify-between px-8 pt-8 pb-12"}`}>
         <div
-          className={`flex items-center overflow-hidden transition-all duration-300 ${isCollapsed ? "w-8 h-8 cursor-pointer" : "w-auto"}`}
+          className={`flex items-center overflow-hidden transition-all duration-300 ${isCollapsed ? "w-12 h-12 cursor-pointer" : "w-auto"}`}
           onClick={isCollapsed ? onToggleCollapse : undefined}
           title={isCollapsed ? "Expand Sidebar" : undefined}
         >
@@ -63,7 +63,7 @@ export default function ClientSidebar({ isCollapsed, onToggleCollapse }: ClientS
             width={isCollapsed ? 48 : 160}
             height={48}
             priority
-            className={`transition-all duration-300 brightness-0 invert ${isCollapsed ? "h-10 w-10 object-contain" : "h-10 w-auto object-contain"}`}
+            className={`transition-all duration-300 brightness-0 invert ${isCollapsed ? "h-12 w-12 object-contain" : "h-12 w-auto object-contain"}`}
           />
         </div>
         {!isCollapsed && (
@@ -76,32 +76,35 @@ export default function ClientSidebar({ isCollapsed, onToggleCollapse }: ClientS
         )}
       </div>
 
+      {!isCollapsed && <div className="w-full h-px bg-white/20 mb-6"></div>}
+
       {/* Navigation Links */}
-      <div className={`flex-1 overflow-y-auto py-8 flex flex-col gap-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isCollapsed ? "px-2 items-center" : "px-4"}`}>
+      <div className={`flex-1 overflow-y-auto pb-8 flex flex-col gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isCollapsed ? "px-0 items-center" : "px-6"}`}>
         {sidebarLinks.map((link) => {
           const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
           const Icon = link.icon;
 
           return (
-            <Link
-              key={link.name}
-              href={link.href}
-              className={`flex items-center rounded-xl transition-all duration-300 group ${isCollapsed ? "justify-center p-3" : "gap-4 px-4 py-3.5"
-                } ${isActive
-                  ? "bg-white/10 text-white font-semibold"
-                  : "text-white/70 hover:text-white hover:bg-white/5"
-                }`}
-              title={isCollapsed ? link.name : undefined}
-            >
-              <Icon
-                size={20}
-                className={`shrink-0 transition-transform duration-300 ${isActive ? "text-white scale-110" : "text-white/70 group-hover:text-white"}`}
-                strokeWidth={isActive ? 2.5 : 2}
-              />
-              {!isCollapsed && (
-                <span className="tracking-wide text-sm whitespace-nowrap">{link.name}</span>
-              )}
-            </Link>
+            <div key={link.name} className="flex flex-col mb-1 w-full">
+              <Link
+                href={link.href}
+                className={`flex items-center rounded-xl transition-all duration-300 group ${isCollapsed ? "justify-center p-3 w-12 h-12 mx-auto" : "gap-4 px-4 py-3 w-full"
+                  } ${isActive
+                    ? "text-white font-semibold"
+                    : "text-white/70 hover:text-white"
+                  }`}
+                title={isCollapsed ? link.name : undefined}
+              >
+                <Icon
+                  size={isCollapsed ? 24 : 18}
+                  className={`shrink-0 transition-transform duration-300 ${isActive ? "text-white" : "text-white/70 group-hover:text-white"}`}
+                  strokeWidth={isActive ? 2 : 1.5}
+                />
+                {!isCollapsed && (
+                  <span className="tracking-wide text-[13px]">{link.name}</span>
+                )}
+              </Link>
+            </div>
           );
         })}
       </div>
