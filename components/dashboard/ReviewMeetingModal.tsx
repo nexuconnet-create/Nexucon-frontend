@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, MapPin, Users, FileText } from 'lucide-react';
+import { X, Calendar, MapPin, Users, FileText, ListTodo, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 interface ReviewMeetingModalProps {
@@ -12,6 +12,8 @@ interface ReviewMeetingModalProps {
 export default function ReviewMeetingModal({ isOpen, onClose, event }: ReviewMeetingModalProps) {
   const [isOnSite, setIsOnSite] = React.useState(false);
   const [isCheckedIn, setIsCheckedIn] = React.useState(false);
+  const [isGeneratingTasks, setIsGeneratingTasks] = React.useState(false);
+  const [tasksGenerated, setTasksGenerated] = React.useState(false);
 
   if (!event) return null;
 
@@ -99,6 +101,67 @@ export default function ReviewMeetingModal({ isOpen, onClose, event }: ReviewMee
                           </div>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Post-Meeting Action Items */}
+                  <div className="flex items-start gap-4 text-[14px] text-gray-700 mt-2">
+                    <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-[#022C4F] shrink-0 border border-gray-100">
+                      <ListTodo size={18} />
+                    </div>
+                    <div className="w-full">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="font-bold text-[#0F181F]">Post-Meeting Action Items</p>
+                        {!tasksGenerated && (
+                          <button 
+                            onClick={() => {
+                              setIsGeneratingTasks(true);
+                              setTimeout(() => {
+                                setIsGeneratingTasks(false);
+                                setTasksGenerated(true);
+                              }, 1500);
+                            }}
+                            disabled={isGeneratingTasks}
+                            className="flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-full border border-[#022C4F] text-[#022C4F] hover:bg-[#022C4F]/5 transition-colors disabled:opacity-50"
+                          >
+                            {isGeneratingTasks ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                            {isGeneratingTasks ? 'Extracting...' : 'AI Extract Tasks'}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {isGeneratingTasks && (
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                          <Loader2 size={16} className="animate-spin text-[#022C4F]" />
+                          <span className="text-[12px] font-medium text-gray-600">Analyzing meeting transcript and notes...</span>
+                        </div>
+                      )}
+
+                      {tasksGenerated && !isGeneratingTasks && (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+                            <CheckCircle2 size={16} className="text-gray-300 shrink-0 mt-0.5" />
+                            <div className="flex flex-col">
+                              <span className="text-[12px] font-bold text-[#0F181F]">Update Structural Load Calculations</span>
+                              <span className="text-[10px] text-gray-500">Assigned to: David Johnson • Due: Tomorrow</span>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+                            <CheckCircle2 size={16} className="text-gray-300 shrink-0 mt-0.5" />
+                            <div className="flex flex-col">
+                              <span className="text-[12px] font-bold text-[#0F181F]">Revise HVAC Routing on Floor 3</span>
+                              <span className="text-[10px] text-gray-500">Assigned to: Sarah Chen • Due: In 2 days</span>
+                            </div>
+                          </div>
+                          <button className="text-[11px] font-bold text-[#022C4F] hover:underline mt-1 self-start">
+                            + Sync to Task Board
+                          </button>
+                        </div>
+                      )}
+                      
+                      {!tasksGenerated && !isGeneratingTasks && (
+                        <p className="text-[12px] text-gray-500 font-medium">No action items extracted yet.</p>
+                      )}
                     </div>
                   </div>
                 </div>
