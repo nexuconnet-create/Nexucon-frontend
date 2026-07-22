@@ -10,6 +10,7 @@ import AddCommentDrawer from './components/AddCommentDrawer';
 import AssignReviewerDrawer from './components/AssignReviewerDrawer';
 import SendReminderDrawer from './components/SendReminderDrawer';
 import Button from '@/components/ui/Button';
+import ProfilePill from '@/components/ui/ProfilePill';
 
 export default function DrawingReviewCenterPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -40,16 +41,8 @@ export default function DrawingReviewCenterPage() {
             <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-[#0F181F] rounded-full"></span>
           </button>
 
-          {/* User Profile Pill */}
-          <button className="flex items-center gap-3 pl-2 pr-6 py-1.5 rounded-full border border-[#022C4F] hover:bg-gray-50 transition-colors shadow-sm bg-white">
-            <div className="w-9 h-9 rounded-full bg-[#022C4F] flex items-center justify-center text-white text-[12px] font-bold tracking-wider shrink-0">
-              JD
-            </div>
-            <div className="flex flex-col items-start justify-center">
-              <span className="text-[12px] font-bold text-[#0F181F] leading-tight">John Doe</span>
-              <span className="text-[10px] text-gray-500 font-medium leading-tight mt-0.5">client@nexucon.tech</span>
-            </div>
-          </button>
+          {/* Profile Pill */}
+          <ProfilePill />
         </div>
       </div>
 

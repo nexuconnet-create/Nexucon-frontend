@@ -5,6 +5,7 @@ import { Search, Bell, ChevronDown, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import NotificationCenter from "@/components/dashboard/NotificationCenter";
 import { CustomSelect } from "@/components/CustomSelect";
+import ProfilePill from "@/components/ui/ProfilePill";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -46,15 +47,7 @@ export default function NewProjectPage() {
             <Bell size={18} />
             <span className="absolute top-2 right-2.5 w-1.5 h-1.5 bg-[#022C4F] rounded-full"></span>
           </button>
-          <button className="flex items-center gap-3 px-4 py-1.5 rounded-full border border-[#022C4F] hover:bg-gray-50 transition-colors shrink-0">
-            <div className="w-7 h-7 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-[10px] font-bold">
-              JD
-            </div>
-            <div className="text-left hidden sm:block pr-2">
-              <p className="text-[11px] font-bold text-[#0F181F] leading-tight">John Doe</p>
-              <p className="text-[9px] text-gray-500 leading-tight">client@nexucon.tech</p>
-            </div>
-          </button>
+          <ProfilePill />
         </div>
       </div>
 
