@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Building2, HardHat, GraduationCap, Users } from "lucide-react";
+import { X, Building2, HardHat, GraduationCap, Users, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface AuthRoleModalProps {
@@ -48,6 +48,13 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       color: "bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-500",
     },
     {
+      id: "government",
+      title: "Government Agency",
+      description: "Review plans, issue permits, and oversee building compliance.",
+      icon: <Landmark size={24} />,
+      color: "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-500",
+    },
+    {
       id: "professional",
       title: "Professional",
       description: "Find jobs, bid on projects, and showcase your expertise.",
@@ -68,6 +75,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       icon: <GraduationCap size={24} />,
       color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-500",
     },
+
   ];
 
   return (
@@ -97,21 +105,19 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
                 <div className="flex gap-4 bg-gray-100 p-1 rounded-xl">
                   <button
                     onClick={() => setMode("login")}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                      mode === "login"
+                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mode === "login"
                         ? "bg-white text-[#0F181F] shadow-sm"
                         : "text-gray-500 hover:text-[#0F181F]"
-                    }`}
+                      }`}
                   >
                     Log In
                   </button>
                   <button
                     onClick={() => setMode("register")}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                      mode === "register"
+                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mode === "register"
                         ? "bg-white text-[#0F181F] shadow-sm"
                         : "text-gray-500 hover:text-[#0F181F]"
-                    }`}
+                      }`}
                   >
                     Register
                   </button>
