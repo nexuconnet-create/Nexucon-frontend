@@ -6,7 +6,7 @@ import Image from "next/image";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export default function ProfessionalLogin() {
+export default function GovernmentLogin() {
   const router = useRouter();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -36,9 +36,9 @@ export default function ProfessionalLogin() {
       if (typeof window !== 'undefined') {
         const status = localStorage.getItem('verification_status');
         if (status === 'completed') {
-          router.push('/professional/dashboard');
+          router.push('/government/dashboard');
         } else {
-          router.push('/professional/onboarding');
+          router.push('/government/onboarding');
         }
       }
     }
@@ -92,8 +92,8 @@ export default function ProfessionalLogin() {
           </h1>
 
           <p className="text-white text-lg font-medium leading-relaxed max-w-lg drop-shadow-md">
-            Sign in to your Nexucon account to access projects, manage proposals, collaborate
-            with clients, and grow your professional presence.
+            Sign in to your Nexucon account to review plans, issue permits, inspect sites,
+            and oversee building compliance within your jurisdiction.
           </p>
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function ProfessionalLogin() {
               Back to homepage
             </Link>
             <p className="text-[11px] sm:text-xs font-medium text-gray-500">
-              Don't have an account? <Link href="/professional/register" className="text-[#022C4F] font-semibold hover:underline">Sign up</Link>
+              Don't have an account? <Link href="/government/register" className="text-[#022C4F] font-semibold hover:underline">Sign up</Link>
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export default function ProfessionalLogin() {
               className="h-10 w-auto object-contain"
             />
             <p className="text-sm font-medium text-gray-500 mt-2">
-              Don't have an account? <Link href="/professional/register" className="text-[#022C4F] font-semibold hover:underline">Sign up</Link>
+              Don't have an account? <Link href="/government/register" className="text-[#022C4F] font-semibold hover:underline">Sign up</Link>
             </p>
           </div>
 
@@ -145,7 +145,7 @@ export default function ProfessionalLogin() {
           <div className="text-left mb-8">
             <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Welcome Back</h2>
             <p className="text-xs sm:text-sm font-medium text-gray-500 leading-relaxed max-w-sm">
-              Sign in to your Nexucon account to access projects, manage proposals, collaborate with clients, and grow your professional presence.
+              Sign in to your Nexucon account to review plans, issue permits, inspect sites, and oversee building compliance within your jurisdiction.
             </p>
           </div>
 
