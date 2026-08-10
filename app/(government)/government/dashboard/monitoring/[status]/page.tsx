@@ -21,9 +21,9 @@ const TABS = [
 
 // Mock data for the table/cards
 const MOCK_MONITORING = [
-  { id: 'MON-2026-001', project: 'Victoria Heights', updatedBy: 'Site Camera 1', type: 'Live Feed', status: 'Active', date: 'Just now', priority: 'High', progress: 65 },
+  { id: 'MON-2026-001', project: 'Victoria Heights', updatedBy: 'Site Supervisor', type: 'Daily Photo Update', status: 'Active', date: 'Just now', priority: 'High', progress: 65 },
   { id: 'MON-2026-002', project: 'Lekki Plaza', updatedBy: 'John Doe', type: 'Progress Update', status: 'Pending Verification', date: '2 hours ago', priority: 'Medium', progress: 42 },
-  { id: 'MON-2026-003', project: 'Ikeja Mixed-Use', updatedBy: 'Inspector Smith', type: 'Observation', status: 'Resolved', date: 'Yesterday', priority: 'Low', progress: 15 },
+  { id: 'MON-2026-003', project: 'Ikeja Mixed-Use', updatedBy: 'Drone Survey', type: 'Comprehensive Survey', status: 'Active', date: 'Yesterday', priority: 'Low', progress: 15 },
   { id: 'MON-2026-004', project: 'Harmony Complex', updatedBy: 'Jane Doe', type: 'Issue', status: 'Critical', date: 'Oct 15, 2026', priority: 'High', progress: 90 },
   { id: 'MON-2026-005', project: 'Green Valley', updatedBy: 'Tersus Rover', type: 'Verification', status: 'Variance Detected', date: 'Oct 10, 2026', priority: 'High', progress: 5 },
 ];
@@ -39,15 +39,15 @@ export default function MonitoringDynamicPage() {
   // Define content mapping based on the prompt requirements
   const pageContent = {
     live: {
-      title: "Live Site View",
-      subtitle: "Centralized view of active government-supervised construction sites, providing visibility into current site activity, project location, progress, and field events.",
+      title: "Live Site View (Daily Updates)",
+      subtitle: "Monitor daily photo updates from site supervisors and scheduled comprehensive drone/Trimble surveys. Note: 'Live' refers to frequent asynchronous updates rather than real-time camera streaming.",
       overview: [
         { label: "Active Sites", value: "48", icon: Activity, color: "emerald" },
-        { label: "Sites Updated Today", value: "31", icon: Clock, color: "blue" },
-        { label: "Open Site Issues", value: "18", icon: AlertTriangle, color: "orange" },
+        { label: "Daily Photos Uploaded", value: "31", icon: Clock, color: "blue" },
+        { label: "Recent Drone Surveys", value: "12", icon: MapPin, color: "purple" },
         { label: "Active Observations", value: "27", icon: Eye, color: "indigo" },
       ],
-      actions: ["📍 Open Live Site View", "View Site Activity", "View Site Photos", "Launch BIM Viewer", "Contact Site Team"]
+      actions: ["📍 View Latest Daily Photos", "View Drone Survey", "Launch BIM Viewer", "Contact Site Supervisor"]
     },
     progress: {
       title: "Site Progress",

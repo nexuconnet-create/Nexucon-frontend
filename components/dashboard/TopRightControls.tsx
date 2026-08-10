@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell } from 'lucide-react';
+import { Search, Bell, Wifi } from 'lucide-react';
 import NotificationCenterSideDrawer from './NotificationCenterSideDrawer';
 
 export default function TopRightControls() {
@@ -25,6 +25,13 @@ export default function TopRightControls() {
         <Bell size={20} />
         <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-[#022C4F] rounded-full animate-pulse"></span>
       </button>
+
+      <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shadow-sm">
+         <Wifi size={14} />
+         <span className="text-[10px] font-bold uppercase tracking-wider">Field Mode: Offline Ready</span>
+         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1"></div>
+      </div>
+
       <div className="h-12 rounded-full border border-[#022C4F] flex items-center px-2 pr-6 gap-3 ml-2">
         <div className="w-8 h-8 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-xs font-bold">
           JD

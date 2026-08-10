@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { HardHat, Search, Filter, ShieldCheck, MapPin, AlertTriangle, Shield, CheckCircle2, ChevronRight } from "lucide-react";
+import { HardHat, Search, Filter, ShieldCheck, MapPin, AlertTriangle, Shield, CheckCircle2, ChevronRight, CheckCircle, Database } from "lucide-react";
 
 export default function ContractorsDirectory() {
   const contractors = [
@@ -11,6 +11,7 @@ export default function ContractorsDirectory() {
       name: "Apex Construction Services",
       type: "General Contractor",
       status: "Prequalified",
+      licenseStatus: "Valid",
       complianceScore: 94,
       activePermits: 12,
       specialties: ["Commercial", "High-Rise", "Civil"],
@@ -21,6 +22,7 @@ export default function ContractorsDirectory() {
       name: "Vertex MEP Solutions",
       type: "Subcontractor",
       status: "Prequalified",
+      licenseStatus: "Expiring Soon",
       complianceScore: 88,
       activePermits: 4,
       specialties: ["HVAC", "Electrical", "Plumbing"],
@@ -31,6 +33,7 @@ export default function ContractorsDirectory() {
       name: "StoneBridge Foundations",
       type: "Subcontractor",
       status: "Suspended",
+      licenseStatus: "Revoked",
       complianceScore: 62,
       activePermits: 0,
       specialties: ["Deep Foundation", "Concrete"],
@@ -50,6 +53,12 @@ export default function ContractorsDirectory() {
         </div>
         
         <div className="flex items-center gap-3">
+           <div className="hidden lg:flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 mr-2 shadow-sm">
+             <Database size={16} />
+             <span className="text-xs font-bold uppercase tracking-wider">Live Agency Validation</span>
+             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-1"></div>
+           </div>
+           
            <div className="relative hidden md:block">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
              <input 
@@ -101,7 +110,7 @@ export default function ContractorsDirectory() {
                 ))}
               </div>
 
-              <div className="mt-auto pt-4 border-t border-gray-100 grid grid-cols-2 gap-4">
+              <div className="mt-auto pt-4 border-t border-gray-100 grid grid-cols-3 gap-2">
                  <div>
                    <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider mb-1">Active Permits</p>
                    <p className="text-sm font-bold text-gray-900">{con.activePermits}</p>
@@ -113,6 +122,17 @@ export default function ContractorsDirectory() {
                    }`}>
                      {con.status === 'Prequalified' ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
                      {con.status}
+                   </span>
+                 </div>
+                 <div>
+                   <p className="text-[10px] font-bold uppercase text-gray-400 tracking-wider mb-1">Agency License</p>
+                   <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${
+                     con.licenseStatus === 'Valid' ? 'text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200' :
+                     con.licenseStatus === 'Expiring Soon' ? 'text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200' :
+                     'text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200'
+                   }`}>
+                     {con.licenseStatus === 'Valid' ? <ShieldCheck size={10} /> : <AlertTriangle size={10} />}
+                     {con.licenseStatus}
                    </span>
                  </div>
               </div>

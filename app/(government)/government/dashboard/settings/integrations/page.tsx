@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { LinkIcon, Save, Key, RefreshCw, EyeOff, CheckCircle2, ShieldAlert, Code2 } from "lucide-react";
+import { LinkIcon, Save, Key, RefreshCw, EyeOff, CheckCircle2, ShieldAlert, Code2, Landmark } from "lucide-react";
 
 export default function IntegrationSettings() {
   const apiKeys = [
@@ -31,6 +31,60 @@ export default function IntegrationSettings() {
       </div>
 
       <div className="max-w-4xl space-y-6">
+        
+        {/* National & State Database Integrations */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        >
+          <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+             <div>
+                <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
+                   <Landmark size={20} className="text-emerald-600" /> National & State Database Integrations
+                </h2>
+                <p className="text-sm text-gray-500">Live API connections to Nigerian government and regulatory registries.</p>
+             </div>
+          </div>
+          
+          <div className="p-8">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { name: "LASG LASRRA", desc: "Lagos State Residents Registration", priority: "CRITICAL", status: "Connected" },
+                  { name: "CAC", desc: "Corporate Affairs Commission (Company verification)", priority: "CRITICAL", status: "Connected" },
+                  { name: "Lagos e-GIS", desc: "Land title & approval verification", priority: "CRITICAL", status: "Connected" },
+                  { name: "FMW", desc: "Federal Ministry of Works coordination", priority: "HIGH", status: "Pending Configuration" },
+                  { name: "NIA", desc: "Nigerian Insurance Association (Bond verification)", priority: "HIGH", status: "Connected" },
+                  { name: "National Building Code", desc: "Automated code compliance checking", priority: "HIGH", status: "Connected" }
+                ].map((integration, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-4 border border-gray-200 rounded-xl bg-gray-50 hover:bg-white transition-colors shadow-sm">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-sm text-gray-900">{integration.name}</h3>
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                          integration.priority === 'CRITICAL' ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+                        }`}>
+                          {integration.priority}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{integration.desc}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                        integration.status === 'Connected' ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>
+                         {integration.status === 'Connected' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>}
+                         {integration.status === 'Pending Configuration' && <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>}
+                         {integration.status}
+                      </span>
+                      <button className="text-[10px] font-bold text-gray-600 hover:text-blue-600 bg-white border border-gray-200 px-2 py-1 rounded shadow-sm">Configure</button>
+                    </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        </motion.div>
+
         {/* Webhooks Section */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}

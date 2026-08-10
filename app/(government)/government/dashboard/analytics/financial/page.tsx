@@ -13,14 +13,13 @@ export default function FinancialOverview() {
     { name: "Permitting & Compliance", budget: 5.5, actual: 4.8, status: "under" },
   ];
 
-  const formatMoney = (val: number) => `$${val.toFixed(1)}M`;
+  const formatMoney = (val: number) => `₦${val.toFixed(1)}M`;
 
   return (
     <div className="w-full min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
-            <DollarSign className="text-emerald-500" />
             Financial Overview
           </h1>
           <p className="text-gray-500 mt-1">High-level oversight of project budget, cash flow, and actuals.</p>
@@ -41,7 +40,7 @@ export default function FinancialOverview() {
             </div>
             <h3 className="font-semibold text-sm text-gray-500">Total Approved Budget</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">$125.0M</p>
+          <p className="text-3xl font-bold text-gray-900">₦125.0M</p>
           <div className="mt-3 text-xs font-semibold text-gray-400">Baseline established Jan 2026</div>
         </motion.div>
 
@@ -57,7 +56,7 @@ export default function FinancialOverview() {
             </div>
             <h3 className="font-semibold text-sm text-gray-500">Actual Cost (ACWP)</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">$69.4M</p>
+          <p className="text-3xl font-bold text-gray-900">₦69.4M</p>
           <div className="mt-3 flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 w-max px-2 py-1 rounded">
             <TrendingDown size={14} /> 4.2% Under Budget
           </div>
@@ -75,9 +74,9 @@ export default function FinancialOverview() {
             </div>
             <h3 className="font-semibold text-sm text-gray-500">Estimate at Completion</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">$122.8M</p>
+          <p className="text-3xl font-bold text-gray-900">₦122.8M</p>
           <div className="mt-3 flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 w-max px-2 py-1 rounded">
-            Projected Savings: $2.2M
+            Projected Savings: ₦2.2M
           </div>
         </motion.div>
 
@@ -90,7 +89,7 @@ export default function FinancialOverview() {
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl"></div>
           <div className="relative z-10">
             <h3 className="font-semibold text-sm text-blue-200 mb-4">Contingency Fund</h3>
-            <p className="text-3xl font-bold text-white">$8.5M</p>
+            <p className="text-3xl font-bold text-white">₦8.5M</p>
             <div className="mt-3">
               <div className="flex justify-between text-xs text-blue-200 font-semibold mb-1">
                 <span>Burn Rate</span>
@@ -130,10 +129,9 @@ export default function FinancialOverview() {
                     </div>
                   </div>
                   <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden flex">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-1000 ${
-                        cat.status === 'over' ? 'bg-red-500' : 'bg-emerald-500'
-                      }`}
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${cat.status === 'over' ? 'bg-red-500' : 'bg-emerald-500'
+                        }`}
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -156,27 +154,27 @@ export default function FinancialOverview() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
         >
           <h2 className="text-lg font-bold text-gray-900 mb-6">Cash Flow Forecast (Cumulative)</h2>
-          
-          <div className="flex-1 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-6 min-h-[300px]">
-             {/* S-Curve CSS Representation */}
-             <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-               {/* Grid */}
-               <path d="M0,20 L100,20 M0,40 L100,40 M0,60 L100,60 M0,80 L100,80" stroke="#F3F4F6" strokeWidth="0.5" fill="none" />
-               {/* Forecast */}
-               <path d="M0,95 Q20,90 50,40 T100,5" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4 4" />
-               {/* Actual */}
-               <path d="M0,95 Q20,92 45,55" fill="none" stroke="#10B981" strokeWidth="3" />
-             </svg>
 
-             {/* Chart legend/overlay */}
-             <div className="absolute top-4 left-4 flex gap-4 bg-white/80 p-2 rounded backdrop-blur-sm border border-gray-100">
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                  <span className="w-3 border-t-2 border-dashed border-gray-400"></span> Forecast
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-700">
-                  <span className="w-3 border-t-2 border-solid border-emerald-500"></span> Actual Drawdown
-                </div>
-             </div>
+          <div className="flex-1 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-6 min-h-[300px]">
+            {/* S-Curve CSS Representation */}
+            <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+              {/* Grid */}
+              <path d="M0,20 L100,20 M0,40 L100,40 M0,60 L100,60 M0,80 L100,80" stroke="#F3F4F6" strokeWidth="0.5" fill="none" />
+              {/* Forecast */}
+              <path d="M0,95 Q20,90 50,40 T100,5" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4 4" />
+              {/* Actual */}
+              <path d="M0,95 Q20,92 45,55" fill="none" stroke="#10B981" strokeWidth="3" />
+            </svg>
+
+            {/* Chart legend/overlay */}
+            <div className="absolute top-4 left-4 flex gap-4 bg-white/80 p-2 rounded backdrop-blur-sm border border-gray-100">
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
+                <span className="w-3 border-t-2 border-dashed border-gray-400"></span> Forecast
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-700">
+                <span className="w-3 border-t-2 border-solid border-emerald-500"></span> Actual Drawdown
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>

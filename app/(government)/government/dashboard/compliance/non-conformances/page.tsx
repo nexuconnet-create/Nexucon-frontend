@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Search, Filter, Plus, Calendar, User, ArrowRight, Eye, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Search, Filter, Plus, Calendar, User, ArrowRight, Eye, ShieldAlert, AlertOctagon, Gavel, FileWarning, Send } from "lucide-react";
 
 export default function NonConformances() {
   const ncrs = [
@@ -11,6 +11,7 @@ export default function NonConformances() {
       title: "Improper Scaffold Tie-offs at Sector 4", 
       severity: "Major", 
       dateLogged: "Oct 12, 2026", 
+      daysOpen: 4,
       reportedBy: "J. Doe (Safety)", 
       status: "Open",
       linkedCapa: "CAPA-092"
@@ -19,7 +20,8 @@ export default function NonConformances() {
       id: "NCR-103", 
       title: "Concrete Slump Test Failed (Batch B)", 
       severity: "Critical", 
-      dateLogged: "Oct 10, 2026", 
+      dateLogged: "Oct 05, 2026", 
+      daysOpen: 11,
       reportedBy: "QA Lab", 
       status: "In Progress",
       linkedCapa: "CAPA-091"
@@ -28,16 +30,18 @@ export default function NonConformances() {
       id: "NCR-102", 
       title: "Missing Warning Signage - Loading Bay", 
       severity: "Minor", 
-      dateLogged: "Oct 08, 2026", 
+      dateLogged: "Sep 25, 2026", 
+      daysOpen: 21,
       reportedBy: "HSE Auditor", 
-      status: "Closed",
+      status: "Open",
       linkedCapa: "CAPA-090"
     },
     { 
       id: "NCR-101", 
       title: "Unapproved Subcontractor on Site", 
       severity: "Major", 
-      dateLogged: "Oct 01, 2026", 
+      dateLogged: "Sep 10, 2026", 
+      daysOpen: 36,
       reportedBy: "Site Admin", 
       status: "Open",
       linkedCapa: "CAPA-088"
@@ -62,6 +66,15 @@ export default function NonConformances() {
     }
   };
 
+  const getEscalationStatus = (daysOpen: number, status: string) => {
+    if (status === 'Closed') return { level: 'Resolved', action: 'None', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    if (daysOpen <= 7) return { level: 'Level 1', action: 'Reminder Sent (Auto)', color: 'bg-blue-50 text-blue-700 border-blue-200' };
+    if (daysOpen <= 14) return { level: 'Level 2', action: 'Warning Letter (Auto)', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+    if (daysOpen <= 21) return { level: 'Level 3', action: 'Escalate to Sr. Officer', color: 'bg-orange-100 text-orange-700 border-orange-200', manual: true };
+    if (daysOpen <= 28) return { level: 'Level 4', action: 'Escalate to Director', color: 'bg-red-100 text-red-700 border-red-200', manual: true };
+    return { level: 'Level 5 (Critical)', action: 'Initiate Legal Proceedings', color: 'bg-red-600 text-white border-red-700', manual: true, critical: true };
+  };
+
   return (
     <div className="w-full min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -77,6 +90,41 @@ export default function NonConformances() {
           <Plus size={16} />
           Log New NCR
         </button>
+      </div>
+
+      {/* Escalation Matrix Legend */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+        <h3 className="text-sm font-bold text-[#022C4F] mb-4 flex items-center gap-2">
+          <AlertOctagon size={18} className="text-red-500" />
+          Regulatory Escalation Matrix
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+            <p className="text-[10px] font-bold text-blue-500 uppercase">0-7 Days</p>
+            <p className="text-sm font-bold text-blue-900 mt-1">Reminder Sent</p>
+            <p className="text-xs text-blue-600 mt-0.5">Automated</p>
+          </div>
+          <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+            <p className="text-[10px] font-bold text-amber-500 uppercase">7-14 Days</p>
+            <p className="text-sm font-bold text-amber-900 mt-1">Warning Letter</p>
+            <p className="text-xs text-amber-600 mt-0.5">Automated</p>
+          </div>
+          <div className="p-3 bg-orange-50 border border-orange-100 rounded-xl">
+            <p className="text-[10px] font-bold text-orange-500 uppercase">14-21 Days</p>
+            <p className="text-sm font-bold text-orange-900 mt-1">Sr. Officer Review</p>
+            <p className="text-xs text-orange-600 mt-0.5">Manual Trigger</p>
+          </div>
+          <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+            <p className="text-[10px] font-bold text-red-500 uppercase">21-28 Days</p>
+            <p className="text-sm font-bold text-red-900 mt-1">Director Escalation</p>
+            <p className="text-xs text-red-600 mt-0.5">Manual Trigger</p>
+          </div>
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl">
+            <p className="text-[10px] font-bold text-red-400 uppercase">28+ Days</p>
+            <p className="text-sm font-bold text-white mt-1">Legal Action</p>
+            <p className="text-xs text-slate-400 mt-0.5">Manual Trigger</p>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -112,6 +160,7 @@ export default function NonConformances() {
               <th className="py-4 px-6 font-semibold text-sm text-gray-500">Severity</th>
               <th className="py-4 px-6 font-semibold text-sm text-gray-500">Reported By / Date</th>
               <th className="py-4 px-6 font-semibold text-sm text-gray-500">Status & CAPA</th>
+              <th className="py-4 px-6 font-semibold text-sm text-gray-500">Regulatory Escalation</th>
               <th className="py-4 px-6 font-semibold text-sm text-gray-500 text-right">Actions</th>
             </tr>
           </thead>
@@ -170,10 +219,32 @@ export default function NonConformances() {
                     </div>
                   </div>
                 </td>
+                <td className="py-4 px-6">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-500">{ncr.status !== 'Closed' ? `${ncr.daysOpen} Days Open` : 'Resolved'}</span>
+                    </div>
+                    {ncr.status !== 'Closed' && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${getEscalationStatus(ncr.daysOpen, ncr.status).color}`}>
+                        {getEscalationStatus(ncr.daysOpen, ncr.status).action}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-4 px-6 text-right">
-                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-md transition-colors">
-                      <Eye size={14} /> Review
+                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {ncr.status !== 'Closed' && getEscalationStatus(ncr.daysOpen, ncr.status).manual && (
+                      <button className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                        getEscalationStatus(ncr.daysOpen, ncr.status).critical 
+                        ? 'bg-red-600 text-white hover:bg-red-700 shadow-sm shadow-red-500/20' 
+                        : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                      }`}>
+                        {getEscalationStatus(ncr.daysOpen, ncr.status).critical ? <Gavel size={14} /> : <AlertOctagon size={14} />}
+                        Escalate
+                      </button>
+                    )}
+                    <button className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-200">
+                      <Eye size={14} /> View
                     </button>
                   </div>
                 </td>
