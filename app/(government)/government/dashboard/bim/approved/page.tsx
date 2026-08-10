@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Lock, ShieldCheck, Download, Award, FileSignature, HardDrive, Share2, Box } from "lucide-react";
+import { CheckCircle, Lock, ShieldCheck, Download, Award, FileSignature, HardDrive, Share2, Box, QrCode, AlertOctagon } from "lucide-react";
 
 export default function ApprovedModel() {
   const approvedModels = [
@@ -12,7 +12,9 @@ export default function ApprovedModel() {
       discipline: "Integrated (Multi)", 
       version: "v3.0 - FINAL",
       approvalDate: "Oct 09, 2026",
+      expiryDate: "Oct 09, 2027",
       approvedBy: "Eng. Samuel K.",
+      agency: "FMW (Federal Ministry of Works)",
       certificateRef: "CERT-2026-HB-A4",
       size: "850 MB"
     },
@@ -22,7 +24,9 @@ export default function ApprovedModel() {
       discipline: "Landscape & Civil", 
       version: "v4.2 - FINAL",
       approvalDate: "Sep 22, 2026",
+      expiryDate: "Sep 22, 2028",
       approvedBy: "Arch. Maria V.",
+      agency: "LABCA (Lagos State Building Control Agency)",
       certificateRef: "CERT-2026-RS-P1",
       size: "1.2 GB"
     }
@@ -54,13 +58,21 @@ export default function ApprovedModel() {
               <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-10 mix-blend-overlay"></div>
               
               <div className="relative z-10">
-                <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg border border-emerald-500/30 font-semibold text-sm mb-6">
+                <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg border border-emerald-500/30 font-semibold text-sm mb-4">
                   <Lock size={14} />
-                  Vault Locked & Immutable
+                  Read-Only & Immutable
                 </div>
                 
-                <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 flex items-center justify-center mb-6">
-                  <Box size={40} className="text-blue-300" />
+                <div className="flex gap-4 mb-6">
+                  <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 flex items-center justify-center">
+                    <Box size={40} className="text-blue-300" />
+                  </div>
+                  <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl border border-emerald-500/30 flex flex-col items-center justify-center relative overflow-hidden group">
+                    <QrCode size={36} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                      <span className="text-[10px] font-bold uppercase text-white text-center">Scan Stamp</span>
+                    </div>
+                  </div>
                 </div>
                 
                 <h2 className="text-2xl font-bold mb-2">{model.name}</h2>
@@ -84,58 +96,65 @@ export default function ApprovedModel() {
                   Approval Certification Details
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                         <FileSignature size={20} />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Approved By</p>
-                        <p className="font-bold text-gray-900">{model.approvedBy}</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Government Chief Engineer</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Digital Signature</p>
+                        <p className="font-bold text-gray-900 text-sm">{model.approvedBy}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{model.agency}</p>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                         <CheckCircle size={20} />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Date of Approval</p>
-                        <p className="font-bold text-gray-900">{model.approvalDate}</p>
-                        <p className="text-sm text-emerald-600 font-semibold mt-0.5">Valid & Active</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Validity Period</p>
+                        <p className="font-bold text-gray-900 text-sm">{model.approvalDate}</p>
+                        <p className="text-xs text-emerald-600 font-semibold mt-0.5">Expires: {model.expiryDate}</p>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
                         <Award size={20} />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Certificate Ref</p>
-                        <p className="font-mono font-bold text-gray-900">{model.certificateRef}</p>
-                        <a href="#" className="text-xs text-blue-600 font-semibold hover:underline mt-1 inline-block">View Full Certificate</a>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Official Stamp Ref</p>
+                        <p className="font-mono font-bold text-gray-900 text-sm">{model.certificateRef}</p>
+                        <a href="#" className="text-xs text-blue-600 font-semibold hover:underline mt-1 inline-block">Verify Stamp</a>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
                         <HardDrive size={20} />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Storage Node</p>
-                        <p className="font-bold text-gray-900">Cold Storage Vault 04</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Size: {model.size}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Storage Node (Read-Only)</p>
+                        <p className="font-bold text-gray-900 text-sm">Vault 04</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Size: {model.size}</p>
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-6 flex items-start gap-3 bg-red-50 p-4 rounded-xl border border-red-100">
+                  <AlertOctagon size={20} className="text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700 font-medium leading-relaxed">
+                    <strong>Enforcement Active:</strong> This model is digitally stamped and read-only. Any unauthorized modification to this BIM model or divergence during construction without an approved resubmission will automatically flag the project for a Stop-Work Order.
+                  </p>
                 </div>
               </div>
               

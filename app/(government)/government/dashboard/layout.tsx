@@ -17,6 +17,7 @@ import {
   Menu,
   Search,
   Bell,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -84,6 +85,7 @@ export default function GovernmentLayout({
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const pathname = usePathname();
 
   return (
@@ -270,6 +272,54 @@ export default function GovernmentLayout({
       </div>
 
       <Toast />
+
+      {/* Floating Contextual Help Button */}
+      <button 
+        onClick={() => setIsHelpModalOpen(true)}
+        className="fixed bottom-6 right-6 w-12 h-12 bg-[#022C4F] text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-50 group"
+      >
+        <HelpCircle size={24} />
+        <span className="absolute right-14 bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Contextual Help</span>
+      </button>
+
+      {/* Help Modal */}
+      <AnimatePresence>
+        {isHelpModalOpen && (
+          <div className="fixed inset-0 bg-[#0F181F]/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
+            >
+              <div className="p-4 bg-[#022C4F] text-white flex items-center justify-between">
+                <h3 className="font-bold flex items-center gap-2"><HelpCircle size={18} /> Contextual Help</h3>
+                <button onClick={() => setIsHelpModalOpen(false)} className="hover:bg-white/20 p-1 rounded-lg transition-colors"><X size={18} /></button>
+              </div>
+              <div className="p-6 flex flex-col gap-4">
+                <p className="text-sm text-gray-600">You are currently viewing the <strong className="text-[#022C4F]">Government Command Center</strong>.</p>
+                
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-2">Key Features</h4>
+                <ul className="text-sm text-gray-700 space-y-3">
+                  <li className="flex gap-2">
+                    <span className="text-blue-500 font-bold">•</span> 
+                    <span><strong>Role-Based Views:</strong> Toggle between Agency Head, Director, or Inspector to filter irrelevant data.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-blue-500 font-bold">•</span> 
+                    <span><strong>Critical Alerts:</strong> Color-coded alerts help you prioritize urgent structural or compliance issues.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-blue-500 font-bold">•</span> 
+                    <span><strong>Offline Mode:</strong> Field inspectors can continue using the dashboard without internet connectivity. Data syncs automatically.</span>
+                  </li>
+                </ul>
+                <button onClick={() => setIsHelpModalOpen(false)} className="w-full mt-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close Help</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

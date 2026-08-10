@@ -27,15 +27,15 @@ export default function ScanSessionsIndex() {
     <div className="w-full min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">Scan Sessions</h1>
-          <p className="text-gray-500 mt-1">Manage and monitor all active and historical scanning sessions.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">Site Surveys</h1>
+          <p className="text-gray-500 mt-1">Manage and monitor all active and historical site surveys.</p>
         </div>
         <Link 
           href="/government/dashboard/digital-eye/scan-sessions/new"
           className="flex items-center gap-2 px-5 py-2.5 bg-[#022C4F] text-white rounded-xl hover:bg-[#033c6c] transition-colors shadow-lg shadow-blue-900/20"
         >
           <Plus size={18} />
-          <span className="font-medium">New Scan Session</span>
+          <span className="font-medium">New Site Survey</span>
         </Link>
       </div>
 

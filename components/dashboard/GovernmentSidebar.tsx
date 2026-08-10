@@ -36,6 +36,7 @@ import {
   Users,
   Briefcase,
   Link as LinkIcon,
+  AlertOctagon,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
@@ -72,6 +73,7 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Pending Projects", href: "/government/dashboard/projects/pending", icon: Building2 },
       { name: "Flagged Projects", href: "/government/dashboard/projects/flagged", icon: AlertTriangle },
       { name: "Project Monitoring", href: "/government/dashboard/projects/monitoring", icon: Activity },
+      { name: "Blacklist / Red-Flags", href: "/government/dashboard/projects/blacklist", icon: AlertOctagon },
     ],
   },
   {
@@ -81,6 +83,7 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Permit Applications", href: "/government/dashboard/applications/permits", icon: ClipboardList },
       { name: "Submitted Applications", href: "/government/dashboard/applications/submitted", icon: ClipboardList },
       { name: "Under Review", href: "/government/dashboard/applications/review", icon: ClipboardList },
+      { name: "Conditional Approvals", href: "/government/dashboard/applications/conditional", icon: ClipboardCheck },
       { name: "Approved", href: "/government/dashboard/applications/approved", icon: CheckCircle },
       { name: "Rejected", href: "/government/dashboard/applications/rejected", icon: AlertTriangle },
       { name: "Expired / Renewal", href: "/government/dashboard/applications/expired", icon: History },
@@ -94,6 +97,7 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Inspection Schedule", href: "/government/dashboard/inspections/schedule", icon: FileSearch },
       { name: "Active Inspection", href: "/government/dashboard/inspections/active", icon: Activity },
       { name: "Inspection Findings", href: "/government/dashboard/inspections/findings", icon: FileSearch },
+      { name: "Stop-Work Orders", href: "/government/dashboard/inspections/stop-work", icon: AlertOctagon },
       { name: "Re-Inspection", href: "/government/dashboard/inspections/re-inspections", icon: History },
       { name: "Inspection Reports", href: "/government/dashboard/inspections/reports", icon: FileText },
     ],
@@ -117,11 +121,14 @@ const sidebarLinks: SidebarItem[] = [
     subItems: [
       { name: "Overview", href: "/government/dashboard/digital-eye/overview", icon: Eye },
       { name: "Scan Planning", href: "/government/dashboard/digital-eye/scan-planning", icon: ListTodo },
-      { name: "Scan Sessions", href: "/government/dashboard/digital-eye/scan-sessions", icon: Activity },
+      { name: "Site Surveys", href: "/government/dashboard/digital-eye/scan-sessions", icon: Activity },
       { name: "Scan Library", href: "/government/dashboard/digital-eye/scan-library", icon: Folder },
-      { name: "Processing Pipeline", href: "/government/dashboard/digital-eye/processing-pipeline", icon: BarChart },
+      { name: "Data Processing", href: "/government/dashboard/digital-eye/processing-pipeline", icon: BarChart },
+      { name: "Scan-to-BIM", href: "/government/dashboard/digital-eye/scan-to-bim", icon: Box },
+      { name: "Deviation Heatmap", href: "/government/dashboard/digital-eye/deviation-heatmap", icon: Map },
       { name: "AI Analysis", href: "/government/dashboard/digital-eye/ai-analysis", icon: PieChart },
-      { name: "QA/QC Insights", href: "/government/dashboard/digital-eye/qa-qc-insights", icon: ShieldCheck },
+      { name: "Automated Compliance", href: "/government/dashboard/digital-eye/compliance", icon: ShieldCheck },
+      { name: "Compliance Results", href: "/government/dashboard/digital-eye/qa-qc-insights", icon: ShieldCheck },
       { name: "Reports", href: "/government/dashboard/digital-eye/reports", icon: FileText },
       { name: "Integration Settings", href: "/government/dashboard/digital-eye/integration-settings", icon: Settings },
     ],

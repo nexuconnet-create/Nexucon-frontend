@@ -51,7 +51,7 @@ export default function GovernmentOnboarding() {
     localStorage.setItem('verification_status', 'completed');
     setShowCompletionModal(true);
     setTimeout(() => {
-      router.push("/government/dashboard");
+      router.push("/government/dashboard/command-center");
     }, 2500);
   };
 

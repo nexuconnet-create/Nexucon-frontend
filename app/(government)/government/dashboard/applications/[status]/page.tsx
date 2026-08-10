@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
-  Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase
+  Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase, ClipboardCheck
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'permits', label: 'Permit Applications', icon: ClipboardList },
   { id: 'submitted', label: 'Submitted Applications', icon: FileCheck },
   { id: 'review', label: 'Under Review', icon: FileSearch },
+  { id: 'conditional', label: 'Conditional Approvals', icon: ClipboardCheck },
   { id: 'approved', label: 'Approved', icon: CheckCircle },
   { id: 'rejected', label: 'Rejected', icon: AlertTriangle },
   { id: 'expired', label: 'Expired / Renewals', icon: History },
@@ -25,6 +26,7 @@ const MOCK_APPLICATIONS = [
   { id: 'APP-2026-003', project: 'Ikeja Mixed-Use', applicant: 'Mainland Builders', type: 'Planning Approval', status: 'Approved', date: 'Sep 20, 2026', priority: 'Low' },
   { id: 'APP-2026-004', project: 'Harmony Complex', applicant: 'Harmony Group', type: 'Demolition Permit', status: 'Rejected', date: 'Oct 05, 2026', priority: 'Medium' },
   { id: 'APP-2026-005', project: 'Green Valley', applicant: 'Green Valley Devs', type: 'Building Permit', status: 'Expired', date: 'Jan 10, 2025', priority: 'High' },
+  { id: 'APP-2026-006', project: 'Eko Atlantic Tower', applicant: 'Eko Devs', type: 'Structural Approval', status: 'Conditional Approval', date: 'Oct 16, 2026', priority: 'High' },
 ];
 
 export default function ApplicationsDynamicPage() {
@@ -70,6 +72,17 @@ export default function ApplicationsDynamicPage() {
       ],
       actions: ["Continue Review", "Add Review Comment", "Request Clarification", "Assign Specialist", "Schedule Inspection", "✅ Process Decision"]
     },
+    conditional: {
+      title: "Conditional Approvals",
+      subtitle: "Applications approved subject to specific conditions (e.g., structural calculations, EIA submission) that must be met before full permit issuance.",
+      overview: [
+        { label: "Awaiting Verification", value: "18", icon: Clock, color: "amber" },
+        { label: "Conditions Satisfied", value: "5", icon: CheckCircle, color: "emerald" },
+        { label: "Overdue Submissions", value: "3", icon: AlertTriangle, color: "red" },
+        { label: "Pending Issuance", value: "8", icon: FileText, color: "blue" },
+      ],
+      actions: ["Verify Conditions", "View Required Docs", "Remind Applicant", "✅ Issue Final Permit"]
+    },
     approved: {
       title: "Approved Permits",
       subtitle: "Registry of permits and applications that have successfully completed the regulatory approval process.",
@@ -111,6 +124,7 @@ export default function ApplicationsDynamicPage() {
   const displayedApplications = MOCK_APPLICATIONS.filter(a => {
     if (currentStatus === 'submitted') return a.status === 'Submitted';
     if (currentStatus === 'review') return a.status === 'Under Review';
+    if (currentStatus === 'conditional') return a.status === 'Conditional Approval';
     if (currentStatus === 'approved') return a.status === 'Approved';
     if (currentStatus === 'rejected') return a.status === 'Rejected';
     if (currentStatus === 'expired') return a.status === 'Expired';
@@ -266,6 +280,7 @@ export default function ApplicationsDynamicPage() {
                         ${application.status === 'Under Review' ? 'bg-amber-100 text-amber-700' : ''}
                         ${application.status === 'Submitted' ? 'bg-blue-100 text-blue-700' : ''}
                         ${application.status === 'Expired' ? 'bg-slate-100 text-slate-700' : ''}
+                        ${application.status === 'Conditional Approval' ? 'bg-teal-100 text-teal-700' : ''}
                       `}>
                         {application.status}
                       </span>
@@ -292,6 +307,7 @@ export default function ApplicationsDynamicPage() {
                         ${application.status === 'Under Review' ? 'bg-amber-100 text-amber-700' : ''}
                         ${application.status === 'Submitted' ? 'bg-blue-100 text-blue-700' : ''}
                         ${application.status === 'Expired' ? 'bg-slate-100 text-slate-700' : ''}
+                        ${application.status === 'Conditional Approval' ? 'bg-teal-100 text-teal-700' : ''}
                       `}>
                         {application.status}
                     </span>

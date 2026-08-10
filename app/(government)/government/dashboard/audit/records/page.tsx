@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { FileText, Shield, Download, Lock, Search, Filter, CalendarDays, ExternalLink, ShieldCheck } from "lucide-react";
+import { FileText, Shield, Download, Lock, Search, Filter, CalendarDays, ExternalLink, ShieldCheck, Gavel, Link2 } from "lucide-react";
 
 export default function AuditRecords() {
   const records = [
@@ -14,6 +14,7 @@ export default function AuditRecords() {
       size: "14.2 MB",
       status: "Immutable Record",
       hash: "0x8f2a...391c",
+      prevHash: "0x4b1d...9f2a",
       description: "Comprehensive package containing all Q3 safety logs, environmental sensor data, and structural sign-offs."
     },
     {
@@ -24,6 +25,7 @@ export default function AuditRecords() {
       size: "12.8 MB",
       status: "Immutable Record",
       hash: "0x4b1d...9f2a",
+      prevHash: "0x1a9c...77e2",
       description: "Q2 consolidated permit decisions, inspector logs, and contractor prequalifications."
     },
     {
@@ -34,6 +36,7 @@ export default function AuditRecords() {
       size: "10.5 MB",
       status: "Immutable Record",
       hash: "0x1a9c...77e2",
+      prevHash: "0x0000...0000",
       description: "Initial groundbreaking compliance package. Contains master zoning variances and foundational permits."
     }
   ];
@@ -53,21 +56,21 @@ export default function AuditRecords() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                Sealed Audit Records
+                Sealed Audit Records (Read-Only)
               </h1>
               <p className="text-slate-300 mt-2 max-w-xl text-sm leading-relaxed">
-                Legally binding, immutable compliance packets generated for official oversight. These records are cryptographically sealed and cannot be modified.
+                Legally binding, immutable compliance packets generated for official oversight. Actions are cryptographically chained. Closed projects are permanently locked as read-only archives.
               </p>
             </div>
           </div>
           
           <div className="shrink-0 flex flex-col gap-2">
-             <button className="flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg transition-colors border border-blue-400/50">
-               <Lock size={18} />
-               Generate New Record
+             <button className="flex items-center justify-center gap-2 px-5 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg transition-colors border border-red-400/50">
+               <Gavel size={18} />
+               Court-Ordered Export (Chain)
              </button>
              <p className="text-[10px] text-center text-slate-400 uppercase font-bold tracking-wider">
-               Requires Director Auth
+               Requires Subpoena & Director Auth
              </p>
           </div>
         </div>
@@ -123,10 +126,27 @@ export default function AuditRecords() {
               {/* Action Sidebar */}
               <div className="p-6 border-t md:border-t-0 md:border-l border-gray-100 bg-slate-50 flex flex-col justify-center md:w-1/3">
                 <div className="mb-4 text-center">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">SHA-256 Hash</p>
-                  <p className="text-xs font-mono font-bold text-slate-700 bg-white border border-gray-200 px-2 py-1 rounded inline-block">
-                    {record.hash}
-                  </p>
+                  <div className="flex flex-col gap-2 bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-0.5 flex items-center justify-center gap-1">
+                        <Link2 size={10} /> Previous Block Hash
+                      </p>
+                      <p className="text-[10px] font-mono font-bold text-slate-400">
+                        {record.prevHash}
+                      </p>
+                    </div>
+                    <div className="h-px bg-gray-100 w-full relative">
+                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-1">
+                        <Lock size={10} className="text-gray-300" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 mb-0.5">Current SHA-256 Hash</p>
+                      <p className="text-xs font-mono font-bold text-slate-800 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 inline-block mt-0.5">
+                        {record.hash}
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 
                 <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 text-white rounded-xl font-bold shadow-sm hover:bg-slate-700 transition-colors text-sm mb-2">
