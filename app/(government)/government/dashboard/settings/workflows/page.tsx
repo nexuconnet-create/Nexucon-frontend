@@ -2,10 +2,22 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Settings, Save, Plus, ArrowRight, GitMerge, FileText, CheckCircle2, User, HardHat } from "lucide-react";
+import { Settings, Save, Plus, ArrowRight, GitMerge, FileText, CheckCircle2, User, HardHat, Search, AlertTriangle, ShieldCheck } from "lucide-react";
 
 export default function ApprovalWorkflows() {
   const workflows = [
+    {
+      id: "WF-00-MASTER",
+      name: "Master Building Collapse Prevention Pipeline",
+      status: "System Enforced",
+      steps: [
+        { title: "Approval & Permit Gate", role: "Agency Approvers", icon: ShieldCheck },
+        { title: "Construction Oversight", role: "Inspectors & Digital Eye", icon: HardHat },
+        { title: "Deviation Detection", role: "Automated Engine", icon: Search },
+        { title: "Action & Stop-Work", role: "System Escalation", icon: AlertTriangle },
+        { title: "Corrective Verification", role: "Review Board", icon: CheckCircle2 }
+      ]
+    },
     {
       id: "WF-01",
       name: "Standard Foundation Permit",
@@ -58,9 +70,13 @@ export default function ApprovalWorkflows() {
           >
             <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                <h2 className="text-lg font-bold text-gray-900 flex flex-wrap items-center gap-3">
                   {wf.name}
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                    wf.status === 'System Enforced' 
+                      ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
                     {wf.status}
                   </span>
                 </h2>
@@ -80,10 +96,12 @@ export default function ApprovalWorkflows() {
                      <React.Fragment key={sIdx}>
                         {/* Step Node */}
                         <div className="relative z-10 flex flex-col items-center flex-1">
-                           <div className="w-12 h-12 rounded-full bg-white border-4 border-blue-50 text-blue-600 shadow-sm flex items-center justify-center mb-3">
+                           <div className={`w-12 h-12 rounded-full bg-white border-4 shadow-sm flex items-center justify-center mb-3 z-10 relative ${
+                             wf.status === 'System Enforced' ? 'border-purple-50 text-purple-600' : 'border-blue-50 text-blue-600'
+                           }`}>
                               <step.icon size={20} />
                            </div>
-                           <h3 className="text-sm font-bold text-gray-900 text-center mb-1">{step.title}</h3>
+                           <h3 className="text-xs md:text-sm font-bold text-gray-900 text-center mb-1">{step.title}</h3>
                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 text-center bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
                               {step.role}
                            </p>

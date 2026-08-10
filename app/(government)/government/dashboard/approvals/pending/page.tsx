@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, Clock, AlertCircle, FileText, User, Calendar, Check, X, MessageSquare, ChevronRight } from "lucide-react";
+import { CheckCircle, Clock, AlertCircle, FileText, User, Calendar, Check, X, MessageSquare, ChevronRight, ShieldCheck, DollarSign } from "lucide-react";
 
 export default function PendingApprovals() {
   const [selectedItem, setSelectedItem] = useState<string | null>("REQ-8892");
@@ -16,6 +16,7 @@ export default function PendingApprovals() {
       submittedBy: "EcoSolve Ltd.",
       submittedDate: "Oct 12, 2026",
       dueDate: "Oct 15, 2026",
+      value: 120000000,
       description: "Additional assessment required for the eastern boundary soil disruption. Needs expedited approval to prevent delay in foundation pour."
     },
     {
@@ -26,6 +27,7 @@ export default function PendingApprovals() {
       submittedBy: "Apex Engineering",
       submittedDate: "Oct 10, 2026",
       dueDate: "Oct 20, 2026",
+      value: 45000000,
       description: "Final shop drawings for zone 3 structural steel. Includes revised connection details per RFI-142."
     },
     {
@@ -36,6 +38,7 @@ export default function PendingApprovals() {
       submittedBy: "J. Jenkins (Site Lead)",
       submittedDate: "Oct 05, 2026",
       dueDate: "Oct 25, 2026",
+      value: 5000000,
       description: "Standard monthly renewal for night shift operations. All noise mitigation protocols remain unchanged."
     }
   ];
@@ -56,6 +59,13 @@ export default function PendingApprovals() {
       case 'Low': return <CheckCircle size={14} className="text-emerald-500" />;
       default: return null;
     }
+  };
+
+  const getDelegationOfAuthority = (value: number) => {
+    if (value > 50000000) {
+      return { role: "Permanent Secretary / Director General", rule: "Above ₦50M", color: "text-purple-700 bg-purple-50 border-purple-200" };
+    }
+    return { role: "Director", rule: "₦50M and below", color: "text-blue-700 bg-blue-50 border-blue-200" };
   };
 
   const activeItem = pendingItems.find(item => item.id === selectedItem);
@@ -98,13 +108,25 @@ export default function PendingApprovals() {
               <h3 className={`font-bold text-sm leading-snug mb-3 ${selectedItem === item.id ? 'text-blue-700' : 'text-gray-900'}`}>
                 {item.title}
               </h3>
-              <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
                 <div className="flex items-center gap-1">
                   <User size={12} /> {item.submittedBy}
                 </div>
                 <div className={`font-semibold ${item.priority === 'High' ? 'text-red-600' : ''}`}>
                   Due: {item.dueDate}
                 </div>
+              </div>
+              
+              <div className="pt-3 border-t border-gray-100/50 flex items-center justify-between mt-auto">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">₦{(item.value / 1000000).toFixed(1)}M</span>
+                <button 
+                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-emerald-200 hover:border-emerald-600 shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Check size={12} /> Quick Approve
+                </button>
               </div>
             </motion.div>
           ))}
@@ -163,6 +185,17 @@ export default function PendingApprovals() {
                         <p className="text-[10px] uppercase font-bold text-gray-400 leading-none mb-0.5">Decision Required By</p>
                         <p className={`font-bold ${activeItem.priority === 'High' ? 'text-red-600' : 'text-amber-600'}`}>{activeItem.dueDate}</p>
                       </div>
+                    </div>
+                  </div>
+                  
+                  <div className={`mt-6 p-4 rounded-xl border flex items-start gap-4 ${getDelegationOfAuthority(activeItem.value).color}`}>
+                    <ShieldCheck size={24} className="mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider mb-1 opacity-80">Delegation of Authority Check</p>
+                      <p className="font-bold text-sm">Required Approval: {getDelegationOfAuthority(activeItem.value).role}</p>
+                      <p className="text-xs font-medium opacity-90 mt-1">
+                        Rule: Project/Permit Value is {getDelegationOfAuthority(activeItem.value).rule} (Actual: ₦{(activeItem.value / 1000000).toFixed(1)}M)
+                      </p>
                     </div>
                   </div>
                 </div>

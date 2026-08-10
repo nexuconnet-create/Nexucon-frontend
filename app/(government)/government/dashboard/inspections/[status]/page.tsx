@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
-  Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase
+  Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase, AlertOctagon, Octagon, Wifi
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
@@ -14,6 +14,7 @@ const TABS = [
   { id: 'schedule', label: 'Inspection Schedule', icon: Calendar },
   { id: 'active', label: 'Active Inspections', icon: Activity },
   { id: 'findings', label: 'Inspection Findings', icon: AlertTriangle },
+  { id: 'stop-work', label: 'Stop-Work Orders', icon: AlertOctagon },
   { id: 're-inspections', label: 'Re-Inspections', icon: History },
   { id: 'reports', label: 'Inspection Reports', icon: FileText },
 ];
@@ -25,6 +26,7 @@ const MOCK_INSPECTIONS = [
   { id: 'INS-2026-003', project: 'Ikeja Mixed-Use', inspector: 'Jane Smith', type: 'Site Verification', status: 'Scheduled', date: 'Oct 17, 2026', priority: 'Low', findings: 0 },
   { id: 'INS-2026-004', project: 'Harmony Complex', inspector: 'Mike Ross', type: 'Safety Audit', status: 'Failed', date: 'Oct 15, 2026', priority: 'High', findings: 4 },
   { id: 'INS-2026-005', project: 'Green Valley', inspector: 'Sarah Connor', type: 'Final Clearance', status: 'Completed', date: 'Oct 10, 2026', priority: 'Medium', findings: 0 },
+  { id: 'SWO-2026-001', project: 'Eko Atlantic Tower', inspector: 'James Bond', type: 'Stop-Work Order', status: 'Halted', date: 'Oct 16, 2026', priority: 'Critical', findings: 1, reason: 'Severe Structural Deviation (Column Misalignment)' },
 ];
 
 export default function InspectionsDynamicPage() {
@@ -79,7 +81,18 @@ export default function InspectionsDynamicPage() {
         { label: "Safety Violations", value: "4", icon: ShieldCheck, color: "orange" },
         { label: "Resolved", value: "45", icon: CheckCircle, color: "emerald" },
       ],
-      actions: ["⚠️ Record Finding", "View Finding", "Assign Corrective Action", "Notify Project Team", "Request Evidence", "Escalate Finding"]
+      actions: ["⚠️ Record Finding", "View Finding", "⚡ Auto-Generate Corrective Tasks", "Notify Project Team", "Request Evidence", "Escalate Finding"]
+    },
+    'stop-work': {
+      title: "Stop-Work Orders",
+      subtitle: "Critical enforcement registry for projects with halted construction due to severe regulatory violations.",
+      overview: [
+        { label: "Active Stop-Work", value: "3", icon: AlertOctagon, color: "red" },
+        { label: "Pending Corrective Plan", value: "2", icon: FileWarning, color: "orange" },
+        { label: "Awaiting Re-Inspection", value: "1", icon: Clock, color: "amber" },
+        { label: "Resolved This Month", value: "5", icon: CheckCircle, color: "emerald" },
+      ],
+      actions: ["⚠️ Issue Stop-Work Order", "Review Corrective Plan", "Schedule Re-Inspection", "✅ Lift Stop-Work Order"]
     },
     're-inspections': {
       title: "Re-Inspections",
@@ -111,10 +124,11 @@ export default function InspectionsDynamicPage() {
   const displayedInspections = MOCK_INSPECTIONS.filter(i => {
     if (currentStatus === 'schedule') return i.status === 'Scheduled';
     if (currentStatus === 'active') return i.status === 'Active';
-    if (currentStatus === 'findings') return i.findings > 0;
+    if (currentStatus === 'findings') return i.findings > 0 && i.type !== 'Stop-Work Order';
+    if (currentStatus === 'stop-work') return i.type === 'Stop-Work Order';
     if (currentStatus === 're-inspections') return i.status === 'Failed';
     if (currentStatus === 'reports') return i.status === 'Completed' || i.status === 'Failed';
-    return true; // requests (all pending/general)
+    return i.type !== 'Stop-Work Order'; // requests (all pending/general)
   });
 
   return (
@@ -129,6 +143,11 @@ export default function InspectionsDynamicPage() {
             <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">
               Inspection Management
             </h1>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md shadow-sm ml-2">
+               <Wifi size={14} />
+               <span className="text-[10px] font-bold uppercase tracking-wider">Field Mode: Offline Ready</span>
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1"></div>
+            </div>
           </div>
           <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">
             {content.subtitle}
@@ -234,7 +253,45 @@ export default function InspectionsDynamicPage() {
 
         {/* Content Area */}
         <div className="p-6 flex-1 overflow-y-auto">
-          {viewMode === 'list' ? (
+          {currentStatus === 'stop-work' ? (
+            <div className="flex flex-col gap-3">
+              {displayedInspections.map((inspection) => (
+                <div key={inspection.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-red-100 hover:border-red-300 hover:shadow-md transition-all group bg-red-50/30">
+                  <div className="flex items-center gap-4 w-full sm:w-1/3 mb-4 sm:mb-0">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                      <AlertOctagon size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors">{inspection.project}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{inspection.id}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Issued by: {inspection.inspector}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1 w-full sm:w-1/3 mb-4 sm:mb-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason for Stoppage</span>
+                    <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                      <AlertTriangle size={12} /> {(inspection as any).reason || 'Severe Violation'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center sm:justify-end gap-6 w-full sm:w-1/3">
+                    <div className="flex flex-col items-start sm:items-end">
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1 bg-red-600 text-white shadow-sm">
+                        {inspection.status}
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">Since {inspection.date}</span>
+                    </div>
+                    <button className="p-2 text-slate-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors ml-auto sm:ml-0">
+                      <MoreVertical size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
               {displayedInspections.map((inspection) => (
                 <div key={inspection.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white">
@@ -271,6 +328,11 @@ export default function InspectionsDynamicPage() {
                       </span>
                       <span className="text-[10px] font-bold text-slate-500">{inspection.type}</span>
                     </div>
+                    {currentStatus === 'findings' && (
+                      <button className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-blue-200 hover:border-blue-600 shadow-sm whitespace-nowrap">
+                        ⚡ Auto-Gen Tasks
+                      </button>
+                    )}
                     <button className="p-2 text-slate-400 hover:text-[#022C4F] hover:bg-slate-100 rounded-lg transition-colors">
                       <MoreVertical size={18} />
                     </button>
@@ -311,10 +373,16 @@ export default function InspectionsDynamicPage() {
                   </div>
 
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500">{inspection.type}</span>
-                    <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                      View <ArrowUpRight size={12} />
-                    </button>
+                    <span className="text-[10px] font-bold text-slate-500">{(inspection as any).priority || 'Normal'} Priority</span>
+                    {currentStatus === 'findings' ? (
+                      <button className="text-[10px] font-bold text-blue-700 hover:text-white hover:bg-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1">
+                        ⚡ Auto-Gen Tasks
+                      </button>
+                    ) : (
+                      <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        View <ArrowUpRight size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

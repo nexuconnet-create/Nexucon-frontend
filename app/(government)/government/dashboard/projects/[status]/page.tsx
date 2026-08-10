@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   Building2, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
-  ClipboardList, Check, FolderOpen, AlertCircle, FileSearch
+  ClipboardList, Check, FolderOpen, AlertCircle, FileSearch, AlertOctagon, UserX, Gavel, FileX
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
@@ -16,15 +16,22 @@ const TABS = [
   { id: 'pending', label: 'Pending Projects', icon: Clock },
   { id: 'flagged', label: 'Flagged Projects', icon: AlertTriangle },
   { id: 'monitoring', label: 'Project Monitoring', icon: Eye },
+  { id: 'blacklist', label: 'Blacklist / Red-Flags', icon: AlertOctagon },
+];
+
+const MOCK_OFFENDERS = [
+  { id: 'ENT-001', name: 'Rovengates Properties', type: 'Developer', reason: 'Pending Court Case (Structural Failure)', status: 'Suspended', date: 'Oct 2025', icon: Gavel },
+  { id: 'ENT-002', name: 'Mainland Builders', type: 'Contractor', reason: 'Previous Building Collapse', status: 'Blacklisted', date: 'Jan 2024', icon: AlertOctagon },
+  { id: 'ENT-003', name: 'O&A Consults', type: 'Consultant', reason: 'Revoked License (Falsified Docs)', status: 'Banned', date: 'Mar 2026', icon: FileX },
 ];
 
 // Mock data for the table/cards
 const MOCK_PROJECTS = [
-  { id: 'PRJ-2026-001', name: 'Victoria Heights Commercial Development', developer: 'Rovengates Properties', location: 'Victoria Island, Lagos', type: 'Commercial', status: 'Active', progress: 68, compliance: 'Compliant' },
-  { id: 'PRJ-2026-002', name: 'Lekki Commercial Plaza', developer: 'Lekki Concession Co.', location: 'Lekki Phase 1, Lagos', type: 'Mixed-Use', status: 'Flagged', progress: 42, compliance: 'Warning' },
-  { id: 'PRJ-2026-003', name: 'Ikeja Mixed-Use Development', developer: 'Mainland Builders', location: 'Ikeja, Lagos', type: 'Mixed-Use', status: 'Active', progress: 15, compliance: 'Compliant' },
-  { id: 'PRJ-2026-004', name: 'Harmony Business Complex', developer: 'Harmony Group', location: 'Port Harcourt, Rivers', type: 'Commercial', status: 'Completed', progress: 100, compliance: 'Compliant' },
-  { id: 'PRJ-2026-005', name: 'Green Valley Apartments', developer: 'Green Valley Devs', location: 'Abuja Phase 2', type: 'Residential', status: 'Pending', progress: 0, compliance: 'Under Review' },
+  { id: 'PRJ-2026-001', name: 'Victoria Heights Commercial Development', developer: 'Rovengates Properties', location: 'Victoria Island, Lagos', type: 'Commercial', status: 'Active', progress: 68, compliance: 'Compliant', complianceScore: 92 },
+  { id: 'PRJ-2026-002', name: 'Lekki Commercial Plaza', developer: 'Lekki Concession Co.', location: 'Lekki Phase 1, Lagos', type: 'Mixed-Use', status: 'Flagged', progress: 42, compliance: 'Warning', complianceScore: 45 },
+  { id: 'PRJ-2026-003', name: 'Ikeja Mixed-Use Development', developer: 'Mainland Builders', location: 'Ikeja, Lagos', type: 'Mixed-Use', status: 'Active', progress: 15, compliance: 'Compliant', complianceScore: 88 },
+  { id: 'PRJ-2026-004', name: 'Harmony Business Complex', developer: 'Harmony Group', location: 'Port Harcourt, Rivers', type: 'Commercial', status: 'Completed', progress: 100, compliance: 'Compliant', complianceScore: 100 },
+  { id: 'PRJ-2026-005', name: 'Green Valley Apartments', developer: 'Green Valley Devs', location: 'Abuja Phase 2', type: 'Residential', status: 'Pending', progress: 0, compliance: 'Under Review', complianceScore: 60 },
 ];
 
 export default function ProjectsDynamicPage() {
@@ -102,6 +109,17 @@ export default function ProjectsDynamicPage() {
         { label: "Tersus Verifications", value: "12", icon: MapPin, color: "indigo" },
       ],
       actions: ["Open Project Monitor", "View Site Map", "Launch BIM Viewer", "Verify Site Coordinates", "Review Activity", "Generate Monitoring Report"]
+    },
+    blacklist: {
+      title: "Recurring Offenders Registry",
+      subtitle: "Registry of blacklisted or red-flagged contractors, developers, and consultants.",
+      overview: [
+        { label: "Total Blacklisted", value: "14", icon: AlertOctagon, color: "red" },
+        { label: "Pending Court Cases", value: "5", icon: Gavel, color: "orange" },
+        { label: "Revoked Licenses", value: "8", icon: FileX, color: "red" },
+        { label: "Suspended Entities", value: "22", icon: UserX, color: "amber" },
+      ],
+      actions: ["Add to Registry", "Review Case Files", "Generate Tribunal Report", "Escalate to Enforcement"]
     }
   };
 
@@ -233,7 +251,49 @@ export default function ProjectsDynamicPage() {
 
         {/* Content Area */}
         <div className="p-6 flex-1 overflow-y-auto">
-          {viewMode === 'list' ? (
+          {currentStatus === 'blacklist' ? (
+            <div className="flex flex-col gap-3">
+              {MOCK_OFFENDERS.map((offender) => (
+                <div key={offender.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-red-100 hover:border-red-300 hover:shadow-md transition-all group bg-red-50/30">
+                  <div className="flex items-center gap-4 w-full sm:w-1/3 mb-4 sm:mb-0">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                      <offender.icon size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors">{offender.name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{offender.id}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{offender.type}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1 w-full sm:w-1/3 mb-4 sm:mb-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason for Flag</span>
+                    <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                      <AlertTriangle size={12} /> {offender.reason}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center sm:justify-end gap-6 w-full sm:w-1/3">
+                    <div className="flex flex-col items-start sm:items-end">
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1
+                        ${offender.status === 'Blacklisted' ? 'bg-red-600 text-white shadow-sm' : ''}
+                        ${offender.status === 'Suspended' ? 'bg-orange-100 text-orange-700' : ''}
+                        ${offender.status === 'Banned' ? 'bg-red-900 text-white shadow-sm' : ''}
+                      `}>
+                        {offender.status}
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-500">Since {offender.date}</span>
+                    </div>
+                    <button className="p-2 text-slate-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors ml-auto sm:ml-0">
+                      <MoreVertical size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
               {displayedProjects.map((project) => (
                 <div key={project.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white">
@@ -258,6 +318,12 @@ export default function ProjectsDynamicPage() {
                   </div>
 
                   <div className="flex items-center gap-6 w-1/4 justify-end">
+                    <div className="flex flex-col items-end mr-2 text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Compliance</span>
+                      <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100' : project.complianceScore >= 50 ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100' : 'text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100'}`}>
+                        {project.complianceScore}%
+                      </span>
+                    </div>
                     <div className="flex flex-col items-end">
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1
                         ${project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : ''}
@@ -315,6 +381,13 @@ export default function ProjectsDynamicPage() {
                   </div>
 
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">Compliance</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${project.complianceScore >= 80 ? 'bg-emerald-500' : project.complianceScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                        <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-700' : project.complianceScore >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{project.complianceScore}%</span>
+                      </div>
+                    </div>
                     {project.status === 'Active' ? (
                       <div className="flex flex-col w-24">
                          <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
@@ -325,8 +398,11 @@ export default function ProjectsDynamicPage() {
                     ) : (
                       <span className="text-[10px] font-bold text-slate-500">{project.type}</span>
                     )}
-                    <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                      View <ArrowUpRight size={12} />
+                  </div>
+                  
+                  <div className="mt-4 flex items-center justify-end">
+                    <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                      View Project <ArrowUpRight size={12} />
                     </button>
                   </div>
                 </div>

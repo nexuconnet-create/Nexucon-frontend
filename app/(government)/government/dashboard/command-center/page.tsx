@@ -1,8 +1,9 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowUpRight,
+  X,
   Building2,
   FileText,
   AlertTriangle,
@@ -26,6 +27,9 @@ import Link from 'next/link';
 import TopRightControls from "@/components/dashboard/TopRightControls";
 
 export default function GovernmentCommandCenter() {
+  const [showAlertsModal, setShowAlertsModal] = useState(true);
+  const [userRole, setUserRole] = useState<'Agency Head' | 'Director' | 'Inspector'>('Agency Head');
+
   return (
     <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Top Bar */}
@@ -44,6 +48,13 @@ export default function GovernmentCommandCenter() {
           </p>
         </div>
         <TopRightControls />
+      </div>
+
+      {/* Role Toggle for Usability Concern 1 */}
+      <div className="flex items-center gap-2 mb-6 p-1 bg-slate-200/50 rounded-xl w-fit border border-slate-200/50">
+        <button onClick={() => setUserRole('Agency Head')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Agency Head' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Agency Head</button>
+        <button onClick={() => setUserRole('Director')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Director' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Director</button>
+        <button onClick={() => setUserRole('Inspector')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Inspector' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Inspector</button>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-8 pb-8">
@@ -76,6 +87,7 @@ export default function GovernmentCommandCenter() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Project Portfolio */}
+            {(userRole === 'Agency Head' || userRole === 'Director') && (
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
@@ -100,8 +112,10 @@ export default function GovernmentCommandCenter() {
                 View Project Portfolio <ArrowUpRight size={16} />
               </button>
             </div>
+            )}
 
             {/* Regulatory Workflow */}
+            {(userRole === 'Agency Head' || userRole === 'Director') && (
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
@@ -137,8 +151,10 @@ export default function GovernmentCommandCenter() {
                 <button className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors">View Compliance</button>
               </div>
             </div>
+            )}
 
             {/* Construction Monitoring */}
+            {(userRole === 'Agency Head' || userRole === 'Inspector') && (
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
@@ -179,8 +195,10 @@ export default function GovernmentCommandCenter() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Compliance Overview */}
+            {(userRole === 'Agency Head' || userRole === 'Director') && (
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl">
@@ -217,8 +235,10 @@ export default function GovernmentCommandCenter() {
                 </button>
               </div>
             </div>
+            )}
 
             {/* Inspection Overview */}
+            {(userRole === 'Agency Head' || userRole === 'Inspector') && (
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all lg:col-span-2 xl:col-span-1">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 bg-orange-50 text-orange-600 rounded-xl">
@@ -279,6 +299,7 @@ export default function GovernmentCommandCenter() {
                 </button>
               </div>
             </div>
+            )}
 
             {/* Tersus Site Positioning */}
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-full group hover:shadow-md transition-all lg:col-span-2 xl:col-span-1 bg-gradient-to-br from-white to-slate-50">
@@ -353,6 +374,89 @@ export default function GovernmentCommandCenter() {
             </div>
           </div>
 
+          {/* Structural Risk Index Row (Full Width span) */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col group hover:shadow-md transition-all">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[#022C4F]">Structural Risk Index</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Risk-based prioritization framework for building collapse prevention</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {/* CRITICAL */}
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex flex-col h-full shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-red-500" /></div>
+                <div className="flex items-center justify-between mb-3 relative z-10">
+                  <span className="px-2.5 py-1 bg-red-100 text-red-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Critical Risk</span>
+                  <span className="text-xl font-bold text-red-600">2<span className="text-[9px] text-red-500/80 ml-1 uppercase">Projects</span></span>
+                </div>
+                <div className="mb-4 relative z-10 flex-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
+                  <p className="text-xs font-medium text-slate-700 leading-relaxed">Active construction without permit, structural deviation &gt;10%, expired approvals.</p>
+                </div>
+                <div className="mt-auto relative z-10">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Action Required</h4>
+                  <p className="text-xs font-bold text-red-700 bg-red-100/50 p-2.5 rounded-lg border border-red-200/50 flex items-center justify-center text-center leading-snug">Immediate site visit, stop-work order</p>
+                </div>
+              </div>
+
+              {/* HIGH */}
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 flex flex-col h-full shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-orange-500" /></div>
+                <div className="flex items-center justify-between mb-3 relative z-10">
+                  <span className="px-2.5 py-1 bg-orange-100 text-orange-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">High Risk</span>
+                  <span className="text-xl font-bold text-orange-600">5<span className="text-[9px] text-orange-500/80 ml-1 uppercase">Projects</span></span>
+                </div>
+                <div className="mb-4 relative z-10 flex-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
+                  <p className="text-xs font-medium text-slate-700 leading-relaxed">Compliance violations, incomplete inspections, pending critical approvals.</p>
+                </div>
+                <div className="mt-auto relative z-10">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Action Required</h4>
+                  <p className="text-xs font-bold text-orange-700 bg-orange-100/50 p-2.5 rounded-lg border border-orange-200/50 flex items-center justify-center text-center leading-snug">Urgent inspection within 48 hours</p>
+                </div>
+              </div>
+
+              {/* MEDIUM */}
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex flex-col h-full shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-blue-500" /></div>
+                <div className="flex items-center justify-between mb-3 relative z-10">
+                  <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Medium Risk</span>
+                  <span className="text-xl font-bold text-blue-600">12<span className="text-[9px] text-blue-500/80 ml-1 uppercase">Projects</span></span>
+                </div>
+                <div className="mb-4 relative z-10 flex-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
+                  <p className="text-xs font-medium text-slate-700 leading-relaxed">Minor deviations, documentation gaps, upcoming permit expiry.</p>
+                </div>
+                <div className="mt-auto relative z-10">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Action Required</h4>
+                  <p className="text-xs font-bold text-blue-700 bg-blue-100/50 p-2.5 rounded-lg border border-blue-200/50 flex items-center justify-center text-center leading-snug">Scheduled inspection within 7 days</p>
+                </div>
+              </div>
+
+              {/* LOW */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex flex-col h-full shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-3 opacity-10"><ShieldCheck size={80} className="text-emerald-500" /></div>
+                <div className="flex items-center justify-between mb-3 relative z-10">
+                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Low Risk</span>
+                  <span className="text-xl font-bold text-emerald-600">29<span className="text-[9px] text-emerald-500/80 ml-1 uppercase">Projects</span></span>
+                </div>
+                <div className="mb-4 relative z-10 flex-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
+                  <p className="text-xs font-medium text-slate-700 leading-relaxed">Compliant, all approvals current, regular site activity reported.</p>
+                </div>
+                <div className="mt-auto relative z-10">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Action Required</h4>
+                  <p className="text-xs font-bold text-emerald-700 bg-emerald-100/50 p-2.5 rounded-lg border border-emerald-200/50 flex items-center justify-center text-center leading-snug">Routine monitoring & oversight</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Critical Alerts & Quick Actions Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
@@ -369,6 +473,9 @@ export default function GovernmentCommandCenter() {
                 <div className="p-4 rounded-xl border border-red-200 bg-red-50 flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-red-600 text-white px-1.5 py-0.5 rounded">Critical</span>
+                    </div>
                     <h4 className="text-sm font-bold text-red-900 mb-0.5">Structural inspection failed</h4>
                     <p className="text-xs font-medium text-red-700 mb-2">Victoria Heights Commercial Development</p>
                     <button className="text-[11px] font-bold uppercase tracking-wider text-white bg-red-600 px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors">Schedule Re-Inspection</button>
@@ -378,6 +485,9 @@ export default function GovernmentCommandCenter() {
                 <div className="p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-orange-500 text-white px-1.5 py-0.5 rounded">High</span>
+                    </div>
                     <h4 className="text-sm font-bold text-orange-900 mb-0.5">Permit approaching expiration</h4>
                     <p className="text-xs font-medium text-orange-700 mb-2">Lekki Commercial Plaza</p>
                     <button className="text-[11px] font-bold uppercase tracking-wider text-orange-700 bg-orange-200 px-3 py-1.5 rounded-lg hover:bg-orange-300 transition-colors">Review Renewal</button>
@@ -387,6 +497,9 @@ export default function GovernmentCommandCenter() {
                 <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded">Medium</span>
+                    </div>
                     <h4 className="text-sm font-bold text-amber-900 mb-0.5">Construction activity outside scope</h4>
                     <p className="text-xs font-medium text-amber-700 mb-2">Ikeja Mixed-Use Development</p>
                     <button className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-300 transition-colors">Review Evidence</button>
@@ -568,6 +681,69 @@ export default function GovernmentCommandCenter() {
 
         </div>
       </div>
+
+      {/* Critical Alerts Modal on Login */}
+      {showAlertsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 bg-red-50 border-b border-red-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-red-100 text-red-600 rounded-xl">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-red-900 leading-tight">Critical Alerts</h2>
+                  <p className="text-sm font-medium text-red-700">Immediate attention required</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAlertsModal(false)}
+                className="p-2 text-red-500 hover:bg-red-200 hover:text-red-700 rounded-xl transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+              <div className="p-4 rounded-xl border border-red-200 bg-red-50 flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
+                <div className="w-full">
+                  <h4 className="text-sm font-bold text-red-900 mb-0.5">Structural inspection failed</h4>
+                  <p className="text-xs font-medium text-red-700 mb-3">Victoria Heights Commercial Development</p>
+                  <button className="text-[11px] font-bold uppercase tracking-wider text-white bg-red-600 px-4 py-2.5 rounded-lg hover:bg-red-700 transition-colors w-full">Schedule Re-Inspection</button>
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
+                <div className="w-full">
+                  <h4 className="text-sm font-bold text-orange-900 mb-0.5">Permit approaching expiration</h4>
+                  <p className="text-xs font-medium text-orange-700 mb-3">Lekki Commercial Plaza</p>
+                  <button className="text-[11px] font-bold uppercase tracking-wider text-orange-700 bg-orange-200 px-4 py-2.5 rounded-lg hover:bg-orange-300 transition-colors w-full">Review Renewal</button>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
+                <div className="w-full">
+                  <h4 className="text-sm font-bold text-amber-900 mb-0.5">Construction activity outside scope</h4>
+                  <p className="text-xs font-medium text-amber-700 mb-3">Ikeja Mixed-Use Development</p>
+                  <button className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200 px-4 py-2.5 rounded-lg hover:bg-amber-300 transition-colors w-full">Review Evidence</button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setShowAlertsModal(false)}
+                className="px-6 py-2.5 bg-[#022C4F] text-white rounded-xl text-sm font-bold hover:bg-[#033b6a] transition-all shadow-md shadow-[#022C4F]/20"
+              >
+                Acknowledge & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
