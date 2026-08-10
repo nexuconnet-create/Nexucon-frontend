@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Folder, FolderOpen, FileText, Search, Plus, MoreVertical, LayoutGrid, List as ListIcon, Star, Clock, Share2, Download, Trash2, ChevronRight } from "lucide-react";
+import { Folder, FolderOpen, FileText, Search, Plus, MoreVertical, LayoutGrid, List as ListIcon, Star, Clock, Share2, Download, Trash2, ChevronRight, AlertTriangle } from "lucide-react";
 
 export default function ProjectDocuments() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -16,10 +16,10 @@ export default function ProjectDocuments() {
   ];
 
   const recentFiles = [
-    { id: 1, name: "Master_Schedule_Q4.pdf", type: "pdf", size: "2.4 MB", modified: "10 mins ago", owner: "S. Jenkins", starred: true },
-    { id: 2, name: "Budget_Review_Oct.xlsx", type: "excel", size: "850 KB", modified: "1 hr ago", owner: "Finance Dept", starred: false },
-    { id: 3, name: "Site_Survey_Report.docx", type: "word", size: "1.2 MB", modified: "3 hrs ago", owner: "M. Chen", starred: false },
-    { id: 4, name: "Meeting_Minutes_1012.pdf", type: "pdf", size: "450 KB", modified: "Yesterday", owner: "Admin", starred: true },
+    { id: 1, name: "Structural_Calculations_V2.pdf", type: "pdf", size: "12.4 MB", modified: "10 mins ago", owner: "S. Jenkins", starred: true, status: 'expired', expiryDate: 'Oct 01, 2026' },
+    { id: 2, name: "Environmental_Impact_Assessment.pdf", type: "pdf", size: "8.5 MB", modified: "1 hr ago", owner: "Enviro Dept", starred: false, status: 'valid', expiryDate: 'Dec 15, 2029' },
+    { id: 3, name: "Site_Survey_Report.docx", type: "word", size: "1.2 MB", modified: "3 hrs ago", owner: "M. Chen", starred: false, status: 'valid', expiryDate: 'N/A' },
+    { id: 4, name: "Fire_Safety_Certificate.pdf", type: "pdf", size: "450 KB", modified: "Yesterday", owner: "Admin", starred: true, status: 'expiring_soon', expiryDate: 'Oct 20, 2026' },
   ];
 
   const getFileIcon = (type: string) => {
@@ -154,6 +154,16 @@ export default function ProjectDocuments() {
                     </div>
                   </div>
                   <h4 className="font-semibold text-gray-800 text-sm line-clamp-2 group-hover:text-blue-600 transition-colors mb-2" title={file.name}>{file.name}</h4>
+                  {file.status === 'expired' && (
+                    <div className="flex items-center gap-1 text-[10px] text-red-700 font-bold bg-red-100 border border-red-200 px-2 py-0.5 rounded mb-2 w-fit">
+                      <AlertTriangle size={12} /> Expired: {file.expiryDate}
+                    </div>
+                  )}
+                  {file.status === 'expiring_soon' && (
+                    <div className="flex items-center gap-1 text-[10px] text-orange-700 font-bold bg-orange-100 border border-orange-200 px-2 py-0.5 rounded mb-2 w-fit">
+                      <AlertTriangle size={12} /> Expiring: {file.expiryDate}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-[11px] text-gray-500 font-medium mt-auto">
                     <span className="truncate max-w-[80px]">{file.owner}</span>
                     <span>•</span>
@@ -170,7 +180,7 @@ export default function ProjectDocuments() {
                     <th className="py-3 px-4 font-semibold text-xs text-gray-500">Name</th>
                     <th className="py-3 px-4 font-semibold text-xs text-gray-500">Owner</th>
                     <th className="py-3 px-4 font-semibold text-xs text-gray-500">Modified</th>
-                    <th className="py-3 px-4 font-semibold text-xs text-gray-500">Size</th>
+                    <th className="py-3 px-4 font-semibold text-xs text-gray-500">Status</th>
                     <th className="py-3 px-4 font-semibold text-xs text-gray-500 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -186,7 +196,19 @@ export default function ProjectDocuments() {
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">{file.owner}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">{file.modified}</td>
-                      <td className="py-3 px-4 text-sm text-gray-600">{file.size}</td>
+                      <td className="py-3 px-4">
+                        {file.status === 'expired' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-bold border border-red-200">
+                            <AlertTriangle size={12} /> Expired ({file.expiryDate})
+                          </span>
+                        ) : file.status === 'expiring_soon' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-100 text-orange-700 text-xs font-bold border border-orange-200">
+                            <AlertTriangle size={12} /> Expiring ({file.expiryDate})
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">Valid</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-md transition-colors"><Share2 size={16} /></button>

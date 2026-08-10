@@ -36,7 +36,7 @@ export default function GovernmentLogin() {
       if (typeof window !== 'undefined') {
         const status = localStorage.getItem('verification_status');
         if (status === 'completed') {
-          router.push('/government/dashboard');
+          router.push('/government/dashboard/command-center');
         } else {
           router.push('/government/onboarding');
         }

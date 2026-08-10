@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, Save, Volume2, Droplet, Clock, HardHat, ShieldAlert } from "lucide-react";
+import { ShieldCheck, Save, Volume2, Droplet, Clock, HardHat, ShieldAlert, BookOpen, ExternalLink, ArrowRight } from "lucide-react";
 
 export default function ComplianceStandards() {
   return (
@@ -99,7 +99,7 @@ export default function ComplianceStandards() {
           </div>
 
           {/* SLA Thresholds */}
-          <div className="p-8">
+          <div className="p-8 border-b border-gray-100">
             <div className="flex items-center gap-3 mb-6">
                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
                   <Clock size={20} />
@@ -133,10 +133,78 @@ export default function ComplianceStandards() {
                      <span className="text-sm font-bold text-gray-500 shrink-0">Days</span>
                   </div>
                </div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    </div>
-  );
-}
+             </div>
+           </div>
+
+           {/* Statutory Instrument Reference */}
+           <div className="p-8 bg-slate-900 text-white rounded-b-2xl">
+             <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2">
+                     <BookOpen className="text-blue-400" size={20} /> Statutory Instrument Reference
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">Digital library of applicable laws, regulations, and codes connected to system thresholds.</p>
+                </div>
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-bold border border-slate-700 transition-colors shadow-sm">
+                  Add Document
+                </button>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { 
+                    code: "URP-Law 2010", 
+                    name: "Urban & Regional Planning Law", 
+                    features: ["Zoning Controls", "Setbacks"],
+                    link: "View Full Act"
+                  },
+                  { 
+                    code: "NBC-2006", 
+                    name: "National Building Code", 
+                    features: ["Structural Tolerances", "Fire Safety"],
+                    link: "View Sections"
+                  },
+                  { 
+                    code: "LSEPA-2023", 
+                    name: "State Environmental Protection Guidelines", 
+                    features: ["Noise Limits", "Effluent Discharge"],
+                    link: "View Guidelines"
+                  },
+                  { 
+                    code: "Safety-Comm", 
+                    name: "Safety Commission Regulations", 
+                    features: ["Health & Safety Logs", "Stop-Work Orders"],
+                    link: "View Mandate"
+                  }
+                ].map((statute, idx) => (
+                  <div key={idx} className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl hover:bg-slate-800 transition-colors">
+                     <div className="flex items-start justify-between mb-3">
+                       <div>
+                         <h3 className="font-bold text-sm text-slate-100">{statute.name}</h3>
+                         <span className="inline-block px-2 py-0.5 mt-1 bg-slate-900 border border-slate-700 rounded text-[10px] font-mono font-bold text-blue-300">
+                           {statute.code}
+                         </span>
+                       </div>
+                       <button className="text-slate-400 hover:text-white transition-colors">
+                         <ExternalLink size={14} />
+                       </button>
+                     </div>
+                     <div className="mt-3 pt-3 border-t border-slate-700/50">
+                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Connected System Features</p>
+                       <div className="flex flex-wrap gap-2">
+                         {statute.features.map(f => (
+                           <span key={f} className="text-xs font-semibold bg-slate-900/50 text-slate-300 px-2 py-1 rounded border border-slate-700/50 flex items-center gap-1">
+                             {f} <ArrowRight size={10} className="text-slate-500" />
+                           </span>
+                         ))}
+                       </div>
+                     </div>
+                  </div>
+                ))}
+             </div>
+           </div>
+         </motion.div>
+       </div>
+     </div>
+   );
+ }

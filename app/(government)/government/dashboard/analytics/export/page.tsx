@@ -16,7 +16,12 @@ export default function ExportReports() {
     "Financial Overview",
     "Agency Performance SLAs",
     "Detailed Approval Logs",
-    "BIM Clash Summaries"
+    "BIM Clash Summaries",
+    "Structural Risk Assessment",
+    "Compliance Dashboard",
+    "Inspector Performance",
+    "Annual Building Safety Report",
+    "Emergency Response Report"
   ];
 
   const toggleModule = (moduleName: string) => {
