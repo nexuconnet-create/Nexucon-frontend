@@ -18,6 +18,7 @@ import {
   Search,
   Bell,
   HelpCircle,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,7 +36,7 @@ const sidebarLinks: SidebarItem[] = [
     subItems: [
       { name: "LIVE SITE VIEW", href: "/government/dashboard/live-site-view", icon: Home },
       { name: "COMPLIANCE DASHBOARD", href: "/government/dashboard/project/overview", icon: Home },
-      { name: "INSPECTION REPORTS", href: "/government/dashboard/documents/reports", icon: Home },
+      { name: "CENTRALIZED ISSUES", href: "/government/dashboard/issues", icon: FileText },
       { name: "ACTIVE PROJECTS", href: "/government/dashboard/project/schedule", icon: Home },
     ],
   },
@@ -44,18 +45,40 @@ const sidebarLinks: SidebarItem[] = [
     icon: FileText,
     subItems: [
       { name: "APPROVALS", href: "/government/dashboard/regulatory/approvals", icon: FileText },
+      { name: "PERMIT DECISIONS", href: "/government/dashboard/approvals/decisions", icon: FileText },
       { name: "COMPLIANCE ISSUES", href: "/government/dashboard/regulatory/issues", icon: FileText },
-      { name: "COMPLIANCE ANALYTICS", href: "/government/dashboard/regulatory/analytics", icon: FileText },
+      { name: "ESCALATION MATRIX", href: "/government/dashboard/regulatory/escalation", icon: FileText },
+      { name: "STOP-WORK ORDERS", href: "/government/dashboard/inspections/stop-work", icon: FileText },
+      { name: "GOVERNMENT APIs", href: "/government/dashboard/integrations/government", icon: FileText },
     ],
   },
   {
-    name: "T-S1 SCANNER",
+    name: "RISK & AUDIT",
+    icon: FileText,
+    subItems: [
+      { name: "STRUCTURAL RISK INDEX", href: "/government/dashboard/analytics/risk", icon: FileText },
+      { name: "AUDIT RECORDS", href: "/government/dashboard/audit/records", icon: FileText },
+      { name: "BLACKLIST", href: "/government/dashboard/stakeholders/blacklist", icon: FileText },
+      { name: "EXPIRED DOCS", href: "/government/dashboard/applications/expired", icon: FileText },
+    ],
+  },
+  {
+    name: "DIGITAL EYE",
     icon: Scan,
     subItems: [
-      { name: "SCAN INGESTION LOGS", href: "/government/dashboard/tersus/ingestion-logs", icon: Scan },
+      { name: "SCAN PLANNING", href: "/government/dashboard/digital-eye/scan-planning", icon: Scan },
+      { name: "PROCESSING PIPELINE", href: "/government/dashboard/digital-eye/processing-pipeline", icon: Scan },
       { name: "3DGS & LIDAR VIEWER", href: "/government/dashboard/tersus/viewer", icon: Scan },
-      { name: "BIM DEVIATION ANALYSIS", href: "/government/dashboard/tersus/bim-comparison", icon: Scan },
       { name: "QC DASHBOARD", href: "/government/dashboard/tersus/qc-dashboard", icon: Scan },
+    ],
+  },
+  {
+    name: "BIM",
+    icon: Layers,
+    subItems: [
+      { name: "CLASH DETECTION", href: "/government/dashboard/bim/clashes", icon: Layers },
+      { name: "PROGRESS VALIDATION", href: "/government/dashboard/bim/progress-validation", icon: Layers },
+      { name: "DEVIATION ANALYSIS", href: "/government/dashboard/tersus/bim-comparison", icon: Layers },
     ],
   },
   {

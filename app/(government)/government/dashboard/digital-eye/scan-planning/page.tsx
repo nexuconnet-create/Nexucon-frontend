@@ -1,38 +1,42 @@
 "use client";
-
 import React, { useState } from "react";
-import { 
-  Calendar,
-  MapPin,
-  Users,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Plus
-} from "lucide-react";
+import { Calendar, MapPin, Search, Filter, ChevronLeft, ChevronRight, Clock, Plus, X, Check, Layers, Cpu, Radio, ShieldAlert } from "lucide-react";
 
 export default function ScanPlanning() {
   const [activeTab, setActiveTab] = useState<'schedule' | 'map'>('schedule');
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [selectedSensors, setSelectedSensors] = useState<string[]>([]);
 
   const upcomingScans = [
     { id: "PLN-2026-042", project: "Downtown Metro Station", date: "Oct 12, 2026", time: "09:00 AM", operator: "John Smith", scanner: "NAVIS-V3-001", status: "confirmed" },
     { id: "PLN-2026-043", project: "Riverside Commercial Complex", date: "Oct 12, 2026", time: "02:00 PM", operator: "Sarah Jenkins", scanner: "NAVIS-V3-002", status: "pending" },
-    { id: "PLN-2026-044", project: "Highway Bridge A4", date: "Oct 13, 2026", time: "10:30 AM", operator: "Michael Chen", scanner: "NAVIS-V3-001", status: "confirmed" },
-    { id: "PLN-2026-045", project: "City Hospital Annex", date: "Oct 14, 2026", time: "08:15 AM", operator: "David Rossi", scanner: "NAVIS-V3-003", status: "tentative" },
   ];
 
+  const sensors = [
+    { id: "lidar", name: "High-Res LiDAR", icon: <Layers size={20} />, desc: "Millimeter accuracy point clouds" },
+    { id: "rgb", name: "Photogrammetry (RGB)", icon: <Cpu size={20} />, desc: "Colorization and 3D Gaussian Splatting" },
+    { id: "thermal", name: "Thermal Imaging", icon: <ShieldAlert size={20} />, desc: "Heat anomaly detection" },
+    { id: "rtk", name: "RTK GNSS", icon: <Radio size={20} />, desc: "Real-time kinematic positioning" }
+  ];
+
+  const toggleSensor = (id: string) => {
+    setSelectedSensors(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
+
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen relative">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">Scan Planning & Scheduling</h1>
-          <p className="text-gray-500 mt-1">Coordinate Tersus S1 deployments across project sites.</p>
+          <p className="text-gray-500 mt-1">Coordinate guided scan deployments across project sites.</p>
         </div>
-        <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#022C4F] text-white rounded-xl hover:bg-[#033c6c] transition-colors shadow-lg shadow-blue-900/20">
+        <button 
+          onClick={() => setIsWizardOpen(true)}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#022C4F] text-white rounded-xl hover:bg-[#033c6c] transition-colors shadow-lg shadow-blue-900/20"
+        >
           <Plus size={18} />
-          <span className="font-medium">Schedule New Scan</span>
+          <span className="font-medium">Guided Planning Wizard</span>
         </button>
       </div>
 
@@ -52,98 +56,128 @@ export default function ScanPlanning() {
               Map View
             </button>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search plans..." 
-                className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
-              />
-            </div>
-            <button className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors">
-              <Filter size={18} />
-            </button>
-          </div>
         </div>
 
         {activeTab === 'schedule' ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/50">
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500">Plan ID</th>
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500">Project / Location</th>
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500">Schedule</th>
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500">Operator</th>
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500">Equipment</th>
-                  <th className="py-4 px-6 font-semibold text-sm text-gray-500 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {upcomingScans.map((scan) => (
-                  <tr key={scan.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer group">
-                    <td className="py-4 px-6 text-sm font-medium text-gray-900">{scan.id}</td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-                        <span className="text-sm text-gray-700 font-medium">{scan.project}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-900 flex items-center gap-1.5"><Calendar size={14} className="text-gray-400"/> {scan.date}</span>
-                        <span className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5"><Clock size={14} className="text-gray-400"/> {scan.time}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
-                          {scan.operator.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <span className="text-sm text-gray-700">{scan.operator}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm text-gray-600">{scan.scanner}</td>
-                    <td className="py-4 px-6 text-right">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        scan.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                        scan.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {scan.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex items-center justify-between p-4 border-t border-gray-100">
-              <p className="text-xs text-gray-500">Showing 4 of 4 planned scans</p>
-              <div className="flex items-center gap-1">
-                <button className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50" disabled><ChevronLeft size={16} /></button>
-                <button className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50" disabled><ChevronRight size={16} /></button>
+          <div className="p-6 text-gray-500">
+            {upcomingScans.map((scan) => (
+              <div key={scan.id} className="p-4 border border-gray-100 rounded-xl mb-3 flex items-center justify-between hover:border-blue-200 transition-colors cursor-pointer">
+                <div>
+                  <h3 className="font-bold text-gray-900">{scan.project} <span className="text-sm font-normal text-gray-400 ml-2">{scan.id}</span></h3>
+                  <div className="flex gap-4 mt-2 text-sm">
+                    <span className="flex items-center gap-1"><Calendar size={14}/> {scan.date}</span>
+                    <span className="flex items-center gap-1"><Clock size={14}/> {scan.time}</span>
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${scan.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {scan.status}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         ) : (
-          <div className="h-[600px] w-full bg-slate-50 relative flex items-center justify-center">
-            {/* Map Placeholder */}
+          <div className="h-[600px] w-full bg-slate-50 relative flex items-center justify-center overflow-hidden">
+            {/* Map Grid Pattern */}
             <div className="absolute inset-0 z-0 opacity-20 mix-blend-multiply" 
                  style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(0,0,0,0.1) 1px, transparent 0)', backgroundSize: '32px 32px' }}>
             </div>
             
-            <div className="z-10 flex flex-col items-center bg-white/80 backdrop-blur px-6 py-4 rounded-2xl border border-gray-200 shadow-sm text-center">
-              <MapPin size={32} className="text-gray-400 mb-3" />
-              <h3 className="text-lg font-bold text-gray-800">Map View Mockup</h3>
-              <p className="text-sm text-gray-500 max-w-sm mt-1">
-                This area will render an interactive geospatial map highlighting scheduled scan zones and boundaries.
-              </p>
+            {/* Mock Map Polygons */}
+            <div className="absolute z-10 w-64 h-64 border-4 border-blue-500/50 bg-blue-500/10 rounded-lg transform -translate-x-32 -translate-y-16 animate-pulse flex items-center justify-center">
+              <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">Zone A (Downtown)</span>
+            </div>
+            <div className="absolute z-10 w-48 h-32 border-4 border-emerald-500/50 bg-emerald-500/10 rounded-lg transform translate-x-48 translate-y-32 flex items-center justify-center">
+              <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">Zone B (Riverside)</span>
+            </div>
+            
+            <div className="absolute top-4 right-4 z-20 bg-white p-4 rounded-xl shadow-lg border border-gray-100 w-72">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin size={16} className="text-blue-500"/> Scan Boundaries</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg cursor-pointer border border-blue-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                    <span className="text-sm font-medium text-blue-900">Downtown Metro</span>
+                  </div>
+                  <span className="text-xs text-blue-500 font-bold">09:00 AM</span>
+                </div>
+                <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer border border-transparent hover:border-gray-200 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <span className="text-sm font-medium text-gray-700">Riverside Complex</span>
+                  </div>
+                  <span className="text-xs text-gray-400">02:00 PM</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-bold text-[#022C4F]">Guided Scan Planning Wizard</h2>
+              <button onClick={() => setIsWizardOpen(false)} className="p-2 text-gray-400 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8">
+              {wizardStep === 1 && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-500">
+                  <h3 className="text-lg font-semibold mb-4">Step 1: Define Sensor Fusion Requirements</h3>
+                  <p className="text-sm text-gray-500 mb-6">Select the data capture modalities required for this scan session. This will configure the edge-device pipeline.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {sensors.map((sensor) => (
+                      <div 
+                        key={sensor.id} 
+                        onClick={() => toggleSensor(sensor.id)}
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedSensors.includes(sensor.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-200'}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className={`p-2 rounded-lg ${selectedSensors.includes(sensor.id) ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                            {sensor.icon}
+                          </div>
+                          {selectedSensors.includes(sensor.id) && <Check size={18} className="text-blue-500"/>}
+                        </div>
+                        <h4 className="font-bold text-gray-900 mt-3">{sensor.name}</h4>
+                        <p className="text-xs text-gray-500 mt-1">{sensor.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {wizardStep === 2 && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-500">
+                  <h3 className="text-lg font-semibold mb-4">Step 2: Coverage & Boundary Definition</h3>
+                  <div className="h-64 bg-slate-100 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 mb-4">
+                    Interactive Map: Draw Polygon Boundary
+                  </div>
+                  <p className="text-sm text-gray-500">The Tersus Rover will be guided to capture the highlighted zone to generate a dense 3D Gaussian Splatting asset.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 flex justify-between bg-white">
+              <button 
+                onClick={() => setWizardStep(1)} 
+                disabled={wizardStep === 1}
+                className="px-6 py-2 rounded-xl text-gray-600 font-medium hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                Back
+              </button>
+              <button 
+                onClick={() => {
+                  if(wizardStep === 1) setWizardStep(2);
+                  else setIsWizardOpen(false);
+                }}
+                className="px-6 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30"
+              >
+                {wizardStep === 1 ? 'Next Step' : 'Schedule Scan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
