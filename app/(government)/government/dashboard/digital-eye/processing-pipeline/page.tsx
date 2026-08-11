@@ -1,175 +1,154 @@
 "use client";
-
-import React, { useState, useEffect } from "react";
-import { 
-  Server,
-  Activity,
-  CheckCircle,
-  Clock,
-  Terminal,
-  Cpu,
-  RefreshCcw,
-  AlertTriangle,
-  ArrowRight
-} from "lucide-react";
+import React, { useState } from "react";
+import { Server, Activity, RefreshCw, CheckCircle, Wifi, WifiOff } from "lucide-react";
 
 export default function ProcessingPipeline() {
-  const [logs, setLogs] = useState<string[]>([
-    "[10:45:01] INFO - Initializing pipeline for SCN-26-002...",
-    "[10:45:02] INFO - Fetching LiDAR asset (1.2GB) from S3 bucket...",
-    "[10:45:10] INFO - Download complete. Starting point cloud alignment...",
-  ]);
+  const [activeTab, setActiveTab] = useState<'cloud' | 'edge'>('edge');
 
-  useEffect(() => {
-    // Simulate incoming logs
-    const newLogs = [
-      "[10:45:15] INFO - Running ICP registration (Iteration 1)...",
-      "[10:45:18] INFO - ICP registration (Iteration 2)...",
-      "[10:45:22] WARN - Low point density detected in sector 4B.",
-      "[10:45:25] INFO - ICP registration completed. Error: 0.002m.",
-      "[10:45:26] INFO - Starting mesh generation...",
-    ];
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < newLogs.length) {
-        setLogs(prev => [...prev, newLogs[i]]);
-        i++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const pipelineStages = [
-    { name: "Ingestion", status: "completed", desc: "Data transfer from edge devices." },
-    { name: "Alignment", status: "completed", desc: "Point cloud registration." },
-    { name: "Meshing", status: "processing", desc: "Generating 3D surfaces." },
-    { name: "AI Inference", status: "pending", desc: "Running anomaly detection models." },
-    { name: "Export", status: "pending", desc: "Generating deliverables." },
+  const edgeDevices = [
+    { id: "T-Rover-01", status: "online", battery: "84%", sync: "syncing", activeScan: "PLN-2026-042", lastSeen: "Just now" },
+    { id: "Drone-Alpha", status: "offline", battery: "12%", sync: "pending", activeScan: "None", lastSeen: "4 hours ago" },
+    { id: "Stationary-Scanner-B", status: "online", battery: "100%", sync: "synced", activeScan: "PLN-2026-043", lastSeen: "2 mins ago" },
   ];
 
   return (
-    <div className="w-full min-h-screen pb-12">
+    <div className="w-full min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">Processing Pipeline</h1>
-          <p className="text-gray-500 mt-1">Monitor real-time data ingestion and server processing nodes.</p>
+          <p className="text-gray-500 mt-1">Manage cloud ingestion and edge-device processing integration.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        {/* Node Status */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Server size={20} className="text-blue-600" />
-              Node Cluster Status
-            </h2>
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 uppercase">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              Healthy
-            </span>
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-medium text-gray-600 flex items-center gap-1.5"><Cpu size={14}/> GPU Utilization</span>
-                <span className="font-bold text-gray-900">78%</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: "78%" }}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="font-medium text-gray-600 flex items-center gap-1.5"><Activity size={14}/> Memory (RAM)</span>
-                <span className="font-bold text-gray-900">45GB / 64GB</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div className="bg-amber-500 h-2 rounded-full" style={{ width: "70%" }}></div>
-              </div>
-            </div>
-          </div>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+        <div className="flex items-center p-6 border-b border-gray-100 gap-2 bg-slate-50">
+          <button 
+            onClick={() => setActiveTab('cloud')}
+            className={`px-5 py-2 rounded-lg font-medium transition-colors ${activeTab === 'cloud' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'}`}
+          >
+            Cloud Processing
+          </button>
+          <button 
+            onClick={() => setActiveTab('edge')}
+            className={`px-5 py-2 rounded-lg font-medium transition-colors ${activeTab === 'edge' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'}`}
+          >
+            Edge Devices (Field)
+          </button>
         </div>
 
-        {/* Active Job Details */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-800">Active Job: SCN-26-002</h2>
-            <span className="text-sm font-medium text-blue-600">Riverside Commercial Complex</span>
-          </div>
-
-          <div className="flex items-center justify-between relative mb-8">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10"></div>
+        {activeTab === 'edge' && (
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100">
+                <div className="flex items-center gap-3 text-emerald-600 mb-2"><Server size={20}/><h3 className="font-bold">Edge Processing</h3></div>
+                <p className="text-sm text-emerald-800">Raw LiDAR and RGB data is compressed and pre-processed on the field devices before syncing to the cloud.</p>
+              </div>
+            </div>
             
-            {pipelineStages.map((stage, idx) => (
-              <div key={stage.name} className="flex flex-col items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 shadow-sm ${
-                  stage.status === 'completed' ? 'bg-emerald-500 text-white' :
-                  stage.status === 'processing' ? 'bg-blue-500 text-white border-2 border-blue-200' :
-                  'bg-gray-100 text-gray-400 border border-gray-200'
-                }`}>
-                  {stage.status === 'completed' ? <CheckCircle size={16} /> :
-                   stage.status === 'processing' ? <RefreshCcw size={14} className="animate-spin" /> :
-                   <Clock size={16} />}
+            <div className="space-y-4">
+              {edgeDevices.map(device => (
+                <div key={device.id} className="p-5 border border-gray-100 rounded-xl flex items-center justify-between hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-full ${device.status === 'online' ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+                      {device.status === 'online' ? <Wifi size={24}/> : <WifiOff size={24}/>}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-lg">{device.id}</h3>
+                      <p className="text-sm text-gray-500">Active Task: <span className="font-medium text-gray-700">{device.activeScan}</span> • Battery: {device.battery}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {device.sync === 'syncing' && <span className="flex items-center gap-2 text-blue-500 bg-blue-50 px-3 py-1 rounded-full text-sm font-medium"><RefreshCw size={14} className="animate-spin"/> Syncing Data...</span>}
+                    {device.sync === 'synced' && <span className="flex items-center gap-2 text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full text-sm font-medium"><CheckCircle size={14}/> Synced</span>}
+                    {device.sync === 'pending' && <span className="flex items-center gap-2 text-amber-500 bg-amber-50 px-3 py-1 rounded-full text-sm font-medium"><Activity size={14}/> Pending Upload</span>}
+                    <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Manage</button>
+                  </div>
                 </div>
-                <span className={`text-xs font-bold ${
-                  stage.status === 'completed' ? 'text-emerald-700' :
-                  stage.status === 'processing' ? 'text-blue-700' :
-                  'text-gray-400'
-                }`}>{stage.name}</span>
-              </div>
-            ))}
-          </div>
-          
-          <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-            <h4 className="text-sm font-bold text-blue-900 mb-1">Current Stage: Meshing</h4>
-            <p className="text-xs text-blue-700 mb-3">Reconstructing 3D surfaces from aligned point cloud data.</p>
-            <div className="w-full bg-blue-100 rounded-full h-1.5">
-              <div className="bg-blue-600 h-1.5 rounded-full relative" style={{ width: "45%" }}>
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-blue-600 rounded-full"></div>
-              </div>
-            </div>
-            <div className="flex justify-between text-[10px] font-bold text-blue-500 uppercase mt-2">
-              <span>0%</span>
-              <span>45% Complete</span>
-              <span>100%</span>
+              ))}
             </div>
           </div>
-        </div>
-      </div>
+        )}
+        
+        {activeTab === 'cloud' && (
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 flex flex-col justify-center">
+                <div className="flex items-center gap-3 text-blue-600 mb-1"><Server size={20}/><h3 className="font-bold">Cloud Nodes</h3></div>
+                <h2 className="text-3xl font-bold text-blue-900 mt-2">12 / 16</h2>
+                <p className="text-sm text-blue-700 mt-1">Active GPU nodes processing</p>
+              </div>
+              <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex flex-col justify-center">
+                <p className="text-sm text-gray-500 font-medium">Pending Jobs</p>
+                <h2 className="text-3xl font-bold text-gray-900 mt-2">8</h2>
+              </div>
+              <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex flex-col justify-center">
+                <p className="text-sm text-gray-500 font-medium">Processing</p>
+                <h2 className="text-3xl font-bold text-blue-600 mt-2">3</h2>
+              </div>
+              <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex flex-col justify-center">
+                <p className="text-sm text-gray-500 font-medium">Completed (24h)</p>
+                <h2 className="text-3xl font-bold text-emerald-600 mt-2">42</h2>
+              </div>
+            </div>
 
-      {/* Live Terminal Logs */}
-      <div className="bg-[#0a192f] rounded-2xl shadow-xl overflow-hidden border border-gray-800 flex flex-col h-[400px]">
-        <div className="bg-[#020c1b] px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-gray-400">
-            <Terminal size={16} />
-            <span className="text-sm font-mono tracking-wider">nexucon-processing-node-01</span>
-          </div>
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500/50"></div>
-            <div className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div>
-          </div>
-        </div>
-        <div className="p-4 flex-1 overflow-y-auto font-mono text-[13px] leading-relaxed">
-          {logs.map((log: string, i: number) => (
-            <div key={i} className="mb-1">
-              <span className="text-gray-500">{log?.substring(0, 12)}</span>
-              <span className={`ml-2 ${
-                log?.includes('INFO') ? 'text-blue-400' :
-                log?.includes('WARN') ? 'text-amber-400' :
-                log?.includes('ERR') ? 'text-red-400' : 'text-gray-300'
-              }`}>{log?.substring(12, 19)}</span>
-              <span className="text-gray-300 ml-2">{log?.substring(19)}</span>
+            <h3 className="font-bold text-gray-900 mb-4 text-lg">Active Processing Jobs</h3>
+            <div className="space-y-4">
+              {/* Job 1 */}
+              <div className="p-5 border border-gray-100 rounded-xl hover:shadow-md transition-shadow bg-white">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><RefreshCw size={18} className="animate-spin"/></div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">3D Gaussian Splatting Rendering</h4>
+                      <p className="text-sm text-gray-500">Project: Downtown Metro • Job ID: JOB-9923</p>
+                    </div>
+                  </div>
+                  <span className="text-blue-600 font-bold text-sm bg-blue-50 px-3 py-1 rounded-full">Processing (45%)</span>
+                </div>
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                  <div className="bg-blue-500 h-full w-[45%]"></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-3 text-right">Est. time remaining: 14 mins</p>
+              </div>
+              
+              {/* Job 2 */}
+              <div className="p-5 border border-gray-100 rounded-xl hover:shadow-md transition-shadow bg-white">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><RefreshCw size={18} className="animate-spin"/></div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">AI Thermal Anomaly Detection</h4>
+                      <p className="text-sm text-gray-500">Project: Riverside Complex • Job ID: JOB-9924</p>
+                    </div>
+                  </div>
+                  <span className="text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1 rounded-full">Analyzing (82%)</span>
+                </div>
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                  <div className="bg-indigo-500 h-full w-[82%]"></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-3 text-right">Est. time remaining: 2 mins</p>
+              </div>
+              
+              {/* Job 3 */}
+              <div className="p-5 border border-gray-100 rounded-xl hover:shadow-md transition-shadow bg-white">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><CheckCircle size={18}/></div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">LiDAR Point Cloud Registration</h4>
+                      <p className="text-sm text-gray-500">Project: Highway Bridge A4 • Job ID: JOB-9920</p>
+                    </div>
+                  </div>
+                  <span className="text-emerald-600 font-bold text-sm bg-emerald-50 px-3 py-1 rounded-full">Completed</span>
+                </div>
+                <div className="w-full bg-emerald-100 h-2 rounded-full overflow-hidden">
+                  <div className="bg-emerald-500 h-full w-full"></div>
+                </div>
+                <p className="text-xs text-emerald-600 mt-3 text-right">Finished 1 hour ago</p>
+              </div>
             </div>
-          ))}
-          <div className="flex items-center mt-2">
-            <span className="text-emerald-500 animate-pulse">_</span>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
