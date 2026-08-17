@@ -17,8 +17,7 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   async rewrites() {
     const isProd = process.env.NODE_ENV === 'production';
-    // IGNORE process.env entirely because invalid values cause rewrite loops
-    const backendUrl = isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || (isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000');
     
     return [
       {
