@@ -102,7 +102,7 @@ export default function ClientRegister() {
       newErrors.password = "Password is required";
     } else if (formData.password.length < 8) {
       newErrors.password = "Password must be at least 8 characters";
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])/.test(formData.password)) {
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/.test(formData.password)) {
       newErrors.password = "Password must contain uppercase, lowercase, number, and special character";
     }
     if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
