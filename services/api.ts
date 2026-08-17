@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+const isProd = process.env.NODE_ENV === 'production';
+const defaultBackend = isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000';
+const backendUrl = process.env.NEXT_PUBLIC_API_URL || defaultBackend;
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api/v1` : '/api/v1',
+  baseURL: `${backendUrl.replace(/\/$/, '')}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
