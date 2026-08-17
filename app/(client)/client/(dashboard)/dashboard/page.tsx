@@ -15,8 +15,10 @@ import FinalApprovalDrawer from "@/components/dashboard/FinalApprovalDrawer";
 import ApprovalSuccessModal from "@/components/dashboard/ApprovalSuccessModal";
 import { Search, Bell, FileText, MessageSquare, Plus, X, User, PenTool, Clipboard, Wallet, UploadCloud, Users, Briefcase, AlertTriangle, CheckCircle, Circle, PlayCircle } from "lucide-react";
 import ProfilePill from "@/components/ui/ProfilePill";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ClientDashboardPage() {
+  const { user } = useAuth();
   const [isSpeedDialOpen, setIsSpeedDialOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false);
@@ -86,7 +88,7 @@ export default function ClientDashboardPage() {
         {/* Welcome Text */}
         <div>
           <h1 className="text-3xl font-extrabold text-[#022C4F] mb-1">Welcome Back</h1>
-          <h2 className="text-xl font-bold text-[#0F181F] mb-2">Good morning, John Doe <span className="inline-block animate-wave">👋</span></h2>
+          <h2 className="text-xl font-bold text-[#0F181F] mb-2">Good morning, {user ? `${user.first_name}`.trim() || user.email : 'Loading...'} <span className="inline-block animate-wave">👋</span></h2>
           <p className="text-[12px] text-gray-500 font-light max-w-lg">
             Monitor your design projects, review drawings, collaborate with consultants, and prepare projects for successful execution.
           </p>

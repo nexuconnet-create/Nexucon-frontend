@@ -5,6 +5,7 @@ import { Bell, Search, Menu } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
 
 interface DashboardHeaderProps {
   onMenuClick?: () => void;
@@ -12,6 +13,8 @@ interface DashboardHeaderProps {
 
 export default function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const router = useRouter();
+
+  const { user } = useAuth();
 
   return (
     <header className="h-24 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 sm:px-10 sticky top-0 z-30 transition-all duration-300">
@@ -60,17 +63,16 @@ export default function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
 
         {/* User Profile */}
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Action executed successfully!', type: 'success' } })); }} className="flex items-center gap-3 p-1.5 pr-4 rounded-full border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all duration-300 bg-white group">
-          <div className="relative w-9 h-9 rounded-full overflow-hidden bg-blue-100 border-2 border-white shadow-sm">
-            <Image
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779870104/user_n8222a.jpg"
-              alt="Profile"
-              fill
-              className="object-cover group-hover:scale-110 transition-transform duration-300"
-            />
+          <div className="relative w-9 h-9 rounded-full overflow-hidden bg-blue-100 border-2 border-white shadow-sm flex items-center justify-center text-[#022C4F] font-bold text-sm">
+            {user ? (user.first_name?.[0] || user.email?.[0] || 'U').toUpperCase() : 'U'}
           </div>
           <div className="hidden sm:block text-left">
-            <p className="text-sm font-bold text-[#0F181F] leading-none mb-1">John Doe</p>
-            <p className="text-[11px] font-medium text-gray-500 leading-none">Client Account</p>
+            <p className="text-sm font-bold text-[#0F181F] leading-none mb-1">
+              {user ? `${user.first_name} ${user.last_name}`.trim() || user.email : 'Loading...'}
+            </p>
+            <p className="text-[11px] font-medium text-gray-500 leading-none capitalize">
+              {user?.role_name ? user.role_name.replace('_', ' ') : 'User'}
+            </p>
           </div>
         </button>
       </div>

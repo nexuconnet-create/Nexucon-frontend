@@ -5,18 +5,22 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
 export default function GovernmentLogin() {
   const router = useRouter();
+  const { login, isLoading, error: authError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
     if (!formData.email) {
@@ -31,15 +35,9 @@ export default function GovernmentLogin() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      // Proceed with login
-      console.log('Login successful', formData);
-      if (typeof window !== 'undefined') {
-        const status = localStorage.getItem('verification_status');
-        if (status === 'completed') {
-          router.push('/government/dashboard/command-center');
-        } else {
-          router.push('/government/onboarding');
-        }
+      const success = await login({ email: formData.email, password: formData.password });
+      if (success) {
+        setShowSuccessModal(true);
       }
     }
   };
@@ -147,6 +145,7 @@ export default function GovernmentLogin() {
             <p className="text-xs sm:text-sm font-medium text-gray-500 leading-relaxed max-w-sm">
               Sign in to your Nexucon account to review plans, issue permits, inspect sites, and oversee building compliance within your jurisdiction.
             </p>
+            {authError && <p className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">{authError}</p>}
           </div>
 
           {/* Form Fields & Actions */}
@@ -192,15 +191,24 @@ export default function GovernmentLogin() {
             <div className="flex flex-col gap-4 mt-auto lg:mt-0 mb-6 lg:mb-0">
               <button
                 type="submit"
-                className="w-full py-4 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
+                disabled={isLoading}
+                className="w-full py-4 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] disabled:opacity-70 flex justify-center items-center"
               >
-                Login
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  "Login"
+                )}
               </button>
             </div>
           </form>
 
         </div>
       </div>
+      <LoginSuccessModal 
+        isOpen={showSuccessModal} 
+        onClose={() => router.push('/government/dashboard/command-center')} 
+      />
     </div>
   );
 }

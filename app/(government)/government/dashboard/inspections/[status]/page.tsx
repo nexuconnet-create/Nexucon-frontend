@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getInspections, Inspection } from '@/services/inspections';
 import {
-  ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
+  ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle,
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
   Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase, AlertOctagon, Octagon, Wifi
 } from 'lucide-react';
@@ -33,9 +34,37 @@ export default function InspectionsDynamicPage() {
   const params = useParams();
   const router = useRouter();
   const currentStatus = (params.status as string) || 'requests';
-  
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [inspections, setInspections] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInspections = async () => {
+      try {
+        const data = await getInspections();
+        const mapped = (Array.isArray(data) ? data : []).map((i: Inspection) => ({
+          id: i.id,
+          project: 'Project Name', // TODO: populate from project relation
+          inspector: 'Unassigned',
+          type: i.inspection_type || 'General Inspection',
+          status: i.status === 'SCHEDULED' ? 'Scheduled' : i.status === 'COMPLETED' ? 'Completed' : 'Pending Request',
+          date: i.scheduled_date ? new Date(i.scheduled_date).toLocaleDateString() : 'N/A',
+          priority: 'Normal',
+          findings: 0
+        }));
+        setInspections([...MOCK_INSPECTIONS, ...mapped]);
+      } catch (error) {
+        console.error('Failed to fetch inspections', error);
+        setInspections(MOCK_INSPECTIONS);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInspections();
+  }, []);
 
   // Define content mapping based on the prompt requirements
   const pageContent = {
@@ -120,8 +149,8 @@ export default function InspectionsDynamicPage() {
 
   const content = pageContent[currentStatus as keyof typeof pageContent] || pageContent.requests;
 
-  // Filter inspections based on tab (simple mock logic)
-  const displayedInspections = MOCK_INSPECTIONS.filter(i => {
+  // Filter inspections based on tab
+  const displayedInspections = inspections.filter(i => {
     if (currentStatus === 'schedule') return i.status === 'Scheduled';
     if (currentStatus === 'active') return i.status === 'Active';
     if (currentStatus === 'findings') return i.findings > 0 && i.type !== 'Stop-Work Order';
@@ -143,11 +172,11 @@ export default function InspectionsDynamicPage() {
             <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">
               Inspection Management
             </h1>
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md shadow-sm ml-2">
+            {/* <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md shadow-sm ml-2">
                <Wifi size={14} />
                <span className="text-[10px] font-bold uppercase tracking-wider">Field Mode: Offline Ready</span>
                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1"></div>
-            </div>
+            </div> */}
           </div>
           <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">
             {content.subtitle}
@@ -164,11 +193,10 @@ export default function InspectionsDynamicPage() {
             <button
               key={tab.id}
               onClick={() => router.push(`/government/dashboard/inspections/${tab.id}`)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-                isActive 
-                  ? 'bg-[#022C4F] text-white shadow-md' 
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${isActive
+                  ? 'bg-[#022C4F] text-white shadow-md'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
+                }`}
             >
               <tab.icon size={16} />
               {tab.label}
@@ -179,7 +207,7 @@ export default function InspectionsDynamicPage() {
 
       {/* Dynamic Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-        
+
         {/* Overview Stats */}
         <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-4">
           {content.overview.map((stat, idx) => (
@@ -219,13 +247,13 @@ export default function InspectionsDynamicPage() {
           <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
             <FileSearch size={18} /> {content.title}
           </h2>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search inspections..." 
+              <input
+                type="text"
+                placeholder="Search inspections..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full sm:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F]/20 transition-all"
@@ -235,13 +263,13 @@ export default function InspectionsDynamicPage() {
               <Filter size={18} />
             </button>
             <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1">
-              <button 
+              <button
                 onClick={() => setViewMode('list')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <List size={16} />
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('grid')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
@@ -269,7 +297,7 @@ export default function InspectionsDynamicPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-col gap-1 w-full sm:w-1/3 mb-4 sm:mb-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason for Stoppage</span>
                     <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
@@ -304,7 +332,7 @@ export default function InspectionsDynamicPage() {
                       <p className="text-xs text-slate-500">{inspection.id}</p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 w-1/4">
                     <User size={14} className="text-slate-400" />
                     <span className="text-xs font-medium text-slate-600 line-clamp-1">{inspection.inspector}</span>
@@ -355,12 +383,12 @@ export default function InspectionsDynamicPage() {
                         ${inspection.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' : ''}
                         ${inspection.status === 'Active' ? 'bg-indigo-100 text-indigo-700' : ''}
                       `}>
-                        {inspection.status}
+                      {inspection.status}
                     </span>
                   </div>
                   <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1">{inspection.project}</h4>
                   <p className="text-xs text-slate-500 mb-4">{inspection.id}</p>
-                  
+
                   <div className="flex flex-col gap-2 mt-auto mb-4">
                     <div className="flex items-center gap-2">
                       <User size={12} className="text-slate-400" />

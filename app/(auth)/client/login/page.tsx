@@ -5,12 +5,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
+import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
 export default function ClientLogin() {
   const router = useRouter();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -33,7 +35,7 @@ export default function ClientLogin() {
     if (Object.keys(newErrors).length === 0) {
       // Proceed with login
       console.log('Login successful', formData);
-      router.push("/client/dashboard");
+      setShowSuccessModal(true);
     }
   };
 
@@ -206,6 +208,10 @@ export default function ClientLogin() {
 
         </div>
       </div>
+      <LoginSuccessModal 
+        isOpen={showSuccessModal} 
+        onClose={() => router.push('/client/dashboard')} 
+      />
     </div>
   );
 }

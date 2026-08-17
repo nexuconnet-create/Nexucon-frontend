@@ -5,9 +5,11 @@ import { Search, Bell, ChevronDown, Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CustomSelect } from "@/components/CustomSelect";
 import TopRightControls from "@/components/dashboard/TopRightControls";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProfessionalDashboard() {
   const router = useRouter();
+  const { user } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [step, setStep] = useState(1);
   const [projectType, setProjectType] = useState("");
@@ -24,7 +26,7 @@ export default function ProfessionalDashboard() {
         {/* Left Side: Welcome Text */}
         <div className="max-w-3xl">
           <h1 className="text-[40px] font-bold text-[#022C4F] leading-tight mb-4">
-            Welcome Back, John Doe
+            Welcome Back, {user ? `${user.first_name}`.trim() || user.email : 'Loading...'}
           </h1>
           <p className="text-gray-600 text-sm leading-relaxed">
             Set up a new design project, define the project scope, invite collaborators, and

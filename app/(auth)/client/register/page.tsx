@@ -98,7 +98,13 @@ export default function ClientRegister() {
 
   const handleNextStep5 = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.password || formData.password.length < 8) newErrors.password = "Password must be at least 8 characters";
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])/.test(formData.password)) {
+      newErrors.password = "Password must contain uppercase, lowercase, number, and special character";
+    }
     if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
 
     if (Object.keys(newErrors).length > 0) {

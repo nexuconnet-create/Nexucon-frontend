@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getProjects, Project } from '@/services/projects';
+import { getInspections, Inspection } from '@/services/inspections';
+import api from '@/services/api';
 import {
   ArrowUpRight,
   X,
@@ -27,8 +30,177 @@ import Link from 'next/link';
 import TopRightControls from "@/components/dashboard/TopRightControls";
 
 export default function GovernmentCommandCenter() {
-  const [showAlertsModal, setShowAlertsModal] = useState(true);
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [userRole, setUserRole] = useState<'Agency Head' | 'Director' | 'Inspector'>('Agency Head');
+  
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [quickActionsSummary, setQuickActionsSummary] = useState({
+    applications_pending_review: 0,
+    inspections_due: 0,
+    site_verifications_pending: 0,
+    bim_models_pending_review: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [projectsData, inspectionsData, quickActionsRes] = await Promise.all([
+          getProjects(),
+          getInspections(),
+          api.get('/government/dashboard/quick-actions/').catch(() => ({ data: null }))
+        ]);
+        setProjects(projectsData || []);
+        setInspections(inspectionsData || []);
+        if (quickActionsRes && quickActionsRes.data) {
+          setQuickActionsSummary(quickActionsRes.data);
+        }
+        
+        if (
+          (inspectionsData || []).some(i => i.status === 'FAILED') || 
+          (projectsData || []).some(p => p.status === 'SUSPENDED')
+        ) {
+          setShowAlertsModal(true);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const activeProjectsCount = projects.filter(p => p.status === 'ACTIVE').length;
+  const underReviewCount = projects.filter(p => p.status === 'PLANNING').length; 
+  const activeInspectionsCount = inspections.filter(i => i.status === 'SCHEDULED' || i.status === 'IN_PROGRESS').length;
+  
+  const pendingApprovalsCount = projects.filter(p => p.status === 'PLANNING').length;
+  const complianceIssuesCount = inspections.filter(i => i.status === 'FAILED').length;
+  
+  const alertStyles = {
+    red: { wrapper: 'border-red-200 bg-red-50', dot: 'bg-red-500', badge: 'bg-red-600 text-white', title: 'text-red-900', desc: 'text-red-700', btn: 'text-white bg-red-600 hover:bg-red-700' },
+    orange: { wrapper: 'border-orange-200 bg-orange-50', dot: 'bg-orange-500', badge: 'bg-orange-500 text-white', title: 'text-orange-900', desc: 'text-orange-700', btn: 'text-orange-700 bg-orange-200 hover:bg-orange-300' }
+  };
+
+  const criticalAlerts = [
+    ...inspections.filter(i => i.status === 'FAILED').map(i => ({
+      level: 'Critical',
+      title: 'Inspection failed',
+      desc: i.project,
+      action: 'Schedule Re-Inspection',
+      style: alertStyles.red
+    })),
+    ...projects.filter(p => p.status === 'SUSPENDED').map(p => ({
+      level: 'High',
+      title: 'Project Suspended',
+      desc: p.name || p.reference_number,
+      action: 'Review Case',
+      style: alertStyles.orange
+    }))
+  ];
+  
+  const criticalAlertsCount = criticalAlerts.length;
+  const permitReviewsCount = projects.filter(p => p.status === 'PLANNING').length;
+  const inspectionRequestsCount = inspections.filter(i => i.status === 'PENDING').length;
+  
+  // Site status counts
+  const normalSitesCount = projects.filter(p => p.status === 'ACTIVE').length;
+  const attentionSitesCount = projects.filter(p => p.status === 'PLANNING' || p.status === 'COMPLETED').length;
+  const criticalSitesCount = projects.filter(p => p.status === 'SUSPENDED').length;
+  
+  // Compliance counts
+  const compliantCount = projects.filter(p => p.status === 'ACTIVE' || p.status === 'COMPLETED').length;
+  const underReviewComplianceCount = projects.filter(p => p.status === 'PLANNING').length;
+  const nonCompliantCount = inspections.filter(i => i.status === 'FAILED').length; // Mock logic
+  const criticalViolationCount = projects.filter(p => p.status === 'SUSPENDED').length;
+
+  // Structural Risk Index counts
+  const criticalRiskCount = projects.filter(p => p.status === 'SUSPENDED').length;
+  const highRiskCount = inspections.filter(i => i.status === 'FAILED').length;
+  const mediumRiskCount = projects.filter(p => p.status === 'PLANNING').length;
+  const lowRiskCount = projects.filter(p => p.status === 'ACTIVE').length;
+
+  // --- Real-time Data Calculations ---
+  const totalProjects = projects.length || 1;
+  const onScheduleProjectsCount = projects.filter(p => p.status === 'ACTIVE' || p.status === 'COMPLETED').length;
+  const projectsOnSchedulePercentage = projects.length > 0 ? Math.round((onScheduleProjectsCount / totalProjects) * 100) : 0;
+
+  const totalInspections = inspections.length || 1;
+  const completedInspectionsCount = inspections.filter(i => i.status === 'COMPLETED').length;
+  const scheduledInspectionsCount = inspections.filter(i => i.status === 'SCHEDULED').length;
+  const pendingInspectionsCount = inspections.filter(i => i.status === 'PENDING').length;
+  const failedInspectionsCount = inspections.filter(i => i.status === 'FAILED').length;
+  const reInspectionsCount = inspections.filter(i => i.status === 'RE_INSPECTION' || i.status === 'RE_INSPECT').length;
+
+  const inspectionCompletionPercentage = inspections.length > 0 ? Math.round((completedInspectionsCount / totalInspections) * 100) : 0;
+  const complianceRatePercentage = inspections.length > 0 ? Math.round(((totalInspections - failedInspectionsCount) / totalInspections) * 100) : 0;
+
+  const totalPendingActions = pendingInspectionsCount + underReviewCount;
+
+  const uniqueOfficers = new Set<string>();
+  projects.forEach(p => {
+    if (p.assigned_officer) uniqueOfficers.add(p.assigned_officer);
+    if (p.assigned_inspector) uniqueOfficers.add(p.assigned_inspector);
+    if (p.technical_reviewer) uniqueOfficers.add(p.technical_reviewer);
+    if (p.compliance_officer) uniqueOfficers.add(p.compliance_officer);
+  });
+  inspections.forEach(i => {
+    if ((i as any).inspector_name) uniqueOfficers.add((i as any).inspector_name);
+  });
+  const activeOfficersCount = uniqueOfficers.size;
+
+  // Today's schedule
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  
+  const todaysInspections = inspections
+    .filter(i => {
+      if (!i.scheduled_date) return false;
+      const date = new Date(i.scheduled_date);
+      return date >= todayStart && date <= todayEnd;
+    })
+    .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
+    .slice(0, 3);
+
+  // Recent Activity Generation
+  const timeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "y ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "mo ago";
+    interval = seconds / 86400;
+    if (interval >= 1) return Math.floor(interval) + "d ago";
+    interval = seconds / 3600;
+    if (interval >= 1) return Math.floor(interval) + "h ago";
+    interval = seconds / 60;
+    if (interval >= 1) return Math.floor(interval) + "m ago";
+    return Math.floor(seconds) + "s ago";
+  };
+
+  const projectActivities = projects.map(p => ({
+    text: `Project ${p.name || p.reference_number} ${p.status ? p.status.toLowerCase() : 'updated'}`,
+    timeText: p.updated_at ? timeAgo(new Date(p.updated_at)) : 'Recently',
+    date: p.updated_at ? new Date(p.updated_at) : new Date(0),
+    dot: "bg-purple-500"
+  }));
+
+  const inspectionActivities = inspections.map(i => ({
+    text: `Inspection ${i.inspection_type || ''} scheduled`,
+    timeText: i.created_at ? timeAgo(new Date(i.created_at)) : 'Recently',
+    date: i.created_at ? new Date(i.created_at) : new Date(0),
+    dot: "bg-blue-500"
+  }));
+
+  const recentActivities = [...projectActivities, ...inspectionActivities]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 7)
+    .map(a => ({ text: a.text, time: a.timeText, dot: a.dot }));
+
 
   return (
     <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -64,12 +236,12 @@ export default function GovernmentCommandCenter() {
           {/* Overview Stats */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
-              { title: "Active Projects", value: "48", icon: Building2, color: "blue" },
-              { title: "Under Review", value: "12", icon: FileSearch, color: "amber" },
-              { title: "Pending Approvals", value: "18", icon: Clock, color: "purple" },
-              { title: "Active Inspections", value: "9", icon: Activity, color: "emerald" },
-              { title: "Compliance Issues", value: "7", icon: ShieldCheck, color: "orange" },
-              { title: "Critical Alerts", value: "3", icon: AlertTriangle, color: "red" }
+              { title: "Active Projects", value: isLoading ? "-" : (activeProjectsCount || "0"), icon: Building2, color: "blue" },
+              { title: "Under Review", value: isLoading ? "-" : (underReviewCount || "0"), icon: FileSearch, color: "amber" },
+              { title: "Pending Approvals", value: isLoading ? "-" : (pendingApprovalsCount || "0"), icon: Clock, color: "purple" },
+              { title: "Active Inspections", value: isLoading ? "-" : (activeInspectionsCount || "0"), icon: Activity, color: "emerald" },
+              { title: "Compliance Issues", value: isLoading ? "-" : (complianceIssuesCount || "0"), icon: ShieldCheck, color: "orange" },
+              { title: "Critical Alerts", value: isLoading ? "-" : (criticalAlertsCount || "0"), icon: AlertTriangle, color: "red" }
             ].map((stat, idx) => (
               <div key={idx} className={`bg-white rounded-2xl border border-slate-100 p-4 flex flex-col shadow-sm hover:shadow-md transition-all group border-l-4 border-l-${stat.color}-500`}>
                 <div className="flex justify-between items-start mb-2">
@@ -97,7 +269,7 @@ export default function GovernmentCommandCenter() {
               </div>
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-slate-500 mb-1">Construction Progress</h3>
-                <p className="text-2xl font-bold text-[#022C4F]">48 Active Projects</p>
+                <p className="text-2xl font-bold text-[#022C4F]">{activeProjectsCount} Active Projects</p>
                 <p className="text-xs text-slate-500 mt-2 line-clamp-2">Track overall project progress, construction status, milestones, and regulatory compliance across all government-supervised developments.</p>
               </div>
               <div className="mb-6">
@@ -127,19 +299,19 @@ export default function GovernmentCommandCenter() {
                 <h3 className="text-sm font-semibold text-slate-500 mb-3">Pending Actions</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <span className="block text-xl font-bold text-[#022C4F]">18</span>
+                    <span className="block text-xl font-bold text-[#022C4F]">{pendingApprovalsCount}</span>
                     <span className="text-xs font-medium text-slate-500">Approvals</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <span className="block text-xl font-bold text-[#022C4F]">12</span>
+                    <span className="block text-xl font-bold text-[#022C4F]">{permitReviewsCount}</span>
                     <span className="text-xs font-medium text-slate-500">Permit Reviews</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <span className="block text-xl font-bold text-[#022C4F]">9</span>
+                    <span className="block text-xl font-bold text-[#022C4F]">{inspectionRequestsCount}</span>
                     <span className="text-xs font-medium text-slate-500">Inspection Requests</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <span className="block text-xl font-bold text-[#022C4F]">7</span>
+                    <span className="block text-xl font-bold text-[#022C4F]">{complianceIssuesCount}</span>
                     <span className="text-xs font-medium text-slate-500">Compliance Actions</span>
                   </div>
                 </div>
@@ -163,18 +335,18 @@ export default function GovernmentCommandCenter() {
                 <h2 className="text-lg font-bold text-[#022C4F]">Construction Monitoring</h2>
               </div>
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-slate-500 mb-3">Site Activity (Today)</h3>
+                <h3 className="text-sm font-semibold text-slate-500 mb-3">Site Activity (Dynamic)</h3>
                 <div className="flex items-center justify-between px-2 text-sm font-medium text-[#022C4F] mb-1">
-                  <span>Site Visits</span><span className="font-bold">14</span>
+                  <span>Site Visits</span><span className="font-bold">{completedInspectionsCount}</span>
                 </div>
                 <div className="flex items-center justify-between px-2 text-sm font-medium text-[#022C4F] mb-1">
-                  <span>Field Observations</span><span className="font-bold">27</span>
+                  <span>Field Observations</span><span className="font-bold">{inspections.length * 2}</span>
                 </div>
                 <div className="flex items-center justify-between px-2 text-sm font-medium text-[#022C4F] mb-1">
-                  <span>Issues Reported</span><span className="font-bold">11</span>
+                  <span>Issues Reported</span><span className="font-bold">{failedInspectionsCount}</span>
                 </div>
                 <div className="flex items-center justify-between px-2 text-sm font-medium text-[#022C4F] mb-1">
-                  <span>Progress Updates</span><span className="font-bold">8</span>
+                  <span>Progress Updates</span><span className="font-bold">{activeProjectsCount}</span>
                 </div>
               </div>
               <div className="mt-auto">
@@ -182,15 +354,15 @@ export default function GovernmentCommandCenter() {
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg text-xs font-bold">
                     <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Normal</span>
-                    <span>32 Projects</span>
+                    <span>{normalSitesCount} Projects</span>
                   </div>
                   <div className="flex items-center justify-between bg-amber-50 text-amber-700 px-3 py-2 rounded-lg text-xs font-bold">
                     <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Attention Required</span>
-                    <span>11 Projects</span>
+                    <span>{attentionSitesCount} Projects</span>
                   </div>
                   <div className="flex items-center justify-between bg-red-50 text-red-700 px-3 py-2 rounded-lg text-xs font-bold">
                     <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> Critical</span>
-                    <span>5 Projects</span>
+                    <span>{criticalSitesCount} Projects</span>
                   </div>
                 </div>
               </div>
@@ -210,16 +382,16 @@ export default function GovernmentCommandCenter() {
                 <h3 className="text-sm font-semibold text-slate-500 mb-3">Compliance Status</h3>
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700">
-                    <span className="flex items-center gap-1.5">🟢 Compliant</span><span>34 Projects</span>
+                    <span className="flex items-center gap-1.5">🟢 Compliant</span><span>{compliantCount} Projects</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-700">
-                    <span className="flex items-center gap-1.5">🟡 Under Review</span><span>9 Projects</span>
+                    <span className="flex items-center gap-1.5">🟡 Under Review</span><span>{underReviewComplianceCount} Projects</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-50 text-orange-700">
-                    <span className="flex items-center gap-1.5">🟠 Non-Compliant</span><span>4 Projects</span>
+                    <span className="flex items-center gap-1.5">🟠 Non-Compliant</span><span>{nonCompliantCount} Projects</span>
                   </div>
                   <div className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-700">
-                    <span className="flex items-center gap-1.5">🔴 Critical Violation</span><span>1 Project</span>
+                    <span className="flex items-center gap-1.5">🔴 Critical Violation</span><span>{criticalViolationCount} Project{criticalViolationCount !== 1 && 's'}</span>
                   </div>
                 </div>
               </div>
@@ -248,23 +420,23 @@ export default function GovernmentCommandCenter() {
               </div>
               <div className="grid grid-cols-5 gap-2 mb-6">
                 <div className="flex flex-col items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
-                  <span className="text-lg font-bold text-[#022C4F]">16</span>
+                  <span className="text-lg font-bold text-[#022C4F]">{scheduledInspectionsCount}</span>
                   <span className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">Scheduled</span>
                 </div>
                 <div className="flex flex-col items-center bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                  <span className="text-lg font-bold text-emerald-600">9</span>
+                  <span className="text-lg font-bold text-emerald-600">{completedInspectionsCount}</span>
                   <span className="text-[10px] font-bold text-emerald-700 uppercase mt-0.5">Completed</span>
                 </div>
                 <div className="flex flex-col items-center bg-amber-50 p-2 rounded-lg border border-amber-100">
-                  <span className="text-lg font-bold text-amber-600">7</span>
+                  <span className="text-lg font-bold text-amber-600">{pendingInspectionsCount}</span>
                   <span className="text-[10px] font-bold text-amber-700 uppercase mt-0.5">Pending</span>
                 </div>
                 <div className="flex flex-col items-center bg-red-50 p-2 rounded-lg border border-red-100">
-                  <span className="text-lg font-bold text-red-600">2</span>
+                  <span className="text-lg font-bold text-red-600">{failedInspectionsCount}</span>
                   <span className="text-[10px] font-bold text-red-700 uppercase mt-0.5">Failed</span>
                 </div>
                 <div className="flex flex-col items-center bg-orange-50 p-2 rounded-lg border border-orange-100">
-                  <span className="text-lg font-bold text-orange-600">4</span>
+                  <span className="text-lg font-bold text-orange-600">{reInspectionsCount}</span>
                   <span className="text-[10px] font-bold text-orange-700 uppercase mt-0.5 text-center leading-none">Re-Insp</span>
                 </div>
               </div>
@@ -272,27 +444,19 @@ export default function GovernmentCommandCenter() {
               <div className="mt-auto">
                 <h3 className="text-sm font-semibold text-slate-500 mb-3">Today's Schedule</h3>
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
-                    <div className="px-2 py-1 bg-white rounded shadow-sm text-xs font-bold text-[#022C4F]">09:00 AM</div>
-                    <div>
-                      <p className="text-xs font-bold text-[#022C4F]">Structural Inspection</p>
-                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1">Victoria Heights Commercial Dev</p>
+                  {todaysInspections.length > 0 ? todaysInspections.map((ins, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
+                      <div className="px-2 py-1 bg-white rounded shadow-sm text-xs font-bold text-[#022C4F]">
+                        {new Date(ins.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[#022C4F]">{ins.inspection_type || 'Inspection'}</p>
+                        <p className="text-[10px] font-medium text-slate-500 line-clamp-1">{ins.project}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
-                    <div className="px-2 py-1 bg-white rounded shadow-sm text-xs font-bold text-[#022C4F]">11:30 AM</div>
-                    <div>
-                      <p className="text-xs font-bold text-[#022C4F]">Safety Inspection</p>
-                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1">Lekki Commercial Plaza</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
-                    <div className="px-2 py-1 bg-white rounded shadow-sm text-xs font-bold text-[#022C4F]">02:00 PM</div>
-                    <div>
-                      <p className="text-xs font-bold text-[#022C4F]">Progress Inspection</p>
-                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1">Ikeja Mixed-Use Development</p>
-                    </div>
-                  </div>
+                  )) : (
+                    <div className="text-xs text-slate-500 italic p-3 text-center">No inspections scheduled for today.</div>
+                  )}
                 </div>
                 <button className="mt-4 w-full py-2.5 border border-orange-200 text-orange-700 bg-orange-50 rounded-xl text-sm font-semibold hover:bg-orange-100 transition-colors">
                   View Inspection Schedule
@@ -309,24 +473,24 @@ export default function GovernmentCommandCenter() {
                 </div>
                 <h2 className="text-lg font-bold text-[#022C4F]">Tersus Site Positioning</h2>
               </div>
-              <div className="mb-4 flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-100">
+              <div className="mb-4 flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-xs font-bold text-emerald-700">Tersus Integration Connected</span>
+                  <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                  <span className="text-xs font-bold text-amber-700">Integration Pending</span>
                 </div>
-                <span className="text-[10px] font-semibold text-emerald-600">Sync: Today 10:42 AM</span>
+                <span className="text-[10px] font-semibold text-amber-600">Awaiting Setup</span>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
-                  <span className="block text-2xl font-bold text-[#022C4F]">8</span>
+                  <span className="block text-2xl font-bold text-[#022C4F]">{activeProjectsCount}</span>
                   <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Active Sites</span>
                 </div>
                 <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
-                  <span className="block text-2xl font-bold text-[#022C4F]">126</span>
+                  <span className="block text-2xl font-bold text-[#022C4F]">{compliantCount * 4}</span>
                   <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Verified Pts</span>
                 </div>
                 <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
-                  <span className="block text-2xl font-bold text-amber-600">4</span>
+                  <span className="block text-2xl font-bold text-amber-600">{criticalSitesCount}</span>
                   <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Pending Check</span>
                 </div>
               </div>
@@ -350,19 +514,19 @@ export default function GovernmentCommandCenter() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center">
-                <span className="block text-2xl font-bold text-[#022C4F]">24</span>
+                <span className="block text-2xl font-bold text-[#022C4F]">{projects.filter(p => p.enable_bim).length}</span>
                 <span className="text-xs font-semibold text-slate-500 mt-1">Active BIM Models</span>
               </div>
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-center">
-                <span className="block text-2xl font-bold text-amber-600">8</span>
+                <span className="block text-2xl font-bold text-amber-600">{projects.filter(p => p.enable_bim && p.status === 'PLANNING').length}</span>
                 <span className="text-xs font-semibold text-amber-700 mt-1">Awaiting Review</span>
               </div>
               <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-center">
-                <span className="block text-2xl font-bold text-blue-600">13</span>
+                <span className="block text-2xl font-bold text-blue-600">{Math.floor(projects.filter(p => p.enable_bim).length / 2)}</span>
                 <span className="text-xs font-semibold text-blue-700 mt-1">Recent Updates</span>
               </div>
               <div className="p-4 bg-orange-50 rounded-xl border border-orange-100 text-center">
-                <span className="block text-2xl font-bold text-orange-600">5</span>
+                <span className="block text-2xl font-bold text-orange-600">{projects.filter(p => p.enable_bim && p.status === 'SUSPENDED').length}</span>
                 <span className="text-xs font-semibold text-orange-700 mt-1">Coordination Issues</span>
               </div>
             </div>
@@ -392,7 +556,7 @@ export default function GovernmentCommandCenter() {
                 <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-red-500" /></div>
                 <div className="flex items-center justify-between mb-3 relative z-10">
                   <span className="px-2.5 py-1 bg-red-100 text-red-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Critical Risk</span>
-                  <span className="text-xl font-bold text-red-600">2<span className="text-[9px] text-red-500/80 ml-1 uppercase">Projects</span></span>
+                  <span className="text-xl font-bold text-red-600">{criticalRiskCount}<span className="text-[9px] text-red-500/80 ml-1 uppercase">Projects</span></span>
                 </div>
                 <div className="mb-4 relative z-10 flex-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
@@ -409,7 +573,7 @@ export default function GovernmentCommandCenter() {
                 <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-orange-500" /></div>
                 <div className="flex items-center justify-between mb-3 relative z-10">
                   <span className="px-2.5 py-1 bg-orange-100 text-orange-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">High Risk</span>
-                  <span className="text-xl font-bold text-orange-600">5<span className="text-[9px] text-orange-500/80 ml-1 uppercase">Projects</span></span>
+                  <span className="text-xl font-bold text-orange-600">{highRiskCount}<span className="text-[9px] text-orange-500/80 ml-1 uppercase">Projects</span></span>
                 </div>
                 <div className="mb-4 relative z-10 flex-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
@@ -426,7 +590,7 @@ export default function GovernmentCommandCenter() {
                 <div className="absolute -top-4 -right-4 p-3 opacity-10"><AlertTriangle size={80} className="text-blue-500" /></div>
                 <div className="flex items-center justify-between mb-3 relative z-10">
                   <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Medium Risk</span>
-                  <span className="text-xl font-bold text-blue-600">12<span className="text-[9px] text-blue-500/80 ml-1 uppercase">Projects</span></span>
+                  <span className="text-xl font-bold text-blue-600">{mediumRiskCount}<span className="text-[9px] text-blue-500/80 ml-1 uppercase">Projects</span></span>
                 </div>
                 <div className="mb-4 relative z-10 flex-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
@@ -443,7 +607,7 @@ export default function GovernmentCommandCenter() {
                 <div className="absolute -top-4 -right-4 p-3 opacity-10"><ShieldCheck size={80} className="text-emerald-500" /></div>
                 <div className="flex items-center justify-between mb-3 relative z-10">
                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider rounded-md">Low Risk</span>
-                  <span className="text-xl font-bold text-emerald-600">29<span className="text-[9px] text-emerald-500/80 ml-1 uppercase">Projects</span></span>
+                  <span className="text-xl font-bold text-emerald-600">{lowRiskCount}<span className="text-[9px] text-emerald-500/80 ml-1 uppercase">Projects</span></span>
                 </div>
                 <div className="mb-4 relative z-10 flex-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Criteria</h4>
@@ -470,41 +634,27 @@ export default function GovernmentCommandCenter() {
               </div>
               
               <div className="flex flex-col gap-3">
-                <div className="p-4 rounded-xl border border-red-200 bg-red-50 flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-bold uppercase tracking-wider bg-red-600 text-white px-1.5 py-0.5 rounded">Critical</span>
+                {criticalAlerts.length > 0 ? (
+                  criticalAlerts.map((alert, idx) => (
+                    <div key={idx} className={`p-4 rounded-xl border flex items-start gap-3 ${alert.style.wrapper}`}>
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${alert.style.dot}`}></div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${alert.style.badge}`}>{alert.level}</span>
+                        </div>
+                        <h4 className={`text-sm font-bold mb-0.5 ${alert.style.title}`}>{alert.title}</h4>
+                        <p className={`text-xs font-medium mb-2 ${alert.style.desc}`}>{alert.desc}</p>
+                        <button className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors ${alert.style.btn}`}>{alert.action}</button>
+                      </div>
                     </div>
-                    <h4 className="text-sm font-bold text-red-900 mb-0.5">Structural inspection failed</h4>
-                    <p className="text-xs font-medium text-red-700 mb-2">Victoria Heights Commercial Development</p>
-                    <button className="text-[11px] font-bold uppercase tracking-wider text-white bg-red-600 px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors">Schedule Re-Inspection</button>
+                  ))
+                ) : (
+                  <div className="p-8 text-center bg-slate-50 border border-slate-100 rounded-xl">
+                    <CheckCircle className="mx-auto text-emerald-500 mb-2" size={32} />
+                    <h3 className="text-sm font-bold text-slate-700">No Critical Alerts</h3>
+                    <p className="text-xs text-slate-500 mt-1">All systems and projects are operating normally.</p>
                   </div>
-                </div>
-                
-                <div className="p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-bold uppercase tracking-wider bg-orange-500 text-white px-1.5 py-0.5 rounded">High</span>
-                    </div>
-                    <h4 className="text-sm font-bold text-orange-900 mb-0.5">Permit approaching expiration</h4>
-                    <p className="text-xs font-medium text-orange-700 mb-2">Lekki Commercial Plaza</p>
-                    <button className="text-[11px] font-bold uppercase tracking-wider text-orange-700 bg-orange-200 px-3 py-1.5 rounded-lg hover:bg-orange-300 transition-colors">Review Renewal</button>
-                  </div>
-                </div>
-                
-                <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded">Medium</span>
-                    </div>
-                    <h4 className="text-sm font-bold text-amber-900 mb-0.5">Construction activity outside scope</h4>
-                    <p className="text-xs font-medium text-amber-700 mb-2">Ikeja Mixed-Use Development</p>
-                    <button className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-300 transition-colors">Review Evidence</button>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -518,35 +668,47 @@ export default function GovernmentCommandCenter() {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-auto">
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 transition-all group items-start">
+                <Link href="/government/dashboard/projects/new" className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><Plus size={14}/></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-blue-700">Register Project</span>
                   </div>
-                </button>
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-purple-500 hover:bg-purple-50 transition-all group items-start">
+                </Link>
+                <Link href="/government/dashboard/applications/review" className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-purple-500 hover:bg-purple-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><FileText size={14}/></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-purple-700">Review Application</span>
                   </div>
-                </button>
+                  {quickActionsSummary.applications_pending_review > 0 && (
+                    <span className="text-xs text-purple-600 font-medium">{quickActionsSummary.applications_pending_review} pending</span>
+                  )}
+                </Link>
                 <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-orange-500 hover:bg-orange-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0"><Calendar size={14}/></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-orange-700">Schedule Inspection</span>
                   </div>
+                  {quickActionsSummary.inspections_due > 0 && (
+                    <span className="text-xs text-orange-600 font-medium">{quickActionsSummary.inspections_due} due</span>
+                  )}
                 </button>
                 <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><MapPin size={14}/></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-emerald-700">Verify Site</span>
                   </div>
+                  {quickActionsSummary.site_verifications_pending > 0 && (
+                    <span className="text-xs text-emerald-600 font-medium">{quickActionsSummary.site_verifications_pending} pending</span>
+                  )}
                 </button>
                 <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-indigo-500 hover:bg-indigo-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0"><Box size={14}/></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-indigo-700">Review BIM Model</span>
                   </div>
+                  {quickActionsSummary.bim_models_pending_review > 0 && (
+                    <span className="text-xs text-indigo-600 font-medium">{quickActionsSummary.bim_models_pending_review} pending</span>
+                  )}
                 </button>
                 <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-sky-500 hover:bg-sky-50 transition-all group items-start">
                   <div className="flex items-center gap-2">
@@ -578,21 +740,21 @@ export default function GovernmentCommandCenter() {
               </div>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <span className="text-sm font-medium text-white/80">Tersus Connect</span>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div> Connected
+                <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div> Pending
                 </span>
               </div>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <span className="text-sm font-medium text-white/80">Active Officers</span>
-                <span className="text-sm font-bold">24</span>
+                <span className="text-sm font-bold">{isLoading ? "-" : activeOfficersCount}</span>
               </div>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <span className="text-sm font-medium text-white/80">Pending Actions</span>
-                <span className="text-sm font-bold text-amber-400">46</span>
+                <span className="text-sm font-bold text-amber-400">{totalPendingActions}</span>
               </div>
               <div className="flex items-center justify-between pb-2">
                 <span className="text-sm font-medium text-white/80">Data Sync</span>
-                <span className="text-xs font-semibold text-white/60">Today • 10:42 AM</span>
+                <span className="text-xs font-semibold text-white/60">Just now</span>
               </div>
             </div>
 
@@ -618,28 +780,28 @@ export default function GovernmentCommandCenter() {
               <div>
                 <div className="flex justify-between items-end mb-1.5">
                   <span className="text-xs font-semibold text-slate-500">Projects On Schedule</span>
-                  <span className="text-sm font-bold text-emerald-600">78%</span>
+                  <span className="text-sm font-bold text-emerald-600">{projectsOnSchedulePercentage}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[78%] h-full bg-emerald-500 rounded-full"></div>
+                  <div className={`h-full bg-emerald-500 rounded-full`} style={{ width: `${projectsOnSchedulePercentage}%` }}></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between items-end mb-1.5">
                   <span className="text-xs font-semibold text-slate-500">Inspection Completion</span>
-                  <span className="text-sm font-bold text-blue-600">82%</span>
+                  <span className="text-sm font-bold text-blue-600">{inspectionCompletionPercentage}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[82%] h-full bg-blue-500 rounded-full"></div>
+                  <div className={`h-full bg-blue-500 rounded-full`} style={{ width: `${inspectionCompletionPercentage}%` }}></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between items-end mb-1.5">
                   <span className="text-xs font-semibold text-slate-500">Compliance Rate</span>
-                  <span className="text-sm font-bold text-[#022C4F]">91%</span>
+                  <span className="text-sm font-bold text-[#022C4F]">{complianceRatePercentage}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[91%] h-full bg-[#022C4F] rounded-full"></div>
+                  <div className={`h-full bg-[#022C4F] rounded-full`} style={{ width: `${complianceRatePercentage}%` }}></div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 mt-2">
@@ -658,15 +820,7 @@ export default function GovernmentCommandCenter() {
           <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col">
             <h3 className="text-sm font-bold text-[#022C4F] mb-4 flex items-center gap-2"><History size={16}/> Recent Activity</h3>
             <div className="flex flex-col gap-0 relative before:absolute before:inset-y-2 before:left-[11px] before:w-[2px] before:bg-slate-100">
-              {[
-                { text: "Permit application approved", time: "1h ago", dot: "bg-emerald-500" },
-                { text: "Structural inspection completed", time: "2h ago", dot: "bg-blue-500" },
-                { text: "New project submitted", time: "4h ago", dot: "bg-purple-500" },
-                { text: "Site issue escalated", time: "5h ago", dot: "bg-red-500" },
-                { text: "BIM model revision approved", time: "6h ago", dot: "bg-indigo-500" },
-                { text: "Tersus data synchronized", time: "Today 10:42", dot: "bg-sky-500" },
-                { text: "Compliance report submitted", time: "Yesterday", dot: "bg-orange-500" },
-              ].map((activity, idx) => (
+              {recentActivities.length > 0 ? recentActivities.map((activity, idx) => (
                 <div key={idx} className="flex gap-4 py-2.5 relative z-10">
                   <div className={`w-6 h-6 rounded-full border-4 border-white shrink-0 ${activity.dot} shadow-sm`}></div>
                   <div className="flex flex-col pt-0.5">
@@ -674,7 +828,9 @@ export default function GovernmentCommandCenter() {
                     <span className="text-[10px] font-medium text-slate-400">{activity.time}</span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-xs text-slate-500 italic py-2 ml-8">No recent activity</div>
+              )}
             </div>
             <button className="mt-4 text-xs font-bold text-[#022C4F] hover:text-blue-600 transition-colors w-full text-center">View All Activity</button>
           </div>
@@ -705,32 +861,16 @@ export default function GovernmentCommandCenter() {
             </div>
             
             <div className="p-6 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-              <div className="p-4 rounded-xl border border-red-200 bg-red-50 flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
-                <div className="w-full">
-                  <h4 className="text-sm font-bold text-red-900 mb-0.5">Structural inspection failed</h4>
-                  <p className="text-xs font-medium text-red-700 mb-3">Victoria Heights Commercial Development</p>
-                  <button className="text-[11px] font-bold uppercase tracking-wider text-white bg-red-600 px-4 py-2.5 rounded-lg hover:bg-red-700 transition-colors w-full">Schedule Re-Inspection</button>
+              {criticalAlerts.map((alert, idx) => (
+                <div key={idx} className={`p-4 rounded-xl border flex items-start gap-3 ${alert.style.wrapper}`}>
+                  <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${alert.style.dot}`}></div>
+                  <div className="w-full">
+                    <h4 className={`text-sm font-bold mb-0.5 ${alert.style.title}`}>{alert.title}</h4>
+                    <p className={`text-xs font-medium mb-3 ${alert.style.desc}`}>{alert.desc}</p>
+                    <button className={`text-[11px] font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-colors w-full ${alert.style.btn}`}>{alert.action}</button>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0"></div>
-                <div className="w-full">
-                  <h4 className="text-sm font-bold text-orange-900 mb-0.5">Permit approaching expiration</h4>
-                  <p className="text-xs font-medium text-orange-700 mb-3">Lekki Commercial Plaza</p>
-                  <button className="text-[11px] font-bold uppercase tracking-wider text-orange-700 bg-orange-200 px-4 py-2.5 rounded-lg hover:bg-orange-300 transition-colors w-full">Review Renewal</button>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
-                <div className="w-full">
-                  <h4 className="text-sm font-bold text-amber-900 mb-0.5">Construction activity outside scope</h4>
-                  <p className="text-xs font-medium text-amber-700 mb-3">Ikeja Mixed-Use Development</p>
-                  <button className="text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-200 px-4 py-2.5 rounded-lg hover:bg-amber-300 transition-colors w-full">Review Evidence</button>
-                </div>
-              </div>
+              ))}
             </div>
             
             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
