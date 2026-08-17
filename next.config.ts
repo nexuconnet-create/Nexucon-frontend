@@ -17,7 +17,10 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   async rewrites() {
     const isProd = process.env.NODE_ENV === 'production';
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || (isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000');
+    const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    // Prevent infinite loop if envUrl is set to a relative path like '/'
+    const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
+    const backendUrl = validEnvUrl || (isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000');
     
     return [
       {
