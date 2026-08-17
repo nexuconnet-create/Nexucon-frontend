@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Bell, Wifi } from 'lucide-react';
 import NotificationCenterSideDrawer from './NotificationCenterSideDrawer';
+import { useAuth } from '@/context/AuthContext';
 
 export default function TopRightControls() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleOpen = () => setIsNotificationOpen(true);
@@ -33,12 +35,16 @@ export default function TopRightControls() {
       </div>
 
       <div className="h-12 rounded-full border border-[#022C4F] flex items-center px-2 pr-6 gap-3 ml-2">
-        <div className="w-8 h-8 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-xs font-bold">
-          JD
+        <div className="w-8 h-8 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-xs font-bold uppercase">
+          {user ? (user.first_name?.[0] || user.email?.[0] || 'U') : 'U'}
         </div>
         <div className="flex flex-col">
-          <span className="text-xs font-bold text-[#0F181F] leading-tight">John Doe</span>
-          <span className="text-[9px] text-gray-500 leading-tight">professional@nexucon.tech</span>
+          <span className="text-xs font-bold text-[#0F181F] leading-tight">
+            {user ? `${user.first_name} ${user.last_name}`.trim() || user.email : 'Loading...'}
+          </span>
+          <span className="text-[9px] text-gray-500 leading-tight">
+            {user ? user.email : '...'}
+          </span>
         </div>
       </div>
 

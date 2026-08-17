@@ -7,10 +7,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CustomSelect } from "@/components/CustomSelect";
 import { Country, State, City } from "country-state-city";
 import { CheckCircle2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function GovernmentOnboarding() {
   const [step, setStep] = useState(0);
   const router = useRouter();
+  const { completeOnboarding: submitOnboarding, isLoading, error: authError } = useAuth();
 
   // State for onboarding steps
   const [primaryRole, setPrimaryRole] = useState("plan_review");
@@ -47,12 +49,24 @@ export default function GovernmentOnboarding() {
     animate: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
 
-  const completeOnboarding = () => {
-    localStorage.setItem('verification_status', 'completed');
-    setShowCompletionModal(true);
-    setTimeout(() => {
-      router.push("/government/dashboard/command-center");
-    }, 2500);
+  const completeOnboarding = async () => {
+    const data = {
+      primaryRole,
+      jurisdictionLevel,
+      projectScaleFocus,
+      country,
+      stateRegion,
+      city,
+      department,
+      collaborationPreference
+    };
+    const success = await submitOnboarding(data);
+    if (success) {
+      setShowCompletionModal(true);
+      setTimeout(() => {
+        router.push("/government/dashboard/command-center");
+      }, 2500);
+    }
   };
 
   return (
@@ -639,12 +653,20 @@ export default function GovernmentOnboarding() {
                 >
                   Back
                 </button>
-                <button
-                  onClick={completeOnboarding}
-                  className="px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl font-medium transition-all active:scale-[0.98] w-full sm:w-auto"
-                >
-                  Complete Setup
-                </button>
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                  {authError && <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">{authError}</p>}
+                  <button
+                    onClick={completeOnboarding}
+                    disabled={isLoading}
+                    className="px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl font-medium transition-all active:scale-[0.98] w-full disabled:opacity-70 flex justify-center items-center"
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                      "Complete Setup"
+                    )}
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}

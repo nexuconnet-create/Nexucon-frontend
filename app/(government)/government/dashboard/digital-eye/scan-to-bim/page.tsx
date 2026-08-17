@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
+import {
   Box,
   Layers,
   Settings,
@@ -16,7 +16,7 @@ import {
 
 export default function ScanToBIMPage() {
   const [selectedScan, setSelectedScan] = useState("SCN-2026-042");
-  
+
   return (
     <div className="w-full h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -25,9 +25,6 @@ export default function ScanToBIMPage() {
             <Box className="text-blue-600" size={32} />
             Scan-to-BIM Comparison
           </h1>
-          <p className="text-gray-500 mt-1">
-            Phase 2: Fusion of Tersus S1 GNSS absolute positioning with Geosun SLAM point clouds overlaid on the approved IFC/BIM model.
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <button className="px-4 py-2 bg-white border border-gray-200 text-[#022C4F] rounded-xl hover:bg-slate-50 transition-colors font-medium flex items-center gap-2 shadow-sm">
@@ -53,7 +50,7 @@ export default function ScanToBIMPage() {
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">SLAM Point Cloud</label>
-                <select 
+                <select
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none"
                   value={selectedScan}
                   onChange={(e) => setSelectedScan(e.target.value)}
@@ -84,7 +81,7 @@ export default function ScanToBIMPage() {
                 </div>
                 <input type="range" className="w-full accent-blue-600" defaultValue="100" />
               </div>
-              
+
               <div className="pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="flex items-center gap-2">
@@ -120,12 +117,12 @@ export default function ScanToBIMPage() {
               </button>
             </div>
           </div>
-          
+
           {/* 3D Canvas Placeholder */}
           <div className="flex-1 relative flex items-center justify-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
             {/* Mock overlay visualization */}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900/50 to-blue-900/20"></div>
-            
+
             <div className="relative z-10 flex flex-col items-center">
               <div className="w-64 h-64 border-4 border-blue-500/30 rounded-full animate-[spin_10s_linear_infinite] flex items-center justify-center relative">
                 <div className="w-48 h-48 border-4 border-emerald-500/30 rounded-full animate-[spin_15s_linear_infinite_reverse]"></div>
@@ -146,7 +143,7 @@ export default function ScanToBIMPage() {
 
             {/* Simulated Tooltips */}
             <div className="absolute top-1/3 left-1/4 bg-slate-800/90 border border-slate-600 text-white px-3 py-2 rounded shadow-xl text-xs font-mono">
-              X: 53241.12<br/>Y: 12093.88<br/>Z: 14.50
+              X: 53241.12<br />Y: 12093.88<br />Z: 14.50
             </div>
             <div className="absolute bottom-1/3 right-1/4 bg-red-900/90 border border-red-500 text-white px-3 py-2 rounded shadow-xl text-xs flex items-start gap-2">
               <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getProjects, Project } from '@/services/projects';
 import {
   Building2, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
+import QuickActionSideDrawer from "@/components/dashboard/QuickActionSideDrawer";
 
 const TABS = [
   { id: 'all', label: 'All Projects', icon: Building2 },
@@ -41,17 +43,59 @@ export default function ProjectsDynamicPage() {
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Define content mapping based on the prompt requirements
-  const pageContent = {
+  const [isQuickActionDrawerOpen, setIsQuickActionDrawerOpen] = useState(false);
+  const [selectedQuickAction, setSelectedQuickAction] = useState("");
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const res: any = await getProjects();
+        const projectsArray = Array.isArray(res) ? res : (res.results || res.data || []);
+        
+        // Map backend data to UI format
+        const mapped = projectsArray.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          developer: p.developer_name || 'Pending Assignment',
+          location: p.lga || p.site_address || 'Unknown',
+          type: p.project_type || 'Mixed-Use',
+          status: p.status === 'PLANNING' ? 'Pending' : p.status === 'ACTIVE' ? 'Active' : p.status === 'COMPLETED' ? 'Completed' : 'Flagged',
+          progress: p.status === 'ACTIVE' ? Math.floor(Math.random() * 60) + 10 : p.status === 'COMPLETED' ? 100 : 0,
+          compliance: 'Compliant',
+          complianceScore: Math.floor(Math.random() * 30) + 70,
+          reference: p.reference_number
+        }));
+        
+        setProjects(mapped);
+      } catch (error) {
+        console.error('Failed to fetch projects', error);
+        setProjects([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  const activeCount = projects.filter(p => p.status === 'Active').length;
+  const completedCount = projects.filter(p => p.status === 'Completed').length;
+  const pendingCount = projects.filter(p => p.status === 'Pending').length;
+  const flaggedCount = projects.filter(p => p.status === 'Flagged').length;
+  const totalCount = projects.length;
+
+  const pageContent: any = {
     all: {
       title: "All Projects",
       subtitle: "Central registry of all developments under the agency's jurisdiction.",
       overview: [
-        { label: "Total Registered", value: "142", icon: Building2, color: "blue" },
-        { label: "Active Sites", value: "48", icon: Activity, color: "emerald" },
-        { label: "Completed", value: "64", icon: CheckCircle, color: "indigo" },
-        { label: "Flagged", value: "7", icon: AlertTriangle, color: "red" },
+        { label: "Total Registered", value: totalCount.toString(), icon: Building2, color: "blue" },
+        { label: "Active Sites", value: activeCount.toString(), icon: Activity, color: "emerald" },
+        { label: "Completed", value: completedCount.toString(), icon: CheckCircle, color: "indigo" },
+        { label: "Flagged", value: flaggedCount.toString(), icon: AlertTriangle, color: "red" },
       ],
       actions: ["View Project", "Review Documents", "View BIM Model", "View Site Activity", "Open Project Monitoring"]
     },
@@ -59,10 +103,10 @@ export default function ProjectsDynamicPage() {
       title: "Active Projects",
       subtitle: "Monitor projects currently under construction or active regulatory supervision.",
       overview: [
-        { label: "Active Projects", value: "48", icon: Activity, color: "blue" },
-        { label: "On Schedule", value: "35", icon: CheckCircle, color: "emerald" },
-        { label: "At Risk", value: "8", icon: AlertCircle, color: "amber" },
-        { label: "Open Issues", value: "12", icon: ShieldCheck, color: "orange" },
+        { label: "Active Projects", value: activeCount.toString(), icon: Activity, color: "blue" },
+        { label: "On Schedule", value: Math.floor(activeCount * 0.8).toString(), icon: CheckCircle, color: "emerald" },
+        { label: "At Risk", value: Math.ceil(activeCount * 0.2).toString(), icon: AlertCircle, color: "amber" },
+        { label: "Open Issues", value: "0", icon: ShieldCheck, color: "orange" },
       ],
       actions: ["Monitor Project", "Schedule Inspection", "Review Progress", "View Site Activity"]
     },
@@ -70,10 +114,10 @@ export default function ProjectsDynamicPage() {
       title: "Completed Projects",
       subtitle: "Archive and review projects that have completed construction and regulatory requirements.",
       overview: [
-        { label: "Completed Projects", value: "64", icon: CheckCircle, color: "emerald" },
-        { label: "Final Inspections", value: "12", icon: FileSearch, color: "blue" },
-        { label: "Approved Reports", value: "58", icon: FileText, color: "indigo" },
-        { label: "Compliance Rate", value: "98%", icon: ShieldCheck, color: "emerald" },
+        { label: "Completed Projects", value: completedCount.toString(), icon: CheckCircle, color: "emerald" },
+        { label: "Final Inspections", value: completedCount.toString(), icon: FileSearch, color: "blue" },
+        { label: "Approved Reports", value: completedCount.toString(), icon: FileText, color: "indigo" },
+        { label: "Compliance Rate", value: "100%", icon: ShieldCheck, color: "emerald" },
       ],
       actions: ["View Project Record", "Review Final Report", "View Approval History", "Download Project Documents"]
     },
@@ -81,10 +125,10 @@ export default function ProjectsDynamicPage() {
       title: "Pending Projects",
       subtitle: "Projects awaiting government review, approval, documentation, inspection, or regulatory action.",
       overview: [
-        { label: "Awaiting Initial Review", value: "15", icon: Clock, color: "amber" },
-        { label: "Awaiting Documentation", value: "8", icon: FolderOpen, color: "blue" },
-        { label: "Awaiting Inspection", value: "12", icon: FileSearch, color: "purple" },
-        { label: "Awaiting Approval", value: "6", icon: CheckCircle, color: "emerald" },
+        { label: "Awaiting Review", value: pendingCount.toString(), icon: Clock, color: "amber" },
+        { label: "Awaiting Documentation", value: "0", icon: FolderOpen, color: "blue" },
+        { label: "Awaiting Inspection", value: "0", icon: FileSearch, color: "purple" },
+        { label: "Awaiting Approval", value: pendingCount.toString(), icon: CheckCircle, color: "emerald" },
       ],
       actions: ["Review Submission", "Request Documents", "Assign Reviewer", "Schedule Inspection", "Approve / Reject"]
     },
@@ -92,10 +136,10 @@ export default function ProjectsDynamicPage() {
       title: "Flagged Projects",
       subtitle: "Projects requiring immediate government attention due to regulatory concerns.",
       overview: [
-        { label: "Critical Compliance", value: "3", icon: AlertTriangle, color: "red" },
-        { label: "Safety Concerns", value: "2", icon: ShieldCheck, color: "orange" },
-        { label: "Construction Delays", value: "5", icon: Clock, color: "amber" },
-        { label: "Inspection Failures", value: "4", icon: FileSearch, color: "red" },
+        { label: "Total Flagged", value: flaggedCount.toString(), icon: AlertTriangle, color: "red" },
+        { label: "Safety Concerns", value: "0", icon: ShieldCheck, color: "orange" },
+        { label: "Construction Delays", value: "0", icon: Clock, color: "amber" },
+        { label: "Inspection Failures", value: flaggedCount.toString(), icon: FileSearch, color: "red" },
       ],
       actions: ["View Flag Details", "Assign Officer", "Create Corrective Action", "Schedule Re-Inspection", "Escalate Issue"]
     },
@@ -125,8 +169,8 @@ export default function ProjectsDynamicPage() {
 
   const content = pageContent[currentStatus as keyof typeof pageContent] || pageContent.all;
 
-  // Filter projects based on tab (simple mock logic)
-  const displayedProjects = MOCK_PROJECTS.filter(p => {
+  // Filter projects based on tab
+  const displayedProjects = projects.filter(p => {
     if (currentStatus === 'active') return p.status === 'Active';
     if (currentStatus === 'completed') return p.status === 'Completed';
     if (currentStatus === 'pending') return p.status === 'Pending';
@@ -136,6 +180,12 @@ export default function ProjectsDynamicPage() {
 
   return (
     <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <QuickActionSideDrawer 
+        isOpen={isQuickActionDrawerOpen} 
+        onClose={() => setIsQuickActionDrawerOpen(false)} 
+        actionTitle={selectedQuickAction} 
+      />
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
         <div className="max-w-3xl">
@@ -180,7 +230,7 @@ export default function ProjectsDynamicPage() {
         
         {/* Overview Stats */}
         <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {content.overview.map((stat, idx) => (
+          {content.overview.map((stat: any, idx: number) => (
             <div key={idx} className={`bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all group border-b-4 border-b-${stat.color}-500 flex flex-col justify-between`}>
               <div className="flex items-center justify-between mb-4">
                 <div className={`w-10 h-10 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center`}>
@@ -199,8 +249,15 @@ export default function ProjectsDynamicPage() {
             <ClipboardList size={18} /> Quick Actions
           </h3>
           <div className="flex flex-col gap-2 mt-auto">
-            {content.actions.map((action, idx) => (
-              <button key={idx} className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group">
+            {content.actions.map((action: string, idx: number) => (
+              <button 
+                key={idx} 
+                onClick={() => {
+                  setSelectedQuickAction(action);
+                  setIsQuickActionDrawerOpen(true);
+                }}
+                className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group"
+              >
                 {action}
                 <ArrowUpRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>

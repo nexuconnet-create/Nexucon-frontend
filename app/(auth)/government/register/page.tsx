@@ -6,8 +6,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Country, State } from "country-state-city";
 import { CustomSelect } from "../../../../components/CustomSelect";
+import { useAuth } from "@/context/AuthContext";
 
 export default function GovernmentRegister() {
+  const { register, isLoading, error: authError } = useAuth();
   const [step, setStep] = useState(1);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -84,7 +86,13 @@ export default function GovernmentRegister() {
 
   const handleNextStep4 = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.password || formData.password.length < 8) newErrors.password = "Password must be at least 8 characters";
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])/.test(formData.password)) {
+      newErrors.password = "Password must contain uppercase, lowercase, number, and special character";
+    }
     if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
 
     if (Object.keys(newErrors).length > 0) {
@@ -137,15 +145,26 @@ export default function GovernmentRegister() {
     otpRefs.current[focusIndex]?.focus();
   };
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     const isOtpComplete = formData.otp.every(char => char.trim() !== '');
     if (!isOtpComplete) {
       setErrors({ otp: 'Please enter the complete verification code' });
       return;
     }
 
-    console.log("Submitting Government Agency Registration Data:", formData);
-    setShowSuccessModal(true);
+    const userData = {
+      email: formData.email,
+      password: formData.password,
+      first_name: formData.fullName.split(' ')[0] || '',
+      last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
+      phone_number: formData.phone,
+    };
+
+    const success = await register(userData);
+    
+    if (success) {
+      setShowSuccessModal(true);
+    }
   };
 
   return (
@@ -286,10 +305,9 @@ export default function GovernmentRegister() {
                     value={formData.role}
                     onChange={(val) => handleInputChange('role', val)}
                     options={[
-                      { value: "client", label: "Project Owner" },
-                      { value: "professional", label: "Client Representative" },
-                      { value: "government", label: "Government Agency" },
-                      { value: "non-government", label: "NGOs"}
+                      { value: "Agency Head", label: "Agency Head" },
+                      { value: "Director", label: "Director" },
+                      { value: "Inspector", label: "Inspector" }
                     ]}
                     placeholder="Select Role"
                     error={errors.role}
@@ -576,12 +594,18 @@ export default function GovernmentRegister() {
                 <p className="text-[13px] text-gray-600 leading-relaxed text-left">
                   Check your inbox and follow the verification instructions provided. If you don't see it, please check your spam folder.
                 </p>
+                {authError && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">{authError}</p>}
                 <button
                   onClick={handleFinalSubmit}
                   type="button"
-                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
+                  disabled={isLoading}
+                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
                 >
-                  Verify Account & Continue
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    "Verify Account & Continue"
+                  )}
                 </button>
               </div>
             </>

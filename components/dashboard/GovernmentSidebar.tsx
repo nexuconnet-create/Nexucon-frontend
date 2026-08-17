@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import {
   Folder,
   Compass,
@@ -49,10 +50,12 @@ type SidebarItem = {
   name: string;
   icon: React.ElementType;
   href?: string;
+  requiredPermission?: string;
   subItems?: {
     name: string;
     href: string;
     icon: React.ElementType;
+    requiredPermission?: string;
   }[];
 };
 
@@ -67,6 +70,7 @@ const sidebarLinks: SidebarItem[] = [
   {
     name: "Projects",
     icon: Building2,
+    requiredPermission: "projects.view",
     subItems: [
       { name: "All Projects ", href: "/government/dashboard/projects/all", icon: Building2 },
       { name: "Active Projects", href: "/government/dashboard/projects/active", icon: Building2 },
@@ -80,6 +84,7 @@ const sidebarLinks: SidebarItem[] = [
   {
     name: "Applications & Permits",
     icon: ClipboardList,
+    requiredPermission: "applications.view",
     subItems: [
       { name: "Permit Applications", href: "/government/dashboard/applications/permits", icon: ClipboardList },
       { name: "Submitted Applications", href: "/government/dashboard/applications/submitted", icon: ClipboardList },
@@ -93,6 +98,7 @@ const sidebarLinks: SidebarItem[] = [
   {
     name: "Inspections",
     icon: FileSearch,
+    requiredPermission: "inspections.view",
     subItems: [
       { name: "Inspection Requests", href: "/government/dashboard/inspections/requests", icon: FileSearch },
       { name: "Inspection Schedule", href: "/government/dashboard/inspections/schedule", icon: FileSearch },
@@ -188,12 +194,14 @@ const sidebarLinks: SidebarItem[] = [
   {
     name: "Reports & Analytics",
     icon: BarChart,
+    requiredPermission: "analytics.view_industry",
     subItems: [
       { name: "Project Performance", href: "/government/dashboard/analytics/performance", icon: BarChart },
       { name: "Structural Risk Index", href: "/government/dashboard/analytics/risk", icon: ShieldAlert },
       { name: "Construction Progress", href: "/government/dashboard/analytics/progress", icon: Activity },
       { name: "Inspection Analytics", href: "/government/dashboard/analytics/inspections", icon: PieChart },
       { name: "Compliance Reports", href: "/government/dashboard/analytics/compliance", icon: FileText },
+      { name: "Industry Performance", href: "/government/dashboard/analytics/industry", icon: BarChart },
       { name: "Financial Overview", href: "/government/dashboard/analytics/financial", icon: BarChart },
       { name: "Agency Performance", href: "/government/dashboard/analytics/agency", icon: BarChart },
       { name: "Export Reports", href: "/government/dashboard/analytics/export", icon: FileText },
@@ -207,6 +215,7 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Inspection Requests", href: "/government/dashboard/notifications/inspections", icon: Bell },
       { name: "Approval Requests", href: "/government/dashboard/notifications/approvals", icon: Bell },
       { name: "Compliance Alerts", href: "/government/dashboard/notifications/compliance", icon: AlertTriangle },
+      { name: "Emergency Dispatch", href: "/government/dashboard/notifications/emergency", icon: ShieldAlert },
       { name: "Overdue Actions", href: "/government/dashboard/notifications/overdue", icon: AlertTriangle },
       { name: "Critical Issues", href: "/government/dashboard/notifications/critical", icon: AlertTriangle },
     ],
@@ -266,6 +275,7 @@ const sidebarLinks: SidebarItem[] = [
 export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: GovernmentSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, hasPermission, logout } = useAuth();
 
   const [openSections, setOpenSections] = useState<string[]>([]);
 
@@ -316,7 +326,7 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
 
       {/* Navigation Links */}
       <div className={`flex-1 overflow-y-auto pb-8 flex flex-col gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isCollapsed ? "px-0 items-center" : "px-6"}`}>
-        {sidebarLinks.map((link, idx) => {
+        {sidebarLinks.filter(link => !link.requiredPermission || hasPermission(link.requiredPermission) || (user?.permissions?.includes('admin')) || user?.role_name === 'Director' || user?.role_name === 'Agency Head').map((link, idx) => {
           const isParent = !!(link.subItems && link.subItems.length > 0);
           const targetHref = link.href || (isParent ? link.subItems![0].href : "#");
 
@@ -407,18 +417,18 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
       {/* Bottom Area - User Profile & Logout */}
       <div className={`p-6 border-t border-white/10 flex ${isCollapsed ? "flex-col items-center justify-center gap-8" : "items-center justify-between"}`}>
         <div className="flex items-center gap-4 overflow-hidden">
-          <div className="w-12 h-12 shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center text-lg shadow-inner">
-            GU
+          <div className="w-12 h-12 shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center text-lg shadow-inner uppercase">
+            {user?.first_name?.[0] || 'G'}{user?.last_name?.[0] || 'U'}
           </div>
           {!isCollapsed && (
             <div className="flex flex-col whitespace-nowrap">
-              <span className="font-bold text-sm">Government User</span>
-              <span className="text-xs text-white/60">Agency Administrator / Regulatory Officer</span>
+              <span className="font-bold text-sm truncate max-w-[150px]">{user ? `${user.first_name} ${user.last_name}` : 'Government User'}</span>
+              <span className="text-xs text-white/60 truncate max-w-[150px]">{user?.role_name || 'Agency Officer'}</span>
             </div>
           )}
         </div>
         <button
-          onClick={() => router.push('/government/login')}
+          onClick={logout}
           className="shrink-0 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all"
           title="Log Out"
         >

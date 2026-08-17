@@ -5,12 +5,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
+import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
 export default function ProfessionalLogin() {
   const router = useRouter();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -33,14 +35,7 @@ export default function ProfessionalLogin() {
     if (Object.keys(newErrors).length === 0) {
       // Proceed with login
       console.log('Login successful', formData);
-      if (typeof window !== 'undefined') {
-        const status = localStorage.getItem('verification_status');
-        if (status === 'completed') {
-          router.push('/professional/dashboard');
-        } else {
-          router.push('/professional/onboarding');
-        }
-      }
+      setShowSuccessModal(true);
     }
   };
 
@@ -201,6 +196,19 @@ export default function ProfessionalLogin() {
 
         </div>
       </div>
+      <LoginSuccessModal 
+        isOpen={showSuccessModal} 
+        onClose={() => {
+          if (typeof window !== 'undefined') {
+            const status = localStorage.getItem('verification_status');
+            if (status === 'completed') {
+              router.push('/professional/dashboard');
+            } else {
+              router.push('/professional/onboarding');
+            }
+          }
+        }} 
+      />
     </div>
   );
 }

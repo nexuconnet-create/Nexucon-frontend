@@ -31,6 +31,7 @@ export default function Footer() {
             <li><a href="#" className="hover:text-[#022C4F] transition-colors">How it works</a></li>
             <li><a href="#" className="hover:text-[#022C4F] transition-colors">Pricing</a></li>
             <li><a href="#" className="hover:text-[#022C4F] transition-colors">FAQs</a></li>
+            <li><Link href="/transparency" className="hover:text-[#022C4F] transition-colors">Transparency Portal</Link></li>
             <li><a href="#" className="hover:text-[#022C4F] transition-colors">Contact Us</a></li>
           </ul>
         </div>
