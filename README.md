@@ -10,6 +10,13 @@ This repository is organized into a modular monolith architecture with independe
 - `backend/`: Django API server powered by PostgreSQL/PostGIS.
 - `docs/`: Technical documentation, PRDs, and architecture decisions.
 
+## Key Features
+- **Centralized Project Monitoring:** Track construction projects in real-time with comprehensive details including progress, compliance scores, and key personnel.
+- **Document Management:** Securely review, manage, and approve architectural designs, structural calculations, and environmental impact assessments.
+- **BIM Integration:** Built-in interactive 3D WebGL viewer placeholder for structural and architectural models.
+- **Site Activity Tracking:** Real-time timeline of site inspections, field reports, and document approvals.
+
+
 ## Technology Stack
 
 ### Frontend
