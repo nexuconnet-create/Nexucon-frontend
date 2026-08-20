@@ -1,10 +1,30 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, TrendingDown, TrendingUp, Wallet, Receipt, CreditCard, ChevronRight } from "lucide-react";
+import { DollarSign, TrendingDown, TrendingUp, Wallet, Receipt, CreditCard, RefreshCw } from "lucide-react";
+import { FinancialSummary, getFinancialSummary } from "@/services/analytics";
 
 export default function FinancialOverview() {
+  const [financials, setFinancials] = useState<FinancialSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchFinancials = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getFinancialSummary();
+      setFinancials(data);
+    } catch (err) {
+      console.error("Failed to load financial summary", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFinancials();
+  }, [fetchFinancials]);
+
   const budgetCategories = [
     { name: "Site Prep & Foundation", budget: 15.2, actual: 15.5, status: "over" },
     { name: "Structural (Steel/Concrete)", budget: 35.0, actual: 32.1, status: "under" },
@@ -20,10 +40,17 @@ export default function FinancialOverview() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
-            Financial Overview
+            Financial & Revenue Overview
           </h1>
-          <p className="text-gray-500 mt-1">High-level oversight of project budget, cash flow, and actuals.</p>
+          <p className="text-gray-500 mt-1">High-level oversight of regulatory fee collections, project budgets, and revenue.</p>
         </div>
+        <button 
+          onClick={fetchFinancials}
+          className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors self-start md:self-auto"
+          title="Refresh"
+        >
+          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+        </button>
       </div>
 
       {/* Top Metric Cards */}
@@ -35,13 +62,13 @@ export default function FinancialOverview() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <Wallet size={20} />
             </div>
-            <h3 className="font-semibold text-sm text-gray-500">Total Approved Budget</h3>
+            <h3 className="font-semibold text-sm text-gray-500">Total Revenue Collected</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">₦125.0M</p>
-          <div className="mt-3 text-xs font-semibold text-gray-400">Baseline established Jan 2026</div>
+          <p className="text-3xl font-bold text-gray-900">{financials?.total_revenue || "₦428.5M"}</p>
+          <div className="mt-3 text-xs font-semibold text-gray-400">All permits & regulatory fees</div>
         </motion.div>
 
         <motion.div
@@ -51,14 +78,14 @@ export default function FinancialOverview() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Receipt size={20} />
             </div>
-            <h3 className="font-semibold text-sm text-gray-500">Actual Cost (ACWP)</h3>
+            <h3 className="font-semibold text-sm text-gray-500">Permit Fees Collected</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">₦69.4M</p>
-          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 w-max px-2 py-1 rounded">
-            <TrendingDown size={14} /> 4.2% Under Budget
+          <p className="text-3xl font-bold text-gray-900">{financials?.permit_fees || "₦394.3M"}</p>
+          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 w-max px-2 py-1 rounded-lg">
+            <TrendingDown size={14} /> Collection Rate: {financials?.collection_efficiency || "96.4%"}
           </div>
         </motion.div>
 
@@ -69,14 +96,14 @@ export default function FinancialOverview() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
               <CreditCard size={20} />
             </div>
-            <h3 className="font-semibold text-sm text-gray-500">Estimate at Completion</h3>
+            <h3 className="font-semibold text-sm text-gray-500">Enforcement Penalties</h3>
           </div>
-          <p className="text-3xl font-bold text-gray-900">₦122.8M</p>
-          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 w-max px-2 py-1 rounded">
-            Projected Savings: ₦2.2M
+          <p className="text-3xl font-bold text-gray-900">{financials?.enforcement_penalties || "₦34.2M"}</p>
+          <div className="mt-3 flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 w-max px-2 py-1 rounded-lg">
+            Outstanding: {financials?.outstanding_dues || "₦18.4M"}
           </div>
         </motion.div>
 
@@ -88,11 +115,11 @@ export default function FinancialOverview() {
         >
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl"></div>
           <div className="relative z-10">
-            <h3 className="font-semibold text-sm text-blue-200 mb-4">Contingency Fund</h3>
-            <p className="text-3xl font-bold text-white">₦8.5M</p>
+            <h3 className="font-semibold text-sm text-blue-200 mb-4">Contingency Balance</h3>
+            <p className="text-3xl font-bold text-white">₦12.5M</p>
             <div className="mt-3">
               <div className="flex justify-between text-xs text-blue-200 font-semibold mb-1">
-                <span>Burn Rate</span>
+                <span>Drawdown Rate</span>
                 <span>15% used</span>
               </div>
               <div className="w-full h-1.5 bg-blue-900 rounded-full">
@@ -128,10 +155,11 @@ export default function FinancialOverview() {
                       <span className="text-xs text-gray-500 font-semibold">{formatMoney(cat.budget)}</span>
                     </div>
                   </div>
-                  <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden flex">
+                  <div className="relative h-3.5 bg-gray-100 rounded-full overflow-hidden flex">
                     <div
-                      className={`h-full rounded-full transition-all duration-1000 ${cat.status === 'over' ? 'bg-red-500' : 'bg-emerald-500'
-                        }`}
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        cat.status === 'over' ? 'bg-red-500' : 'bg-emerald-500'
+                      }`}
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -146,35 +174,37 @@ export default function FinancialOverview() {
           </div>
         </motion.div>
 
-        {/* Cash Flow Forecast Chart (Placeholder) */}
+        {/* Monthly Revenue Breakdown */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
         >
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Cash Flow Forecast (Cumulative)</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-6">Monthly Revenue Stream (2026)</h2>
 
-          <div className="flex-1 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-6 min-h-[300px]">
-            {/* S-Curve CSS Representation */}
-            <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-              {/* Grid */}
-              <path d="M0,20 L100,20 M0,40 L100,40 M0,60 L100,60 M0,80 L100,80" stroke="#F3F4F6" strokeWidth="0.5" fill="none" />
-              {/* Forecast */}
-              <path d="M0,95 Q20,90 50,40 T100,5" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeDasharray="4 4" />
-              {/* Actual */}
-              <path d="M0,95 Q20,92 45,55" fill="none" stroke="#10B981" strokeWidth="3" />
-            </svg>
-
-            {/* Chart legend/overlay */}
-            <div className="absolute top-4 left-4 flex gap-4 bg-white/80 p-2 rounded backdrop-blur-sm border border-gray-100">
-              <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                <span className="w-3 border-t-2 border-dashed border-gray-400"></span> Forecast
-              </div>
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-700">
-                <span className="w-3 border-t-2 border-solid border-emerald-500"></span> Actual Drawdown
-              </div>
-            </div>
+          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-6 gap-3 min-h-[300px]">
+            {(financials?.monthly_breakdown || [
+              { month: "May", revenue: 68000000 },
+              { month: "Jun", revenue: 82000000 },
+              { month: "Jul", revenue: 95000000 },
+              { month: "Aug", revenue: 110000000 },
+              { month: "Sep", revenue: 73500000 }
+            ]).map((item, idx) => {
+              const heightPct = Math.round((item.revenue / 120000000) * 100);
+              return (
+                <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full group">
+                  <div className="text-[10px] font-bold text-gray-700 opacity-0 group-hover:opacity-100 mb-1 transition-opacity">
+                    ₦{(item.revenue / 1000000).toFixed(1)}M
+                  </div>
+                  <div 
+                    className="w-full bg-blue-600 rounded-t-lg group-hover:bg-blue-500 transition-colors"
+                    style={{ height: `${heightPct}%` }}
+                  ></div>
+                  <span className="text-xs font-bold text-gray-500 mt-2">{item.month}</span>
+                </div>
+              );
+            })}
           </div>
         </motion.div>
       </div>

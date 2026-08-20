@@ -39,6 +39,8 @@ import {
   Briefcase,
   Link as LinkIcon,
   AlertOctagon,
+  Calendar,
+  MessageSquare,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
@@ -242,6 +244,8 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Consultants", href: "/government/dashboard/stakeholders/consultants", icon: Users },
       { name: "Inspectors", href: "/government/dashboard/stakeholders/inspectors", icon: Users },
       { name: "Project Teams", href: "/government/dashboard/stakeholders/teams", icon: Users },
+      { name: "Meetings & Calls", href: "/government/dashboard/stakeholders/meetings", icon: Calendar },
+      { name: "Messages & Channels", href: "/government/dashboard/stakeholders/messages", icon: MessageSquare },
     ],
   },
   {

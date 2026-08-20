@@ -1,20 +1,74 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, ShieldCheck, Leaf, AlertTriangle, Download, Filter, TrendingUp, CalendarDays } from "lucide-react";
+import { FileText, ShieldCheck, Leaf, AlertTriangle, Download, Filter, TrendingUp, CalendarDays, RefreshCw } from "lucide-react";
+import { createGeneratedReport, getGeneratedReports, GeneratedReport } from "@/services/analytics";
+import ReportBuilderDrawer from "@/components/dashboard/ReportBuilderDrawer";
 
 export default function ComplianceReportsAnalytics() {
+  const [reports, setReports] = useState<GeneratedReport[]>([]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchReports = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getGeneratedReports();
+      if (data.length > 0) {
+        setReports(data);
+      } else {
+        setReports([
+          {
+            id: "1",
+            report_reference: "REP-992",
+            title: "Q3 Full Safety Audit",
+            report_type: "Compliance",
+            format: "PDF",
+            modules_included: ["Compliance & Regulatory", "Inspection Analytics"],
+            status: "Ready",
+            generated_by_name: "Safety Inspectorate",
+            created_at: "2026-10-01"
+          },
+          {
+            id: "2",
+            report_reference: "REP-991",
+            title: "Sept Emissions Log",
+            report_type: "Compliance",
+            format: "PDF",
+            modules_included: ["Compliance & Regulatory"],
+            status: "Ready",
+            generated_by_name: "Environmental Board",
+            created_at: "2026-09-30"
+          },
+          {
+            id: "3",
+            report_reference: "REP-990",
+            title: "Structural Code Verification",
+            report_type: "Compliance",
+            format: "PDF",
+            modules_included: ["Structural Risk Assessment"],
+            status: "Ready",
+            generated_by_name: "Building Control",
+            created_at: "2026-09-15"
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load reports", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
+
   const complianceScores = [
     { title: "Safety & Health (OSHA)", score: 94, trend: "+2", icon: ShieldCheck, color: "text-blue-600", bg: "bg-blue-50", fill: "bg-blue-500" },
     { title: "Environmental Protection", score: 88, trend: "-1", icon: Leaf, color: "text-emerald-600", bg: "bg-emerald-50", fill: "bg-emerald-500" },
     { title: "Building Code & Structural", score: 98, trend: "0", icon: AlertTriangle, color: "text-purple-600", bg: "bg-purple-50", fill: "bg-purple-500" },
-  ];
-
-  const recentReports = [
-    { id: "REP-992", name: "Q3 Full Safety Audit", date: "Oct 01, 2026", type: "Safety", status: "Published" },
-    { id: "REP-991", name: "Sept Emissions Log", date: "Sep 30, 2026", type: "Environmental", status: "Published" },
-    { id: "REP-990", name: "Structural Code Verification", date: "Sep 15, 2026", type: "Code", status: "Archived" },
   ];
 
   return (
@@ -23,16 +77,23 @@ export default function ComplianceReportsAnalytics() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <FileText className="text-blue-500" />
-            Compliance Analytics
+            Compliance Analytics & Scorecards
           </h1>
           <p className="text-gray-500 mt-1">Aggregate scorecards and historical reports for regulatory adherence.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchReports}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold">
+          <button 
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold"
+          >
             <Download size={16} />
             Generate Master Report
           </button>
@@ -76,7 +137,7 @@ export default function ComplianceReportsAnalytics() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Incident Tracking Chart (Placeholder) */}
+        {/* Incident Tracking Chart */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -85,21 +146,20 @@ export default function ComplianceReportsAnalytics() {
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold text-gray-900">Incident Rate Trends</h2>
-            <select className="border border-gray-200 rounded-lg text-sm px-2 py-1 text-gray-600 bg-white focus:outline-none">
+            <select className="border border-gray-200 rounded-xl text-sm px-3 py-1 text-gray-600 bg-white focus:outline-none">
               <option>6 Months</option>
               <option>12 Months</option>
             </select>
           </div>
           
-          <div className="flex-1 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden min-h-[300px]">
-             {/* Decorative Area Chart Representation */}
+          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden min-h-[300px]">
              <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
                <path d="M0,80 Q25,70 50,85 T100,50 L100,100 L0,100 Z" fill="rgba(239, 68, 68, 0.1)" />
                <path d="M0,80 Q25,70 50,85 T100,50" fill="none" stroke="#EF4444" strokeWidth="2" />
              </svg>
-             <div className="z-10 text-center bg-white/80 p-3 rounded-lg backdrop-blur-sm border border-gray-100">
+             <div className="z-10 text-center bg-white/90 p-4 rounded-2xl backdrop-blur-sm border border-gray-100 shadow-sm">
                <p className="text-xs font-bold uppercase text-gray-500">Peak Incidents (July)</p>
-               <p className="text-lg font-bold text-red-600">12 Logged</p>
+               <p className="text-xl font-bold text-red-600">12 Logged</p>
              </div>
           </div>
         </motion.div>
@@ -114,25 +174,31 @@ export default function ComplianceReportsAnalytics() {
           <h2 className="text-lg font-bold text-gray-900 mb-6">Generated Reports Log</h2>
           
           <div className="space-y-4">
-            {recentReports.map(report => (
-              <div key={report.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group hover:border-blue-200 transition-colors cursor-pointer">
+            {reports.slice(0, 4).map(report => (
+              <div 
+                key={report.id} 
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('show-toast', { 
+                    detail: { message: `Downloading ${report.report_reference}: ${report.title}...`, type: 'info' } 
+                  }));
+                }}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group hover:border-blue-200 hover:bg-blue-50/20 transition-all cursor-pointer"
+              >
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 text-gray-400 flex items-center justify-center group-hover:text-blue-500 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 text-gray-400 flex items-center justify-center group-hover:text-blue-500 transition-colors">
                     <FileText size={18} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">{report.name}</h4>
+                    <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">{report.title}</h4>
                     <div className="flex items-center gap-2 mt-1 text-xs">
-                      <span className="font-mono text-gray-500">{report.id}</span>
+                      <span className="font-mono font-bold text-gray-500">{report.report_reference}</span>
                       <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                      <span className="text-gray-500 flex items-center gap-1"><CalendarDays size={12} /> {report.date}</span>
+                      <span className="text-gray-500 flex items-center gap-1"><CalendarDays size={12} /> {new Date(report.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${
-                    report.status === 'Published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'
-                  }`}>
+                  <span className="inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200">
                     {report.status}
                   </span>
                 </div>
@@ -140,11 +206,20 @@ export default function ComplianceReportsAnalytics() {
             ))}
           </div>
           
-          <button className="w-full mt-4 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-semibold">
-            View Report Archive
+          <button 
+            onClick={() => setIsDrawerOpen(true)}
+            className="w-full mt-4 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-semibold"
+          >
+            Create New Report
           </button>
         </motion.div>
       </div>
+
+      <ReportBuilderDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onSuccess={fetchReports}
+      />
     </div>
   );
 }

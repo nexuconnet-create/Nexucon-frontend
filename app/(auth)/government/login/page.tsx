@@ -35,7 +35,7 @@ export default function GovernmentLogin() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      const success = await login({ email: formData.email, password: formData.password });
+      const success = await login({ email: formData.email.trim(), password: formData.password });
       if (success) {
         setShowSuccessModal(true);
       }

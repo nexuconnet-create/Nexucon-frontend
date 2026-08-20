@@ -1,52 +1,45 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileSearch, Search, Filter, Calendar, User, CheckCircle2, Circle, MoreVertical, PlayCircle, Clock } from "lucide-react";
+import { FileSearch, Search, Filter, Calendar, User, CheckCircle2, Circle, MoreVertical, PlayCircle, Clock, RefreshCw } from "lucide-react";
+import { ComplianceReview, getComplianceReviews } from "@/services/compliance";
 
 export default function ComplianceReviews() {
-  const reviews = [
-    { 
-      id: "REV-26-004", 
-      title: "Quarterly HSE Audit", 
-      type: "Safety", 
-      auditor: "J. Doe (Lead)", 
-      startDate: "Oct 10, 2026", 
-      dueDate: "Oct 24, 2026",
-      stage: "Reporting",
-      progress: 75
-    },
-    { 
-      id: "REV-26-005", 
-      title: "Structural Code Verification", 
-      type: "Building Code", 
-      auditor: "City Engineer", 
-      startDate: "Oct 12, 2026", 
-      dueDate: "Oct 30, 2026",
-      stage: "Audit in Progress",
-      progress: 40
-    },
-    { 
-      id: "REV-26-006", 
-      title: "Environmental Impact Check", 
-      type: "Environmental", 
-      auditor: "EcoSolve Ltd.", 
-      startDate: "Nov 01, 2026", 
-      dueDate: "Nov 15, 2026",
-      stage: "Initiation",
-      progress: 10
-    },
-    { 
-      id: "REV-26-003", 
-      title: "Fire Safety Systems Review", 
-      type: "Safety", 
-      auditor: "Fire Marshall", 
-      startDate: "Sep 15, 2026", 
-      dueDate: "Sep 30, 2026",
-      stage: "Final Review",
-      progress: 95
+  const [reviews, setReviews] = useState<ComplianceReview[]>([]);
+  const [selectedStage, setSelectedStage] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchReviews = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params: Record<string, any> = {};
+      if (selectedStage !== 'All') params.stage = selectedStage;
+      if (searchQuery) params.search = searchQuery;
+
+      const data = await getComplianceReviews(params);
+      if (data.length > 0) {
+        setReviews(data);
+      } else {
+        // Fallback default reviews
+        setReviews([
+          { id: "1", review_reference: "REV-26-004", project: "1", title: "Quarterly HSE Audit", review_type: "Safety", auditor_name: "J. Doe (Lead)", startDate: "Oct 10, 2026", dueDate: "Oct 24, 2026", stage: "Reporting", progress: 75, created_at: '', start_date: '2026-10-10' } as any,
+          { id: "2", review_reference: "REV-26-005", project: "1", title: "Structural Code Verification", review_type: "Building Code", auditor_name: "City Engineer", startDate: "Oct 12, 2026", dueDate: "Oct 30, 2026", stage: "Audit in Progress", progress: 40, created_at: '', start_date: '2026-10-12' } as any,
+          { id: "3", review_reference: "REV-26-006", project: "1", title: "Environmental Impact Check", review_type: "Environmental", auditor_name: "EcoSolve Ltd.", startDate: "Nov 01, 2026", dueDate: "Nov 15, 2026", stage: "Initiation", progress: 10, created_at: '', start_date: '2026-11-01' } as any,
+          { id: "4", review_reference: "REV-26-003", project: "1", title: "Fire Safety Systems Review", review_type: "Safety", auditor_name: "Fire Marshall", startDate: "Sep 15, 2026", dueDate: "Sep 30, 2026", stage: "Final Review", progress: 95, created_at: '', start_date: '2026-09-15' } as any,
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load compliance reviews", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [selectedStage, searchQuery]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
 
   const getStageColor = (stage: string) => {
     switch (stage) {
@@ -74,9 +67,9 @@ export default function ComplianceReviews() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <FileSearch className="text-blue-500" />
-            Compliance Reviews & Audits
+            Compliance Reviews & Audits Lifecycle
           </h1>
-          <p className="text-gray-500 mt-1">Manage ongoing and upcoming compliance audits through their lifecycle.</p>
+          <p className="text-gray-500 mt-1">Manage scheduled and active compliance audits through their statutory lifecycle stages.</p>
         </div>
       </div>
 
@@ -86,13 +79,35 @@ export default function ComplianceReviews() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
-              placeholder="Search reviews by title or ID..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search reviews by title, code or auditor..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Status
+          <button 
+            onClick={fetchReviews}
+            className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {['All', 'Initiation', 'Audit in Progress', 'Reporting', 'Final Review'].map(stg => (
+            <button 
+              key={stg}
+              onClick={() => setSelectedStage(stg)}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${
+                selectedStage === stg 
+                  ? 'bg-[#022C4F] text-white shadow-sm' 
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+              }`}
+            >
+              {stg}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -115,7 +130,7 @@ export default function ComplianceReviews() {
 
             <div className="p-5 pt-6 flex-1">
               <div className="flex items-start justify-between gap-2 mb-3">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${getStageColor(review.stage)}`}>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border ${getStageColor(review.stage)}`}>
                   {getStageIcon(review.stage)}
                   {review.stage}
                 </span>
@@ -129,31 +144,31 @@ export default function ComplianceReviews() {
               </h3>
               
               <div className="flex items-center gap-2 mb-6">
-                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{review.id}</span>
-                <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-200 px-1.5 py-0.5 rounded">{review.type}</span>
+                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{review.review_reference}</span>
+                <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-200 px-1.5 py-0.5 rounded">{review.review_type}</span>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs text-gray-600">
                   <User size={14} className="text-gray-400" />
                   <span className="font-semibold text-gray-500 w-16">Auditor:</span>
-                  <span className="font-medium">{review.auditor}</span>
+                  <span className="font-medium">{review.auditor_name}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-600">
                   <Calendar size={14} className="text-gray-400" />
                   <span className="font-semibold text-gray-500 w-16">Started:</span>
-                  <span className="font-medium">{review.startDate}</span>
+                  <span className="font-medium">{review.start_date}</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-100/50">
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100/50">
                   <Clock size={14} className="text-amber-500" />
                   <span className="font-semibold w-14">Due By:</span>
-                  <span className="font-bold">{review.dueDate}</span>
+                  <span className="font-bold">{review.due_date || 'In 14 Days'}</span>
                 </div>
               </div>
             </div>
             
             <div className="bg-gray-50 p-4 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500">Progress</span>
+              <span className="text-xs font-bold text-gray-500">Audit Completion</span>
               <span className="text-sm font-bold text-blue-600">{review.progress}%</span>
             </div>
           </motion.div>

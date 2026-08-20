@@ -1,17 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, Search, Filter, Download, Eye, MoreVertical, Calendar, User, FileBarChart } from "lucide-react";
+import { FileText, Search, Filter, Download, Eye, MoreVertical, Calendar, User, FileBarChart, RefreshCw } from "lucide-react";
+import { Document, getDocuments } from "@/services/documents";
 
 export default function TechnicalReports() {
-  const reports = [
-    { id: "REP-204", title: "Geotechnical Soil Analysis - Zone C", type: "Geotechnical", date: "Oct 12, 2026", author: "Dr. H. Rahman", size: "4.2 MB", status: "Final" },
-    { id: "REP-203", title: "Environmental Impact Assessment", type: "Environmental", date: "Oct 09, 2026", author: "EcoSolve Ltd.", size: "12.5 MB", status: "Final" },
-    { id: "REP-202", title: "Structural Load Testing Results", type: "Structural", date: "Oct 05, 2026", author: "A. Rivera", size: "3.1 MB", status: "Draft" },
-    { id: "REP-201", title: "Traffic Management Plan V2", type: "Civil", date: "Sep 28, 2026", author: "City Planning", size: "8.4 MB", status: "Under Review" },
-    { id: "REP-200", title: "Acoustic Insulation Study", type: "Architecture", date: "Sep 15, 2026", author: "S. Jenkins", size: "2.8 MB", status: "Final" },
-  ];
+  const [reports, setReports] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('All');
+
+  const fetchReports = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params: Record<string, any> = {};
+      if (searchQuery) params.search = searchQuery;
+      if (selectedDiscipline !== 'All') params.discipline = selectedDiscipline;
+      const data = await getDocuments(params);
+      setReports(data);
+    } catch (err) {
+      console.error("Failed to load reports", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, selectedDiscipline]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
   const getTypeStyle = (type: string) => {
     switch(type) {
@@ -82,7 +99,19 @@ export default function TechnicalReports() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {reports.map((report, idx) => (
+            {(reports.length > 0 ? reports.map(r => ({
+              id: r.document_reference,
+              title: r.title,
+              type: r.discipline,
+              date: new Date(r.created_at).toLocaleDateString(),
+              author: r.uploader_name,
+              size: r.file_size,
+              status: r.status === 'APPROVED' ? 'Final' : r.status === 'UNDER_REVIEW' ? 'Under Review' : 'Draft'
+            })) : [
+              { id: "REP-204", title: "Geotechnical Soil Analysis - Zone C", type: "Geotechnical", date: "Oct 12, 2026", author: "Dr. H. Rahman", size: "4.2 MB", status: "Final" },
+              { id: "REP-203", title: "Environmental Impact Assessment", type: "Environmental", date: "Oct 09, 2026", author: "EcoSolve Ltd.", size: "12.5 MB", status: "Final" },
+              { id: "REP-202", title: "Structural Load Testing Results", type: "Structural", date: "Oct 05, 2026", author: "A. Rivera", size: "3.1 MB", status: "Draft" },
+            ]).map((report, idx) => (
               <motion.tr 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}

@@ -1,37 +1,65 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ListTodo, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronDown, BookOpen } from "lucide-react";
+import { ListTodo, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronDown, BookOpen, RefreshCw } from "lucide-react";
+import { RegulatoryRequirement, getRequirements, updateRequirementStatus } from "@/services/compliance";
 
 export default function ComplianceRequirements() {
-  const [expandedSection, setExpandedSection] = useState<string | null>("Environmental");
+  const [requirements, setRequirements] = useState<RegulatoryRequirement[]>([]);
+  const [expandedSection, setExpandedSection] = useState<string | null>("Environmental Standards");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const requirements = [
-    {
-      category: "Environmental",
-      items: [
-        { id: "ENV-001", title: "Air Quality Control Plan", status: "Compliant", authority: "EPA", lastChecked: "Oct 12, 2026" },
-        { id: "ENV-002", title: "Waste Water Disposal Permit", status: "At Risk", authority: "State Water Board", lastChecked: "Oct 05, 2026" },
-        { id: "ENV-003", title: "Noise Pollution Limits (Night)", status: "Compliant", authority: "City Council", lastChecked: "Oct 10, 2026" },
-      ]
-    },
-    {
-      category: "Safety & Health",
-      items: [
-        { id: "SAF-101", title: "OSHA Site Safety Plan", status: "Compliant", authority: "OSHA", lastChecked: "Oct 01, 2026" },
-        { id: "SAF-102", title: "Scaffolding Inspection Certs", status: "Non-Compliant", authority: "Dept of Labor", lastChecked: "Sep 28, 2026" },
-        { id: "SAF-103", title: "Worker Protective Gear Audit", status: "Compliant", authority: "Internal HSE", lastChecked: "Oct 12, 2026" },
-      ]
-    },
-    {
-      category: "Building Codes",
-      items: [
-        { id: "BLD-201", title: "Structural Steel Load Ratings", status: "Compliant", authority: "Bldg Dept", lastChecked: "Sep 15, 2026" },
-        { id: "BLD-202", title: "Fire Safety Systems Design", status: "Compliant", authority: "Fire Marshall", lastChecked: "Sep 10, 2026" },
-      ]
+  const fetchRequirements = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getRequirements({ search: searchQuery });
+      if (data.length > 0) {
+        setRequirements(data);
+      } else {
+        // Fallback default statutory requirements
+        setRequirements([
+          { id: "1", requirement_reference: "ENV-001", category: "Environmental", title: "Air Quality Control Plan", status: "Compliant", authority: "EPA", last_checked: "Oct 12, 2026", created_at: '' },
+          { id: "2", requirement_reference: "ENV-002", category: "Environmental", title: "Waste Water Disposal Permit", status: "At Risk", authority: "State Water Board", last_checked: "Oct 05, 2026", created_at: '' },
+          { id: "3", requirement_reference: "ENV-003", category: "Environmental", title: "Noise Pollution Limits (Night)", status: "Compliant", authority: "City Council", last_checked: "Oct 10, 2026", created_at: '' },
+          { id: "4", requirement_reference: "SAF-101", category: "Safety & Health", title: "OSHA Site Safety Plan", status: "Compliant", authority: "OSHA", last_checked: "Oct 01, 2026", created_at: '' },
+          { id: "5", requirement_reference: "SAF-102", category: "Safety & Health", title: "Scaffolding Inspection Certs", status: "Non-Compliant", authority: "Dept of Labor", last_checked: "Sep 28, 2026", created_at: '' },
+          { id: "6", requirement_reference: "SAF-103", category: "Safety & Health", title: "Worker Protective Gear Audit", status: "Compliant", authority: "Internal HSE", last_checked: "Oct 12, 2026", created_at: '' },
+          { id: "7", requirement_reference: "BLD-201", category: "Building Codes", title: "Structural Steel Load Ratings", status: "Compliant", authority: "Bldg Dept", last_checked: "Sep 15, 2026", created_at: '' },
+          { id: "8", requirement_reference: "BLD-202", category: "Building Codes", title: "Fire Safety Systems Design", status: "Compliant", authority: "Fire Marshall", last_checked: "Sep 10, 2026", created_at: '' },
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load requirements", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchRequirements();
+  }, [fetchRequirements]);
+
+  const handleToggleStatus = async (item: RegulatoryRequirement) => {
+    const cycleMap: Record<string, string> = {
+      'Compliant': 'At Risk',
+      'At Risk': 'Non-Compliant',
+      'Non-Compliant': 'Compliant'
+    };
+    const nextStatus = cycleMap[item.status] || 'Compliant';
+    try {
+      if (item.id && item.id.length > 5) {
+        await updateRequirementStatus(item.id, { status: nextStatus });
+      }
+      setRequirements(prev => prev.map(r => r.id === item.id ? { ...r, status: nextStatus as any } : r));
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `${item.requirement_reference} updated to ${nextStatus}!`, type: 'info' } 
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -51,6 +79,13 @@ export default function ComplianceRequirements() {
     }
   };
 
+  // Group by category
+  const categories = Array.from(new Set(requirements.map(r => r.category)));
+
+  const compliantCount = requirements.filter(r => r.status === 'Compliant').length;
+  const atRiskCount = requirements.filter(r => r.status === 'At Risk').length;
+  const nonCompliantCount = requirements.filter(r => r.status === 'Non-Compliant').length;
+
   return (
     <div className="w-full min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -59,7 +94,7 @@ export default function ComplianceRequirements() {
             <ListTodo className="text-blue-500" />
             Statutory & Regulatory Requirements
           </h1>
-          <p className="text-gray-500 mt-1">Track specific clauses and standards required for project compliance.</p>
+          <p className="text-gray-500 mt-1">Track statutory building codes, environmental regulations, and safety standards.</p>
         </div>
       </div>
 
@@ -69,102 +104,116 @@ export default function ComplianceRequirements() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
-              placeholder="Search by ID, title, or authority..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search by code, title, or authority..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchRequirements}
+            className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Compliant (6)
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-100">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Compliant ({compliantCount})
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span> At Risk (1)
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-100">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span> At Risk ({atRiskCount})
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-red-500"></span> Non-Compliant (1)
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-red-50 px-2.5 py-1 rounded-xl border border-red-100">
+            <span className="w-2 h-2 rounded-full bg-red-500"></span> Non-Compliant ({nonCompliantCount})
           </div>
         </div>
       </div>
 
       <div className="space-y-4">
-        {requirements.map((category, idx) => (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            key={category.category}
-            className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm"
-          >
-            <button
-              onClick={() => setExpandedSection(expandedSection === category.category ? null : category.category)}
-              className="w-full flex items-center justify-between p-5 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+        {categories.map((catName, idx) => {
+          const items = requirements.filter(r => r.category === catName);
+          const isExpanded = expandedSection === catName;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              key={catName}
+              className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <BookOpen size={20} />
-                </div>
-                <div className="text-left">
-                  <h2 className="font-bold text-gray-900">{category.category} Requirements</h2>
-                  <p className="text-xs text-gray-500 font-medium">{category.items.length} Tracking Items</p>
-                </div>
-              </div>
-              <ChevronDown 
-                size={20} 
-                className={`text-gray-400 transition-transform duration-300 ${expandedSection === category.category ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            <AnimatePresence>
-              {expandedSection === category.category && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <div className="border-t border-gray-100">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead>
-                        <tr className="bg-white border-b border-gray-100">
-                          <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider w-24">Req ID</th>
-                          <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Title / Description</th>
-                          <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Authority</th>
-                          <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Last Checked</th>
-                          <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {category.items.map(item => (
-                          <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
-                            <td className="py-3 px-5">
-                              <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200">
-                                {item.id}
-                              </span>
-                            </td>
-                            <td className="py-3 px-5 font-semibold text-sm text-gray-800">{item.title}</td>
-                            <td className="py-3 px-5 text-sm text-gray-600">{item.authority}</td>
-                            <td className="py-3 px-5 text-sm text-gray-500">{item.lastChecked}</td>
-                            <td className="py-3 px-5 text-right">
-                              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md border ${getStatusBadge(item.status)}`}>
-                                {getStatusIcon(item.status)}
-                                {item.status}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              <button
+                onClick={() => setExpandedSection(isExpanded ? null : catName)}
+                className="w-full flex items-center justify-between p-5 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <BookOpen size={20} />
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
+                  <div className="text-left">
+                    <h2 className="font-bold text-gray-900">{catName}</h2>
+                    <p className="text-xs text-gray-500 font-medium">{items.length} Statutory Codes</p>
+                  </div>
+                </div>
+                <ChevronDown 
+                  size={20} 
+                  className={`text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="border-t border-gray-100">
+                      <table className="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                          <tr className="bg-white border-b border-gray-100">
+                            <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider w-24">Req ID</th>
+                            <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Title / Standard</th>
+                            <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Authority</th>
+                            <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider">Last Checked</th>
+                            <th className="py-3 px-5 font-semibold text-xs text-gray-400 uppercase tracking-wider text-right">Status (Click to toggle)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {items.map(item => (
+                            <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
+                              <td className="py-3.5 px-5">
+                                <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
+                                  {item.requirement_reference}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-5 font-semibold text-sm text-gray-800">{item.title}</td>
+                              <td className="py-3.5 px-5 text-sm text-gray-600">{item.authority}</td>
+                              <td className="py-3.5 px-5 text-sm text-gray-500">{item.last_checked || 'Today'}</td>
+                              <td className="py-3.5 px-5 text-right">
+                                <button
+                                  onClick={() => handleToggleStatus(item)}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider rounded-lg border cursor-pointer hover:opacity-80 transition-opacity ${getStatusBadge(item.status)}`}
+                                  title="Click to cycle status"
+                                >
+                                  {getStatusIcon(item.status)}
+                                  {item.status}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

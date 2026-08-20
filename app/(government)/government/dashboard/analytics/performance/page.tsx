@@ -1,12 +1,47 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { BarChart, TrendingUp, TrendingDown, Clock, DollarSign, Activity, Calendar, Download } from "lucide-react";
+import { BarChart, TrendingUp, TrendingDown, Clock, DollarSign, Activity, Calendar, Download, RefreshCw } from "lucide-react";
+import { ExecutiveKPIs, getExecutiveKPIs, createGeneratedReport } from "@/services/analytics";
 
 export default function ProjectPerformance() {
-  const kpis = [
-    { label: "Overall Health Index", value: "92.4", trend: "+1.2", positive: true, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+  const [kpis, setKpis] = useState<ExecutiveKPIs | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchKPIs = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getExecutiveKPIs();
+      setKpis(data);
+    } catch (err) {
+      console.error("Failed to load KPIs", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchKPIs();
+  }, [fetchKPIs]);
+
+  const handleExportDashboard = async () => {
+    try {
+      await createGeneratedReport({
+        title: "Executive Project Performance & EVM Summary",
+        format: "PDF",
+        modules_included: ["Project Performance", "Financial Overview"]
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Exporting Executive Project Performance report...', type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const metricCards = [
+    { label: "Overall Health Index", value: kpis?.structural_safety_index || "94.8%", trend: "+1.2%", positive: true, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
     { label: "Schedule Performance (SPI)", value: "0.95", trend: "-0.02", positive: false, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
     { label: "Cost Performance (CPI)", value: "1.04", trend: "+0.01", positive: true, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
   ];
@@ -19,15 +54,25 @@ export default function ProjectPerformance() {
             <BarChart className="text-blue-500" />
             Project Performance Analytics
           </h1>
-          <p className="text-gray-500 mt-1">High-level executive overview of project health, schedule, and cost.</p>
+          <p className="text-gray-500 mt-1">High-level executive overview of project health, schedule, and cost performance.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 shadow-sm">
+          <button 
+            onClick={fetchKPIs}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 shadow-sm">
             <Calendar size={16} className="text-gray-400" />
             <span>Q3 2026</span>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold">
+          <button 
+            onClick={handleExportDashboard}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold"
+          >
             <Download size={16} />
             Export Dashboard
           </button>
@@ -36,7 +81,7 @@ export default function ProjectPerformance() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {kpis.map((kpi, idx) => (
+        {metricCards.map((kpi, idx) => (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -63,7 +108,7 @@ export default function ProjectPerformance() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Trend Chart (CSS Placeholder) */}
+        {/* Main Trend Chart */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -82,15 +127,12 @@ export default function ProjectPerformance() {
             </div>
           </div>
           
-          <div className="flex-1 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-4 gap-2">
-            {/* Mock Bar Chart */}
+          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-4 gap-2">
             {[40, 60, 45, 80, 55, 90, 75, 85, 60, 95, 80, 85].map((val, i) => (
               <div key={i} className="flex-1 flex flex-col justify-end gap-1 h-full group relative">
-                {/* Tooltip on hover */}
                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap">
                   Week {i+1}: {val}%
                 </div>
-                {/* Data Bars */}
                 <div 
                   className="w-full bg-emerald-500/80 rounded-t-sm hover:bg-emerald-400 transition-colors" 
                   style={{ height: `${val}%` }}
@@ -139,7 +181,7 @@ export default function ProjectPerformance() {
           <div className="mt-8 p-4 bg-amber-50 border border-amber-100 rounded-xl">
             <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2 mb-1">
               <TrendingDown size={16} className="text-amber-600" />
-              Critical Path Delay
+              Critical Path Alert
             </h4>
             <p className="text-xs text-amber-700 leading-relaxed">
               Structural framing is currently 5% behind schedule due to delayed steel deliveries in Zone 3.

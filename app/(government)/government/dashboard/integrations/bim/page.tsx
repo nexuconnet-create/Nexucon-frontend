@@ -1,16 +1,48 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { LinkIcon, Box, CheckCircle2, AlertTriangle, RefreshCw, Plus, ExternalLink } from "lucide-react";
+import { BIMIntegration, getBimIntegrations, syncBimPlatform } from "@/services/integrations";
+import ConfigureBimModal from "@/components/dashboard/ConfigureBimModal";
 
 export default function BimIntegrations() {
-  const platforms = [
-    { name: "Autodesk Construction Cloud", status: "Connected", lastSync: "10 mins ago", models: 142, icon: "A" },
-    { name: "Procore", status: "Connected", lastSync: "1 hour ago", models: 89, icon: "P" },
-    { name: "Bentley Systems", status: "Disconnected", lastSync: "2 days ago", models: 0, icon: "B" },
-    { name: "Trimble Connect", status: "Connected", lastSync: "5 mins ago", models: 34, icon: "T" },
-  ];
+  const [platforms, setPlatforms] = useState<BIMIntegration[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [selectedBim, setSelectedBim] = useState<BIMIntegration | null>(null);
+  const [isConfigureOpen, setIsConfigureOpen] = useState(false);
+
+  const fetchBimData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getBimIntegrations();
+      setPlatforms(data);
+    } catch (err) {
+      console.error("Failed to load BIM integrations", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBimData();
+  }, [fetchBimData]);
+
+  const handleSync = async (id: string, provider: string) => {
+    setSyncingId(id);
+    try {
+      await syncBimPlatform(id);
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `3D model ingestion synchronized with ${provider}!`, type: 'success' } 
+      }));
+      fetchBimData();
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to sync models', type: 'error' } }));
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -24,7 +56,17 @@ export default function BimIntegrations() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold">
+          <button 
+            onClick={fetchBimData}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          <button 
+            onClick={() => { setSelectedBim(null); setIsConfigureOpen(true); }}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold"
+          >
             <Plus size={16} />
             Add Integration
           </button>
@@ -34,52 +76,80 @@ export default function BimIntegrations() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {platforms.map((platform, idx) => (
           <motion.div
-            key={idx}
+            key={platform.id || idx}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-6 hover:shadow-md transition-shadow"
+            transition={{ delay: idx * 0.08 }}
+            className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden p-6 hover:shadow-md transition-shadow flex flex-col justify-between"
           >
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center text-xl font-black text-[#022C4F]">
-                  {platform.icon}
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{platform.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`w-2 h-2 rounded-full ${platform.status === 'Connected' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                    <span className="text-xs font-semibold text-gray-500">{platform.status}</span>
+            <div>
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-center text-xl font-black text-[#022C4F]">
+                    {platform.icon_code}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-base">{platform.provider}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`w-2 h-2 rounded-full ${platform.status === 'Connected' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                      <span className="text-xs font-semibold text-gray-500">{platform.status}</span>
+                    </div>
                   </div>
                 </div>
+                <button 
+                  onClick={() => { setSelectedBim(platform); setIsConfigureOpen(true); }}
+                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                >
+                  <ExternalLink size={18} />
+                </button>
               </div>
-              <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                <ExternalLink size={18} />
-              </button>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Synced Models</span>
+                  <span className="text-xl font-black text-[#022C4F]">{platform.synced_models_count}</span>
+                </div>
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                  <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Last Sync</span>
+                  <span className="text-xs font-bold text-gray-700 mt-1 block">
+                    {new Date(platform.last_sync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Synced Models</span>
-                <span className="text-xl font-black text-[#022C4F]">{platform.models}</span>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Last Sync</span>
-                <span className="text-sm font-bold text-gray-700 mt-2 block">{platform.lastSync}</span>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold">
-                <RefreshCw size={14} /> Sync Now
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={() => handleSync(platform.id, platform.provider)}
+                disabled={syncingId === platform.id}
+                className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-xs font-bold disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={syncingId === platform.id ? "animate-spin" : ""} />
+                {syncingId === platform.id ? 'Syncing...' : 'Sync Now'}
               </button>
-              <button className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold">
+              <button 
+                onClick={() => { setSelectedBim(platform); setIsConfigureOpen(true); }}
+                className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors shadow-sm text-xs font-bold"
+              >
                 <LinkIcon size={14} /> Configure
               </button>
             </div>
           </motion.div>
         ))}
+
+        {platforms.length === 0 && !isLoading && (
+          <div className="p-12 text-center text-gray-400 text-xs col-span-2">
+            No BIM platforms connected.
+          </div>
+        )}
       </div>
+
+      <ConfigureBimModal
+        isOpen={isConfigureOpen}
+        onClose={() => setIsConfigureOpen(false)}
+        bimPlatform={selectedBim}
+        onSuccess={fetchBimData}
+      />
     </div>
   );
 }

@@ -1,12 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { 
   BarChart, Activity, Map, Building2, TrendingUp, AlertTriangle, 
-  MapPin, Users, Target, Search, Download
+  MapPin, Users, Target, Download
 } from "lucide-react";
+import ReportBuilderDrawer from "@/components/dashboard/ReportBuilderDrawer";
 
 export default function IndustryPerformancePage() {
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   return (
     <div className="w-full h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -20,9 +23,12 @@ export default function IndustryPerformancePage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-white border border-gray-200 text-[#022C4F] rounded-xl hover:bg-slate-50 transition-colors font-medium flex items-center gap-2 shadow-sm">
+          <button 
+            onClick={() => setIsDrawerOpen(true)}
+            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 shadow-sm text-sm"
+          >
             <Download size={18} />
-            Export Report
+            Export Industry Report
           </button>
         </div>
       </div>
@@ -109,21 +115,20 @@ export default function IndustryPerformancePage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Compliance Trends Chart (Simulated) */}
+        {/* Compliance Trends Chart */}
         <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
               <Activity size={18} className="text-blue-500" />
               Industry Compliance Trends (YTD)
             </h3>
-            <select className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-600 outline-none">
+            <select className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-slate-600 outline-none">
               <option>2026</option>
               <option>2025</option>
             </select>
           </div>
           
           <div className="h-64 flex items-end justify-between gap-2 px-2">
-            {/* Simulated Line/Bar Chart */}
             {[45, 52, 48, 61, 59, 68, 75, 71, 82, 85, 81, 89].map((val, idx) => (
               <div key={idx} className="w-full relative group flex flex-col justify-end h-full">
                 <div 
@@ -151,7 +156,7 @@ export default function IndustryPerformancePage() {
             </h3>
           </div>
           
-          <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1">
             {[
               { lga: 'Eti-Osa', violations: 142, trend: '+12%' },
               { lga: 'Ikeja', violations: 98, trend: '+5%' },
@@ -160,7 +165,7 @@ export default function IndustryPerformancePage() {
               { lga: 'Alimosho', violations: 54, trend: '-8%' },
               { lga: 'Kosofe', violations: 41, trend: '0%' },
             ].map((area, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50 transition-colors">
+              <div key={idx} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
                     <MapPin size={14} />
@@ -179,6 +184,10 @@ export default function IndustryPerformancePage() {
         </div>
       </div>
 
+      <ReportBuilderDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      />
     </div>
   );
 }

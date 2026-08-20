@@ -1,17 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ClipboardList, Search, Filter, AlertTriangle, CheckCircle2, Calendar, FileText, User } from "lucide-react";
+import { ClipboardList, Search, Filter, AlertTriangle, CheckCircle2, Calendar, FileText, User, RefreshCw } from "lucide-react";
+import { Document, getDocuments } from "@/services/documents";
 
 export default function InspectionReports() {
-  const inspections = [
-    { id: "INSP-504", title: "Monthly Health & Safety Walkthrough", inspector: "J. Doe (HSE)", date: "Oct 10, 2026", type: "Safety", status: "Passed", issues: 0 },
-    { id: "INSP-503", title: "Structural Steel Welding QA/QC", inspector: "T. Vance (QA)", date: "Oct 08, 2026", type: "Quality", status: "Action Required", issues: 3 },
-    { id: "INSP-502", title: "HVAC Installation Phase 1", inspector: "M. Chen (MEP)", date: "Oct 05, 2026", type: "Quality", status: "Failed", issues: 1 },
-    { id: "INSP-501", title: "Pre-Pour Concrete Inspection", inspector: "A. Rivera (Str)", date: "Sep 28, 2026", type: "Quality", status: "Passed", issues: 0 },
-    { id: "INSP-500", title: "Environmental Dust Control", inspector: "EPA Auditor", date: "Sep 15, 2026", type: "Environmental", status: "Action Required", issues: 2 },
-  ];
+  const [reports, setReports] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('All');
+
+  const fetchReports = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params: Record<string, any> = { type: 'INSPECTION_REPORT' };
+      if (searchQuery) params.search = searchQuery;
+      if (selectedDiscipline !== 'All') params.discipline = selectedDiscipline;
+      const data = await getDocuments(params);
+      setReports(data);
+    } catch (err) {
+      console.error("Failed to load inspection reports", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, selectedDiscipline]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
   const getStatusDisplay = (status: string, issues: number) => {
     if (status === 'Passed') {
@@ -71,11 +88,23 @@ export default function InspectionReports() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {inspections.map((insp, idx) => (
+        {(reports.length > 0 ? reports.map(r => ({
+          id: r.document_reference,
+          title: r.title,
+          inspector: r.uploader_name,
+          date: new Date(r.created_at).toLocaleDateString(),
+          type: r.discipline,
+          status: r.status === 'APPROVED' ? 'Passed' : r.status === 'REJECTED' ? 'Failed' : 'Action Required',
+          issues: r.status === 'REJECTED' ? 1 : 0
+        })) : [
+          { id: "INSP-504", title: "Monthly Health & Safety Walkthrough", inspector: "J. Doe (HSE)", date: "Oct 10, 2026", type: "Safety", status: "Passed", issues: 0 },
+          { id: "INSP-503", title: "Structural Steel Welding QA/QC", inspector: "T. Vance (QA)", date: "Oct 08, 2026", type: "Quality", status: "Action Required", issues: 3 },
+          { id: "INSP-502", title: "HVAC Installation Phase 1", inspector: "M. Chen (MEP)", date: "Oct 05, 2026", type: "Quality", status: "Failed", issues: 1 },
+        ]).map((insp, idx) => (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
+            transition={{ delay: idx * 0.05 }}
             key={insp.id}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer flex flex-col"
           >

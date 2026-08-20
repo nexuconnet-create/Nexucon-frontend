@@ -1,52 +1,56 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Bell, Briefcase, FileText, Check, Clock, ExternalLink, Filter, CheckCircle2 } from "lucide-react";
+import { Bell, Briefcase, FileText, Check, Clock, ExternalLink, Filter, CheckCircle2, RefreshCw } from "lucide-react";
+import { Notification, getNotifications, markNotificationRead, markAllNotificationsRead } from "@/services/notifications";
 
 export default function ApplicationNotifications() {
-  const notifications = [
-    {
-      id: "NOT-9102",
-      title: "New Subcontractor Prequalification Submitted",
-      applicant: "Vertex Engineering Solutions",
-      type: "Prequalification",
-      submittedAt: "2 hours ago",
-      isUnread: true,
-      priority: "Medium",
-      snippet: "Vertex Engineering has submitted their QA/QC manual and past performance logs for review to bid on MEP packages."
-    },
-    {
-      id: "NOT-9101",
-      title: "Phase 3 Zoning Variance Request",
-      applicant: "Nexucon Master Dev",
-      type: "Permit Application",
-      submittedAt: "5 hours ago",
-      isUnread: true,
-      priority: "High",
-      snippet: "Requesting a 15ft variance on the western boundary setback to accommodate updated structural footings."
-    },
-    {
-      id: "NOT-9088",
-      title: "Updated Night-Shift Operations Plan",
-      applicant: "Apex Construction",
-      type: "Operational",
-      submittedAt: "1 day ago",
-      isUnread: false,
-      priority: "Medium",
-      snippet: "Revised noise mitigation strategy and lighting plan for Q4 night shift operations."
-    },
-    {
-      id: "NOT-9085",
-      title: "Environmental Impact Baseline Report",
-      applicant: "EcoSolve Ltd.",
-      type: "Document Submission",
-      submittedAt: "2 days ago",
-      isUnread: false,
-      priority: "Low",
-      snippet: "Initial baseline readings for soil composition in Sector 4 prior to mass excavation."
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchApplications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params: Record<string, any> = { category: 'APPLICATIONS' };
+      if (unreadOnly) params.unread_only = true;
+      const data = await getNotifications(params);
+      setNotifications(data);
+    } catch (err) {
+      console.error("Failed to load application notifications", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [unreadOnly]);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
+  const handleDismiss = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Notification marked as read', type: 'info' } 
+      }));
+      fetchApplications();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsRead('APPLICATIONS');
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'All application notifications marked as read', type: 'success' } 
+      }));
+      fetchApplications();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -55,18 +59,37 @@ export default function ApplicationNotifications() {
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <div className="relative">
               <Bell className="text-blue-500" />
-              <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></div>
+              {notifications.some(n => !n.is_read) && (
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></div>
+              )}
             </div>
-            New Applications
+            New Applications & Submissions
           </h1>
           <p className="text-gray-500 mt-1">Recent submissions, permit applications, and documents awaiting initial triage.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
+          <button 
+            onClick={fetchApplications}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          <button 
+            onClick={() => setUnreadOnly(!unreadOnly)}
+            className={`flex items-center gap-2 px-3.5 py-2.5 border rounded-xl text-sm font-semibold transition-all ${
+              unreadOnly 
+                ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
             <Filter size={16} /> Unread Only
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-semibold">
+          <button 
+            onClick={handleMarkAllRead}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-semibold"
+          >
             <CheckCircle2 size={16} />
             Mark All as Read
           </button>
@@ -78,57 +101,62 @@ export default function ApplicationNotifications() {
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
+            transition={{ delay: idx * 0.06 }}
             key={notif.id}
             className={`flex flex-col sm:flex-row gap-4 p-5 rounded-2xl border transition-all ${
-              notif.isUnread ? 'bg-white border-blue-200 shadow-md ring-1 ring-blue-500/10' : 'bg-gray-50/50 border-gray-100 shadow-sm opacity-80'
+              !notif.is_read ? 'bg-white border-blue-200 shadow-md ring-1 ring-blue-500/10' : 'bg-gray-50/50 border-gray-100 shadow-sm opacity-80'
             }`}
           >
             {/* Icon Column */}
             <div className="shrink-0 pt-1">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                notif.isUnread ? 'bg-blue-100 text-blue-600' : 'bg-white border border-gray-200 text-gray-400'
+                !notif.is_read ? 'bg-blue-100 text-blue-600' : 'bg-white border border-gray-200 text-gray-400'
               }`}>
-                {notif.type === 'Permit Application' ? <Briefcase size={20} /> : <FileText size={20} />}
+                {notif.category === 'APPLICATIONS' ? <Briefcase size={20} /> : <FileText size={20} />}
               </div>
             </div>
 
             {/* Content Column */}
             <div className="flex-1">
               <div className="flex items-start justify-between gap-4 mb-1">
-                <h3 className={`text-base font-bold ${notif.isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
+                <h3 className={`text-base font-bold ${!notif.is_read ? 'text-gray-900' : 'text-gray-700'}`}>
                   {notif.title}
                 </h3>
                 <span className="text-xs font-semibold text-gray-400 whitespace-nowrap flex items-center gap-1">
-                  <Clock size={12} /> {notif.submittedAt}
+                  <Clock size={12} /> {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
               
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-xs font-bold text-gray-500">{notif.applicant}</span>
+                <span className="text-xs font-bold text-gray-500">{notif.location || 'Central Metro Hub'}</span>
                 <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                  {notif.type}
+                  {notif.priority} Priority
                 </span>
-                {notif.priority === 'High' && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100">
-                    High Priority
-                  </span>
-                )}
               </div>
               
               <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                {notif.snippet}
+                {notif.message}
               </p>
               
               <div className="flex items-center gap-3">
-                <button className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
-                  notif.isUnread ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                }`}>
+                <button 
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('show-toast', { 
+                      detail: { message: `Opening triage review for ${notif.notification_reference}...`, type: 'info' } 
+                    }));
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${
+                    !notif.is_read ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
                   Review Application <ExternalLink size={14} />
                 </button>
-                {notif.isUnread && (
-                  <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                {!notif.is_read && (
+                  <button 
+                    onClick={() => handleDismiss(notif.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
                     <Check size={14} /> Dismiss
                   </button>
                 )}
@@ -136,6 +164,12 @@ export default function ApplicationNotifications() {
             </div>
           </motion.div>
         ))}
+
+        {notifications.length === 0 && !isLoading && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-500">
+            No application notifications found.
+          </div>
+        )}
       </div>
     </div>
   );

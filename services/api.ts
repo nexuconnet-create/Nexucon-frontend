@@ -5,13 +5,11 @@ const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
 const backendUrl = validEnvUrl ? validEnvUrl.replace(/\/$/, '') : (isProd ? 'https://nexucon-backend.onrender.com' : '');
 
+const isBrowser = typeof window !== 'undefined';
 const api = axios.create({
-  baseURL: `${backendUrl}/api/v1`,
+  baseURL: isBrowser ? '/api/proxy' : `${backendUrl}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
-    'Expires': '0',
   },
   withCredentials: true, // Send cookies with requests
 });

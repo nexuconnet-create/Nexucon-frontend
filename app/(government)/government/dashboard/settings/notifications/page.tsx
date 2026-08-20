@@ -1,43 +1,81 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Bell, Save, Smartphone, Mail, Globe, AlertTriangle, Network, Clock, Trash2, Plus } from "lucide-react";
+import { Bell, Save, Smartphone, Mail, Globe, AlertTriangle, Network, Clock, Trash2, Plus, RefreshCw } from "lucide-react";
+import { NotificationCategoryGroup, NotificationRoutingRule, getNotificationPreferences, updateNotificationPreference, getRoutingRules, deleteRoutingRule } from "@/services/settings";
+import AddRoutingRuleModal from "@/components/dashboard/AddRoutingRuleModal";
 
 export default function NotificationPreferences() {
-  const categories = [
-    {
-      title: "Critical Safety Incidents",
-      description: "Work stoppages, severe environmental breaches, and major safety hazards.",
-      icon: AlertTriangle,
-      color: "text-red-500",
-      settings: [
-        { label: "In-App Dashboard Alerts", email: true, sms: true, push: true, locked: true },
-      ]
-    },
-    {
-      title: "Permits & Approvals",
-      description: "New submissions, required reviews, and final sign-offs.",
-      icon: Globe,
-      color: "text-blue-500",
-      settings: [
-        { label: "New Permit Application", email: true, sms: false, push: true, locked: false },
-        { label: "Technical Review Required", email: true, sms: false, push: true, locked: false },
-        { label: "Approval Decision Finalized", email: true, sms: false, push: false, locked: false },
-      ]
-    },
-    {
-      title: "Field Inspections",
-      description: "Inspection requests, NCR generation, and schedule changes.",
-      icon: Smartphone,
-      color: "text-emerald-500",
-      settings: [
-        { label: "Inspection Requested (Contractor)", email: true, sms: true, push: true, locked: false },
-        { label: "Failed Inspection (NCR Generated)", email: true, sms: true, push: true, locked: false },
-        { label: "Inspection Passed", email: false, sms: false, push: true, locked: false },
-      ]
+  const [categories, setCategories] = useState<NotificationCategoryGroup[]>([]);
+  const [routingRules, setRoutingRules] = useState<NotificationRoutingRule[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
+
+  const fetchNotificationData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [catData, ruleData] = await Promise.all([
+        getNotificationPreferences(),
+        getRoutingRules()
+      ]);
+      setCategories(catData);
+      setRoutingRules(ruleData);
+    } catch (err) {
+      console.error("Failed to load notification preferences", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, []);
+
+  useEffect(() => {
+    fetchNotificationData();
+  }, [fetchNotificationData]);
+
+  const handleToggle = (cIdx: number, sIdx: number, channel: 'in_app' | 'email' | 'sms') => {
+    const updated = [...categories];
+    const item = updated[cIdx].settings[sIdx];
+    if (item.locked && (channel === 'in_app' || channel === 'email')) return;
+
+    item[channel] = !item[channel];
+    setCategories(updated);
+  };
+
+  const handleSavePreferences = async () => {
+    setIsSaving(true);
+    try {
+      for (const cat of categories) {
+        for (const s of cat.settings) {
+          await Promise.all([
+            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'in_app', enabled: s.in_app }),
+            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'email', enabled: s.email }),
+            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'sms', enabled: s.sms }),
+          ]);
+        }
+      }
+
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: "Notification delivery preferences updated!", type: "success" } 
+      }));
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to save preferences", type: "error" } }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteRule = async (ruleId: string) => {
+    try {
+      await deleteRoutingRule(ruleId);
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: "Routing rule deleted.", type: "info" } 
+      }));
+      fetchNotificationData();
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to delete rule", type: "error" } }));
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -51,9 +89,20 @@ export default function NotificationPreferences() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold">
+          <button 
+            onClick={fetchNotificationData}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          <button 
+            onClick={handleSavePreferences}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold disabled:opacity-50"
+          >
             <Save size={16} />
-            Save Preferences
+            {isSaving ? 'Saving...' : 'Save Preferences'}
           </button>
         </div>
       </div>
@@ -64,7 +113,7 @@ export default function NotificationPreferences() {
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+          className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
         >
           <div className="p-6 bg-gray-50/50 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -72,10 +121,13 @@ export default function NotificationPreferences() {
                 <Network className="text-blue-500" />
                 Notification Routing & SLAs
               </h2>
-              <p className="text-sm text-gray-500 mt-1">Define who receives critical notifications and escalation timelines.</p>
+              <p className="text-xs text-gray-500 mt-1">Define who receives critical notifications and escalation timelines.</p>
             </div>
-            <button className="flex items-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors">
-              <Plus size={16} /> Add Routing Rule
+            <button 
+              onClick={() => setIsAddRuleOpen(true)}
+              className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3.5 py-2 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors"
+            >
+              <Plus size={14} /> Add Routing Rule
             </button>
           </div>
           
@@ -87,52 +139,49 @@ export default function NotificationPreferences() {
               <div className="col-span-1">Escalation Target</div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-3 border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-              <div className="col-span-1">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
-                  <AlertTriangle size={12} /> Critical Alerts
-                </span>
-              </div>
-              <div className="col-span-1 text-sm font-semibold text-gray-800">
-                Agency Director
-              </div>
-              <div className="col-span-1">
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                  <Clock size={12} /> Within 15 mins
-                </span>
-              </div>
-              <div className="col-span-1 flex items-center justify-between text-sm font-bold text-purple-700">
-                Permanent Secretary
-                <button className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-3 border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-              <div className="col-span-1">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-200">
-                  <AlertTriangle size={12} /> Stop-Work Order
-                </span>
-              </div>
-              <div className="col-span-1 text-sm font-semibold text-gray-800">
-                Chief Inspector
-              </div>
-              <div className="col-span-1">
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-200">
-                  <Clock size={12} /> Within 2 hours
-                </span>
-              </div>
-              <div className="col-span-1 flex items-center justify-between text-sm font-bold text-gray-700">
-                Agency Director
-                <button className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-              </div>
+            <div className="divide-y divide-gray-50">
+              {routingRules.map((rule) => (
+                <div key={rule.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-3.5 hover:bg-gray-50/50 transition-colors">
+                  <div className="col-span-1">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
+                      <AlertTriangle size={12} /> {rule.trigger_event}
+                    </span>
+                  </div>
+                  <div className="col-span-1 text-xs font-bold text-gray-800">
+                    {rule.primary_recipient}
+                  </div>
+                  <div className="col-span-1">
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                      <Clock size={12} /> {rule.sla_timeline}
+                    </span>
+                  </div>
+                  <div className="col-span-1 flex items-center justify-between text-xs font-bold text-purple-700">
+                    {rule.escalation_target}
+                    <button 
+                      onClick={() => handleDeleteRule(rule.id)}
+                      className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                      title="Delete Rule"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {routingRules.length === 0 && !isLoading && (
+                <div className="p-8 text-center text-xs text-gray-400">
+                  No routing rules defined.
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
 
+        {/* Multi-channel toggles */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+          className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
         >
           {/* Header Row for Toggles */}
           <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-gray-50/50 border-b border-gray-100">
@@ -152,10 +201,9 @@ export default function NotificationPreferences() {
              <div key={idx} className="border-b border-gray-100 last:border-0">
                 <div className="p-6 bg-gray-50/30">
                    <div className="flex items-center gap-3 mb-1">
-                      <cat.icon size={18} className={cat.color} />
                       <h2 className="text-base font-bold text-gray-900">{cat.title}</h2>
                    </div>
-                   <p className="text-sm text-gray-500 pl-7">{cat.description}</p>
+                   <p className="text-xs text-gray-500">{cat.description}</p>
                 </div>
 
                 <div className="p-6 space-y-6">
@@ -163,43 +211,49 @@ export default function NotificationPreferences() {
                       <div key={sIdx} className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                          <div className="md:col-span-6">
                             <p className="text-sm font-bold text-gray-700">{setting.label}</p>
-                            {setting.locked && <p className="text-[10px] uppercase font-bold text-red-500 mt-1">System Required (Cannot Disable)</p>}
+                            {setting.locked && <p className="text-[10px] uppercase font-bold text-red-500 mt-0.5">System Required (Cannot Disable)</p>}
                          </div>
                          
                          {/* In-App Toggle */}
                          <div className="md:col-span-2 flex justify-start md:justify-center">
-                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                               setting.push ? 'bg-blue-600' : 'bg-gray-200'
+                            <div 
+                              onClick={() => handleToggle(idx, sIdx, 'in_app')}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                               setting.in_app ? 'bg-blue-600' : 'bg-gray-200'
                             } ${setting.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                  setting.push ? 'translate-x-6' : 'translate-x-1'
+                                  setting.in_app ? 'translate-x-6' : 'translate-x-1'
                                }`} />
                             </div>
-                            <span className="md:hidden ml-3 text-sm font-bold text-gray-500">In-App</span>
+                            <span className="md:hidden ml-3 text-xs font-bold text-gray-500">In-App</span>
                          </div>
                          
                          {/* Email Toggle */}
                          <div className="md:col-span-2 flex justify-start md:justify-center">
-                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            <div 
+                              onClick={() => handleToggle(idx, sIdx, 'email')}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                setting.email ? 'bg-blue-600' : 'bg-gray-200'
                             } ${setting.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                                   setting.email ? 'translate-x-6' : 'translate-x-1'
                                }`} />
                             </div>
-                            <span className="md:hidden ml-3 text-sm font-bold text-gray-500">Email</span>
+                            <span className="md:hidden ml-3 text-xs font-bold text-gray-500">Email</span>
                          </div>
 
                          {/* SMS Toggle */}
                          <div className="md:col-span-2 flex justify-start md:justify-center">
-                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            <div 
+                              onClick={() => handleToggle(idx, sIdx, 'sms')}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
                                setting.sms ? 'bg-blue-600' : 'bg-gray-200'
-                            } ${setting.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            }`}>
                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                                   setting.sms ? 'translate-x-6' : 'translate-x-1'
                                }`} />
                             </div>
-                            <span className="md:hidden ml-3 text-sm font-bold text-gray-500">SMS</span>
+                            <span className="md:hidden ml-3 text-xs font-bold text-gray-500">SMS</span>
                          </div>
                       </div>
                    ))}
@@ -208,6 +262,12 @@ export default function NotificationPreferences() {
           ))}
         </motion.div>
       </div>
+
+      <AddRoutingRuleModal
+        isOpen={isAddRuleOpen}
+        onClose={() => setIsAddRuleOpen(false)}
+        onSuccess={fetchNotificationData}
+      />
     </div>
   );
 }

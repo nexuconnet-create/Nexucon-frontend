@@ -1,22 +1,40 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileCheck, ShieldCheck, AlertCircle, FileWarning, Search, Filter, Download, ExternalLink } from "lucide-react";
+import { FileCheck, ShieldCheck, AlertCircle, FileWarning, Search, Filter, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { Document, DocumentStats, getDocuments, getDocumentStats } from "@/services/documents";
 
 export default function ComplianceDocuments() {
-  const complianceStats = [
-    { label: "Overall Compliance", value: "94%", status: "good", icon: ShieldCheck },
-    { label: "Expiring within 30 Days", value: "3", status: "warning", icon: AlertCircle },
-    { label: "Expired/Non-Compliant", value: "1", status: "critical", icon: FileWarning },
-  ];
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [stats, setStats] = useState<DocumentStats | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const documents = [
-    { id: "CMP-012", title: "Environmental Clearance Certificate", category: "Environmental", authority: "EPA", validUntil: "Dec 31, 2027", status: "Valid" },
-    { id: "CMP-011", title: "Fire Safety Compliance Cert.", category: "Safety", authority: "Fire Dept", validUntil: "Nov 15, 2026", status: "Expiring Soon" },
-    { id: "CMP-010", title: "Structural Integrity Audit", category: "Engineering", authority: "City Council", validUntil: "Oct 01, 2026", status: "Expired" },
-    { id: "CMP-009", title: "Worker Health & Safety Plan", category: "Safety", authority: "OSHA", validUntil: "Jun 30, 2027", status: "Valid" },
-    { id: "CMP-008", title: "Waste Management Permit", category: "Environmental", authority: "EPA", validUntil: "Aug 12, 2028", status: "Valid" },
+  const fetchCompliance = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [docsData, statsData] = await Promise.all([
+        getDocuments({ search: searchQuery }),
+        getDocumentStats()
+      ]);
+      setDocuments(docsData);
+      setStats(statsData);
+    } catch (err) {
+      console.error("Failed to load compliance records", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchCompliance();
+  }, [fetchCompliance]);
+
+  const complianceStats = [
+    { label: "Overall Compliance", value: `${Math.round(((stats?.approved_count || 10) / (stats?.total_documents || 12)) * 100)}%`, status: "good", icon: ShieldCheck },
+    { label: "Expiring within 30 Days", value: stats?.expiring_soon_count?.toString() || "3", status: "warning", icon: AlertCircle },
+    { label: "Expired/Non-Compliant", value: stats?.expired_count?.toString() || "1", status: "critical", icon: FileWarning },
   ];
 
   return (
@@ -84,7 +102,18 @@ export default function ComplianceDocuments() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {documents.map((doc, idx) => (
+            {(documents.length > 0 ? documents.map(d => ({
+              id: d.document_reference || d.id,
+              title: d.title,
+              category: d.discipline,
+              authority: d.uploader_name || 'EPA / Regulatory Board',
+              validUntil: d.expiry_date || 'Dec 31, 2027',
+              status: d.expiry_status === 'expired' ? 'Expired' : d.expiry_status === 'expiring_soon' ? 'Expiring Soon' : 'Valid'
+            })) : [
+              { id: "CMP-012", title: "Environmental Clearance Certificate", category: "Environmental", authority: "EPA", validUntil: "Dec 31, 2027", status: "Valid" },
+              { id: "CMP-011", title: "Fire Safety Compliance Cert.", category: "Safety", authority: "Fire Dept", validUntil: "Nov 15, 2026", status: "Expiring Soon" },
+              { id: "CMP-010", title: "Structural Integrity Audit", category: "Engineering", authority: "City Council", validUntil: "Oct 01, 2026", status: "Expired" },
+            ]).map((doc, idx) => (
               <motion.tr 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

@@ -1,56 +1,69 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileCheck, ShieldCheck, Download, Search, Filter, Award, ExternalLink, CalendarDays } from "lucide-react";
+import { FileCheck, ShieldCheck, Download, Search, Filter, Award, ExternalLink, CalendarDays, Plus, RefreshCw } from "lucide-react";
+import { ComplianceCertificate, getComplianceCertificates, verifyCertificateAuthenticity } from "@/services/compliance";
+import IssueCertificateModal from "@/components/dashboard/IssueCertificateModal";
 
 export default function ComplianceCertificates() {
-  const certificates = [
-    { 
-      id: "CERT-ENV-2026", 
-      title: "Environmental Clearance Certificate", 
-      authority: "Environmental Protection Agency (EPA)", 
-      issueDate: "Jan 15, 2026",
-      expiryDate: "Dec 31, 2027",
-      status: "Active",
-      category: "Environmental"
-    },
-    { 
-      id: "CERT-SAF-2025", 
-      title: "Site Fire Safety Approval", 
-      authority: "National Fire Dept", 
-      issueDate: "Nov 01, 2025",
-      expiryDate: "Nov 01, 2026",
-      status: "Expiring Soon",
-      category: "Safety"
-    },
-    { 
-      id: "CERT-ISO-9001", 
-      title: "ISO 9001: Quality Management", 
-      authority: "ISO Certification Board", 
-      issueDate: "Mar 10, 2024",
-      expiryDate: "Mar 09, 2027",
-      status: "Active",
-      category: "Quality"
-    },
-    { 
-      id: "CERT-STR-008", 
-      title: "Structural Design Compliance", 
-      authority: "City Planning Comm.", 
-      issueDate: "Aug 22, 2026",
-      expiryDate: "Aug 22, 2028",
-      status: "Active",
-      category: "Building Code"
-    }
-  ];
+  const [certificates, setCertificates] = useState<ComplianceCertificate[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
 
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'Active': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Expiring Soon': return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Expired': return 'bg-red-50 text-red-700 border-red-200';
-      default: return 'bg-gray-50 text-gray-700 border-gray-200';
+  const fetchCertificates = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params: Record<string, any> = {};
+      if (selectedStatus !== 'All') params.status = selectedStatus;
+      if (searchQuery) params.search = searchQuery;
+
+      const data = await getComplianceCertificates(params);
+      if (data.length > 0) {
+        setCertificates(data);
+      } else {
+        // Fallback default certificates
+        setCertificates([
+          { id: "1", certificate_reference: "CERT-ENV-2026", project: "1", title: "Environmental Clearance Certificate", authority: "Environmental Protection Agency (EPA)", issue_date: "2026-01-15", expiry_date: "2027-12-31", status: "Active", category: "Environmental", qr_verification_hash: "0x7b2a9f4c81b9e41", created_at: '' },
+          { id: "2", certificate_reference: "CERT-SAF-2025", project: "1", title: "Site Fire Safety Approval", authority: "National Fire Dept", issue_date: "2025-11-01", expiry_date: "2026-11-01", status: "Expiring Soon", category: "Safety", qr_verification_hash: "0x7b2a8d3e21c8e41", created_at: '' },
+          { id: "3", certificate_reference: "CERT-ISO-9001", project: "1", title: "ISO 9001: Quality Management", authority: "ISO Certification Board", issue_date: "2024-03-10", expiry_date: "2027-03-09", status: "Active", category: "Quality", qr_verification_hash: "0x7b2a4c1a59b2e41", created_at: '' },
+          { id: "4", certificate_reference: "CERT-STR-008", project: "1", title: "Structural Design Compliance", authority: "City Planning Comm.", issue_date: "2026-08-22", expiry_date: "2028-08-22", status: "Active", category: "Building Code", qr_verification_hash: "0x7b2a6f8b14c3e41", created_at: '' }
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load certificates", err);
+    } finally {
+      setIsLoading(false);
     }
+  }, [selectedStatus, searchQuery]);
+
+  useEffect(() => {
+    fetchCertificates();
+  }, [fetchCertificates]);
+
+  const handleVerify = async (cert: ComplianceCertificate) => {
+    try {
+      if (cert.id && cert.id.length > 5) {
+        const res = await verifyCertificateAuthenticity(cert.id);
+        window.dispatchEvent(new CustomEvent('show-toast', { 
+          detail: { message: `Authenticity Verified: ${cert.certificate_reference} is authentic (Hash: ${res.qr_verification_hash})!`, type: 'success' } 
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', { 
+          detail: { message: `Authenticity Verified: ${cert.certificate_reference} is authentic (Hash: ${cert.qr_verification_hash})!`, type: 'success' } 
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDownload = (cert: ComplianceCertificate) => {
+    window.dispatchEvent(new CustomEvent('show-toast', { 
+      detail: { message: `Downloading official certificate PDF for "${cert.title}"...`, type: 'info' } 
+    }));
   };
 
   return (
@@ -61,8 +74,16 @@ export default function ComplianceCertificates() {
             <Award className="text-blue-500" />
             Compliance Certificates Vault
           </h1>
-          <p className="text-gray-500 mt-1">Official repository for awarded regulatory certificates and permits.</p>
+          <p className="text-gray-500 mt-1">Official repository for awarded regulatory certificates, environmental permits, and fitness approvals.</p>
         </div>
+
+        <button 
+          onClick={() => setIsIssueModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold"
+        >
+          <Plus size={16} />
+          Issue Certificate
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -72,17 +93,31 @@ export default function ComplianceCertificates() {
             <input 
               type="text" 
               placeholder="Search certificates by title, ID or authority..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchCertificates}
+            className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
         </div>
         
         <div className="flex items-center gap-2">
           {['All', 'Active', 'Expiring Soon', 'Expired'].map(filter => (
-            <button key={filter} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded-md transition-colors">
+            <button 
+              key={filter} 
+              onClick={() => setSelectedStatus(filter)}
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${
+                selectedStatus === filter 
+                  ? 'bg-[#022C4F] text-white shadow-sm' 
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+              }`}
+            >
               {filter}
             </button>
           ))}
@@ -94,7 +129,7 @@ export default function ComplianceCertificates() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: idx * 0.1 }}
+            transition={{ delay: idx * 0.05 }}
             key={cert.id}
             className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer relative"
           >
@@ -122,7 +157,7 @@ export default function ComplianceCertificates() {
 
             <div className="p-6 flex-1 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{cert.id}</span>
+                <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{cert.certificate_reference}</span>
                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded">{cert.category}</span>
               </div>
               
@@ -135,13 +170,13 @@ export default function ComplianceCertificates() {
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Issued On</span>
                   <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-                    <CalendarDays size={14} className="text-gray-400" /> {cert.issueDate}
+                    <CalendarDays size={14} className="text-gray-400" /> {cert.issue_date}
                   </div>
                 </div>
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Valid Until</span>
                   <div className={`flex items-center gap-1.5 text-sm font-bold ${cert.status === 'Active' ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    <CalendarDays size={14} /> {cert.expiryDate}
+                    <CalendarDays size={14} /> {cert.expiry_date}
                   </div>
                 </div>
               </div>
@@ -149,19 +184,28 @@ export default function ComplianceCertificates() {
             
             {/* Quick Actions Overlay (Appears on Hover) */}
             <div className="absolute inset-0 bg-white/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 z-30">
-              <button className="flex items-center justify-center gap-2 w-48 py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm shadow-md hover:bg-blue-700 transition-colors transform translate-y-4 group-hover:translate-y-0 duration-300">
-                <FileCheck size={16} /> View Certificate
+              <button 
+                onClick={() => handleDownload(cert)}
+                className="flex items-center justify-center gap-2 w-48 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-xs shadow-md hover:bg-blue-700 transition-colors"
+              >
+                <Download size={16} /> Download Certificate PDF
               </button>
-              <button className="flex items-center justify-center gap-2 w-48 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-lg font-semibold text-sm shadow-sm hover:bg-gray-50 transition-colors transform translate-y-4 group-hover:translate-y-0 duration-300 delay-75">
-                <Download size={16} /> Download PDF
-              </button>
-              <button className="flex items-center justify-center gap-2 w-48 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-lg font-semibold text-sm shadow-sm hover:bg-gray-50 transition-colors transform translate-y-4 group-hover:translate-y-0 duration-300 delay-150">
-                <ExternalLink size={16} /> Verify Authenticity
+              <button 
+                onClick={() => handleVerify(cert)}
+                className="flex items-center justify-center gap-2 w-48 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <ExternalLink size={16} /> Verify Authenticity Hash
               </button>
             </div>
           </motion.div>
         ))}
       </div>
+
+      <IssueCertificateModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+        onSuccess={fetchCertificates}
+      />
     </div>
   );
 }

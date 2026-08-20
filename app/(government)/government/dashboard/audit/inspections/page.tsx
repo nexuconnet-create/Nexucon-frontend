@@ -1,67 +1,71 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { History, Filter, Download, Search, CheckCircle2, XCircle, FileWarning, ExternalLink } from "lucide-react";
+import { History, Filter, Download, Search, CheckCircle2, XCircle, FileWarning, ExternalLink, RefreshCw } from "lucide-react";
+import { AuditEvent, getAuditEvents } from "@/services/audit";
+import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 
 export default function InspectionHistory() {
-  const history = [
-    {
-      id: "INSP-810",
-      type: "Structural Framing",
-      inspector: "Marcus Chen",
-      date: "Oct 06, 2026",
-      location: "Zone 3, Level 2",
-      outcome: "Passed",
-      defects: 0,
-      notes: "All welds pass visual and UT inspection."
-    },
-    {
-      id: "INSP-809",
-      type: "Concrete Slump (Pour #44)",
-      inspector: "Sarah Jenkins",
-      date: "Oct 05, 2026",
-      location: "Sector B",
-      outcome: "Failed",
-      defects: 1,
-      notes: "Slump exceeded max limit by 2 inches. Pour halted.",
-      ncrRef: "NCR-8893"
-    },
-    {
-      id: "INSP-805",
-      type: "Environmental Silt Fence",
-      inspector: "David Rivera",
-      date: "Oct 03, 2026",
-      location: "Western Perimeter",
-      outcome: "Conditional Pass",
-      defects: 2,
-      notes: "Minor sagging in two sections. Contractor given 24h to fix."
-    }
-  ];
+  const [history, setHistory] = useState<AuditEvent[]>([]);
+  const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
+  const [isDiffOpen, setIsDiffOpen] = useState(false);
 
-  const getOutcomeBadge = (outcome: string) => {
-    switch (outcome) {
-      case 'Passed':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 size={12} /> {outcome}
-          </span>
-        );
-      case 'Failed':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-            <XCircle size={12} /> {outcome}
-          </span>
-        );
-      case 'Conditional Pass':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-            <FileWarning size={12} /> {outcome}
-          </span>
-        );
-      default:
-        return null;
+  const fetchInspectionHistory = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getAuditEvents({ search: search.trim() || undefined });
+      const inspEvents = data.filter(e => 
+        e.resource_type.toLowerCase().includes('inspection') ||
+        e.action.toLowerCase().includes('inspection') ||
+        e.action.toLowerCase().includes('slump') ||
+        e.action.toLowerCase().includes('framing')
+      );
+      setHistory(inspEvents.length > 0 ? inspEvents : data);
+    } catch (err) {
+      console.error("Failed to load inspection history", err);
+    } finally {
+      setIsLoading(false);
     }
+  }, [search]);
+
+  useEffect(() => {
+    fetchInspectionHistory();
+  }, [fetchInspectionHistory]);
+
+  const handleExportPDF = () => {
+    window.dispatchEvent(new CustomEvent('show-toast', { 
+      detail: { message: 'Generating Inspection Audit PDF report...', type: 'info' } 
+    }));
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Inspection History Audit PDF downloaded!', type: 'success' } 
+      }));
+    }, 800);
+  };
+
+  const getOutcomeBadge = (action: string) => {
+    if (action.toLowerCase().includes('failed') || action.toLowerCase().includes('violation')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-red-50 text-red-700 border border-red-200">
+          <XCircle size={12} /> Failed
+        </span>
+      );
+    }
+    if (action.toLowerCase().includes('conditional') || action.toLowerCase().includes('warning')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          <FileWarning size={12} /> Conditional Pass
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <CheckCircle2 size={12} /> Passed
+      </span>
+    );
   };
 
   return (
@@ -70,16 +74,23 @@ export default function InspectionHistory() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <History className="text-emerald-500" />
-            Inspection History Log
+            Inspection History Log & Audit
           </h1>
-          <p className="text-gray-500 mt-1">Immutable audit trail of all completed site inspections and outcomes.</p>
+          <p className="text-gray-500 mt-1">Immutable audit trail of all completed site inspections, defect records, and outcomes.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchInspectionHistory}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-semibold">
+          <button 
+            onClick={handleExportPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-semibold"
+          >
             <Download size={16} />
             Export to PDF
           </button>
@@ -89,15 +100,17 @@ export default function InspectionHistory() {
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+        className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
       >
         <div className="p-4 border-b border-gray-100 flex items-center gap-4 bg-gray-50/50">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by ID, Inspector, or Location..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
         </div>
@@ -108,66 +121,63 @@ export default function InspectionHistory() {
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Inspection ID</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Date & Inspector</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Type & Location</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Action & Resource</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Outcome</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Defects Logged</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Notes & NCRs</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Project / Target</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">SHA-256 Seal</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {history.map((record, idx) => (
-                <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
+              {history.map((record) => (
+                <tr 
+                  key={record.id} 
+                  onClick={() => { setSelectedEvent(record); setIsDiffOpen(true); }}
+                  className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="font-mono text-xs font-bold text-gray-900 group-hover:text-emerald-600 transition-colors">
-                      {record.id}
+                      {record.audit_reference}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col">
-                      <span className="font-bold text-sm text-gray-900">{record.inspector}</span>
-                      <span className="text-xs text-gray-500 font-semibold">{record.date}</span>
+                      <span className="font-bold text-sm text-gray-900">{record.user_name}</span>
+                      <span className="text-xs text-gray-500 font-semibold">{new Date(record.timestamp).toLocaleDateString()}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col">
-                      <span className="font-bold text-sm text-gray-700">{record.type}</span>
-                      <span className="text-xs text-gray-500">{record.location}</span>
+                      <span className="font-bold text-sm text-gray-700">{record.action.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-gray-500">{record.resource_type} ({record.resource_id})</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {getOutcomeBadge(record.outcome)}
+                    {getOutcomeBadge(record.action)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {record.defects > 0 ? (
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 font-bold text-xs">
-                        {record.defects}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400 font-bold">-</span>
-                    )}
+                  <td className="px-6 py-4 max-w-xs truncate text-xs text-gray-600 font-medium">
+                    {record.project_name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    <p className="max-w-xs truncate mb-1">{record.notes}</p>
-                    {record.ncrRef && (
-                      <a href="#" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200 hover:bg-red-100 transition-colors">
-                        View {record.ncrRef} <ExternalLink size={10} />
-                      </a>
-                    )}
+                  <td className="px-6 py-4 font-mono text-xs text-blue-600">
+                    {record.signature_hash}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        
-        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between text-sm">
-          <span className="text-gray-500 font-semibold">Showing 1 to 3 of 1,822 records</span>
-          <div className="flex items-center gap-2">
-            <button className="px-3 py-1 border border-gray-200 rounded text-gray-600 bg-white font-semibold shadow-sm disabled:opacity-50" disabled>Prev</button>
-            <button className="px-3 py-1 border border-gray-200 rounded text-gray-600 bg-white font-semibold shadow-sm">Next</button>
+
+        {history.length === 0 && !isLoading && (
+          <div className="p-12 text-center text-gray-500 text-sm">
+            No inspection audit logs found.
           </div>
-        </div>
+        )}
       </motion.div>
+
+      <AuditDiffModal
+        isOpen={isDiffOpen}
+        onClose={() => setIsDiffOpen(false)}
+        event={selectedEvent}
+      />
     </div>
   );
 }

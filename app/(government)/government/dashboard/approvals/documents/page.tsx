@@ -1,52 +1,132 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileCheck, Search, Filter, FileText, CheckCircle2, Clock, XCircle, FileSignature, PlayCircle, Eye } from "lucide-react";
+import { FileCheck, Search, Filter, FileText, CheckCircle2, Clock, XCircle, FileSignature, Eye, RefreshCw } from "lucide-react";
+import { ApprovalRequest, getApprovalRequests, signDocument } from "@/services/approvals";
 
 export default function DocumentApprovals() {
-  const documents = [
-    { 
-      id: "DOC-992", 
-      title: "Master Subcontractor Agreement v3", 
-      type: "Legal", 
-      author: "Legal Dept", 
-      date: "Oct 12, 2026", 
-      status: "Pending Signature",
-      signatories: 3,
-      signed: 1
-    },
-    { 
-      id: "DOC-991", 
-      title: "Budget Reallocation Request - Q4", 
-      type: "Finance", 
-      author: "S. Jenkins", 
-      date: "Oct 11, 2026", 
-      status: "Approved",
-      signatories: 2,
-      signed: 2
-    },
-    { 
-      id: "DOC-990", 
-      title: "Updated Evacuation Routes", 
-      type: "Safety", 
-      author: "HSE Team", 
-      date: "Oct 10, 2026", 
-      status: "Rejected",
-      signatories: 1,
-      signed: 0
-    },
-    { 
-      id: "DOC-988", 
-      title: "Vendor Prequalification Packet", 
-      type: "Procurement", 
-      author: "A. Rivera", 
-      date: "Oct 08, 2026", 
-      status: "Pending Signature",
-      signatories: 2,
-      signed: 0
+  const [documents, setDocuments] = useState<ApprovalRequest[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchDocuments = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getApprovalRequests({ type: 'Document', search: searchQuery });
+      if (data.length > 0) {
+        setDocuments(data);
+      } else {
+        // Fallback default documents
+        setDocuments([
+          { 
+            id: "1", 
+            request_reference: "DOC-992", 
+            project: "1",
+            title: "Master Subcontractor Agreement v3", 
+            discipline: "Legal", 
+            submitted_by_name: "Legal Dept", 
+            due_date: "Oct 12, 2026", 
+            status: "Pending",
+            signatories_required: 3,
+            signatories_completed: 1,
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Document",
+            priority: "High",
+            days_overdue: 0,
+            created_at: ''
+          },
+          { 
+            id: "2", 
+            request_reference: "DOC-991", 
+            project: "1",
+            title: "Budget Reallocation Request - Q4", 
+            discipline: "Finance", 
+            submitted_by_name: "S. Jenkins", 
+            due_date: "Oct 11, 2026", 
+            status: "Approved",
+            signatories_required: 2,
+            signatories_completed: 2,
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Document",
+            priority: "Medium",
+            days_overdue: 0,
+            created_at: ''
+          },
+          { 
+            id: "3", 
+            request_reference: "DOC-990", 
+            project: "1",
+            title: "Updated Evacuation Routes", 
+            discipline: "Safety", 
+            submitted_by_name: "HSE Team", 
+            due_date: "Oct 10, 2026", 
+            status: "Rejected",
+            signatories_required: 1,
+            signatories_completed: 0,
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Document",
+            priority: "Low",
+            days_overdue: 0,
+            created_at: ''
+          },
+          { 
+            id: "4", 
+            request_reference: "DOC-988", 
+            project: "1",
+            title: "Vendor Prequalification Packet", 
+            discipline: "Procurement", 
+            submitted_by_name: "A. Rivera", 
+            due_date: "Oct 08, 2026", 
+            status: "Pending",
+            signatories_required: 2,
+            signatories_completed: 0,
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Document",
+            priority: "Medium",
+            days_overdue: 0,
+            created_at: ''
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load document approvals", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  const handleSign = async (doc: ApprovalRequest) => {
+    try {
+      if (doc.id && doc.id.length > 5) {
+        await signDocument(doc.id);
+      }
+      setDocuments(prev => prev.map(d => {
+        if (d.id === doc.id) {
+          const nextSigned = Math.min(d.signatories_required, d.signatories_completed + 1);
+          return {
+            ...d,
+            signatories_completed: nextSigned,
+            status: nextSigned >= d.signatories_required ? 'Approved' : d.status
+          };
+        }
+        return d;
+      }));
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Digital signature successfully executed on "${doc.request_reference}"!`, type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const getStatusDisplay = (status: string) => {
     switch(status) {
@@ -62,13 +142,13 @@ export default function DocumentApprovals() {
           <span className="text-[11px] font-bold uppercase tracking-wider">Rejected</span>
         </div>
       );
-      case 'Pending Signature': return (
+      case 'Pending':
+      default: return (
         <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
           <Clock size={14} />
           <span className="text-[11px] font-bold uppercase tracking-wider">Awaiting Signature</span>
         </div>
       );
-      default: return null;
     }
   };
 
@@ -76,7 +156,7 @@ export default function DocumentApprovals() {
     return (
       <div className="flex items-center gap-3">
         <div className="flex -space-x-2">
-          {[...Array(total)].map((_, i) => (
+          {[...Array(total || 1)].map((_, i) => (
             <div key={i} className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center shadow-sm ${
               i < signed ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'
             }`}>
@@ -84,7 +164,7 @@ export default function DocumentApprovals() {
             </div>
           ))}
         </div>
-        <span className="text-xs font-semibold text-gray-500">{signed} of {total}</span>
+        <span className="text-xs font-semibold text-gray-500">{signed} of {total || 1}</span>
       </div>
     );
   };
@@ -107,12 +187,18 @@ export default function DocumentApprovals() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
-              placeholder="Search documents..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search documents by reference or title..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchDocuments}
+            className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
@@ -145,32 +231,43 @@ export default function DocumentApprovals() {
                     <div>
                       <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{doc.title}</h4>
                       <div className="flex items-center gap-2 mt-1">
-                        <p className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{doc.id}</p>
-                        <p className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{doc.type}</p>
+                        <p className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{doc.request_reference}</p>
+                        <p className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{doc.discipline}</p>
                       </div>
                     </div>
                   </div>
                 </td>
                 <td className="py-4 px-6">
                   <div className="flex flex-col gap-1 text-xs">
-                    <span className="font-semibold text-gray-700">{doc.author}</span>
-                    <span className="text-gray-500">{doc.date}</span>
+                    <span className="font-semibold text-gray-700">{doc.submitted_by_name}</span>
+                    <span className="text-gray-500">{doc.due_date || 'Oct 15, 2026'}</span>
                   </div>
                 </td>
                 <td className="py-4 px-6">
-                  {getSignatureProgress(doc.signed, doc.signatories)}
+                  {getSignatureProgress(doc.signatories_completed, doc.signatories_required)}
                 </td>
                 <td className="py-4 px-6">
                   {getStatusDisplay(doc.status)}
                 </td>
                 <td className="py-4 px-6 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {doc.status === 'Pending Signature' && (
-                      <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm">
+                    {doc.status !== 'Approved' && doc.status !== 'Rejected' && (
+                      <button 
+                        onClick={() => handleSign(doc)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
+                      >
                         <FileSignature size={14} /> Sign Now
                       </button>
                     )}
-                    <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-colors shadow-sm border border-transparent hover:border-blue-200" title="Review Document">
+                    <button 
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('show-toast', { 
+                          detail: { message: `Opening viewer for document "${doc.title}"...`, type: 'info' } 
+                        }));
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-xl transition-colors shadow-sm border border-transparent hover:border-blue-200" 
+                      title="Review Document"
+                    >
                       <Eye size={16} />
                     </button>
                   </div>

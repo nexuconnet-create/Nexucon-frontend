@@ -53,10 +53,21 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
   );
 
   const handleProjectSelect = (project: any) => {
-    // Determine where to navigate based on actionTitle
-    // For now, default to the project details page
     onClose();
-    router.push(`/government/dashboard/projects/${project.id}`);
+    
+    // Route to monitoring page based on action
+    const monitoringActions = ["Open Project Monitoring", "View Project", "Review Documents", "View BIM Model", "View Site Activity", "Monitor Project", "Review Progress"];
+    
+    if (monitoringActions.includes(actionTitle)) {
+      let tab = 'overview';
+      if (actionTitle.includes('Document')) tab = 'documents';
+      if (actionTitle.includes('BIM')) tab = 'bim';
+      if (actionTitle.includes('Activity')) tab = 'activity';
+      
+      router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=${tab}`);
+    } else {
+      router.push(`/government/dashboard/projects/view/${project.id}`);
+    }
   };
 
   const getStatusColor = (status: string) => {

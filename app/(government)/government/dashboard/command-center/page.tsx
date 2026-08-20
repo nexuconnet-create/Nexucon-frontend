@@ -103,7 +103,7 @@ export default function GovernmentCommandCenter() {
   
   const criticalAlertsCount = criticalAlerts.length;
   const permitReviewsCount = projects.filter(p => p.status === 'PLANNING').length;
-  const inspectionRequestsCount = inspections.filter(i => i.status === 'PENDING').length;
+  const inspectionRequestsCount = inspections.filter(i => i.status === 'REQUESTED').length;
   
   // Site status counts
   const normalSitesCount = projects.filter(p => p.status === 'ACTIVE').length;
@@ -130,9 +130,9 @@ export default function GovernmentCommandCenter() {
   const totalInspections = inspections.length || 1;
   const completedInspectionsCount = inspections.filter(i => i.status === 'COMPLETED').length;
   const scheduledInspectionsCount = inspections.filter(i => i.status === 'SCHEDULED').length;
-  const pendingInspectionsCount = inspections.filter(i => i.status === 'PENDING').length;
+  const pendingInspectionsCount = inspections.filter(i => i.status === 'REQUESTED').length;
   const failedInspectionsCount = inspections.filter(i => i.status === 'FAILED').length;
-  const reInspectionsCount = inspections.filter(i => i.status === 'RE_INSPECTION' || i.status === 'RE_INSPECT').length;
+  const reInspectionsCount = inspections.filter(i => i.status === 'RE_INSPECTION_REQUIRED').length;
 
   const inspectionCompletionPercentage = inspections.length > 0 ? Math.round((completedInspectionsCount / totalInspections) * 100) : 0;
   const complianceRatePercentage = inspections.length > 0 ? Math.round(((totalInspections - failedInspectionsCount) / totalInspections) * 100) : 0;
@@ -163,7 +163,7 @@ export default function GovernmentCommandCenter() {
       const date = new Date(i.scheduled_date);
       return date >= todayStart && date <= todayEnd;
     })
-    .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
+    .sort((a, b) => new Date(a.scheduled_date || 0).getTime() - new Date(b.scheduled_date || 0).getTime())
     .slice(0, 3);
 
   // Recent Activity Generation
@@ -447,7 +447,7 @@ export default function GovernmentCommandCenter() {
                   {todaysInspections.length > 0 ? todaysInspections.map((ins, idx) => (
                     <div key={idx} className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50">
                       <div className="px-2 py-1 bg-white rounded shadow-sm text-xs font-bold text-[#022C4F]">
-                        {new Date(ins.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(ins.scheduled_date || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <div>
                         <p className="text-xs font-bold text-[#022C4F]">{ins.inspection_type || 'Inspection'}</p>

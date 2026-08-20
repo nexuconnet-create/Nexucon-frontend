@@ -19,6 +19,9 @@ export interface Project {
   development_category?: string;
   estimated_project_value?: string;
   number_of_floors?: number;
+  location?: string;
+  progress?: number;
+  complianceScore?: number;
   
   developer_name?: string;
   developer_organization?: string;
@@ -84,8 +87,13 @@ export interface Project {
 }
 
 export const getProjects = async (): Promise<Project[]> => {
-  const response = await api.get('/projects/projects/');
-  return response as unknown as Project[]; // Data unwrapped by interceptor
+  try {
+    const response = await api.get('/projects/projects/');
+    return response as unknown as Project[]; // Data unwrapped by interceptor
+  } catch (error) {
+    console.log("Failed to fetch projects:", error);
+    return [];
+  }
 };
 
 export const getProjectById = async (id: string): Promise<Project> => {

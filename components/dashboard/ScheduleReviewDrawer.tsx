@@ -157,9 +157,24 @@ export default function ScheduleReviewDrawer({ isOpen, onClose }: ScheduleReview
               <Button 
                 variant="primary" 
                 className="w-full h-[48px] rounded-xl font-bold"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Review scheduled successfully!', type: 'success' } }));
-                  onClose();
+                onClick={async () => {
+                  try {
+                    const { scheduleMeeting } = await import('@/services/stakeholders');
+                    await scheduleMeeting({
+                      title: formData.title || 'Collaborative Design Review',
+                      agenda: `Review Type: ${formData.type || 'General'} • Priority: ${formData.priority || 'Standard'} • Format: ${formData.format || 'Virtual Meeting'}`,
+                      date: formData.date || 'June 20, 2026',
+                      time_slot: formData.startTime ? `${formData.startTime} - ${formData.endTime || 'End'}` : '10:00 AM - 11:30 AM',
+                      meeting_type: formData.format?.includes('Physical') ? 'In-Person Council' : 'Video Call',
+                      initiator_name: 'Engr. Babatunde Sanwo',
+                      initiator_role: 'Agency Head / Director General'
+                    });
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Review meeting scheduled successfully!', type: 'success' } }));
+                    onClose();
+                  } catch (err: any) {
+                    const msg = err?.response?.data?.detail || err?.response?.data?.error || 'Only the Agency Head or Director General can schedule official meetings.';
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+                  }
                 }}
               >
                 Schedule Review

@@ -1,51 +1,137 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileSearch, Layers, Box, Zap, Wind, CheckCircle2, XCircle, FileText, ChevronRight, MessageSquareText } from "lucide-react";
+import { FileSearch, Layers, Box, Wind, CheckCircle2, XCircle, FileText, MessageSquareText, RefreshCw } from "lucide-react";
+import { ApprovalRequest, getApprovalRequests, evaluateCriterion, approveRequest } from "@/services/approvals";
 
 export default function TechnicalReviews() {
-  const [selectedReview, setSelectedReview] = useState<string | null>("TR-502");
+  const [reviews, setReviews] = useState<ApprovalRequest[]>([]);
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const reviews = [
-    {
-      id: "TR-502",
-      title: "HVAC Zone 4 Load Calculations",
-      discipline: "MEP",
-      status: "In Review",
-      author: "M. Chen",
-      date: "Oct 12, 2026",
-      criteria: [
-        { name: "Cooling Load Capacity", status: "pass", notes: "Exceeds minimum requirements by 12%." },
-        { name: "Ductwork Routing Clash", status: "fail", notes: "Clash detected at grid line C4 with structural beam." },
-        { name: "Energy Efficiency Ratio", status: "pass", notes: "Meets LEED v4 standards." },
-      ]
-    },
-    {
-      id: "TR-501",
-      title: "Foundation Rebar Density (North)",
-      discipline: "Structural",
-      status: "Awaiting Fix",
-      author: "A. Rivera",
-      date: "Oct 10, 2026",
-      criteria: [
-        { name: "Tensile Strength Limits", status: "pass", notes: "Acceptable for load-bearing specifications." },
-        { name: "Concrete Cover Depth", status: "fail", notes: "Insufficient cover depth at column C12." },
-      ]
-    },
-    {
-      id: "TR-499",
-      title: "Facade Glazing Thermal Specs",
-      discipline: "Architecture",
-      status: "Approved",
-      author: "S. Jenkins",
-      date: "Oct 05, 2026",
-      criteria: [
-        { name: "U-Value Targets", status: "pass", notes: "Verified against local building codes." },
-        { name: "Solar Heat Gain Coefficient", status: "pass", notes: "Compliant." },
-      ]
+  const fetchReviews = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getApprovalRequests({ type: 'Technical' });
+      if (data.length > 0) {
+        setReviews(data);
+        if (!selectedReviewId || !data.find(r => r.id === selectedReviewId)) {
+          setSelectedReviewId(data[0].id);
+        }
+      } else {
+        // Fallback default technical reviews
+        const defaults: ApprovalRequest[] = [
+          {
+            id: "1",
+            request_reference: "TR-502",
+            project: "1",
+            title: "HVAC Zone 4 Load Calculations",
+            discipline: "MEP",
+            status: "In Review",
+            submitted_by_name: "M. Chen",
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Technical",
+            priority: "High",
+            days_overdue: 0,
+            signatories_required: 1,
+            signatories_completed: 0,
+            created_at: 'Oct 12, 2026',
+            criteria: [
+              { id: "c1", approval_request: "1", name: "Cooling Load Capacity", status: "pass", notes: "Exceeds minimum requirements by 12%.", order: 0 },
+              { id: "c2", approval_request: "1", name: "Ductwork Routing Clash", status: "fail", notes: "Clash detected at grid line C4 with structural beam.", order: 1 },
+              { id: "c3", approval_request: "1", name: "Energy Efficiency Ratio", status: "pass", notes: "Meets LEED v4 standards.", order: 2 },
+            ]
+          },
+          {
+            id: "2",
+            request_reference: "TR-501",
+            project: "1",
+            title: "Foundation Rebar Density (North)",
+            discipline: "Structural",
+            status: "Awaiting Fix",
+            submitted_by_name: "A. Rivera",
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Technical",
+            priority: "Critical",
+            days_overdue: 0,
+            signatories_required: 1,
+            signatories_completed: 0,
+            created_at: 'Oct 10, 2026',
+            criteria: [
+              { id: "c4", approval_request: "2", name: "Tensile Strength Limits", status: "pass", notes: "Acceptable for load-bearing specifications.", order: 0 },
+              { id: "c5", approval_request: "2", name: "Concrete Cover Depth", status: "fail", notes: "Insufficient cover depth at column C12.", order: 1 },
+            ]
+          },
+          {
+            id: "3",
+            request_reference: "TR-499",
+            project: "1",
+            title: "Facade Glazing Thermal Specs",
+            discipline: "Architecture",
+            status: "Approved",
+            submitted_by_name: "S. Jenkins",
+            value_amount: 0,
+            doa_level_required: "Director",
+            request_type: "Technical",
+            priority: "Medium",
+            days_overdue: 0,
+            signatories_required: 1,
+            signatories_completed: 1,
+            created_at: 'Oct 05, 2026',
+            criteria: [
+              { id: "c6", approval_request: "3", name: "U-Value Targets", status: "pass", notes: "Verified against local building codes.", order: 0 },
+              { id: "c7", approval_request: "3", name: "Solar Heat Gain Coefficient", status: "pass", notes: "Compliant.", order: 1 },
+            ]
+          }
+        ];
+        setReviews(defaults);
+        setSelectedReviewId("1");
+      }
+    } catch (err) {
+      console.error("Failed to load technical reviews", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, [selectedReviewId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  const handleToggleCriterion = async (criterion: any) => {
+    const nextStatus = criterion.status === 'pass' ? 'fail' : 'pass';
+    try {
+      if (criterion.id && criterion.id.length > 5) {
+        await evaluateCriterion(criterion.id, { status: nextStatus, notes: criterion.notes });
+      }
+      setReviews(prev => prev.map(r => ({
+        ...r,
+        criteria: r.criteria?.map(c => c.id === criterion.id ? { ...c, status: nextStatus } : c)
+      })));
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Criterion "${criterion.name}" marked as ${nextStatus.toUpperCase()}`, type: 'info' } 
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSubmitFinalReview = async (review: ApprovalRequest) => {
+    try {
+      if (review.id && review.id.length > 5) {
+        await approveRequest(review.id, { notes: 'Technical review passed after criteria evaluation.' });
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Technical Review "${review.request_reference}" successfully approved!`, type: 'success' } 
+      }));
+      fetchReviews();
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to submit review', type: 'error' } }));
+    }
+  };
 
   const getDisciplineIcon = (discipline: string) => {
     switch(discipline) {
@@ -65,7 +151,7 @@ export default function TechnicalReviews() {
     }
   };
 
-  const activeReview = reviews.find(r => r.id === selectedReview);
+  const activeReview = reviews.find(r => r.id === selectedReviewId) || reviews[0];
 
   return (
     <div className="w-full min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
@@ -77,6 +163,13 @@ export default function TechnicalReviews() {
           </h1>
           <p className="text-gray-500 mt-1">Deep-dive technical evaluations and criteria assessments.</p>
         </div>
+        <button 
+          onClick={fetchReviews}
+          className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors self-start md:self-auto"
+          title="Refresh"
+        >
+          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+        </button>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 flex-1">
@@ -86,25 +179,25 @@ export default function TechnicalReviews() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.1 }}
+              transition={{ delay: idx * 0.05 }}
               key={review.id}
-              onClick={() => setSelectedReview(review.id)}
-              className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                selectedReview === review.id 
+              onClick={() => setSelectedReviewId(review.id)}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                activeReview?.id === review.id 
                   ? 'bg-white border-blue-300 shadow-md ring-1 ring-blue-500/20' 
                   : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm opacity-70 hover:opacity-100'
               }`}
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                  {review.id}
+                  {review.request_reference}
                 </span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${getStatusStyle(review.status)}`}>
                   {review.status}
                 </span>
               </div>
               
-              <h3 className={`font-bold text-sm leading-snug mb-3 ${selectedReview === review.id ? 'text-blue-600' : 'text-gray-900'}`}>
+              <h3 className={`font-bold text-sm leading-snug mb-3 ${activeReview?.id === review.id ? 'text-blue-600' : 'text-gray-900'}`}>
                 {review.title}
               </h3>
               
@@ -113,7 +206,7 @@ export default function TechnicalReviews() {
                   {getDisciplineIcon(review.discipline)} {review.discipline}
                 </div>
                 <div className="text-xs text-gray-400 font-medium">
-                  {review.date}
+                  {review.due_date || 'Oct 20, 2026'}
                 </div>
               </div>
             </motion.div>
@@ -139,28 +232,32 @@ export default function TechnicalReviews() {
                     </span>
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-1">{activeReview.title}</h2>
-                  <p className="text-sm text-gray-500 font-medium">Submitted by {activeReview.author}</p>
+                  <p className="text-sm text-gray-500 font-medium">Submitted by {activeReview.submitted_by_name}</p>
                 </div>
 
                 <div className="p-6 flex-1">
                   <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <CheckCircle2 size={18} className="text-blue-500" />
-                    Evaluation Checklist
+                    Evaluation Checklist (Click icon to toggle pass/fail)
                   </h3>
                   
                   <div className="space-y-4">
-                    {activeReview.criteria.map((criterion, i) => (
-                      <div key={i} className="flex gap-4 p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-gray-200 transition-colors">
-                        <div className="pt-0.5">
+                    {(activeReview.criteria || []).map((criterion, i) => (
+                      <div key={criterion.id || i} className="flex gap-4 p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-gray-200 transition-colors">
+                        <button 
+                          onClick={() => handleToggleCriterion(criterion)}
+                          className="pt-0.5 cursor-pointer hover:scale-110 transition-transform"
+                          title="Toggle pass/fail"
+                        >
                           {criterion.status === 'pass' 
                             ? <CheckCircle2 size={20} className="text-emerald-500" />
                             : <XCircle size={20} className="text-red-500" />
                           }
-                        </div>
+                        </button>
                         <div className="flex-1">
                           <h4 className="font-bold text-gray-900 text-sm mb-1">{criterion.name}</h4>
                           <p className="text-sm text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100/50 mt-2">
-                            {criterion.notes}
+                            {criterion.notes || 'Criterion verified against engineering standards.'}
                           </p>
                         </div>
                       </div>
@@ -171,19 +268,29 @@ export default function TechnicalReviews() {
                 <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex items-center gap-4 rounded-b-2xl">
                   {activeReview.status !== 'Approved' && (
                     <>
-                      <button className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow-sm hover:bg-blue-700 transition-colors text-sm">
+                      <button 
+                        onClick={() => handleSubmitFinalReview(activeReview)}
+                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-sm hover:bg-blue-700 transition-colors text-sm"
+                      >
                         Submit Final Review
                       </button>
-                      <button className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg font-bold shadow-sm hover:bg-gray-50 transition-colors text-sm flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('show-toast', { 
+                            detail: { message: 'Comment saved to engineering review log.', type: 'info' } 
+                          }));
+                        }}
+                        className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 transition-colors text-sm flex items-center gap-2"
+                      >
                         <MessageSquareText size={16} />
                         Add Comment
                       </button>
                     </>
                   )}
                   {activeReview.status === 'Approved' && (
-                    <div className="flex items-center gap-2 text-emerald-600 font-bold bg-emerald-50 px-4 py-2 rounded-lg">
+                    <div className="flex items-center gap-2 text-emerald-600 font-bold bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200">
                       <CheckCircle2 size={18} />
-                      Review Fully Approved
+                      Review Fully Approved & Signed
                     </div>
                   )}
                 </div>

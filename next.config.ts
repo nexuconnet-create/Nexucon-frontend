@@ -24,8 +24,12 @@ const nextConfig: NextConfig = {
     
     return [
       {
-        source: '/api/v1/:path*',
-        destination: `${backendUrl.replace(/\/$/, '')}/api/v1/:path*`,
+        source: '/api/proxy/:path*/',
+        destination: `${backendUrl.replace(/\/$/, '')}/api/v1/:path*/`,
+      },
+      {
+        source: '/api/proxy/:path*',
+        destination: `${backendUrl.replace(/\/$/, '')}/api/v1/:path*/`,
       }
     ];
   },

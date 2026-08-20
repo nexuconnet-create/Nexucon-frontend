@@ -115,14 +115,28 @@ export default function ScheduleCollaborativeReviewSideDrawer({ isOpen, onClose 
             </div>
             
             <div className="p-8 border-t border-[#E5E7EB] flex flex-col gap-3">
-              <Button onClick={() => {
-                alert("Review Scheduled!");
-                onClose();
+              <Button onClick={async () => {
+                try {
+                  const { scheduleMeeting } = await import('@/services/stakeholders');
+                  await scheduleMeeting({
+                    title: 'Collaborative Design Review',
+                    agenda: 'Evaluate drawings, BIM models, annotations, and design decisions with all stakeholders.',
+                    project_name: 'Victoria Heights Commercial Development',
+                    meeting_type: 'Video Call',
+                    initiator_name: 'Engr. Babatunde Sanwo',
+                    initiator_role: 'Agency Head / Director General'
+                  });
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Collaborative Review Scheduled!', type: 'success' } }));
+                  onClose();
+                } catch (err: any) {
+                  const msg = err?.response?.data?.detail || err?.response?.data?.error || 'Only the Agency Head or Director General can schedule official meetings.';
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+                }
               }} variant="primary" className="w-full justify-center py-4 text-[13px]">
                 Schedule Review
               </Button>
               <Button onClick={() => {
-                alert("Saved as Draft");
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Review Draft Saved', type: 'info' } }));
                 onClose();
               }} variant="outline" className="w-full justify-center py-4 text-[13px] bg-[#0F181F] text-white border-none hover:bg-gray-800 hover:text-white">
                 Save as Draft

@@ -6,9 +6,12 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, EyeOff, Eye } from "lucide-react";
 import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
+import { useAuth } from "@/context/AuthContext";
+
 
 export default function ClientLogin() {
   const router = useRouter();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -18,7 +21,7 @@ export default function ClientLogin() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
     if (!formData.email) {
@@ -33,9 +36,10 @@ export default function ClientLogin() {
     setErrors(newErrors);
     
     if (Object.keys(newErrors).length === 0) {
-      // Proceed with login
-      console.log('Login successful', formData);
-      setShowSuccessModal(true);
+      const success = await login({ email: formData.email.trim(), password: formData.password });
+      if (success) {
+        setShowSuccessModal(true);
+      }
     }
   };
 

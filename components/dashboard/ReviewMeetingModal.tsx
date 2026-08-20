@@ -179,7 +179,16 @@ export default function ReviewMeetingModal({ isOpen, onClose, event }: ReviewMee
                       {isCheckedIn ? 'Checked In (GPS Verified)' : 'GPS Check-In'}
                     </Button>
                   ) : (
-                    <Button variant="primary" className="flex-1 h-[48px]">
+                    <Button 
+                      variant="primary" 
+                      className="flex-1 h-[48px]"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('show-toast', { 
+                          detail: { message: `Connecting to ${event.title || 'Meeting Call Room'}...`, type: 'info' } 
+                        }));
+                        onClose();
+                      }}
+                    >
                       Join Meeting
                     </Button>
                   )}

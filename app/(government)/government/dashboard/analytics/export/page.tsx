@@ -2,11 +2,15 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Download, Calendar, Filter, CheckCircle2, Circle, FileType2, Search, ArrowRight, LayoutTemplate } from "lucide-react";
+import { FileText, Download, Calendar, CheckCircle2, Circle, FileType2, Search, LayoutTemplate } from "lucide-react";
+import { createGeneratedReport } from "@/services/analytics";
 
 export default function ExportReports() {
-  const [selectedModules, setSelectedModules] = useState<string[]>(['Project Performance', 'Compliance']);
-  const [format, setFormat] = useState<string>('PDF');
+  const [selectedModules, setSelectedModules] = useState<string[]>(['Project Performance', 'Compliance & Regulatory']);
+  const [format, setFormat] = useState<'PDF' | 'CSV'>('PDF');
+  const [startDate, setStartDate] = useState('2026-07-01');
+  const [endDate, setEndDate] = useState('2026-09-30');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const availableModules = [
     "Project Performance",
@@ -18,7 +22,6 @@ export default function ExportReports() {
     "Detailed Approval Logs",
     "BIM Clash Summaries",
     "Structural Risk Assessment",
-    "Compliance Dashboard",
     "Inspector Performance",
     "Annual Building Safety Report",
     "Emergency Response Report"
@@ -32,15 +35,50 @@ export default function ExportReports() {
     }
   };
 
+  const handleGenerateAndDownload = async () => {
+    if (selectedModules.length === 0) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Select at least one module', type: 'error' } }));
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const rep = await createGeneratedReport({
+        title: `Leadership Summary Report (${format})`,
+        format,
+        modules_included: selectedModules,
+        period_start: startDate,
+        period_end: endDate
+      });
+
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+      }));
+
+      // Simulate download trigger
+      const link = document.createElement("a");
+      link.href = rep.file_url || "#";
+      link.setAttribute("download", `report_${rep.report_reference}.${format.toLowerCase()}`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to generate report';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="w-full min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <FileText className="text-blue-500" />
-            Report Builder & Export
+            Report Builder & Export Center
           </h1>
-          <p className="text-gray-500 mt-1">Configure and generate custom PDF or CSV reports for stakeholders.</p>
+          <p className="text-gray-500 mt-1">Configure and generate custom PDF or CSV reports for executive leadership.</p>
         </div>
       </div>
 
@@ -64,20 +102,39 @@ export default function ExportReports() {
                 <label className="block text-xs font-bold uppercase text-gray-500 tracking-wider mb-2">Start Date</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input type="date" defaultValue="2026-07-01" className="pl-9 pr-4 py-2.5 w-full border border-gray-200 rounded-lg text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="pl-9 pr-4 py-2.5 w-full border border-gray-200 rounded-xl text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase text-gray-500 tracking-wider mb-2">End Date</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input type="date" defaultValue="2026-09-30" className="pl-9 pr-4 py-2.5 w-full border border-gray-200 rounded-lg text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="pl-9 pr-4 py-2.5 w-full border border-gray-200 rounded-xl text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  />
                 </div>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
               {['Last 7 Days', 'Last 30 Days', 'Q3 2026', 'YTD'].map(preset => (
-                <button key={preset} className="px-3 py-1.5 text-xs font-bold bg-gray-50 border border-gray-200 text-gray-600 rounded-md hover:bg-gray-100 transition-colors">
+                <button 
+                  key={preset} 
+                  onClick={() => {
+                    if (preset === 'Last 7 Days') { setStartDate('2026-10-12'); setEndDate('2026-10-19'); }
+                    if (preset === 'Last 30 Days') { setStartDate('2026-09-19'); setEndDate('2026-10-19'); }
+                    if (preset === 'Q3 2026') { setStartDate('2026-07-01'); setEndDate('2026-09-30'); }
+                    if (preset === 'YTD') { setStartDate('2026-01-01'); setEndDate('2026-10-19'); }
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-gray-50 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-100 transition-colors"
+                >
                   {preset}
                 </button>
               ))}
@@ -100,7 +157,7 @@ export default function ExportReports() {
                 <div 
                   key={module}
                   onClick={() => toggleModule(module)}
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                  className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-colors ${
                     selectedModules.includes(module) ? 'bg-blue-50/50 border-blue-200 shadow-sm ring-1 ring-blue-500/10' : 'bg-white border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -129,7 +186,7 @@ export default function ExportReports() {
             <div className="flex gap-4">
               <div 
                 onClick={() => setFormat('PDF')}
-                className={`flex-1 flex flex-col items-center justify-center p-6 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`flex-1 flex flex-col items-center justify-center p-6 rounded-2xl border-2 cursor-pointer transition-all ${
                   format === 'PDF' ? 'border-red-500 bg-red-50/50' : 'border-gray-200 bg-white hover:border-red-200'
                 }`}
               >
@@ -139,7 +196,7 @@ export default function ExportReports() {
               </div>
               <div 
                 onClick={() => setFormat('CSV')}
-                className={`flex-1 flex flex-col items-center justify-center p-6 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`flex-1 flex flex-col items-center justify-center p-6 rounded-2xl border-2 cursor-pointer transition-all ${
                   format === 'CSV' ? 'border-emerald-500 bg-emerald-50/50' : 'border-gray-200 bg-white hover:border-emerald-200'
                 }`}
               >
@@ -157,7 +214,7 @@ export default function ExportReports() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-[#022C4F] rounded-2xl shadow-md p-6 text-white sticky top-6"
+            className="bg-[#022C4F] rounded-3xl shadow-xl p-6 text-white sticky top-6"
           >
             <h2 className="text-lg font-bold mb-6 flex items-center gap-2 border-b border-blue-900/50 pb-4">
               <Search className="text-blue-400" size={20} /> Report Summary
@@ -166,7 +223,7 @@ export default function ExportReports() {
             <div className="space-y-4 mb-8">
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-1">Time Period</span>
-                <p className="text-sm font-semibold">Jul 01, 2026 - Sep 30, 2026</p>
+                <p className="text-sm font-semibold">{startDate} — {endDate}</p>
               </div>
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-1">Modules Included</span>
@@ -174,7 +231,7 @@ export default function ExportReports() {
                 <ul className="mt-2 space-y-1">
                   {selectedModules.map(m => (
                     <li key={m} className="text-xs text-blue-200 flex items-center gap-2">
-                      <div className="w-1 h-1 rounded-full bg-blue-400"></div> {m}
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div> {m}
                     </li>
                   ))}
                 </ul>
@@ -185,12 +242,16 @@ export default function ExportReports() {
               </div>
             </div>
 
-            <button className="w-full py-3.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold shadow-lg shadow-blue-900/50 transition-colors flex items-center justify-center gap-2">
+            <button 
+              onClick={handleGenerateAndDownload}
+              disabled={isSubmitting}
+              className="w-full py-3.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold shadow-lg shadow-blue-900/50 transition-colors flex items-center justify-center gap-2"
+            >
               <Download size={18} />
-              Generate & Download
+              {isSubmitting ? 'Generating...' : 'Generate & Download'}
             </button>
             <p className="text-[10px] text-center text-blue-300 mt-3 font-semibold">
-              Estimated generation time: ~15 seconds
+              Estimated generation time: ~5 seconds
             </p>
           </motion.div>
         </div>

@@ -1,44 +1,90 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, Save, Plus, Search, Check, X, ShieldAlert } from "lucide-react";
+import { ShieldCheck, Save, Plus, Search, ShieldAlert, RefreshCw } from "lucide-react";
+import { RolesMatrixResponse, getRolesMatrix, updateRolesMatrix } from "@/services/settings";
+import CreateRoleModal from "@/components/dashboard/CreateRoleModal";
 
 export default function RolesPermissions() {
-  const roles = [
-    { name: "System Administrator", users: 3, type: "System Default" },
-    { name: "City Planner", users: 12, type: "Custom Role" },
-    { name: "Lead Inspector", users: 45, type: "Custom Role" },
-    { name: "Reviewer", users: 85, type: "Custom Role" }
-  ];
+  const [matrixData, setMatrixData] = useState<RolesMatrixResponse | null>(null);
+  const [selectedRoleIdx, setSelectedRoleIdx] = useState(1);
+  const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const permissionModules = [
-    {
-      module: "Permits & Approvals",
-      permissions: [
-        { name: "View Permit Applications", admin: true, planner: true, inspector: true, reviewer: true },
-        { name: "Approve/Reject Permits", admin: true, planner: true, inspector: false, reviewer: false },
-        { name: "Grant Zoning Variances", admin: true, planner: true, inspector: false, reviewer: false },
-        { name: "Sign Off Final Occupancy", admin: true, planner: true, inspector: true, reviewer: false },
-      ]
-    },
-    {
-      module: "Site Inspections",
-      permissions: [
-        { name: "View Inspection Logs", admin: true, planner: true, inspector: true, reviewer: true },
-        { name: "Generate Non-Conformance (NCR)", admin: true, planner: false, inspector: true, reviewer: false },
-        { name: "Halt Construction (Work Stoppage)", admin: true, planner: false, inspector: true, reviewer: false },
-      ]
-    },
-    {
-      module: "System & Audit",
-      permissions: [
-        { name: "View Audit Records", admin: true, planner: false, inspector: false, reviewer: false },
-        { name: "Export Compliance Packages", admin: true, planner: false, inspector: false, reviewer: false },
-        { name: "Manage Roles & Permissions", admin: true, planner: false, inspector: false, reviewer: false },
-      ]
+  const fetchMatrix = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getRolesMatrix();
+      setMatrixData(data);
+    } catch (err) {
+      console.error("Failed to load roles matrix", err);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  }, []);
+
+  useEffect(() => {
+    fetchMatrix();
+  }, [fetchMatrix]);
+
+  const activeRoleName = matrixData?.roles[selectedRoleIdx]?.name || "City Planner";
+
+  const getRoleProp = (roleName: string) => {
+    if (roleName.includes('Admin')) return 'admin';
+    if (roleName.includes('Planner')) return 'planner';
+    if (roleName.includes('Inspector')) return 'inspector';
+    return 'reviewer';
+  };
+
+  const handleToggle = (mIdx: number, pIdx: number) => {
+    if (!matrixData) return;
+    const prop = getRoleProp(activeRoleName) as 'admin' | 'planner' | 'inspector' | 'reviewer';
+    
+    const updatedModules = [...matrixData.permission_modules];
+    const currentVal = updatedModules[mIdx].permissions[pIdx][prop];
+    updatedModules[mIdx].permissions[pIdx][prop] = !currentVal;
+
+    setMatrixData({
+      ...matrixData,
+      permission_modules: updatedModules
+    });
+  };
+
+  const handleSave = async () => {
+    if (!matrixData) return;
+    setIsSaving(true);
+    try {
+      const prop = getRoleProp(activeRoleName) as 'admin' | 'planner' | 'inspector' | 'reviewer';
+      const updates: { role_name: string; module: string; permission_name: string; is_granted: boolean }[] = [];
+
+      matrixData.permission_modules.forEach(m => {
+        m.permissions.forEach(p => {
+          updates.push({
+            role_name: activeRoleName,
+            module: m.module,
+            permission_name: p.name,
+            is_granted: p[prop]
+          });
+        });
+      });
+
+      await updateRolesMatrix(updates);
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Permissions for ${activeRoleName} updated successfully!`, type: 'success' } 
+      }));
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to save permissions', type: 'error' } }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const rolesList = matrixData?.roles.filter(r => 
+    !search.trim() || r.name.toLowerCase().includes(search.toLowerCase())
+  ) || [];
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -52,9 +98,20 @@ export default function RolesPermissions() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold">
+          <button 
+            onClick={fetchMatrix}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold disabled:opacity-50"
+          >
             <Save size={16} />
-            Save Changes
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -62,26 +119,37 @@ export default function RolesPermissions() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Col: Role List */}
         <div className="w-full lg:w-72 shrink-0 space-y-4">
-          <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-200 border-dashed text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold">
+          <button 
+            onClick={() => setIsCreateOpen(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-200 border-dashed text-gray-700 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold"
+          >
             <Plus size={16} /> Create New Role
           </button>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-100">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
                <div className="relative">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                  <input 
                    type="text" 
+                   value={search}
+                   onChange={(e) => setSearch(e.target.value)}
                    placeholder="Search roles..." 
-                   className="pl-8 pr-3 py-1.5 w-full bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   className="pl-8 pr-3 py-1.5 w-full bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                  />
                </div>
             </div>
             <div className="divide-y divide-gray-100">
-              {roles.map((role, idx) => (
-                <div key={idx} className={`p-4 cursor-pointer transition-colors ${idx === 1 ? 'bg-blue-50/50 border-l-4 border-l-blue-600' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}>
+              {rolesList.map((role, idx) => (
+                <div 
+                  key={idx} 
+                  onClick={() => setSelectedRoleIdx(idx)}
+                  className={`p-4 cursor-pointer transition-colors ${
+                    selectedRoleIdx === idx ? 'bg-blue-50/50 border-l-4 border-l-blue-600' : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+                  }`}
+                >
                   <div className="flex items-start justify-between mb-1">
-                    <h3 className={`text-sm font-bold ${idx === 1 ? 'text-blue-700' : 'text-gray-900'}`}>{role.name}</h3>
+                    <h3 className={`text-sm font-bold ${selectedRoleIdx === idx ? 'text-blue-700' : 'text-gray-900'}`}>{role.name}</h3>
                     {role.name === 'System Administrator' && <ShieldAlert size={14} className="text-red-500" />}
                   </div>
                   <div className="flex items-center justify-between">
@@ -99,44 +167,61 @@ export default function RolesPermissions() {
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+            className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
           >
             <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Editing Permissions: City Planner</h2>
-                  <p className="text-sm text-gray-500">Changes will affect 12 active users.</p>
+                  <h2 className="text-lg font-bold text-gray-900">Editing Permissions: {activeRoleName}</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Toggle checkboxes or switches and click Save Changes to persist.</p>
                </div>
             </div>
 
             <div className="p-6">
-               {permissionModules.map((module, mIdx) => (
-                 <div key={mIdx} className="mb-8 last:mb-0">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 pb-2 border-b border-gray-100">
-                       {module.module}
-                    </h3>
-                    
-                    <div className="space-y-3">
-                       {module.permissions.map((perm, pIdx) => (
-                          <div key={pIdx} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-colors">
-                             <span className="text-sm font-semibold text-gray-700">{perm.name}</span>
-                             
-                             {/* Toggle Switch */}
-                             <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                                perm.planner ? 'bg-blue-600' : 'bg-gray-200'
-                             }`}>
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                   perm.planner ? 'translate-x-6' : 'translate-x-1'
-                                }`} />
-                             </div>
-                          </div>
-                       ))}
-                    </div>
-                 </div>
-               ))}
+               {matrixData?.permission_modules.map((module, mIdx) => {
+                 const prop = getRoleProp(activeRoleName) as 'admin' | 'planner' | 'inspector' | 'reviewer';
+
+                 return (
+                   <div key={mIdx} className="mb-8 last:mb-0">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 pb-2 border-b border-gray-100">
+                         {module.module}
+                      </h3>
+                      
+                      <div className="space-y-3">
+                         {module.permissions.map((perm, pIdx) => {
+                            const isGranted = perm[prop];
+
+                            return (
+                              <div key={pIdx} className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-colors">
+                                 <span className="text-sm font-semibold text-gray-700">{perm.name}</span>
+                                 
+                                 {/* Toggle Switch */}
+                                 <div 
+                                    onClick={() => handleToggle(mIdx, pIdx)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                                       isGranted ? 'bg-blue-600' : 'bg-gray-200'
+                                    }`}
+                                 >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                       isGranted ? 'translate-x-6' : 'translate-x-1'
+                                    }`} />
+                                 </div>
+                              </div>
+                            );
+                         })}
+                      </div>
+                   </div>
+                 );
+               })}
             </div>
           </motion.div>
         </div>
       </div>
+
+      <CreateRoleModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={fetchMatrix}
+      />
     </div>
   );
 }
