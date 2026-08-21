@@ -81,83 +81,96 @@ export interface IntegrationStats {
   active_dms_count: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Functions
 export const getTersusDevices = async (params?: Record<string, any>): Promise<TersusDevice[]> => {
   const response = await api.get('/integrations/tersus/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<TersusDevice>(response);
 };
 
 export const registerTersusDevice = async (data: Partial<TersusDevice>): Promise<TersusDevice> => {
   const response = await api.post('/integrations/tersus/', data);
-  return response.data;
+  return unwrapItem<TersusDevice>(response);
 };
 
 export const forceSyncTersusDevice = async (id: string): Promise<TersusDevice> => {
   const response = await api.post(`/integrations/tersus/${id}/force-sync/`);
-  return response.data;
+  return unwrapItem<TersusDevice>(response);
 };
 
 export const getBimIntegrations = async (): Promise<BIMIntegration[]> => {
   const response = await api.get('/integrations/bim/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMIntegration>(response);
 };
 
 export const connectBimPlatform = async (data: Partial<BIMIntegration>): Promise<BIMIntegration> => {
   const response = await api.post('/integrations/bim/', data);
-  return response.data;
+  return unwrapItem<BIMIntegration>(response);
 };
 
 export const syncBimPlatform = async (id: string): Promise<BIMIntegration> => {
   const response = await api.post(`/integrations/bim/${id}/sync/`);
-  return response.data;
+  return unwrapItem<BIMIntegration>(response);
 };
 
 export const getDocumentSystems = async (): Promise<DocumentSystemIntegration[]> => {
   const response = await api.get('/integrations/documents/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DocumentSystemIntegration>(response);
 };
 
 export const connectDocumentSystem = async (data: Partial<DocumentSystemIntegration>): Promise<DocumentSystemIntegration> => {
   const response = await api.post('/integrations/documents/', data);
-  return response.data;
+  return unwrapItem<DocumentSystemIntegration>(response);
 };
 
 export const syncDocumentSystem = async (id: string): Promise<DocumentSystemIntegration> => {
   const response = await api.post(`/integrations/documents/${id}/sync/`);
-  return response.data;
+  return unwrapItem<DocumentSystemIntegration>(response);
 };
 
 export const getGovernmentApis = async (): Promise<GovernmentAPIIntegration[]> => {
   const response = await api.get('/integrations/government/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<GovernmentAPIIntegration>(response);
 };
 
 export const testGovernmentApi = async (id: string): Promise<GovernmentAPIIntegration> => {
   const response = await api.post(`/integrations/government/${id}/test-connection/`);
-  return response.data;
+  return unwrapItem<GovernmentAPIIntegration>(response);
 };
 
 export const addGovernmentApi = async (data: Partial<GovernmentAPIIntegration>): Promise<GovernmentAPIIntegration> => {
   const response = await api.post('/integrations/government/', data);
-  return response.data;
+  return unwrapItem<GovernmentAPIIntegration>(response);
 };
 
 export const getApiKeys = async (): Promise<APIKeyCredential[]> => {
   const response = await api.get('/integrations/api-keys/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<APIKeyCredential>(response);
 };
 
 export const generateApiKey = async (data: { name: string; app_type?: string; volume_tier?: string }): Promise<APIKeyCredential> => {
   const response = await api.post('/integrations/api-keys/', data);
-  return response.data;
+  return unwrapItem<APIKeyCredential>(response);
 };
 
 export const getIntegrationLogs = async (params?: Record<string, any>): Promise<IntegrationLog[]> => {
   const response = await api.get('/integrations/logs/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<IntegrationLog>(response);
 };
 
 export const getIntegrationStats = async (): Promise<IntegrationStats> => {
   const response = await api.get('/integrations/stats/');
-  return response.data;
+  return unwrapItem<IntegrationStats>(response);
 };

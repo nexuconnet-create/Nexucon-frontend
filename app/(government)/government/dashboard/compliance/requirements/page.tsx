@@ -15,21 +15,7 @@ export default function ComplianceRequirements() {
     setIsLoading(true);
     try {
       const data = await getRequirements({ search: searchQuery });
-      if (data.length > 0) {
-        setRequirements(data);
-      } else {
-        // Fallback default statutory requirements
-        setRequirements([
-          { id: "1", requirement_reference: "ENV-001", category: "Environmental", title: "Air Quality Control Plan", status: "Compliant", authority: "EPA", last_checked: "Oct 12, 2026", created_at: '' },
-          { id: "2", requirement_reference: "ENV-002", category: "Environmental", title: "Waste Water Disposal Permit", status: "At Risk", authority: "State Water Board", last_checked: "Oct 05, 2026", created_at: '' },
-          { id: "3", requirement_reference: "ENV-003", category: "Environmental", title: "Noise Pollution Limits (Night)", status: "Compliant", authority: "City Council", last_checked: "Oct 10, 2026", created_at: '' },
-          { id: "4", requirement_reference: "SAF-101", category: "Safety & Health", title: "OSHA Site Safety Plan", status: "Compliant", authority: "OSHA", last_checked: "Oct 01, 2026", created_at: '' },
-          { id: "5", requirement_reference: "SAF-102", category: "Safety & Health", title: "Scaffolding Inspection Certs", status: "Non-Compliant", authority: "Dept of Labor", last_checked: "Sep 28, 2026", created_at: '' },
-          { id: "6", requirement_reference: "SAF-103", category: "Safety & Health", title: "Worker Protective Gear Audit", status: "Compliant", authority: "Internal HSE", last_checked: "Oct 12, 2026", created_at: '' },
-          { id: "7", requirement_reference: "BLD-201", category: "Building Codes", title: "Structural Steel Load Ratings", status: "Compliant", authority: "Bldg Dept", last_checked: "Sep 15, 2026", created_at: '' },
-          { id: "8", requirement_reference: "BLD-202", category: "Building Codes", title: "Fire Safety Systems Design", status: "Compliant", authority: "Fire Marshall", last_checked: "Sep 10, 2026", created_at: '' },
-        ]);
-      }
+      setRequirements(data);
     } catch (err) {
       console.error("Failed to load requirements", err);
     } finally {

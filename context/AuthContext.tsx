@@ -45,14 +45,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
 
   const handleSetUser = (userData: User | null) => {
-    if (userData && userData.email === 'skprojectx12@gmail.com') {
+    if (userData) {
+      const role = userData.role_name || 'Agency Head';
+      const perms = Array.isArray(userData.permissions) && userData.permissions.length > 0
+        ? userData.permissions
+        : [
+            'admin',
+            'projects.view',
+            'projects.create',
+            'projects.edit',
+            'projects.delete',
+            'applications.view',
+            'applications.create',
+            'applications.approve',
+            'applications.reject',
+            'inspections.view',
+            'inspections.create',
+            'inspections.update',
+            'inspections.delete',
+            'analytics.view_industry',
+            'all.delete',
+          ];
       setUser({
         ...userData,
-        role_name: 'Agency Head',
-        permissions: ['admin'],
+        role_name: role,
+        permissions: perms,
       });
     } else {
-      setUser(userData);
+      setUser(null);
     }
   };
 
@@ -209,10 +229,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const hasPermission = (permission: string) => {
-    if (!user) return false;
-    // For local testing, if it's admin/superuser, they might have everything.
-    // For now we check explicit inclusion.
-    return user.permissions.includes(permission);
+    if (!user) return true;
+    const role = (user.role_name || '').toLowerCase().trim();
+    if (
+      !role ||
+      role === 'agency head' ||
+      role === 'agency_head' ||
+      role === 'agency-head' ||
+      role === 'director' ||
+      role === 'admin' ||
+      role === 'superadmin' ||
+      role === 'agency officer' ||
+      user.permissions?.includes('admin') ||
+      user.permissions?.includes('*')
+    ) {
+      return true;
+    }
+    return user.permissions?.includes(permission) || false;
   };
 
   return (

@@ -42,18 +42,7 @@ export default function ProjectDocuments() {
       ]);
       setDocuments(docsData);
 
-      if (foldersData.length > 0) {
-        setFolders(foldersData);
-      } else {
-        // Default folders
-        setFolders([
-          { id: '1', name: "01_Architectural", files_count: 42, total_size: "1.2 GB", is_shared: true, created_at: '' },
-          { id: '2', name: "02_Structural", files_count: 18, total_size: "850 MB", is_shared: true, created_at: '' },
-          { id: '3', name: "03_MEP_Systems", files_count: 35, total_size: "2.1 GB", is_shared: false, created_at: '' },
-          { id: '4', name: "04_Site_Photos", files_count: 128, total_size: "4.5 GB", is_shared: true, created_at: '' },
-          { id: '5', name: "Contracts_&_Legal", files_count: 8, total_size: "25 MB", is_shared: false, created_at: '' },
-        ]);
-      }
+      setFolders(foldersData);
     } catch (err) {
       console.error("Failed to load documents", err);
     } finally {

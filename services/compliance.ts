@@ -100,83 +100,96 @@ export interface ComplianceStats {
   reviews_count: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getNCRs = async (params?: Record<string, any>): Promise<NonConformanceReport[]> => {
   const response = await api.get('/compliance/ncrs/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<NonConformanceReport>(response);
 };
 
 export const getNCRById = async (id: string): Promise<NonConformanceReport> => {
   const response = await api.get(`/compliance/ncrs/${id}/`);
-  return response.data;
+  return unwrapItem<NonConformanceReport>(response);
 };
 
 export const createNCR = async (data: Partial<NonConformanceReport>): Promise<NonConformanceReport> => {
   const response = await api.post('/compliance/ncrs/', data);
-  return response.data;
+  return unwrapItem<NonConformanceReport>(response);
 };
 
 export const escalateNCR = async (id: string, data?: { escalation_level?: number }): Promise<NonConformanceReport> => {
   const response = await api.post(`/compliance/ncrs/${id}/escalate/`, data || {});
-  return response.data;
+  return unwrapItem<NonConformanceReport>(response);
 };
 
 export const closeNCR = async (id: string, data?: { resolution_notes?: string }): Promise<NonConformanceReport> => {
   const response = await api.post(`/compliance/ncrs/${id}/close/`, data || {});
-  return response.data;
+  return unwrapItem<NonConformanceReport>(response);
 };
 
 export const getCAPAs = async (params?: Record<string, any>): Promise<CorrectiveActionPlan[]> => {
   const response = await api.get('/compliance/capas/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<CorrectiveActionPlan>(response);
 };
 
 export const createCAPA = async (data: Partial<CorrectiveActionPlan>): Promise<CorrectiveActionPlan> => {
   const response = await api.post('/compliance/capas/', data);
-  return response.data;
+  return unwrapItem<CorrectiveActionPlan>(response);
 };
 
 export const transitionCAPA = async (id: string, data: { status: string; verification_notes?: string }): Promise<CorrectiveActionPlan> => {
   const response = await api.post(`/compliance/capas/${id}/transition/`, data);
-  return response.data;
+  return unwrapItem<CorrectiveActionPlan>(response);
 };
 
 export const getRequirements = async (params?: Record<string, any>): Promise<RegulatoryRequirement[]> => {
   const response = await api.get('/compliance/requirements/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<RegulatoryRequirement>(response);
 };
 
 export const updateRequirementStatus = async (id: string, data: { status: string }): Promise<RegulatoryRequirement> => {
   const response = await api.post(`/compliance/requirements/${id}/update-status/`, data);
-  return response.data;
+  return unwrapItem<RegulatoryRequirement>(response);
 };
 
 export const getComplianceReviews = async (params?: Record<string, any>): Promise<ComplianceReview[]> => {
   const response = await api.get('/compliance/reviews/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ComplianceReview>(response);
 };
 
 export const createComplianceReview = async (data: Partial<ComplianceReview>): Promise<ComplianceReview> => {
   const response = await api.post('/compliance/reviews/', data);
-  return response.data;
+  return unwrapItem<ComplianceReview>(response);
 };
 
 export const getComplianceCertificates = async (params?: Record<string, any>): Promise<ComplianceCertificate[]> => {
   const response = await api.get('/compliance/certificates/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ComplianceCertificate>(response);
 };
 
 export const issueComplianceCertificate = async (data: Partial<ComplianceCertificate>): Promise<ComplianceCertificate> => {
   const response = await api.post('/compliance/certificates/', data);
-  return response.data;
+  return unwrapItem<ComplianceCertificate>(response);
 };
 
 export const verifyCertificateAuthenticity = async (id: string): Promise<any> => {
   const response = await api.get(`/compliance/certificates/${id}/verify/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getComplianceStats = async (): Promise<ComplianceStats> => {
   const response = await api.get('/compliance/stats/overview/');
-  return response.data;
+  return unwrapItem<ComplianceStats>(response);
 };

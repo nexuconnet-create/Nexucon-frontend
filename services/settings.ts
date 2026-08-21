@@ -124,128 +124,141 @@ export interface WebhookSubscription {
   created_at: string;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getStaffUsers = async (params?: { search?: string; department?: string; role?: string }): Promise<StaffUser[]> => {
   const response = await api.get('/settings/users/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<StaffUser>(response);
 };
 
 export const inviteStaffUser = async (data: { name: string; email: string; role: string; department: string }) => {
   const response = await api.post('/settings/users/', data);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const toggleStaffUserStatus = async (userId: string) => {
   const response = await api.post(`/settings/users/${userId}/toggle-status/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getCustomRoles = async (): Promise<CustomRole[]> => {
   const response = await api.get('/settings/roles/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<CustomRole>(response);
 };
 
 export const createCustomRole = async (data: { name: string; description?: string }): Promise<CustomRole> => {
   const response = await api.post('/settings/roles/', data);
-  return response.data;
+  return unwrapItem<CustomRole>(response);
 };
 
 export const getRolesMatrix = async (): Promise<RolesMatrixResponse> => {
   const response = await api.get('/settings/roles/matrix/');
-  return response.data;
+  return unwrapItem<RolesMatrixResponse>(response);
 };
 
 export const updateRolesMatrix = async (updates: { role_name: string; module: string; permission_name: string; is_granted: boolean }[]) => {
   const response = await api.post('/settings/roles/matrix/', { updates });
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getWorkflows = async (): Promise<ApprovalWorkflow[]> => {
   const response = await api.get('/settings/workflows/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ApprovalWorkflow>(response);
 };
 
 export const createWorkflow = async (data: { name: string; description?: string; steps: { title: string; role: string; icon?: string }[] }): Promise<ApprovalWorkflow> => {
   const response = await api.post('/settings/workflows/', data);
-  return response.data;
+  return unwrapItem<ApprovalWorkflow>(response);
 };
 
 export const getInspectionTemplates = async (): Promise<InspectionTemplate[]> => {
   const response = await api.get('/settings/templates/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<InspectionTemplate>(response);
 };
 
 export const createInspectionTemplate = async (data: { name: string; department: string; items?: Partial<ChecklistItem>[] }): Promise<InspectionTemplate> => {
   const response = await api.post('/settings/templates/', data);
-  return response.data;
+  return unwrapItem<InspectionTemplate>(response);
 };
 
 export const addChecklistItem = async (templateId: string, data: { title: string; field_type: string; is_required: boolean }): Promise<ChecklistItem> => {
   const response = await api.post(`/settings/templates/${templateId}/items/`, data);
-  return response.data;
+  return unwrapItem<ChecklistItem>(response);
 };
 
 export const deleteInspectionTemplate = async (templateId: string) => {
   const response = await api.delete(`/settings/templates/${templateId}/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getComplianceStandards = async (): Promise<ComplianceStandard[]> => {
   const response = await api.get('/settings/standards/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ComplianceStandard>(response);
 };
 
 export const updateComplianceStandards = async (thresholds: Record<string, number>): Promise<ComplianceStandard[]> => {
   const response = await api.post('/settings/standards/update-thresholds/', { thresholds });
-  return response.data;
+  return unwrapList<ComplianceStandard>(response);
 };
 
 export const getStatutoryDocuments = async (): Promise<StatutoryDocument[]> => {
   const response = await api.get('/settings/statutes/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<StatutoryDocument>(response);
 };
 
 export const addStatutoryDocument = async (data: StatutoryDocument): Promise<StatutoryDocument> => {
   const response = await api.post('/settings/statutes/', data);
-  return response.data;
+  return unwrapItem<StatutoryDocument>(response);
 };
 
 export const getNotificationPreferences = async (): Promise<NotificationCategoryGroup[]> => {
   const response = await api.get('/settings/notifications/');
-  return response.data;
+  return unwrapItem<NotificationCategoryGroup[]>(response);
 };
 
 export const updateNotificationPreference = async (data: { category: string; event_label: string; channel: string; enabled: boolean }) => {
   const response = await api.post('/settings/notifications/update-preference/', data);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getRoutingRules = async (): Promise<NotificationRoutingRule[]> => {
   const response = await api.get('/settings/routing-rules/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<NotificationRoutingRule>(response);
 };
 
 export const addRoutingRule = async (data: { trigger_event: string; primary_recipient: string; sla_timeline: string; escalation_target: string }): Promise<NotificationRoutingRule> => {
   const response = await api.post('/settings/routing-rules/', data);
-  return response.data;
+  return unwrapItem<NotificationRoutingRule>(response);
 };
 
 export const deleteRoutingRule = async (ruleId: string) => {
   const response = await api.delete(`/settings/routing-rules/${ruleId}/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getWebhooks = async (): Promise<WebhookSubscription[]> => {
   const response = await api.get('/settings/webhooks/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<WebhookSubscription>(response);
 };
 
 export const createWebhook = async (data: { name: string; target_url: string; events: string[] }): Promise<WebhookSubscription> => {
   const response = await api.post('/settings/webhooks/', data);
-  return response.data;
+  return unwrapItem<WebhookSubscription>(response);
 };
 
 export const deleteWebhook = async (webhookId: string) => {
   const response = await api.delete(`/settings/webhooks/${webhookId}/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };

@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { getProjects, Project } from '@/services/projects';
 import {
-  Building2, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
+  Building2, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle,
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
-  ClipboardList, Check, FolderOpen, AlertCircle, FileSearch, AlertOctagon, UserX, Gavel, FileX
+  ClipboardList, Check, FolderOpen, AlertCircle, FileSearch, AlertOctagon, UserX, Gavel, FileX, Plus
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
@@ -40,10 +40,10 @@ export default function ProjectsDynamicPage() {
   const params = useParams();
   const router = useRouter();
   const currentStatus = (params.status as string) || 'all';
-  
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,7 +55,7 @@ export default function ProjectsDynamicPage() {
       try {
         const res: any = await getProjects();
         const projectsArray = Array.isArray(res) ? res : (res.results || res.data || []);
-        
+
         // Map backend data to UI format
         const mapped = projectsArray.map((p: any) => ({
           id: p.id,
@@ -69,7 +69,7 @@ export default function ProjectsDynamicPage() {
           complianceScore: Math.floor(Math.random() * 30) + 70,
           reference: p.reference_number
         }));
-        
+
         setProjects(mapped);
       } catch (error) {
         console.error('Failed to fetch projects', error);
@@ -180,10 +180,10 @@ export default function ProjectsDynamicPage() {
 
   return (
     <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <QuickActionSideDrawer 
-        isOpen={isQuickActionDrawerOpen} 
-        onClose={() => setIsQuickActionDrawerOpen(false)} 
-        actionTitle={selectedQuickAction} 
+      <QuickActionSideDrawer
+        isOpen={isQuickActionDrawerOpen}
+        onClose={() => setIsQuickActionDrawerOpen(false)}
+        actionTitle={selectedQuickAction}
       />
 
       {/* Top Header */}
@@ -204,30 +204,44 @@ export default function ProjectsDynamicPage() {
         <TopRightControls />
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {TABS.map((tab) => {
-          const isActive = currentStatus === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => router.push(`/government/dashboard/projects/${tab.id}`)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-                isActive 
-                  ? 'bg-[#022C4F] text-white shadow-md' 
+      {/* Tabs & Action */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {TABS.map((tab) => {
+            const isActive = currentStatus === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => router.push(`/government/dashboard/projects/${tab.id}`)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${isActive
+                  ? 'bg-[#022C4F] text-white shadow-md'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon size={16} />
-              {tab.label}
-            </button>
-          );
-        })}
+                  }`}
+              >
+                <tab.icon size={16} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+      </div>
+
+      <div className="flex items-center justify-end shrink-0">
+        <button
+          onClick={() => {
+            setSelectedQuickAction("Register New Project");
+            setIsQuickActionDrawerOpen(true);
+          }}
+          className="flex items-center gap-2  mb-10 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all"
+        >
+          <Plus size={16} /> Register Project
+        </button>
       </div>
 
       {/* Dynamic Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-        
+
         {/* Overview Stats */}
         <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-4">
           {content.overview.map((stat: any, idx: number) => (
@@ -250,8 +264,8 @@ export default function ProjectsDynamicPage() {
           </h3>
           <div className="flex flex-col gap-2 mt-auto">
             {content.actions.map((action: string, idx: number) => (
-              <button 
-                key={idx} 
+              <button
+                key={idx}
                 onClick={() => {
                   setSelectedQuickAction(action);
                   setIsQuickActionDrawerOpen(true);
@@ -274,13 +288,13 @@ export default function ProjectsDynamicPage() {
           <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
             <Building2 size={18} /> {content.title}
           </h2>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search projects..." 
+              <input
+                type="text"
+                placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full sm:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F]/20 transition-all"
@@ -290,13 +304,13 @@ export default function ProjectsDynamicPage() {
               <Filter size={18} />
             </button>
             <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1">
-              <button 
+              <button
                 onClick={() => setViewMode('list')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <List size={16} />
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('grid')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
@@ -324,7 +338,7 @@ export default function ProjectsDynamicPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex flex-col gap-1 w-full sm:w-1/3 mb-4 sm:mb-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason for Flag</span>
                     <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
@@ -363,7 +377,7 @@ export default function ProjectsDynamicPage() {
                       <p className="text-xs text-slate-500">{project.id}</p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 w-1/4">
                     <User size={14} className="text-slate-400" />
                     <span className="text-xs font-medium text-slate-600 line-clamp-1">{project.developer}</span>
@@ -420,12 +434,12 @@ export default function ProjectsDynamicPage() {
                         ${project.status === 'Pending' ? 'bg-amber-100 text-amber-700' : ''}
                         ${project.status === 'Completed' ? 'bg-indigo-100 text-indigo-700' : ''}
                       `}>
-                        {project.status}
+                      {project.status}
                     </span>
                   </div>
                   <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1">{project.name}</h4>
                   <p className="text-xs text-slate-500 mb-4">{project.id}</p>
-                  
+
                   <div className="flex flex-col gap-2 mt-auto mb-4">
                     <div className="flex items-center gap-2">
                       <User size={12} className="text-slate-400" />
@@ -447,16 +461,16 @@ export default function ProjectsDynamicPage() {
                     </div>
                     {project.status === 'Active' ? (
                       <div className="flex flex-col w-24">
-                         <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
-                         <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
-                         </div>
+                        <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
+                        </div>
                       </div>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-500">{project.type}</span>
                     )}
                   </div>
-                  
+
                   <div className="mt-4 flex items-center justify-end">
                     <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
                       View Project <ArrowUpRight size={12} />

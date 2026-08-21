@@ -204,7 +204,32 @@ export default function MonitoringDynamicPage() {
             {content.subtitle}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <TopRightControls />
+      </div>
+
+      {/* Tabs & Action */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {TABS.map((tab) => {
+            const isActive = currentStatus === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => router.push(`/government/dashboard/monitoring/${tab.id}`)}
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  isActive 
+                    ? 'bg-[#022C4F] text-white shadow-md' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <tab.icon size={15} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-end shrink-0">
           <button
             onClick={() => {
               if (currentStatus === 'observations') setIsObservationModalOpen(true);
@@ -219,29 +244,7 @@ export default function MonitoringDynamicPage() {
              currentStatus === 'issues' ? 'Report Issue' :
              currentStatus === 'verification' ? 'Start Verification' : 'Publish Daily Update'}
           </button>
-          <TopRightControls />
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {TABS.map((tab) => {
-          const isActive = currentStatus === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => router.push(`/government/dashboard/monitoring/${tab.id}`)}
-              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                isActive 
-                  ? 'bg-[#022C4F] text-white shadow-md' 
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon size={15} />
-              {tab.label}
-            </button>
-          );
-        })}
       </div>
 
       {/* Dynamic Content Grid */}

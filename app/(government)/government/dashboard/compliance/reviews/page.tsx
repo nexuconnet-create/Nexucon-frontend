@@ -19,17 +19,7 @@ export default function ComplianceReviews() {
       if (searchQuery) params.search = searchQuery;
 
       const data = await getComplianceReviews(params);
-      if (data.length > 0) {
-        setReviews(data);
-      } else {
-        // Fallback default reviews
-        setReviews([
-          { id: "1", review_reference: "REV-26-004", project: "1", title: "Quarterly HSE Audit", review_type: "Safety", auditor_name: "J. Doe (Lead)", startDate: "Oct 10, 2026", dueDate: "Oct 24, 2026", stage: "Reporting", progress: 75, created_at: '', start_date: '2026-10-10' } as any,
-          { id: "2", review_reference: "REV-26-005", project: "1", title: "Structural Code Verification", review_type: "Building Code", auditor_name: "City Engineer", startDate: "Oct 12, 2026", dueDate: "Oct 30, 2026", stage: "Audit in Progress", progress: 40, created_at: '', start_date: '2026-10-12' } as any,
-          { id: "3", review_reference: "REV-26-006", project: "1", title: "Environmental Impact Check", review_type: "Environmental", auditor_name: "EcoSolve Ltd.", startDate: "Nov 01, 2026", dueDate: "Nov 15, 2026", stage: "Initiation", progress: 10, created_at: '', start_date: '2026-11-01' } as any,
-          { id: "4", review_reference: "REV-26-003", project: "1", title: "Fire Safety Systems Review", review_type: "Safety", auditor_name: "Fire Marshall", startDate: "Sep 15, 2026", dueDate: "Sep 30, 2026", stage: "Final Review", progress: 95, created_at: '', start_date: '2026-09-15' } as any,
-        ]);
-      }
+      setReviews(data);
     } catch (err) {
       console.error("Failed to load compliance reviews", err);
     } finally {

@@ -62,58 +62,71 @@ export interface ApprovalStats {
   total_decisions: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getApprovalRequests = async (params?: Record<string, any>): Promise<ApprovalRequest[]> => {
   const response = await api.get('/approvals/requests/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ApprovalRequest>(response);
 };
 
 export const getApprovalRequestById = async (id: string): Promise<ApprovalRequest> => {
   const response = await api.get(`/approvals/requests/${id}/`);
-  return response.data;
+  return unwrapItem<ApprovalRequest>(response);
 };
 
 export const createApprovalRequest = async (data: Partial<ApprovalRequest>): Promise<ApprovalRequest> => {
   const response = await api.post('/approvals/requests/', data);
-  return response.data;
+  return unwrapItem<ApprovalRequest>(response);
 };
 
 export const approveRequest = async (id: string, data?: { notes?: string; pin?: string; conditions?: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/approve/`, data || {});
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const rejectRequest = async (id: string, data: { reason: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/reject/`, data);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const requestInfo = async (id: string, data: { query: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/request-info/`, data);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const escalateRequest = async (id: string, data?: { reason?: string; target_level?: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/escalate/`, data || {});
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const signDocument = async (id: string): Promise<ApprovalRequest> => {
   const response = await api.post(`/approvals/requests/${id}/sign/`);
-  return response.data;
+  return unwrapItem<ApprovalRequest>(response);
 };
 
 export const evaluateCriterion = async (criterionId: string, data: { status: string; notes?: string }): Promise<TechnicalReviewCriteria> => {
   const response = await api.post(`/approvals/criteria/${criterionId}/evaluate/`, data);
-  return response.data;
+  return unwrapItem<TechnicalReviewCriteria>(response);
 };
 
 export const getApprovalDecisions = async (params?: Record<string, any>): Promise<ApprovalDecision[]> => {
   const response = await api.get('/approvals/decisions/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ApprovalDecision>(response);
 };
 
 export const getApprovalStats = async (): Promise<ApprovalStats> => {
   const response = await api.get('/approvals/stats/overview/');
-  return response.data;
+  return unwrapItem<ApprovalStats>(response);
 };

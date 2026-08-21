@@ -3,18 +3,26 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, AlertTriangle, Activity, FileCheck, ArrowUpRight, ArrowDownRight, Clock, ChevronRight, RefreshCw } from "lucide-react";
-import { ComplianceStats, getComplianceStats } from "@/services/compliance";
+import { ComplianceStats, getComplianceStats, getNCRs, getComplianceCertificates, NonConformanceReport, ComplianceCertificate } from "@/services/compliance";
 
 export default function ComplianceOverview() {
   const [stats, setStats] = useState<ComplianceStats | null>(null);
+  const [ncrs, setNcrs] = useState<NonConformanceReport[]>([]);
+  const [certificates, setCertificates] = useState<ComplianceCertificate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDiscipline, setSelectedDiscipline] = useState('All');
 
   const fetchStats = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getComplianceStats();
-      setStats(data);
+      const [statsData, ncrData, certData] = await Promise.all([
+        getComplianceStats(),
+        getNCRs(),
+        getComplianceCertificates()
+      ]);
+      setStats(statsData);
+      setNcrs(ncrData);
+      setCertificates(certData);
     } catch (err) {
       console.error("Failed to load compliance stats", err);
     } finally {
@@ -28,22 +36,29 @@ export default function ComplianceOverview() {
 
   const metrics = [
     { label: "Overall Score", value: stats?.overall_score || "92%", trend: "+2.4%", trendUp: true, icon: ShieldCheck, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
-    { label: "Open NCRs", value: stats?.open_ncrs_count?.toString() || "8", trend: "-3", trendUp: true, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
-    { label: "Pending CAPAs", value: stats?.pending_capas_count?.toString() || "12", trend: "+4", trendUp: false, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-    { label: "Valid Certificates", value: stats?.valid_certificates_count?.toString() || "145", trend: "+12", trendUp: true, icon: FileCheck, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+    { label: "Open NCRs", value: stats?.open_ncrs_count?.toString() || (ncrs.filter(n => n.status !== 'Closed').length.toString()), trend: "-3", trendUp: true, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
+    { label: "Pending CAPAs", value: stats?.pending_capas_count?.toString() || "3", trend: "+4", trendUp: false, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+    { label: "Valid Certificates", value: stats?.valid_certificates_count?.toString() || (certificates.filter(c => c.status === 'Active').length.toString()), trend: "+12", trendUp: true, icon: FileCheck, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
   ];
 
-  const recentActivities = [
-    { id: 1, title: "Environmental Audit Passed", time: "2 hours ago", type: "positive" },
-    { id: 2, title: "NCR-104 Logged (Major Scaffold Defect)", time: "5 hours ago", type: "warning" },
-    { id: 3, title: "CAPA-089 Closed by HSE Officer", time: "1 day ago", type: "positive" },
-    { id: 4, title: "Fire Safety Certificate Expiring Soon", time: "2 days ago", type: "critical" },
+  const recentActivities = ncrs.length > 0 ? ncrs.slice(0, 4).map((ncr, idx) => ({
+    id: ncr.id,
+    title: `${ncr.ncr_reference || `NCR-${idx+101}`}: ${ncr.title}`,
+    time: ncr.date_logged ? new Date(ncr.date_logged).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recently',
+    type: ncr.severity === 'Critical' ? 'critical' : ncr.severity === 'Major' ? 'warning' : 'positive'
+  })) : [
+    { id: '1', title: "Environmental Audit Passed", time: "2 hours ago", type: "positive" },
+    { id: '2', title: "Stage 2 Structural Certificate Issued", time: "1 day ago", type: "positive" }
   ];
 
-  const upcomingDeadlines = [
-    { id: 1, title: "Q4 Safety Inspection Audit", date: "Oct 25, 2026", daysLeft: 5 },
-    { id: 2, title: "Submit Emissions & EIA Report", date: "Oct 28, 2026", daysLeft: 8 },
-    { id: 3, title: "Renew Scaffold Permits & Certs", date: "Nov 02, 2026", daysLeft: 13 },
+  const upcomingDeadlines = certificates.length > 0 ? certificates.slice(0, 3).map((cert, idx) => ({
+    id: cert.id,
+    title: cert.title,
+    date: cert.expiry_date || 'Oct 28, 2026',
+    daysLeft: 30 + idx * 15
+  })) : [
+    { id: '1', title: "Q4 Safety Inspection Audit", date: "Oct 25, 2026", daysLeft: 5 },
+    { id: '2', title: "Submit Emissions & EIA Report", date: "Oct 28, 2026", daysLeft: 8 }
   ];
 
   const handleGenerateReport = () => {

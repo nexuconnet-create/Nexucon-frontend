@@ -29,71 +29,13 @@ export default function PendingApprovals() {
         if (!selectedItem || !pendingList.find(r => r.id === selectedItem)) {
           setSelectedItem(pendingList[0].id);
         }
-      } else if (data.length > 0) {
-        setRequests(data);
-        if (!selectedItem) setSelectedItem(data[0].id);
       } else {
-        // Fallback default sample data
-        setRequests([
-          {
-            id: "1",
-            request_reference: "REQ-8892",
-            project: "1",
-            title: "Phase 2 Environmental Impact Addendum",
-            request_type: "Document",
-            discipline: "General",
-            priority: "High",
-            status: "Pending",
-            submitted_by_name: "EcoSolve Ltd.",
-            due_date: "Oct 15, 2026",
-            value_amount: 120000000,
-            doa_level_required: "Permanent Secretary / Director General",
-            description: "Additional assessment required for the eastern boundary soil disruption. Needs expedited approval to prevent delay in foundation pour.",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: ''
-          },
-          {
-            id: "2",
-            request_reference: "REQ-8891",
-            project: "1",
-            title: "Structural Steel Shop Drawings (Z3)",
-            request_type: "Technical",
-            discipline: "Structural",
-            priority: "Medium",
-            status: "In Review",
-            submitted_by_name: "Apex Engineering",
-            due_date: "Oct 20, 2026",
-            value_amount: 45000000,
-            doa_level_required: "Director",
-            description: "Final shop drawings for zone 3 structural steel. Includes revised connection details per RFI-142.",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: ''
-          },
-          {
-            id: "3",
-            request_reference: "REQ-8885",
-            project: "1",
-            title: "Night Shift Work Permit - November",
-            request_type: "Permit",
-            discipline: "Safety",
-            priority: "Low",
-            status: "Pending",
-            submitted_by_name: "J. Jenkins (Site Lead)",
-            due_date: "Oct 25, 2026",
-            value_amount: 5000000,
-            doa_level_required: "Director",
-            description: "Standard monthly renewal for night shift operations. All noise mitigation protocols remain unchanged.",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: ''
-          }
-        ]);
-        setSelectedItem("1");
+        setRequests(data);
+        if (data.length > 0 && (!selectedItem || !data.find(r => r.id === selectedItem))) {
+          setSelectedItem(data[0].id);
+        } else if (data.length === 0) {
+          setSelectedItem(null);
+        }
       }
     } catch (err) {
       console.error("Failed to load approval requests", err);

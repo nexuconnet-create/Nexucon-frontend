@@ -71,43 +71,56 @@ export interface FinancialSummary {
   monthly_breakdown: Array<{ month: string; revenue: number }>;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getGeneratedReports = async (params?: Record<string, any>): Promise<GeneratedReport[]> => {
   const response = await api.get('/analytics/reports/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<GeneratedReport>(response);
 };
 
 export const createGeneratedReport = async (data: Partial<GeneratedReport>): Promise<GeneratedReport> => {
   const response = await api.post('/analytics/reports/', data);
-  return response.data;
+  return unwrapItem<GeneratedReport>(response);
 };
 
 export const getDepartmentPerformance = async (): Promise<DepartmentPerformanceMetric[]> => {
   const response = await api.get('/analytics/departments/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DepartmentPerformanceMetric>(response);
 };
 
 export const getOfficerPerformance = async (): Promise<OfficerPerformanceRecord[]> => {
   const response = await api.get('/analytics/officers/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<OfficerPerformanceRecord>(response);
 };
 
 export const getRiskAssessments = async (params?: Record<string, any>): Promise<RiskAssessmentAlert[]> => {
   const response = await api.get('/analytics/risk/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<RiskAssessmentAlert>(response);
 };
 
 export const mitigateRiskAlert = async (id: string): Promise<RiskAssessmentAlert> => {
   const response = await api.post(`/analytics/risk/${id}/mitigate/`);
-  return response.data;
+  return unwrapItem<RiskAssessmentAlert>(response);
 };
 
 export const getExecutiveKPIs = async (): Promise<ExecutiveKPIs> => {
   const response = await api.get('/analytics/overview/executive-kpis/');
-  return response.data;
+  return unwrapItem<ExecutiveKPIs>(response);
 };
 
 export const getFinancialSummary = async (): Promise<FinancialSummary> => {
   const response = await api.get('/analytics/overview/financial-summary/');
-  return response.data;
+  return unwrapItem<FinancialSummary>(response);
 };

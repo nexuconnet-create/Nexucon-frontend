@@ -134,88 +134,101 @@ export interface StakeholderStats {
   total_ncrs_issued: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getDevelopers = async (params?: Record<string, any>): Promise<Developer[]> => {
   const response = await api.get('/stakeholders/developers/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<Developer>(response);
 };
 
 export const createDeveloper = async (data: Partial<Developer>): Promise<Developer> => {
   const response = await api.post('/stakeholders/developers/', data);
-  return response.data;
+  return unwrapItem<Developer>(response);
 };
 
 export const getContractors = async (params?: Record<string, any>): Promise<Contractor[]> => {
   const response = await api.get('/stakeholders/contractors/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<Contractor>(response);
 };
 
 export const validateContractorLicense = async (id: string): Promise<any> => {
   const response = await api.post(`/stakeholders/contractors/${id}/validate-license/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getConsultants = async (params?: Record<string, any>): Promise<Consultant[]> => {
   const response = await api.get('/stakeholders/consultants/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<Consultant>(response);
 };
 
 export const getInspectors = async (params?: Record<string, any>): Promise<Inspector[]> => {
   const response = await api.get('/stakeholders/inspectors/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<Inspector>(response);
 };
 
 export const reassignInspectorZone = async (id: string, zone: string): Promise<Inspector> => {
   const response = await api.post(`/stakeholders/inspectors/${id}/reassign-zone/`, { zone });
-  return response.data;
+  return unwrapItem<Inspector>(response);
 };
 
 export const getLicensedProfessionals = async (params?: Record<string, any>): Promise<LicensedProfessional[]> => {
   const response = await api.get('/stakeholders/professionals/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<LicensedProfessional>(response);
 };
 
 export const getProjectTeams = async (params?: Record<string, any>): Promise<ProjectStakeholderTeam[]> => {
   const response = await api.get('/stakeholders/teams/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<ProjectStakeholderTeam>(response);
 };
 
 export const getBlacklistRecords = async (): Promise<BlacklistRecord[]> => {
   const response = await api.get('/stakeholders/blacklist/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BlacklistRecord>(response);
 };
 
 export const toggleBlacklist = async (data: { entity_type: string; entity_id: string; entity_name: string; reason: string; status?: string }): Promise<BlacklistRecord> => {
   const response = await api.post('/stakeholders/blacklist/toggle/', data);
-  return response.data;
+  return unwrapItem<BlacklistRecord>(response);
 };
 
 export const getMeetings = async (): Promise<StakeholderMeeting[]> => {
   const response = await api.get('/stakeholders/meetings/');
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<StakeholderMeeting>(response);
 };
 
 export const scheduleMeeting = async (data: Partial<StakeholderMeeting>): Promise<StakeholderMeeting> => {
   const response = await api.post('/stakeholders/meetings/', data);
-  return response.data;
+  return unwrapItem<StakeholderMeeting>(response);
 };
 
 export const startMeeting = async (id: string): Promise<any> => {
   const response = await api.post(`/stakeholders/meetings/${id}/start/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getMessages = async (params?: { channel?: string }): Promise<StakeholderMessage[]> => {
   const response = await api.get('/stakeholders/messages/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<StakeholderMessage>(response);
 };
 
 export const sendMessage = async (data: Partial<StakeholderMessage>): Promise<StakeholderMessage> => {
   const response = await api.post('/stakeholders/messages/', data);
-  return response.data;
+  return unwrapItem<StakeholderMessage>(response);
 };
 
 export const getStakeholderStats = async (): Promise<StakeholderStats> => {
   const response = await api.get('/stakeholders/stats/');
-  return response.data;
+  return unwrapItem<StakeholderStats>(response);
 };

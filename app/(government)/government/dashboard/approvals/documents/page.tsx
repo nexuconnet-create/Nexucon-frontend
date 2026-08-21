@@ -13,85 +13,13 @@ export default function DocumentApprovals() {
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getApprovalRequests({ type: 'Document', search: searchQuery });
+      const data = await getApprovalRequests({ request_type: 'Document', search: searchQuery });
       if (data.length > 0) {
         setDocuments(data);
       } else {
-        // Fallback default documents
-        setDocuments([
-          { 
-            id: "1", 
-            request_reference: "DOC-992", 
-            project: "1",
-            title: "Master Subcontractor Agreement v3", 
-            discipline: "Legal", 
-            submitted_by_name: "Legal Dept", 
-            due_date: "Oct 12, 2026", 
-            status: "Pending",
-            signatories_required: 3,
-            signatories_completed: 1,
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Document",
-            priority: "High",
-            days_overdue: 0,
-            created_at: ''
-          },
-          { 
-            id: "2", 
-            request_reference: "DOC-991", 
-            project: "1",
-            title: "Budget Reallocation Request - Q4", 
-            discipline: "Finance", 
-            submitted_by_name: "S. Jenkins", 
-            due_date: "Oct 11, 2026", 
-            status: "Approved",
-            signatories_required: 2,
-            signatories_completed: 2,
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Document",
-            priority: "Medium",
-            days_overdue: 0,
-            created_at: ''
-          },
-          { 
-            id: "3", 
-            request_reference: "DOC-990", 
-            project: "1",
-            title: "Updated Evacuation Routes", 
-            discipline: "Safety", 
-            submitted_by_name: "HSE Team", 
-            due_date: "Oct 10, 2026", 
-            status: "Rejected",
-            signatories_required: 1,
-            signatories_completed: 0,
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Document",
-            priority: "Low",
-            days_overdue: 0,
-            created_at: ''
-          },
-          { 
-            id: "4", 
-            request_reference: "DOC-988", 
-            project: "1",
-            title: "Vendor Prequalification Packet", 
-            discipline: "Procurement", 
-            submitted_by_name: "A. Rivera", 
-            due_date: "Oct 08, 2026", 
-            status: "Pending",
-            signatories_required: 2,
-            signatories_completed: 0,
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Document",
-            priority: "Medium",
-            days_overdue: 0,
-            created_at: ''
-          }
-        ]);
+        const allData = await getApprovalRequests({ search: searchQuery });
+        const docList = allData.filter(r => r.request_type === 'Document' || r.discipline === 'Architecture');
+        setDocuments(docList.length > 0 ? docList : allData);
       }
     } catch (err) {
       console.error("Failed to load document approvals", err);

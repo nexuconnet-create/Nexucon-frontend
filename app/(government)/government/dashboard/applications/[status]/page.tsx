@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle, 
+  ClipboardList, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle,
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
   Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase, ClipboardCheck, Plus, RefreshCw
 } from 'lucide-react';
@@ -28,10 +28,10 @@ export default function ApplicationsDynamicPage() {
   const params = useParams();
   const router = useRouter();
   const currentStatus = (params.status as string) || 'permits';
-  
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [applications, setApplications] = useState<Application[]>([]);
   const [stats, setStats] = useState<ApplicationStats>({
     total: 0,
@@ -208,50 +208,53 @@ export default function ApplicationsDynamicPage() {
             {content.subtitle}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsCreateDrawerOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all"
-          >
-            <Plus size={16} /> New Application
-          </button>
-          <TopRightControls />
-        </div>
+        <TopRightControls />
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {TABS.map((tab) => {
-          const isActive = currentStatus === tab.id;
-          let badgeCount = 0;
-          if (tab.id === 'permits') badgeCount = stats.total;
-          if (tab.id === 'submitted') badgeCount = stats.submitted;
-          if (tab.id === 'review') badgeCount = stats.under_review;
-          if (tab.id === 'conditional') badgeCount = stats.conditional;
-          if (tab.id === 'approved') badgeCount = stats.approved;
-          if (tab.id === 'rejected') badgeCount = stats.rejected;
-          if (tab.id === 'expired') badgeCount = stats.expired;
+      {/* Tabs & Action */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {TABS.map((tab) => {
+            const isActive = currentStatus === tab.id;
+            let badgeCount = 0;
+            if (tab.id === 'permits') badgeCount = stats.total;
+            if (tab.id === 'submitted') badgeCount = stats.submitted;
+            if (tab.id === 'review') badgeCount = stats.under_review;
+            if (tab.id === 'conditional') badgeCount = stats.conditional;
+            if (tab.id === 'approved') badgeCount = stats.approved;
+            if (tab.id === 'rejected') badgeCount = stats.rejected;
+            if (tab.id === 'expired') badgeCount = stats.expired;
 
-          return (
-            <button
-              key={tab.id}
-              onClick={() => router.push(`/government/dashboard/applications/${tab.id}`)}
-              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                isActive 
-                  ? 'bg-[#022C4F] text-white shadow-md' 
+            return (
+              <button
+                key={tab.id}
+                onClick={() => router.push(`/government/dashboard/applications/${tab.id}`)}
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${isActive
+                  ? 'bg-[#022C4F] text-white shadow-md'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon size={15} />
-              {tab.label}
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {badgeCount}
-              </span>
-            </button>
-          );
-        })}
+                  }`}
+              >
+                <tab.icon size={15} />
+                {tab.label}
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                  {badgeCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+
+      </div>
+
+      <div className="flex items-center justify-end shrink-0">
+        <button
+          onClick={() => setIsCreateDrawerOpen(true)}
+          className="flex items-center gap-2 px-5 py-2.5 mb-10 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all"
+        >
+          <Plus size={16} /> New Application
+        </button>
       </div>
 
       {/* Dynamic Overview Grid */}
@@ -278,8 +281,8 @@ export default function ApplicationsDynamicPage() {
           </h3>
           <div className="flex flex-col gap-2 mt-auto">
             {content.actions.map((action, idx) => (
-              <button 
-                key={idx} 
+              <button
+                key={idx}
                 onClick={() => handleQuickAction(action)}
                 className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group"
               >
@@ -298,19 +301,19 @@ export default function ApplicationsDynamicPage() {
           <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
             <FileText size={18} /> {content.title}
           </h2>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search by project, ref, or applicant..." 
+              <input
+                type="text"
+                placeholder="Search by project, ref, or applicant..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full sm:w-72 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               />
             </div>
-            <button 
+            <button
               onClick={fetchApplicationsData}
               className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
               title="Refresh Queue"
@@ -318,13 +321,13 @@ export default function ApplicationsDynamicPage() {
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
             <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1">
-              <button 
+              <button
                 onClick={() => setViewMode('list')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <List size={16} />
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('grid')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
               >
@@ -360,8 +363,8 @@ export default function ApplicationsDynamicPage() {
           ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
               {applications.map((app) => (
-                <div 
-                  key={app.id} 
+                <div
+                  key={app.id}
                   onClick={() => {
                     setSelectedApplication(app);
                     setIsDetailDrawerOpen(true);
@@ -379,7 +382,7 @@ export default function ApplicationsDynamicPage() {
                       <p className="text-xs text-slate-400 font-semibold">{app.application_reference}</p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 w-1/4">
                     <User size={14} className="text-slate-400 shrink-0" />
                     <span className="text-xs font-medium text-slate-600 line-clamp-1">{app.applicant_name}</span>
@@ -394,19 +397,18 @@ export default function ApplicationsDynamicPage() {
 
                   <div className="flex items-center gap-6 justify-end">
                     <div className="flex flex-col items-end">
-                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1 ${
-                        app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1 ${app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
                         app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                        app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                        app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
-                        app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
-                        'bg-slate-100 text-slate-700'
-                      }`}>
+                          app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
+                            app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
+                              app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
+                                'bg-slate-100 text-slate-700'
+                        }`}>
                         {app.status}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400">{app.application_type}</span>
                     </div>
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedApplication(app);
@@ -423,8 +425,8 @@ export default function ApplicationsDynamicPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {applications.map((app) => (
-                <div 
-                  key={app.id} 
+                <div
+                  key={app.id}
                   onClick={() => {
                     setSelectedApplication(app);
                     setIsDetailDrawerOpen(true);
@@ -435,23 +437,22 @@ export default function ApplicationsDynamicPage() {
                     <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                       <FileText size={20} />
                     </div>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                      app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
                       app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
-                      app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                      app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
-                      app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
-                      'bg-slate-100 text-slate-700'
-                    }`}>
+                        app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
+                          app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
+                            app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
+                              'bg-slate-100 text-slate-700'
+                      }`}>
                       {app.status}
                     </span>
                   </div>
-                  
+
                   <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1 line-clamp-1">
                     {app.project_name || app.title}
                   </h4>
                   <p className="text-xs text-slate-400 font-semibold mb-4">{app.application_reference}</p>
-                  
+
                   <div className="flex flex-col gap-2 mt-auto mb-4 text-[11px] text-slate-500">
                     <div className="flex items-center gap-2">
                       <User size={13} className="text-slate-400 shrink-0" />

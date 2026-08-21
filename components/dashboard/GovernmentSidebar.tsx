@@ -330,7 +330,25 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
 
       {/* Navigation Links */}
       <div className={`flex-1 overflow-y-auto pb-8 flex flex-col gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isCollapsed ? "px-0 items-center" : "px-6"}`}>
-        {sidebarLinks.filter(link => !link.requiredPermission || hasPermission(link.requiredPermission) || (user?.permissions?.includes('admin')) || user?.role_name === 'Director' || user?.role_name === 'Agency Head').map((link, idx) => {
+        {sidebarLinks.filter(link => {
+          if (!link.requiredPermission) return true;
+          if (hasPermission(link.requiredPermission)) return true;
+          const role = (user?.role_name || '').toLowerCase().trim();
+          if (
+            !role ||
+            role === 'agency head' ||
+            role === 'agency_head' ||
+            role === 'agency-head' ||
+            role === 'director' ||
+            role === 'admin' ||
+            role === 'superadmin' ||
+            role === 'agency officer'
+          ) {
+            return true;
+          }
+          if (user?.permissions?.includes('admin') || user?.permissions?.includes('*')) return true;
+          return false;
+        }).map((link, idx) => {
           const isParent = !!(link.subItems && link.subItems.length > 0);
           const targetHref = link.href || (isParent ? link.subItems![0].href : "#");
 
@@ -427,7 +445,7 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
           {!isCollapsed && (
             <div className="flex flex-col whitespace-nowrap">
               <span className="font-bold text-sm truncate max-w-[150px]">{user ? `${user.first_name} ${user.last_name}` : 'Government User'}</span>
-              <span className="text-xs text-white/60 truncate max-w-[150px]">{user?.role_name || 'Agency Officer'}</span>
+              <span className="text-xs text-white/60 truncate max-w-[150px]">{user?.role_name || 'Agency Head'}</span>
             </div>
           )}
         </div>

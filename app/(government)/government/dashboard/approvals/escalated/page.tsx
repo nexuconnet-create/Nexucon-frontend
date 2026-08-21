@@ -17,70 +17,13 @@ export default function EscalatedReviews() {
   const fetchEscalations = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getApprovalRequests({ status: 'Escalated' });
+      const data = await getApprovalRequests({ request_type: 'Escalated' });
       if (data.length > 0) {
         setEscalations(data);
       } else {
-        // Fallback default sample data
-        setEscalations([
-          {
-            id: "1",
-            request_reference: "ESC-892",
-            project: "1",
-            title: "Disputed Environmental NCR Penalty",
-            request_type: "Escalated",
-            discipline: "Legal",
-            bottleneck: "Legal Review Pending",
-            days_overdue: 14,
-            submitted_by_name: "EcoSolve Ltd.",
-            priority: "Critical",
-            status: "Escalated",
-            value_amount: 0,
-            doa_level_required: "Permanent Secretary / Director General",
-            description: "Subcontractor disputes the non-conformance penalty for dust control violation, citing inaccurate sensor data.",
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: 'Oct 01, 2026'
-          },
-          {
-            id: "2",
-            request_reference: "ESC-891",
-            project: "1",
-            title: "Blocked Foundation Permit (Zone B)",
-            request_type: "Escalated",
-            discipline: "Structural",
-            bottleneck: "Missing Geotech Sign-off",
-            days_overdue: 7,
-            submitted_by_name: "Apex Construction",
-            priority: "High",
-            status: "Escalated",
-            value_amount: 0,
-            doa_level_required: "Permanent Secretary / Director General",
-            description: "Cannot proceed with concrete pour until the independent geotechnical report is approved and signed.",
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: 'Oct 05, 2026'
-          },
-          {
-            id: "3",
-            request_reference: "ESC-889",
-            project: "1",
-            title: "Overdue HVAC Submittal Approval",
-            request_type: "Escalated",
-            discipline: "MEP",
-            bottleneck: "MEP Engineer Workload",
-            days_overdue: 5,
-            submitted_by_name: "Project Manager",
-            priority: "Medium",
-            status: "Escalated",
-            value_amount: 0,
-            doa_level_required: "Permanent Secretary / Director General",
-            description: "Standard review SLA of 10 days exceeded. Needs urgent reassignment to prevent schedule slippage.",
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: 'Oct 07, 2026'
-          }
-        ]);
+        const allData = await getApprovalRequests();
+        const escList = allData.filter(r => r.request_type === 'Escalated' || r.status === 'Escalated' || (r.value_amount && r.value_amount > 50000000));
+        setEscalations(escList);
       }
     } catch (err) {
       console.error("Failed to load escalations", err);

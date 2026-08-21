@@ -13,82 +13,13 @@ export default function TechnicalReviews() {
   const fetchReviews = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getApprovalRequests({ type: 'Technical' });
-      if (data.length > 0) {
-        setReviews(data);
-        if (!selectedReviewId || !data.find(r => r.id === selectedReviewId)) {
-          setSelectedReviewId(data[0].id);
-        }
-      } else {
-        // Fallback default technical reviews
-        const defaults: ApprovalRequest[] = [
-          {
-            id: "1",
-            request_reference: "TR-502",
-            project: "1",
-            title: "HVAC Zone 4 Load Calculations",
-            discipline: "MEP",
-            status: "In Review",
-            submitted_by_name: "M. Chen",
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Technical",
-            priority: "High",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: 'Oct 12, 2026',
-            criteria: [
-              { id: "c1", approval_request: "1", name: "Cooling Load Capacity", status: "pass", notes: "Exceeds minimum requirements by 12%.", order: 0 },
-              { id: "c2", approval_request: "1", name: "Ductwork Routing Clash", status: "fail", notes: "Clash detected at grid line C4 with structural beam.", order: 1 },
-              { id: "c3", approval_request: "1", name: "Energy Efficiency Ratio", status: "pass", notes: "Meets LEED v4 standards.", order: 2 },
-            ]
-          },
-          {
-            id: "2",
-            request_reference: "TR-501",
-            project: "1",
-            title: "Foundation Rebar Density (North)",
-            discipline: "Structural",
-            status: "Awaiting Fix",
-            submitted_by_name: "A. Rivera",
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Technical",
-            priority: "Critical",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: 'Oct 10, 2026',
-            criteria: [
-              { id: "c4", approval_request: "2", name: "Tensile Strength Limits", status: "pass", notes: "Acceptable for load-bearing specifications.", order: 0 },
-              { id: "c5", approval_request: "2", name: "Concrete Cover Depth", status: "fail", notes: "Insufficient cover depth at column C12.", order: 1 },
-            ]
-          },
-          {
-            id: "3",
-            request_reference: "TR-499",
-            project: "1",
-            title: "Facade Glazing Thermal Specs",
-            discipline: "Architecture",
-            status: "Approved",
-            submitted_by_name: "S. Jenkins",
-            value_amount: 0,
-            doa_level_required: "Director",
-            request_type: "Technical",
-            priority: "Medium",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 1,
-            created_at: 'Oct 05, 2026',
-            criteria: [
-              { id: "c6", approval_request: "3", name: "U-Value Targets", status: "pass", notes: "Verified against local building codes.", order: 0 },
-              { id: "c7", approval_request: "3", name: "Solar Heat Gain Coefficient", status: "pass", notes: "Compliant.", order: 1 },
-            ]
-          }
-        ];
-        setReviews(defaults);
-        setSelectedReviewId("1");
+      const data = await getApprovalRequests({ request_type: 'Technical' });
+      const activeList = data.length > 0 ? data : (await getApprovalRequests()).filter(r => r.request_type === 'Technical' || r.discipline === 'Structural' || r.discipline === 'MEP');
+      setReviews(activeList);
+      if (activeList.length > 0 && (!selectedReviewId || !activeList.find(r => r.id === selectedReviewId))) {
+        setSelectedReviewId(activeList[0].id);
+      } else if (activeList.length === 0) {
+        setSelectedReviewId(null);
       }
     } catch (err) {
       console.error("Failed to load technical reviews", err);

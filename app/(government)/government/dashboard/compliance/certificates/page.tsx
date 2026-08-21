@@ -21,17 +21,7 @@ export default function ComplianceCertificates() {
       if (searchQuery) params.search = searchQuery;
 
       const data = await getComplianceCertificates(params);
-      if (data.length > 0) {
-        setCertificates(data);
-      } else {
-        // Fallback default certificates
-        setCertificates([
-          { id: "1", certificate_reference: "CERT-ENV-2026", project: "1", title: "Environmental Clearance Certificate", authority: "Environmental Protection Agency (EPA)", issue_date: "2026-01-15", expiry_date: "2027-12-31", status: "Active", category: "Environmental", qr_verification_hash: "0x7b2a9f4c81b9e41", created_at: '' },
-          { id: "2", certificate_reference: "CERT-SAF-2025", project: "1", title: "Site Fire Safety Approval", authority: "National Fire Dept", issue_date: "2025-11-01", expiry_date: "2026-11-01", status: "Expiring Soon", category: "Safety", qr_verification_hash: "0x7b2a8d3e21c8e41", created_at: '' },
-          { id: "3", certificate_reference: "CERT-ISO-9001", project: "1", title: "ISO 9001: Quality Management", authority: "ISO Certification Board", issue_date: "2024-03-10", expiry_date: "2027-03-09", status: "Active", category: "Quality", qr_verification_hash: "0x7b2a4c1a59b2e41", created_at: '' },
-          { id: "4", certificate_reference: "CERT-STR-008", project: "1", title: "Structural Design Compliance", authority: "City Planning Comm.", issue_date: "2026-08-22", expiry_date: "2028-08-22", status: "Active", category: "Building Code", qr_verification_hash: "0x7b2a6f8b14c3e41", created_at: '' }
-        ]);
-      }
+      setCertificates(data);
     } catch (err) {
       console.error("Failed to load certificates", err);
     } finally {

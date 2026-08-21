@@ -18,49 +18,13 @@ export default function PermitDecisions() {
   const fetchPermits = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getApprovalRequests({ type: 'Permit' });
+      const data = await getApprovalRequests({ request_type: 'Permit' });
       if (data.length > 0) {
         setPermits(data);
       } else {
-        // Fallback default permit decisions
-        setPermits([
-          {
-            id: "1",
-            request_reference: "PRM-DEC-001",
-            project: "1",
-            title: "Riverside Commercial Complex",
-            request_type: "Permit",
-            discipline: "General",
-            priority: "Medium",
-            status: "Pending",
-            value_amount: 15000000,
-            doa_level_required: "Director",
-            submitted_by_name: "Riverside Holdings",
-            description: "The structural engineer must submit the revised load-bearing calculations for Floor 3 before construction begins.",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: ''
-          },
-          {
-            id: "2",
-            request_reference: "PRM-DEC-002",
-            project: "1",
-            title: "Downtown Metro Station",
-            request_type: "Permit",
-            discipline: "Structural",
-            priority: "Critical",
-            status: "Pending",
-            value_amount: 250000000,
-            doa_level_required: "Permanent Secretary / Director General",
-            submitted_by_name: "Metro Transit Authority",
-            description: "This project exceeds the standard ₦50M threshold. It requires Director-level sign-off before the permit can be issued.",
-            days_overdue: 0,
-            signatories_required: 1,
-            signatories_completed: 0,
-            created_at: ''
-          }
-        ]);
+        const allData = await getApprovalRequests();
+        const permitList = allData.filter(r => r.request_type === 'Permit' || r.discipline === 'Legal');
+        setPermits(permitList.length > 0 ? permitList : allData);
       }
     } catch (err) {
       console.error("Failed to load permit decisions", err);

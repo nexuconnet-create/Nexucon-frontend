@@ -131,93 +131,106 @@ export interface BIMStats {
   };
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Functions
 export const getBIMModels = async (params?: Record<string, any>): Promise<BIMModel[]> => {
   const response = await api.get('/bim/models/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMModel>(response);
 };
 
 export const getBIMModelById = async (id: string): Promise<BIMModel> => {
   const response = await api.get(`/bim/models/${id}/`);
-  return response.data;
+  return unwrapItem<BIMModel>(response);
 };
 
 export const createBIMModel = async (data: Partial<BIMModel>): Promise<BIMModel> => {
   const response = await api.post('/bim/models/', data);
-  return response.data;
+  return unwrapItem<BIMModel>(response);
 };
 
 export const certifyBIMModel = async (id: string, data?: { hash_signature?: string }): Promise<BIMModel> => {
   const response = await api.post(`/bim/models/${id}/certify/`, data || {});
-  return response.data;
+  return unwrapItem<BIMModel>(response);
 };
 
 export const requestBIMChanges = async (id: string, data: { reason: string }): Promise<BIMModel> => {
   const response = await api.post(`/bim/models/${id}/request-changes/`, data);
-  return response.data;
+  return unwrapItem<BIMModel>(response);
 };
 
 export const createBIMVersion = async (id: string, data: Partial<BIMModelVersion>): Promise<BIMModelVersion> => {
   const response = await api.post(`/bim/models/${id}/create-version/`, data);
-  return response.data;
+  return unwrapItem<BIMModelVersion>(response);
 };
 
 export const getBIMVersions = async (params?: Record<string, any>): Promise<BIMModelVersion[]> => {
   const response = await api.get('/bim/versions/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMModelVersion>(response);
 };
 
 export const compareBIMVersions = async (versionA: string, versionB: string): Promise<any> => {
   const response = await api.post('/bim/versions/compare/', { version_a: versionA, version_b: versionB });
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const getBIMClashes = async (params?: Record<string, any>): Promise<BIMClash[]> => {
   const response = await api.get('/bim/clashes/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMClash>(response);
 };
 
 export const runClashMatrix = async (data: { project: string; primary_model: string; secondary_model?: string }): Promise<BIMClash> => {
   const response = await api.post('/bim/clashes/run-matrix/', data);
-  return response.data;
+  return unwrapItem<BIMClash>(response);
 };
 
 export const convertClashToSiteIssue = async (id: string): Promise<any> => {
   const response = await api.post(`/bim/clashes/${id}/convert-to-issue/`);
-  return response.data;
+  return unwrapItem<any>(response);
 };
 
 export const resolveBIMClash = async (id: string, data?: { resolution_notes?: string }): Promise<BIMClash> => {
   const response = await api.post(`/bim/clashes/${id}/resolve/`, data || {});
-  return response.data;
+  return unwrapItem<BIMClash>(response);
 };
 
 export const getBIMAnnotations = async (params?: Record<string, any>): Promise<BIMAnnotation[]> => {
   const response = await api.get('/bim/annotations/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMAnnotation>(response);
 };
 
 export const createBIMAnnotation = async (data: Partial<BIMAnnotation>): Promise<BIMAnnotation> => {
   const response = await api.post('/bim/annotations/', data);
-  return response.data;
+  return unwrapItem<BIMAnnotation>(response);
 };
 
 export const resolveBIMAnnotation = async (id: string, data?: { notes?: string }): Promise<BIMAnnotation> => {
   const response = await api.post(`/bim/annotations/${id}/resolve/`, data || {});
-  return response.data;
+  return unwrapItem<BIMAnnotation>(response);
 };
 
 export const getBIMProgressValidations = async (params?: Record<string, any>): Promise<BIMProgressValidation[]> => {
   const response = await api.get('/bim/progress-validation/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<BIMProgressValidation>(response);
 };
 
 export const runTimelineSimulation = async (projectId: string): Promise<BIMProgressValidation> => {
   const response = await api.post('/bim/progress-validation/simulate/', { project: projectId });
-  return response.data;
+  return unwrapItem<BIMProgressValidation>(response);
 };
 
 export const getBIMStats = async (): Promise<BIMStats> => {
   const response = await api.get('/bim/stats/overview/');
-  return response.data;
+  return unwrapItem<BIMStats>(response);
 };

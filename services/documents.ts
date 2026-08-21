@@ -96,73 +96,86 @@ export interface DocumentStats {
   templates_count: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Functions
 export const getDocuments = async (params?: Record<string, any>): Promise<Document[]> => {
   const response = await api.get('/documents/documents/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<Document>(response);
 };
 
 export const getDocumentById = async (id: string): Promise<Document> => {
   const response = await api.get(`/documents/documents/${id}/`);
-  return response.data;
+  return unwrapItem<Document>(response);
 };
 
 export const createDocument = async (data: Partial<Document>): Promise<Document> => {
   const response = await api.post('/documents/documents/', data);
-  return response.data;
+  return unwrapItem<Document>(response);
 };
 
 export const toggleStarDocument = async (id: string): Promise<Document> => {
   const response = await api.post(`/documents/documents/${id}/star/`);
-  return response.data;
+  return unwrapItem<Document>(response);
 };
 
 export const applyDocumentStamp = async (id: string, data?: { comments?: string }): Promise<DocumentApproval> => {
   const response = await api.post(`/documents/documents/${id}/stamp/`, data || {});
-  return response.data;
+  return unwrapItem<DocumentApproval>(response);
 };
 
 export const reviewDocument = async (id: string, data: { status: 'APPROVED' | 'REJECTED'; comments?: string }): Promise<DocumentApproval> => {
   const response = await api.post(`/documents/documents/${id}/review/`, data);
-  return response.data;
+  return unwrapItem<DocumentApproval>(response);
 };
 
 export const createDocumentVersion = async (id: string, data: Partial<DocumentVersion>): Promise<DocumentVersion> => {
   const response = await api.post(`/documents/documents/${id}/create-version/`, data);
-  return response.data;
+  return unwrapItem<DocumentVersion>(response);
 };
 
 export const getDocumentVersions = async (params?: Record<string, any>): Promise<DocumentVersion[]> => {
   const response = await api.get('/documents/versions/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DocumentVersion>(response);
 };
 
 export const getDocumentApprovals = async (params?: Record<string, any>): Promise<DocumentApproval[]> => {
   const response = await api.get('/documents/approvals/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DocumentApproval>(response);
 };
 
 export const getDocumentTemplates = async (params?: Record<string, any>): Promise<DocumentTemplate[]> => {
   const response = await api.get('/documents/templates/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DocumentTemplate>(response);
 };
 
 export const createDocumentTemplate = async (data: Partial<DocumentTemplate>): Promise<DocumentTemplate> => {
   const response = await api.post('/documents/templates/', data);
-  return response.data;
+  return unwrapItem<DocumentTemplate>(response);
 };
 
 export const getDocumentFolders = async (params?: Record<string, any>): Promise<DocumentFolder[]> => {
   const response = await api.get('/documents/folders/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<DocumentFolder>(response);
 };
 
 export const createDocumentFolder = async (data: Partial<DocumentFolder>): Promise<DocumentFolder> => {
   const response = await api.post('/documents/folders/', data);
-  return response.data;
+  return unwrapItem<DocumentFolder>(response);
 };
 
 export const getDocumentStats = async (): Promise<DocumentStats> => {
   const response = await api.get('/documents/stats/overview/');
-  return response.data;
+  return unwrapItem<DocumentStats>(response);
 };

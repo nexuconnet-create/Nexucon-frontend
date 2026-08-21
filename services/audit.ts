@@ -50,28 +50,41 @@ export interface AuditSummary {
   failed_logins_24h: number;
 }
 
+const unwrapList = <T>(res: any): T[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.results)) return res.results;
+  return [];
+};
+
+const unwrapItem = <T>(res: any): T => {
+  if (res && res.data !== undefined && res.data !== null) return res.data;
+  return res as T;
+};
+
 // API Methods
 export const getAuditEvents = async (params?: Record<string, any>): Promise<AuditEvent[]> => {
   const response = await api.get('/audit/events/', { params });
-  return Array.isArray(response.data) ? response.data : response.data.results || [];
+  return unwrapList<AuditEvent>(response);
 };
 
 export const getAuditEventDetail = async (id: string): Promise<AuditEvent> => {
   const response = await api.get(`/audit/events/${id}/`);
-  return response.data;
+  return unwrapItem<AuditEvent>(response);
 };
 
 export const getAuditEventDiff = async (id: string): Promise<AuditDiff> => {
   const response = await api.get(`/audit/events/${id}/diff/`);
-  return response.data;
+  return unwrapItem<AuditDiff>(response);
 };
 
 export const verifyAuditHashChain = async (): Promise<HashChainVerification> => {
   const response = await api.post('/audit/events/verify-chain/');
-  return response.data;
+  return unwrapItem<HashChainVerification>(response);
 };
 
 export const getAuditSummary = async (): Promise<AuditSummary> => {
   const response = await api.get('/audit/events/summary/');
-  return response.data;
+  return unwrapItem<AuditSummary>(response);
 };
