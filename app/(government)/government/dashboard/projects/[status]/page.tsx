@@ -229,11 +229,8 @@ export default function ProjectsDynamicPage() {
 
       <div className="flex items-center justify-end shrink-0">
         <button
-          onClick={() => {
-            setSelectedQuickAction("Register New Project");
-            setIsQuickActionDrawerOpen(true);
-          }}
-          className="flex items-center gap-2  mb-10 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all"
+          onClick={() => router.push('/government/dashboard/projects/new')}
+          className="flex items-center gap-2 mb-10 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
         >
           <Plus size={16} /> Register Project
         </button>
