@@ -32,23 +32,22 @@ export default function IssueStopWorkModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (project?.id) {
-      setSelectedProjectId(project.id);
-    } else if (inspection?.project) {
-      setSelectedProjectId(inspection.project);
-    } else if (projectsList.length > 0) {
-      setSelectedProjectId(projectsList[0].id);
-    } else {
-      getProjects()
-        .then(res => {
-          const list = Array.isArray(res) ? res : ((res as any).results || []);
-          setAvailableProjects(list);
-          if (list.length > 0 && !selectedProjectId) {
-            setSelectedProjectId(list[0].id);
-          }
-        })
-        .catch(err => console.error("Failed to load projects", err));
-    }
+    getProjects()
+      .then(res => {
+        const list = Array.isArray(res) ? res : ((res as any).results || []);
+        setAvailableProjects(list);
+        if (project?.id) {
+          setSelectedProjectId(project.id);
+        } else if (typeof project === 'string') {
+          setSelectedProjectId(project);
+        } else if (inspection?.project) {
+          setSelectedProjectId(inspection.project);
+        } else if (list.length > 0 && !selectedProjectId) {
+          const activeProj = list.find((p: Project) => p.status === 'ACTIVE') || list[0];
+          setSelectedProjectId(activeProj.id);
+        }
+      })
+      .catch(err => console.error("Failed to load projects", err));
   }, [isOpen, inspection, project, projectsList]);
 
   if (!isOpen) return null;
@@ -57,7 +56,8 @@ export default function IssueStopWorkModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProjectId && !inspection?.id) {
+    const targetProject = selectedProjectId || (typeof project === 'string' ? project : project?.id) || inspection?.project || availableProjects[0]?.id;
+    if (!targetProject && !inspection?.id) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a construction project site', type: 'error' } }));
       return;
     }
@@ -76,7 +76,7 @@ export default function IssueStopWorkModal({
         });
       } else {
         swo = await createStopWorkOrder({
-          project: selectedProjectId,
+          project: targetProject,
           reason: reason.trim(),
           severity,
           inspection: inspection?.id
@@ -85,7 +85,7 @@ export default function IssueStopWorkModal({
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { 
-          message: `Stop-Work Order ${swo.order_number || 'Enforced'} successfully issued. Site activities suspended in database.`, 
+          message: `Stop-Work Order ${swo?.order_number || 'Enforced'} successfully issued. Site activities suspended in database.`, 
           type: 'success' 
         } 
       }));
@@ -93,7 +93,7 @@ export default function IssueStopWorkModal({
       onClose();
       if (onSuccess) onSuccess(swo);
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to issue Stop-Work Order';
+      const msg = err.response?.data?.message || err.message || 'Failed to issue Stop-Work Order';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
