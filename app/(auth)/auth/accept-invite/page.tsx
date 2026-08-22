@@ -61,7 +61,17 @@ function AcceptInviteContent() {
 
     setIsSubmitting(true);
     try {
-      // 1. Activate in backend database and set the permanent/temporary password
+      // 1. Cache user credentials on device for resilient authentication
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`nexucon_user_credentials_${email.trim().toLowerCase()}`, JSON.stringify({
+          email: email.trim(),
+          password,
+          name: fullName.trim(),
+          role
+        }));
+      }
+
+      // 2. Activate in backend database and set the permanent/temporary password
       try {
         await api.post('/settings/users/accept-invite/', {
           email: email.trim(),
@@ -74,7 +84,7 @@ function AcceptInviteContent() {
         console.warn('Backend activation endpoint notice:', backendErr);
       }
 
-      // 2. Perform official login
+      // 3. Perform official login
       const loginSuccess = await login({ email: email.trim(), password });
       
       setIsSuccess(true);
