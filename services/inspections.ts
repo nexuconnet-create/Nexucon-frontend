@@ -188,7 +188,13 @@ export const issueStopWorkOrder = async (
 
 export const createReInspection = async (
   id: string,
-  payload?: { scheduled_date?: string }
+  payload?: {
+    scheduled_date?: string;
+    inspector_name?: string;
+    inspector_id?: string;
+    notes?: string;
+    priority?: string;
+  }
 ): Promise<Inspection> => {
   const res: any = await api.post(`/inspections/${id}/create-reinspection/`, payload || {});
   return res.data || res;
