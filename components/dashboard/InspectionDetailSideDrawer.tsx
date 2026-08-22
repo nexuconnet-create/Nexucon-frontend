@@ -23,6 +23,7 @@ interface InspectionDetailSideDrawerProps {
   onLogFinding?: (inspection: Inspection) => void;
   onIssueStopWork?: (inspection: Inspection) => void;
   onAssignInspector?: (inspection: Inspection) => void;
+  onScheduleReInspection?: (inspection: Inspection) => void;
 }
 
 export default function InspectionDetailSideDrawer({
@@ -32,7 +33,8 @@ export default function InspectionDetailSideDrawer({
   onUpdated,
   onLogFinding,
   onIssueStopWork,
-  onAssignInspector
+  onAssignInspector,
+  onScheduleReInspection
 }: InspectionDetailSideDrawerProps) {
   const router = useRouter();
   const [currentInspection, setCurrentInspection] = useState<Inspection | null>(inspection);
@@ -679,7 +681,13 @@ export default function InspectionDetailSideDrawer({
             {(currentInspection.status === 'COMPLETED' || currentInspection.status === 'FAILED' || currentInspection.status === 'RE_INSPECTION_REQUIRED') && (
               <button
                 disabled={isSubmitting}
-                onClick={handleCreateReInspection}
+                onClick={() => {
+                  if (onScheduleReInspection) {
+                    onScheduleReInspection(currentInspection);
+                  } else {
+                    handleCreateReInspection();
+                  }
+                }}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Calendar size={14} /> Schedule Re-Inspection

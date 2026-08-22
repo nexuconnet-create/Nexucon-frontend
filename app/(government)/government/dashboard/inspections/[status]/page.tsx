@@ -12,6 +12,7 @@ import { getInspections, getInspectionStats, Inspection, InspectionStats } from 
 import InspectionDetailSideDrawer from '@/components/dashboard/InspectionDetailSideDrawer';
 import CreateInspectionSideDrawer from '@/components/dashboard/CreateInspectionSideDrawer';
 import AssignInspectorSideDrawer from '@/components/dashboard/AssignInspectorSideDrawer';
+import ScheduleReInspectionModal from '@/components/dashboard/ScheduleReInspectionModal';
 import LogFindingModal from '@/components/dashboard/LogFindingModal';
 import IssueStopWorkModal from '@/components/dashboard/IssueStopWorkModal';
 import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
@@ -52,6 +53,7 @@ export default function InspectionsDynamicPage() {
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
   const [isAssignInspectorDrawerOpen, setIsAssignInspectorDrawerOpen] = useState(false);
+  const [isScheduleReInspectionModalOpen, setIsScheduleReInspectionModalOpen] = useState(false);
   const [isFindingModalOpen, setIsFindingModalOpen] = useState(false);
   const [isStopWorkModalOpen, setIsStopWorkModalOpen] = useState(false);
   const [isRequestDocsModalOpen, setIsRequestDocsModalOpen] = useState(false);
@@ -173,7 +175,11 @@ export default function InspectionsDynamicPage() {
     } else if (action.includes("Schedule Inspection") || action.includes("Create Inspection") || action.includes("📅") || action.includes("➕")) {
       setIsCreateDrawerOpen(true);
     } else if (action.includes("Schedule Re-Inspection") || action.includes("🔄")) {
-      setIsCreateDrawerOpen(true);
+      if (inspections.length > 0) {
+        const initialCandidate = inspections.find(i => i.status === 'FAILED' || i.status === 'RE_INSPECTION_REQUIRED' || (i.findings && i.findings.length > 0)) || inspections[0];
+        setSelectedInspection(initialCandidate);
+      }
+      setIsScheduleReInspectionModalOpen(true);
     } else if (action.includes("Stop-Work") || action.includes("🛑")) {
       if (currentStatus === 'stop-work') {
         router.push('/government/dashboard/inspections/stop-work');
@@ -516,6 +522,29 @@ export default function InspectionsDynamicPage() {
         onAssignInspector={(insp) => {
           setSelectedInspection(insp);
           setIsAssignInspectorDrawerOpen(true);
+        }}
+        onScheduleReInspection={(insp) => {
+          setSelectedInspection(insp);
+          setIsScheduleReInspectionModalOpen(true);
+        }}
+      />
+
+      <ScheduleReInspectionModal
+        isOpen={isScheduleReInspectionModalOpen}
+        onClose={() => setIsScheduleReInspectionModalOpen(false)}
+        inspection={selectedInspection}
+        inspectionsList={inspections}
+        onSuccess={(newReInspection) => {
+          if (newReInspection) {
+            setInspections(prev => [newReInspection, ...prev]);
+            setStats(prev => ({
+              ...prev,
+              re_inspections: prev.re_inspections + 1,
+              schedule: prev.schedule + 1,
+              total: prev.total + 1
+            }));
+          }
+          fetchInspectionsData();
         }}
       />
 
