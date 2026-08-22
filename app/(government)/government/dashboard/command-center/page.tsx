@@ -705,7 +705,10 @@ export default function GovernmentCommandCenter() {
                     <span className="text-xs text-purple-600 font-medium">{quickActionsSummary.applications_pending_review} pending</span>
                   )}
                 </Link>
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-orange-500 hover:bg-orange-50 transition-all group items-start">
+                <button 
+                  onClick={() => router.push('/government/dashboard/inspections/requests')}
+                  className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-orange-500 hover:bg-orange-50 transition-all group items-start cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0"><Calendar size={14} /></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-orange-700">Schedule Inspection</span>
@@ -714,7 +717,10 @@ export default function GovernmentCommandCenter() {
                     <span className="text-xs text-orange-600 font-medium">{quickActionsSummary.inspections_due} due</span>
                   )}
                 </button>
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 transition-all group items-start">
+                <button 
+                  onClick={() => router.push('/government/dashboard/integrations/tersus')}
+                  className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 transition-all group items-start cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><MapPin size={14} /></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-emerald-700">Verify Site</span>
@@ -723,7 +729,10 @@ export default function GovernmentCommandCenter() {
                     <span className="text-xs text-emerald-600 font-medium">{quickActionsSummary.site_verifications_pending} pending</span>
                   )}
                 </button>
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-indigo-500 hover:bg-indigo-50 transition-all group items-start">
+                <button 
+                  onClick={() => router.push('/government/dashboard/bim/review')}
+                  className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-indigo-500 hover:bg-indigo-50 transition-all group items-start cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0"><Box size={14} /></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-indigo-700">Review BIM Model</span>
@@ -732,7 +741,10 @@ export default function GovernmentCommandCenter() {
                     <span className="text-xs text-indigo-600 font-medium">{quickActionsSummary.bim_models_pending_review} pending</span>
                   )}
                 </button>
-                <button className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-sky-500 hover:bg-sky-50 transition-all group items-start">
+                <button 
+                  onClick={() => router.push('/government/dashboard/analytics/performance')}
+                  className="p-3 border border-slate-200 rounded-xl flex flex-col gap-2 hover:border-sky-500 hover:bg-sky-50 transition-all group items-start cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-sky-100 text-sky-600 flex items-center justify-center shrink-0"><BarChart size={14} /></div>
                     <span className="text-sm font-bold text-[#022C4F] group-hover:text-sky-700">Generate Report</span>
@@ -780,17 +792,29 @@ export default function GovernmentCommandCenter() {
               </div>
             </div>
 
-            <button className="w-full mt-6 py-3 bg-white text-[#022C4F] rounded-xl text-sm font-bold hover:bg-blue-50 transition-colors shadow-lg">
+            <button 
+              onClick={() => router.push('/government/dashboard/projects/all')}
+              className="w-full mt-6 py-3 bg-white text-[#022C4F] rounded-xl text-sm font-bold hover:bg-blue-50 transition-colors shadow-lg cursor-pointer"
+            >
               View Project Portfolio
             </button>
             <div className="mt-3 flex flex-col gap-2">
-              <button className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors">
+              <button 
+                onClick={() => router.push('/government/dashboard/approvals/pending')}
+                className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors cursor-pointer"
+              >
                 Review Pending Approvals
               </button>
-              <button className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors">
+              <button 
+                onClick={() => router.push('/government/dashboard/inspections/requests')}
+                className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors cursor-pointer"
+              >
                 Schedule Inspection
               </button>
-              <button className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors">
+              <button 
+                onClick={() => router.push('/government/dashboard/monitoring/live')}
+                className="w-full py-2.5 border border-white/20 text-white rounded-xl text-xs font-semibold hover:bg-white/10 transition-colors cursor-pointer"
+              >
                 Open Site Monitoring
               </button>
             </div>
@@ -854,7 +878,12 @@ export default function GovernmentCommandCenter() {
                 <div className="text-xs text-slate-500 italic py-2 ml-8">No recent activity</div>
               )}
             </div>
-            <button className="mt-4 text-xs font-bold text-[#022C4F] hover:text-blue-600 transition-colors w-full text-center">View All Activity</button>
+            <button 
+              onClick={() => router.push('/government/dashboard/audit/activity')}
+              className="mt-4 text-xs font-bold text-[#022C4F] hover:text-blue-600 transition-colors w-full text-center cursor-pointer"
+            >
+              View All Activity
+            </button>
           </div>
 
         </div>
