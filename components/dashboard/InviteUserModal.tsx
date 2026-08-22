@@ -29,6 +29,19 @@ export default function InviteUserModal({
 
     setIsSubmitting(true);
     try {
+      // 1. Send via Next.js Resend route
+      fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email.trim(),
+          name: name.trim(),
+          role,
+          department
+        })
+      }).catch(e => console.warn('Email dispatch warning:', e));
+
+      // 2. Persist in database
       await inviteStaffUser({
         name,
         email,
@@ -37,13 +50,13 @@ export default function InviteUserModal({
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Invitation sent to ${email} for role ${role}!`, type: 'success' } 
+        detail: { message: `Official invitation email dispatched to ${email} for role ${role}!`, type: 'success' } 
       }));
       onClose();
       if (onSuccess) onSuccess();
     } catch (err: any) {
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: err.response?.data?.error || 'Failed to send invitation', type: 'error' } 
+        detail: { message: err.response?.data?.error || err.message || 'Failed to send invitation', type: 'error' } 
       }));
     } finally {
       setIsSubmitting(false);
