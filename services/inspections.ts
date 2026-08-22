@@ -186,6 +186,17 @@ export const issueStopWorkOrder = async (
   return res.data || res;
 };
 
+export const createStopWorkOrder = async (payload: {
+  project: string;
+  reason: string;
+  severity?: string;
+  inspection?: string;
+  finding?: string;
+}): Promise<StopWorkOrder> => {
+  const res: any = await api.post('/inspections/stop-work-orders/', payload);
+  return res.data || res;
+};
+
 export const createReInspection = async (
   id: string,
   payload?: {

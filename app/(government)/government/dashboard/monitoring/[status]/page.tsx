@@ -96,9 +96,9 @@ export default function MonitoringDynamicPage() {
           title: "Site Progress & Programme",
           subtitle: "Monitor physical construction progress against approved project schedules and reported milestone completion.",
           overview: [
-            { label: "On Schedule Sites", value: stats?.progress?.on_schedule ?? 32, icon: CheckCircle, color: "emerald" },
-            { label: "Delayed Milestones", value: stats?.progress?.delayed ?? 5, icon: AlertCircle, color: "red" },
-            { label: "Milestones Reached", value: stats?.progress?.milestone_reached ?? 12, icon: Activity, color: "blue" },
+            { label: "On Schedule Sites", value: stats?.progress?.on_schedule ?? 0, icon: CheckCircle, color: "emerald" },
+            { label: "Delayed Milestones", value: stats?.progress?.delayed ?? 0, icon: AlertCircle, color: "red" },
+            { label: "Milestones Reached", value: stats?.progress?.milestone_reached ?? 0, icon: Activity, color: "blue" },
             { label: "Progress Reports", value: stats?.progress?.progress_reports ?? dailyUpdates.length, icon: FileText, color: "slate" },
           ],
           actions: ["📊 Update Site Progress", "View Progress Details", "Flag Delayed Progress", "Review Progress Report"]
@@ -109,9 +109,9 @@ export default function MonitoringDynamicPage() {
           subtitle: "Centralized record of observations captured during government site visits, audits, and monitoring activities.",
           overview: [
             { label: "Active Observations", value: stats?.observations?.active ?? observations.length, icon: Eye, color: "blue" },
-            { label: "Quality Points", value: stats?.observations?.quality ?? 5, icon: ShieldCheck, color: "orange" },
-            { label: "Safety Concerns", value: stats?.observations?.safety ?? 3, icon: AlertTriangle, color: "red" },
-            { label: "Resolved", value: stats?.observations?.resolved ?? 24, icon: CheckCircle, color: "emerald" },
+            { label: "Quality Points", value: stats?.observations?.quality ?? 0, icon: ShieldCheck, color: "orange" },
+            { label: "Safety Concerns", value: stats?.observations?.safety ?? 0, icon: AlertTriangle, color: "red" },
+            { label: "Resolved", value: stats?.observations?.resolved ?? 0, icon: CheckCircle, color: "emerald" },
           ],
           actions: ["📝 Add Field Observation", "Create Corrective Action", "Review Open Findings"]
         };
@@ -121,9 +121,9 @@ export default function MonitoringDynamicPage() {
           subtitle: "Track construction defects, safety risks, non-conformances, and deviations requiring government resolution.",
           overview: [
             { label: "Open Issues", value: stats?.issues?.open ?? issues.length, icon: FolderOpen, color: "amber" },
-            { label: "Critical Severity", value: stats?.issues?.critical ?? 2, icon: AlertCircle, color: "red" },
-            { label: "Under Review", value: stats?.issues?.under_review ?? 4, icon: Clock, color: "blue" },
-            { label: "Resolved Issues", value: stats?.issues?.resolved ?? 36, icon: CheckCircle, color: "emerald" },
+            { label: "Critical Severity", value: stats?.issues?.critical ?? 0, icon: AlertCircle, color: "red" },
+            { label: "Under Review", value: stats?.issues?.under_review ?? 0, icon: Clock, color: "blue" },
+            { label: "Resolved Issues", value: stats?.issues?.resolved ?? 0, icon: CheckCircle, color: "emerald" },
           ],
           actions: ["⚠️ Report Site Issue", "Review Critical Defects", "Escalate to Directorate"]
         };
@@ -132,10 +132,10 @@ export default function MonitoringDynamicPage() {
           title: "Construction Milestones Schedule",
           subtitle: "Track major construction programme milestones against approved structural milestones and building code phases.",
           overview: [
-            { label: "Due This Week", value: stats?.milestones?.due_this_week ?? 4, icon: Calendar, color: "amber" },
-            { label: "Verified Milestones", value: stats?.milestones?.verified ?? 15, icon: ShieldCheck, color: "emerald" },
-            { label: "Delayed Milestones", value: stats?.milestones?.delayed ?? 3, icon: AlertTriangle, color: "red" },
-            { label: "Upcoming Phases", value: stats?.milestones?.upcoming ?? 18, icon: Clock, color: "blue" },
+            { label: "Due This Week", value: stats?.milestones?.due_this_week ?? 0, icon: Calendar, color: "amber" },
+            { label: "Verified Milestones", value: stats?.milestones?.verified ?? 0, icon: ShieldCheck, color: "emerald" },
+            { label: "Delayed Milestones", value: stats?.milestones?.delayed ?? 0, icon: AlertTriangle, color: "red" },
+            { label: "Upcoming Phases", value: stats?.milestones?.upcoming ?? 0, icon: Clock, color: "blue" },
           ],
           actions: ["🏗 Verify Milestone", "Flag Milestone Delay", "Add Construction Milestone"]
         };
@@ -144,10 +144,10 @@ export default function MonitoringDynamicPage() {
           title: "Site Verification & GNSS Boundary",
           subtitle: "Verify physical site conditions, project coordinates, and construction boundaries with GNSS RTK rover telemetry.",
           overview: [
-            { label: "Pending Verification", value: stats?.verification?.pending ?? 3, icon: Clock, color: "amber" },
-            { label: "Verified Coordinates", value: stats?.verification?.verified ?? 28, icon: CheckCircle, color: "emerald" },
-            { label: "Variance Detected", value: stats?.verification?.variance_detected ?? 2, icon: AlertTriangle, color: "red" },
-            { label: "Active Rovers", value: stats?.verification?.active_devices ?? 6, icon: Activity, color: "blue" },
+            { label: "Pending Verification", value: stats?.verification?.pending ?? 0, icon: Clock, color: "amber" },
+            { label: "Verified Coordinates", value: stats?.verification?.verified ?? 0, icon: CheckCircle, color: "emerald" },
+            { label: "Variance Detected", value: stats?.verification?.variance_detected ?? 0, icon: AlertTriangle, color: "red" },
+            { label: "Active Rovers", value: stats?.verification?.active_devices ?? 0, icon: Activity, color: "blue" },
           ],
           actions: ["📐 Start Site Verification", "Capture Coordinates", "Calibrate Rover Positioning"]
         };
@@ -156,10 +156,10 @@ export default function MonitoringDynamicPage() {
           title: "Live Site View (Daily Updates)",
           subtitle: "Monitor daily photo updates from site supervisors and scheduled comprehensive drone and Trimble surveys.",
           overview: [
-            { label: "Active Sites", value: stats?.live?.active_sites ?? 12, icon: Activity, color: "emerald" },
+            { label: "Active Sites", value: stats?.live?.active_sites ?? 0, icon: Activity, color: "emerald" },
             { label: "Daily Photos Uploaded", value: stats?.live?.daily_photos ?? dailyUpdates.length, icon: Clock, color: "blue" },
-            { label: "Drone Surveys", value: stats?.live?.drone_surveys ?? 4, icon: MapPin, color: "purple" },
-            { label: "Active Observations", value: stats?.live?.active_observations ?? 6, icon: Eye, color: "indigo" },
+            { label: "Drone Surveys", value: stats?.live?.drone_surveys ?? 0, icon: MapPin, color: "purple" },
+            { label: "Active Observations", value: stats?.live?.active_observations ?? 0, icon: Eye, color: "indigo" },
           ],
           actions: ["📍 View Latest Daily Photos", "Upload Daily Site Update", "Add Field Observation", "Report Site Issue"]
         };
@@ -342,28 +342,103 @@ export default function MonitoringDynamicPage() {
                   <div className="py-16 text-center text-slate-400">
                     <Camera size={40} className="mx-auto mb-3 text-slate-300" />
                     <p className="text-sm font-bold text-slate-700">No site updates logged yet.</p>
-                    <button onClick={() => setIsUpdateDrawerOpen(true)} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700">
+                    <button onClick={() => setIsUpdateDrawerOpen(true)} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer">
                       Publish First Update
                     </button>
+                  </div>
+                ) : viewMode === 'grid' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {dailyUpdates.map(update => (
+                      <div key={update.id} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group">
+                        {/* Site Photo Header */}
+                        <div className="relative h-48 bg-slate-100 overflow-hidden">
+                          {update.photos && update.photos.length > 0 ? (
+                            <img 
+                              src={update.photos[0]} 
+                              alt={update.project_name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100">
+                              <Camera size={32} className="mb-1 text-slate-300" />
+                              <span className="text-xs font-bold">No Photos Attached</span>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                          
+                          <div className="absolute top-3 left-3 flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase bg-white/90 text-[#022C4F] backdrop-blur-sm shadow-sm">
+                              {update.update_type.replace('_', ' ')}
+                            </span>
+                            {update.photos && update.photos.length > 1 && (
+                              <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-black/60 text-white backdrop-blur-sm flex items-center gap-1">
+                                <Camera size={11} /> +{update.photos.length - 1}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="absolute bottom-3 left-3 right-3 text-white">
+                            <h4 className="text-sm font-extrabold line-clamp-1 drop-shadow-sm">{update.project_name}</h4>
+                            <p className="text-[11px] text-white/80 font-medium flex items-center gap-1 mt-0.5">
+                              <MapPin size={11} /> {update.project_location || 'Lagos, Nigeria'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Body Details */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                            {update.work_summary || 'Daily site operations and structural progress recorded.'}
+                          </p>
+
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                              <span>Verified Progress</span>
+                              <span className="text-emerald-600 font-extrabold">{update.progress_percentage}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${update.progress_percentage}%` }} />
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <User size={12} className="text-slate-400" />
+                              <span className="truncate max-w-[120px]">{update.reported_by_name?.split(' ')[0] || 'Site Lead'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 font-semibold text-slate-400">
+                              <Clock size={12} />
+                              <span>{new Date(update.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
                     {dailyUpdates.map(update => (
                       <div key={update.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
                         <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <Camera size={20} />
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                            {update.photos && update.photos.length > 0 ? (
+                              <img src={update.photos[0]} alt={update.project_name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-blue-600 bg-blue-50">
+                                <Camera size={20} />
+                              </div>
+                            )}
                           </div>
                           <div>
                             <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{update.project_name}</h4>
-                            <p className="text-xs text-slate-400 font-semibold">{update.update_reference} • {update.update_type}</p>
+                            <p className="text-xs text-slate-400 font-semibold">{update.update_reference} • {update.update_type.replace('_', ' ')}</p>
                           </div>
                         </div>
 
                         <div className="w-1/4">
                           <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
                             <span>Site Progress</span>
-                            <span>{update.progress_percentage}%</span>
+                            <span className="text-emerald-600 font-extrabold">{update.progress_percentage}%</span>
                           </div>
                           <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${update.progress_percentage}%` }}></div>
@@ -381,7 +456,7 @@ export default function MonitoringDynamicPage() {
                           </span>
                           <button 
                             onClick={() => router.push(`/government/dashboard/projects/view/${update.project}/monitoring`)}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <ArrowUpRight size={18} />
                           </button>
@@ -584,19 +659,67 @@ export default function MonitoringDynamicPage() {
       <CreateDailyUpdateDrawer
         isOpen={isUpdateDrawerOpen}
         onClose={() => setIsUpdateDrawerOpen(false)}
-        onSuccess={fetchMonitoringData}
+        onSuccess={(newUpdate) => {
+          if (newUpdate) {
+            setDailyUpdates(prev => [newUpdate, ...prev]);
+            setStats(prev => prev ? ({
+              ...prev,
+              live: {
+                ...prev.live,
+                daily_photos: prev.live.daily_photos + (newUpdate.photos?.length || 1),
+                drone_surveys: newUpdate.update_type === 'DRONE_SURVEY' ? prev.live.drone_surveys + 1 : prev.live.drone_surveys
+              },
+              progress: {
+                ...prev.progress,
+                progress_reports: prev.progress.progress_reports + 1
+              }
+            }) : prev);
+          }
+          fetchMonitoringData();
+        }}
       />
 
       <CreateObservationModal
         isOpen={isObservationModalOpen}
         onClose={() => setIsObservationModalOpen(false)}
-        onSuccess={fetchMonitoringData}
+        onSuccess={(newObs) => {
+          if (newObs) {
+            setObservations(prev => [newObs, ...prev]);
+            setStats(prev => prev ? ({
+              ...prev,
+              live: {
+                ...prev.live,
+                active_observations: prev.live.active_observations + 1
+              },
+              observations: {
+                ...prev.observations,
+                active: prev.observations.active + 1,
+                quality: newObs.category === 'QUALITY' ? prev.observations.quality + 1 : prev.observations.quality,
+                safety: newObs.category === 'SAFETY' ? prev.observations.safety + 1 : prev.observations.safety
+              }
+            }) : prev);
+          }
+          fetchMonitoringData();
+        }}
       />
 
       <ReportIssueModal
         isOpen={isIssueModalOpen}
         onClose={() => setIsIssueModalOpen(false)}
-        onSuccess={fetchMonitoringData}
+        onSuccess={(newIssue) => {
+          if (newIssue) {
+            setIssues(prev => [newIssue, ...prev]);
+            setStats(prev => prev ? ({
+              ...prev,
+              issues: {
+                ...prev.issues,
+                open: prev.issues.open + 1,
+                critical: newIssue.severity === 'CRITICAL' ? prev.issues.critical + 1 : prev.issues.critical
+              }
+            }) : prev);
+          }
+          fetchMonitoringData();
+        }}
       />
 
       <VerifyMilestoneModal
