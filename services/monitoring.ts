@@ -331,24 +331,14 @@ export const getMonitoringStats = async (): Promise<MonitoringStats> => {
     const res: any = await api.get('/monitoring/stats/overview/');
     return res.data || res;
   } catch (err) {
-    console.warn('getMonitoringStats fallback notice:', err);
+    console.warn('getMonitoringStats notice:', err);
     return {
-      live: {
-        active_sites: 3,
-        daily_photos: 12,
-        drone_surveys: 2,
-        active_observations: 4
-      },
-      progress: {
-        on_schedule: 2,
-        delayed: 1,
-        milestone_reached: 8,
-        progress_reports: 16
-      },
-      observations: { active: 2, quality: 1, safety: 1, resolved: 10 },
-      issues: { open: 1, critical: 1, under_review: 1, resolved: 3 },
-      milestones: { due_this_week: 3, verified: 12, delayed: 2, upcoming: 6 },
-      verification: { pending: 1, verified: 8, variance_detected: 0, active_devices: 4 }
+      live: { active_sites: 0, daily_photos: 0, drone_surveys: 0, active_observations: 0 },
+      progress: { on_schedule: 0, delayed: 0, milestone_reached: 0, progress_reports: 0 },
+      observations: { active: 0, quality: 0, safety: 0, resolved: 0 },
+      issues: { open: 0, critical: 0, under_review: 0, resolved: 0 },
+      milestones: { due_this_week: 0, verified: 0, delayed: 0, upcoming: 0 },
+      verification: { pending: 0, verified: 0, variance_detected: 0, active_devices: 0 }
     };
   }
 };
