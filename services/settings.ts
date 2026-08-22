@@ -6,7 +6,7 @@ export interface StaffUser {
   email: string;
   role: string;
   department: string;
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Pending';
   lastLogin: string;
 }
 
