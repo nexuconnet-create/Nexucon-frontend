@@ -22,6 +22,7 @@ import VerifyMilestoneModal from '@/components/dashboard/VerifyMilestoneModal';
 import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawer';
 import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
 import SiteProgressDetailModal from '@/components/dashboard/SiteProgressDetailModal';
+import MonitoringDetailSideDrawer, { MonitoringDetailItem } from '@/components/dashboard/MonitoringDetailSideDrawer';
 
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
@@ -58,6 +59,7 @@ export default function MonitoringDynamicPage() {
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<ConstructionMilestone | null>(null);
   const [isVerificationDrawerOpen, setIsVerificationDrawerOpen] = useState(false);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<MonitoringDetailItem | null>(null);
 
   const fetchMonitoringData = useCallback(async () => {
     setIsLoading(true);
@@ -361,7 +363,7 @@ export default function MonitoringDynamicPage() {
                     {dailyUpdates.map(update => (
                       <div 
                         key={update.id} 
-                        onClick={() => setIsPhotosGalleryOpen(true)}
+                        onClick={() => setSelectedDetailItem({ type: 'update', data: update })}
                         className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group cursor-pointer"
                       >
                         {/* Site Photo Header */}
@@ -432,10 +434,17 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {dailyUpdates.map(update => (
-                      <div key={update.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={update.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'update', data: update })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div 
-                            onClick={() => setIsPhotosGalleryOpen(true)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsPhotosGalleryOpen(true);
+                            }}
                             className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
                           >
                             {update.photos && update.photos.length > 0 ? (
@@ -447,10 +456,7 @@ export default function MonitoringDynamicPage() {
                             )}
                           </div>
                           <div>
-                            <h4 
-                              onClick={() => setIsPhotosGalleryOpen(true)}
-                              className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors cursor-pointer"
-                            >
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">
                               {update.project_name}
                             </h4>
                             <p className="text-xs text-slate-400 font-semibold">{update.update_reference} • {update.update_type.replace('_', ' ')}</p>
@@ -477,7 +483,10 @@ export default function MonitoringDynamicPage() {
                             {update.status}
                           </span>
                           <button 
-                            onClick={() => router.push(`/government/dashboard/projects/view/${update.project}/monitoring`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/government/dashboard/projects/view/${update.project}/monitoring`);
+                            }}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <ArrowUpRight size={18} />
@@ -499,13 +508,17 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {observations.map(obs => (
-                      <div key={obs.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={obs.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'observation', data: obs })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-orange-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
                             <Eye size={20} />
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{obs.title}</h4>
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-orange-600 transition-colors">{obs.title}</h4>
                             <p className="text-xs text-slate-400 font-semibold">{obs.observation_reference} • {obs.project_name}</p>
                           </div>
                         </div>
@@ -546,7 +559,11 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {issues.map(iss => (
-                      <div key={iss.id} className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={iss.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'issue', data: iss })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
                             <AlertTriangle size={20} />
@@ -593,10 +610,7 @@ export default function MonitoringDynamicPage() {
                     {milestones.map(m => (
                       <div 
                         key={m.id} 
-                        onClick={() => {
-                          setSelectedMilestone(m);
-                          setIsMilestoneModalOpen(true);
-                        }}
+                        onClick={() => setSelectedDetailItem({ type: 'milestone', data: m })}
                         className="p-4 rounded-2xl border border-slate-100 hover:border-emerald-200 hover:shadow-md transition-all bg-white flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-4 w-1/3">
@@ -621,7 +635,14 @@ export default function MonitoringDynamicPage() {
                           }`}>
                             {m.status}
                           </span>
-                          <button className="px-3 py-1 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-bold border border-slate-200 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMilestone(m);
+                              setIsMilestoneModalOpen(true);
+                            }}
+                            className="px-3 py-1 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-bold border border-slate-200 transition-colors cursor-pointer"
+                          >
                             Audit & Sign
                           </button>
                         </div>
@@ -641,7 +662,11 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {verifications.map(vrf => (
-                      <div key={vrf.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={vrf.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'verification', data: vrf })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                             <Compass size={20} />
@@ -771,6 +796,21 @@ export default function MonitoringDynamicPage() {
         onViewPhotos={() => setIsPhotosGalleryOpen(true)}
         onFlagDelay={() => setIsIssueModalOpen(true)}
       />
+
+      <MonitoringDetailSideDrawer
+        isOpen={!!selectedDetailItem}
+        onClose={() => setSelectedDetailItem(null)}
+        item={selectedDetailItem}
+        onAction={(action, payload) => {
+          if (action === 'VIEW_PHOTOS') {
+            setIsPhotosGalleryOpen(true);
+          } else if (action === 'VERIFY_MILESTONE') {
+            setSelectedMilestone(payload);
+            setIsMilestoneModalOpen(true);
+          }
+        }}
+      />
     </div>
   );
 }
+
