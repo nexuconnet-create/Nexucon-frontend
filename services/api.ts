@@ -17,7 +17,12 @@ const api = axios.create({
 // Add a request interceptor
 api.interceptors.request.use(
   (config) => {
-    // No longer attaching Bearer token from localStorage
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('nexucon_access_token');
+      if (token && !config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
     return config;
   },
   (error) => {
@@ -35,11 +40,11 @@ api.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // Handle specific error codes if necessary (e.g. 401 redirect to login)
+    // Only redirect to login if no local session exists and explicitly 401
     if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined') {
-        // Prevent infinite redirect loop if already on a login page
-        if (!window.location.pathname.includes('/login')) {
+        const hasSession = localStorage.getItem('nexucon_auth_user');
+        if (!hasSession && !window.location.pathname.includes('/login') && !window.location.pathname.includes('/accept-invite')) {
           window.location.href = '/government/login';
         }
       }

@@ -143,23 +143,54 @@ export default function UserManagement() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                      user.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'
+                      user.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      user.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-300' :
+                      'bg-gray-100 text-gray-600 border-gray-200'
                     }`}>
-                      {user.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>}
+                      {user.status === 'Active' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                      {user.status === 'Pending' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>}
                       {user.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-xs font-semibold text-gray-600">{user.lastLogin}</span>
+                    <span className="text-xs font-semibold text-gray-600">
+                      {user.status === 'Pending' ? 'Invite Sent (Pending)' : user.lastLogin}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button 
-                      onClick={() => handleToggleStatus(user)}
-                      className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors inline-flex items-center gap-1"
-                    >
-                      <Power size={12} className={user.status === 'Active' ? "text-red-500" : "text-emerald-500"} />
-                      {user.status === 'Active' ? 'Deactivate' : 'Activate'}
-                    </button>
+                    {user.status === 'Pending' ? (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await fetch('/api/email/send', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                to: user.email,
+                                name: user.name,
+                                role: user.role,
+                                department: user.department
+                              })
+                            });
+                            window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Invitation resent to ${user.email}!`, type: 'success' } }));
+                          } catch {
+                            window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to resend invite', type: 'error' } }));
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Mail size={12} className="text-amber-600" />
+                        Resend Invite
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => handleToggleStatus(user)}
+                        className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Power size={12} className={user.status === 'Active' ? "text-red-500" : "text-emerald-500"} />
+                        {user.status === 'Active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

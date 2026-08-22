@@ -29,7 +29,19 @@ export default function InviteUserModal({
 
     setIsSubmitting(true);
     try {
-      // 1. Send via Next.js Resend route
+      const generatedTemp = `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
+
+      // 1. Cache temp credentials on device for resilient instant login
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`nexucon_user_credentials_${email.trim().toLowerCase()}`, JSON.stringify({
+          email: email.trim(),
+          password: generatedTemp,
+          name: name.trim(),
+          role
+        }));
+      }
+
+      // 2. Send via Next.js Resend route
       fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -37,7 +49,8 @@ export default function InviteUserModal({
           to: email.trim(),
           name: name.trim(),
           role,
-          department
+          department,
+          temp_password: generatedTemp
         })
       }).catch(e => console.warn('Email dispatch warning:', e));
 

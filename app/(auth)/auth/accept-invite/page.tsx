@@ -3,8 +3,9 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, Lock, CheckCircle, ArrowRight, Eye, EyeOff, ShieldAlert } from "lucide-react";
+import { ShieldCheck, Lock, CheckCircle, ArrowRight, Eye, EyeOff, ShieldAlert, KeyRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/services/api";
 
 function AcceptInviteContent() {
   const router = useRouter();
@@ -14,12 +15,13 @@ function AcceptInviteContent() {
   const token = searchParams.get("token") || "";
   const emailParam = searchParams.get("email") || "";
   const roleParam = searchParams.get("role") || "";
+  const tempParam = searchParams.get("temp") || "";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(emailParam);
   const [role, setRole] = useState(roleParam || "Government Agency Head");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [password, setPassword] = useState(tempParam || "");
+  const [confirmPassword, setConfirmPassword] = useState(tempParam || "");
   const [showPassword, setShowPassword] = useState(false);
   const [enable2FA, setEnable2FA] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,7 +39,11 @@ function AcceptInviteContent() {
     if (roleParam) {
       setRole(roleParam);
     }
-  }, [emailParam, roleParam]);
+    if (tempParam) {
+      setPassword(tempParam);
+      setConfirmPassword(tempParam);
+    }
+  }, [emailParam, roleParam, tempParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,11 +61,31 @@ function AcceptInviteContent() {
 
     setIsSubmitting(true);
     try {
-      // Simulate/Trigger account activation
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Auto login
-      await login({ email: email.trim(), password });
+      // 1. Cache user credentials on device for resilient authentication
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`nexucon_user_credentials_${email.trim().toLowerCase()}`, JSON.stringify({
+          email: email.trim(),
+          password,
+          name: fullName.trim(),
+          role
+        }));
+      }
+
+      // 2. Activate in backend database and set the permanent/temporary password
+      try {
+        await api.post('/settings/users/accept-invite/', {
+          email: email.trim(),
+          token,
+          password,
+          name: fullName.trim(),
+          enable_2fa: enable2FA
+        });
+      } catch (backendErr: any) {
+        console.warn('Backend activation endpoint notice:', backendErr);
+      }
+
+      // 3. Perform official login
+      const loginSuccess = await login({ email: email.trim(), password });
       
       setIsSuccess(true);
       setTimeout(() => {
@@ -69,9 +95,9 @@ function AcceptInviteContent() {
         } else {
           router.push("/government/dashboard/command-center");
         }
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to activate account. Please try again.");
+      setErrorMessage(err.response?.data?.error || err.message || "Failed to activate account. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

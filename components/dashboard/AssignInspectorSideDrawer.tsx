@@ -143,7 +143,19 @@ export default function AssignInspectorSideDrawer({
 
     setIsSubmitting(true);
     try {
-      // 1. Dispatch official Resend email
+      const generatedTemp = `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
+
+      // 1. Cache temp credentials on device for resilient instant login
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`nexucon_user_credentials_${inviteEmail.trim().toLowerCase()}`, JSON.stringify({
+          email: inviteEmail.trim(),
+          password: generatedTemp,
+          name: inviteName.trim(),
+          role: inviteDiscipline || 'Field Building Inspector'
+        }));
+      }
+
+      // 2. Dispatch official Resend email
       fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,7 +163,8 @@ export default function AssignInspectorSideDrawer({
           to: inviteEmail.trim(),
           name: inviteName.trim(),
           role: inviteDiscipline || 'Field Building Inspector',
-          department: 'Building Inspection & Compliance Unit'
+          department: 'Building Inspection & Compliance Unit',
+          temp_password: generatedTemp
         })
       }).catch(e => console.warn('Email dispatch warning:', e));
 

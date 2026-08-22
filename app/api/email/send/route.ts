@@ -3,11 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_T5fzGV4i_MxWq29RnxPKmDbJizUWHnPZ6';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Nexucon Email notifications <notifications@nexucon.net>';
 
-function getRoleTemplate(role: string, name: string, department: string, inviteUrl: string, email: string) {
+function getRoleTemplate(role: string, name: string, department: string, inviteUrl: string, email: string, tempPassword?: string) {
   const roleLower = (role || '').toLowerCase();
   const currentYear = new Date().getFullYear();
 
-  if (roleLower.includes('director') || roleLower.includes('commissioner') || roleLower.includes('executive')) {
+  const tempBox = tempPassword ? `
+    <div style="background-color:#F8FAFC;border:1.5px dashed #0284C7;border-radius:14px;padding:16px;margin:24px 0;text-align:center;">
+      <div style="font-size:11px;font-weight:800;color:#0369A1;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+        Temporary Access Passcode
+      </div>
+      <div style="font-family:monospace;font-size:18px;font-weight:900;color:#022C4F;letter-spacing:2px;">
+        ${tempPassword}
+      </div>
+      <div style="font-size:11px;color:#64748B;margin-top:4px;">
+        Use this passcode to log in immediately or set your permanent password via the button below.
+      </div>
+    </div>
+  ` : '';
+
+  if (roleLower.includes('director') || roleLower.includes('commissioner') || roleLower.includes('executive') || roleLower.includes('head')) {
     return {
       subject: `🏛️ Directorate Appointment & Onboarding: ${role} - Nexucon`,
       html: `<!DOCTYPE html>
@@ -21,10 +35,11 @@ function getRoleTemplate(role: string, name: string, department: string, inviteU
         <span style="color:#93C5FD;font-size:11px;font-weight:700;padding-left:8px;margin-left:8px;border-left:1px solid rgba(255,255,255,0.3);">GOVERNMENT CONTROL</span>
       </td></tr>
       <tr><td style="padding:40px;">
-        <span style="display:inline-block;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;padding:6px 14px;border-radius:20px;font-weight:800;font-size:12px;text-transform:uppercase;">Directorate Lead & Executive Sign-off</span>
+        <span style="display:inline-block;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;padding:6px 14px;border-radius:20px;font-weight:800;font-size:12px;text-transform:uppercase;">Government Agency Head & Executive Lead</span>
         <h1 style="color:#0F172A;font-size:24px;font-weight:800;margin:16px 0;">Official Invitation: Directorate Appointment</h1>
         <p style="color:#334155;font-size:15px;line-height:24px;">Dear <strong>${name}</strong>,</p>
         <p style="color:#475569;font-size:14px;line-height:22px;">You have been formally designated as <strong>${role}</strong> for the <strong>${department}</strong> on the Nexucon Regulatory Management System.</p>
+        ${tempBox}
         <div style="text-align:center;margin:32px 0;">
           <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#022C4F 0%,#03467B 100%);color:#FFF;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(2,44,79,0.4);">Activate Directorate Account &rarr;</a>
         </div>
@@ -56,6 +71,7 @@ function getRoleTemplate(role: string, name: string, department: string, inviteU
         <h1 style="color:#0F172A;font-size:24px;font-weight:800;margin:16px 0;">Field Inspector Account Provisioned</h1>
         <p style="color:#334155;font-size:15px;line-height:24px;">Hello <strong>${name}</strong>,</p>
         <p style="color:#475569;font-size:14px;line-height:22px;">You have been provisioned as an authorized <strong>${role}</strong> attached to <strong>${department}</strong>.</p>
+        ${tempBox}
         <div style="text-align:center;margin:32px 0;">
           <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#0284C7 0%,#0369A1 100%);color:#FFF;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(2,132,199,0.4);">Activate Inspector Terminal &rarr;</a>
         </div>
@@ -87,6 +103,7 @@ function getRoleTemplate(role: string, name: string, department: string, inviteU
         <h1 style="color:#0F172A;font-size:24px;font-weight:800;margin:16px 0;">You've Been Invited to Join Nexucon</h1>
         <p style="color:#334155;font-size:15px;line-height:24px;">Hello <strong>${name}</strong>,</p>
         <p style="color:#475569;font-size:14px;line-height:22px;">You have been invited to join the Nexucon Building Regulatory Management System with the role of <strong>${role}</strong> in the <strong>${department}</strong> department.</p>
+        ${tempBox}
         <div style="text-align:center;margin:32px 0;">
           <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#022C4F 0%,#03467B 100%);color:#FFF;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(2,44,79,0.4);">Accept Invitation & Set Password &rarr;</a>
         </div>
@@ -106,7 +123,7 @@ function getRoleTemplate(role: string, name: string, department: string, inviteU
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { to, subject, html, text, name, role, department, invite_token, otp_code } = body;
+    const { to, subject, html, text, name, role, department, invite_token, otp_code, temp_password } = body;
 
     const recipientEmail = to || body.email;
     if (!recipientEmail) {
@@ -118,10 +135,10 @@ export async function POST(req: NextRequest) {
 
     // If template parameters are passed
     if (!finalHtml) {
-      const host = req.headers.get('host') || 'localhost:3000';
-      const protocol = host.includes('localhost') ? 'http' : 'https';
+      const appBaseUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexucon-frontend-8x3a.vercel.app';
       const token = invite_token || Math.random().toString(36).substring(2, 15);
-      const inviteUrl = `${protocol}://${host}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}`;
+      const generatedTemp = temp_password || `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
+      const inviteUrl = `${appBaseUrl.replace(/\/$/, '')}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
 
       if (otp_code) {
         finalSubject = finalSubject || `🔐 ${otp_code} is your Nexucon 2FA Security Passcode`;
@@ -133,7 +150,7 @@ export async function POST(req: NextRequest) {
           </div>
         </body></html>`;
       } else {
-        const generated = getRoleTemplate(role || 'Staff Member', name || recipientEmail.split('@')[0], department || 'Building Control', inviteUrl, recipientEmail);
+        const generated = getRoleTemplate(role || 'Staff Member', name || recipientEmail.split('@')[0], department || 'Building Control', inviteUrl, recipientEmail, generatedTemp);
         finalSubject = finalSubject || generated.subject;
         finalHtml = generated.html;
       }
