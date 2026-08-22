@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Building2, Plus, FileText, Calendar, DollarSign, ShieldAlert, Check } from 'lucide-react';
 import { createApplication } from '@/services/applications';
 import { getProjects, Project } from '@/services/projects';
+import { CustomSelect } from '@/components/CustomSelect';
 
 interface CreateApplicationSideDrawerProps {
   isOpen: boolean;
@@ -70,7 +71,15 @@ export default function CreateApplicationSideDrawer({
       onClose();
       if (onCreated) onCreated();
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to submit application';
+      const errorData = err.response?.data;
+      let msg = 'Failed to submit application';
+      if (errorData?.message) {
+        msg = errorData.message;
+      } else if (errorData?.errors) {
+        msg = typeof errorData.errors === 'object' ? Object.values(errorData.errors).flat().join('; ') : String(errorData.errors);
+      } else if (errorData?.detail) {
+        msg = errorData.detail;
+      }
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
@@ -92,7 +101,7 @@ export default function CreateApplicationSideDrawer({
           </div>
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -102,16 +111,16 @@ export default function CreateApplicationSideDrawer({
           
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Target Construction Project</label>
-            <select
+            <CustomSelect
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              required
-              className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-            >
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.reference_number || p.id.slice(0,8)})</option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedProjectId(val)}
+              options={projects.map(p => ({
+                value: p.id,
+                label: `${p.name} (${p.developer_name || p.location || p.id})`
+              }))}
+              placeholder="Select project..."
+              searchable={true}
+            />
           </div>
 
           <div>
@@ -128,32 +137,34 @@ export default function CreateApplicationSideDrawer({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Permit / Approval Type</label>
-              <select
+              <CustomSelect
                 value={applicationType}
-                onChange={(e) => setApplicationType(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-              >
-                <option value="Building Permit">Building Permit</option>
-                <option value="Renovation Permit">Renovation Permit</option>
-                <option value="Planning Approval">Planning Approval</option>
-                <option value="Demolition Permit">Demolition Permit</option>
-                <option value="Structural Approval">Structural Approval</option>
-                <option value="Environmental Clearance">Environmental Clearance</option>
-              </select>
+                onChange={(val) => setApplicationType(val)}
+                options={[
+                  { value: "Building Permit", label: "Building Permit" },
+                  { value: "Renovation Permit", label: "Renovation Permit" },
+                  { value: "Planning Approval", label: "Planning Approval" },
+                  { value: "Demolition Permit", label: "Demolition Permit" },
+                  { value: "Structural Approval", label: "Structural Approval" },
+                  { value: "Environmental Clearance", label: "Environmental Clearance" }
+                ]}
+                placeholder="Select permit type..."
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Priority Level</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-              >
-                <option value="Low">Low</option>
-                <option value="Normal">Normal</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+                onChange={(val) => setPriority(val)}
+                options={[
+                  { value: "Low", label: "Low" },
+                  { value: "Normal", label: "Normal" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                  { value: "Critical", label: "Critical" }
+                ]}
+                placeholder="Select priority..."
+              />
             </div>
           </div>
 
