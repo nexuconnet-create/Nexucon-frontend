@@ -177,20 +177,39 @@ export default function ComplianceOverview() {
             </div>
             
             <div className="space-y-4">
-              {upcomingDeadlines.map(deadline => (
-                <div key={deadline.id} className="flex items-start gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 cursor-pointer">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex flex-col items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold uppercase">Oct</span>
-                    <span className="text-lg font-bold leading-none">{deadline.date.split(' ')[1].replace(',', '')}</span>
+              {upcomingDeadlines.map(deadline => {
+                let monthLabel = "Oct";
+                let dayLabel = "28";
+                try {
+                  const d = new Date(deadline.date);
+                  if (!isNaN(d.getTime())) {
+                    monthLabel = d.toLocaleDateString('en-US', { month: 'short' });
+                    dayLabel = d.getDate().toString();
+                  } else {
+                    const parts = deadline.date.split(' ');
+                    monthLabel = parts[0] || "Due";
+                    dayLabel = parts[1]?.replace(',', '') || "1";
+                  }
+                } catch {
+                  monthLabel = "Due";
+                  dayLabel = "1";
+                }
+
+                return (
+                  <div key={deadline.id} className="flex items-start gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 cursor-pointer">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex flex-col items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold uppercase">{monthLabel}</span>
+                      <span className="text-lg font-bold leading-none">{dayLabel}</span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-sm">{deadline.title}</h4>
+                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <Clock size={12} /> {deadline.daysLeft} days left
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 text-sm">{deadline.title}</h4>
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                      <Clock size={12} /> {deadline.daysLeft} days left
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </motion.div>
 

@@ -78,7 +78,7 @@ export default function UserActivityLog() {
               {activeUsers.map((user, idx) => (
                 <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${user.color}`}>
-                    {user.name.charAt(0)}{user.name.split(' ')[1].charAt(0)}
+                    {user.name.charAt(0)}{user.name.split(' ')[1]?.charAt(0) || ''}
                   </div>
                   <div className="flex-1">
                     <h4 className="font-bold text-gray-900 text-xs">{user.name}</h4>
