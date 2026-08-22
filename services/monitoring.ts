@@ -305,3 +305,84 @@ export const getMonitoringStats = async (): Promise<MonitoringStats> => {
   const res: any = await api.get('/monitoring/stats/overview/');
   return res.data || res;
 };
+
+export interface ProgrammePhase {
+  name: string;
+  progress: number;
+  status: string;
+  color: string;
+}
+
+export interface ProjectProgressDetails {
+  project_id: string;
+  project_name: string;
+  reference_number: string;
+  project_type: string;
+  site_address: string;
+  status: string;
+  verified_progress: number;
+  schedule_status: 'ON_SCHEDULE' | 'AHEAD' | 'MINOR_DELAY' | 'CRITICAL_DELAY';
+  schedule_label: string;
+  workforce_on_site: number;
+  weather_condition: string;
+  total_photos_count: number;
+  photos: {
+    url: string;
+    update_ref: string;
+    update_type: string;
+    date: string;
+    work_summary: string;
+    reported_by: string;
+  }[];
+  milestones_total: number;
+  milestones_verified: number;
+  milestones_delayed: number;
+  milestones: {
+    id: string;
+    name: string;
+    target_date: string;
+    status: string;
+    progress_percentage: number;
+    is_delayed: boolean;
+  }[];
+  phases: ProgrammePhase[];
+  latest_update?: {
+    reference: string;
+    work_summary: string;
+    reported_by: string;
+    date: string;
+  };
+  progress_history: {
+    date: string;
+    progress: number;
+    summary: string;
+    reported_by: string;
+  }[];
+}
+
+// Project Progress Endpoints
+export const getProjectProgress = async (projectId?: string): Promise<ProjectProgressDetails | ProjectProgressDetails[]> => {
+  const params = projectId ? { project: projectId } : undefined;
+  const res: any = await api.get('/monitoring/progress/', { params });
+  return res.data || res;
+};
+
+export const updateProjectProgress = async (payload: {
+  project: string;
+  progress_percentage: number;
+  work_summary?: string;
+  photos?: string[];
+}): Promise<ProjectProgressDetails> => {
+  const res: any = await api.post('/monitoring/progress/update/', payload);
+  return res.data || res;
+};
+
+export const flagProjectDelay = async (payload: {
+  project: string;
+  reason: string;
+  severity?: string;
+}): Promise<any> => {
+  const res: any = await api.post('/monitoring/progress/flag-delay/', payload);
+  return res.data || res;
+};
+
