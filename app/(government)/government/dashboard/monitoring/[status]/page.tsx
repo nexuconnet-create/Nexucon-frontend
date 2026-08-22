@@ -21,6 +21,7 @@ import ReportIssueModal from '@/components/dashboard/ReportIssueModal';
 import VerifyMilestoneModal from '@/components/dashboard/VerifyMilestoneModal';
 import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawer';
 import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
+import SiteProgressDetailModal from '@/components/dashboard/SiteProgressDetailModal';
 
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
@@ -51,6 +52,7 @@ export default function MonitoringDynamicPage() {
   // Modals & Drawers
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
   const [isPhotosGalleryOpen, setIsPhotosGalleryOpen] = useState(false);
+  const [isProgressDetailModalOpen, setIsProgressDetailModalOpen] = useState(false);
   const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
@@ -171,7 +173,11 @@ export default function MonitoringDynamicPage() {
   const content = getPageContent();
 
   const handleQuickAction = (action: string) => {
-    if (action.includes("View Latest Daily Photos") || action.includes("View Latest Daily") || action.includes("Latest Daily") || action.includes("Photos")) {
+    if (action.includes("View Progress Details") || action.includes("Review Progress Report") || action.includes("Progress Details")) {
+      setIsProgressDetailModalOpen(true);
+    } else if (action.includes("Flag Delayed Progress")) {
+      setIsIssueModalOpen(true);
+    } else if (action.includes("View Latest Daily Photos") || action.includes("View Latest Daily") || action.includes("Latest Daily") || action.includes("Photos")) {
       setIsPhotosGalleryOpen(true);
     } else if (action.includes("Daily Photo") || action.includes("Update Site Progress") || action.includes("Upload Daily")) {
       setIsUpdateDrawerOpen(true);
@@ -756,6 +762,14 @@ export default function MonitoringDynamicPage() {
         onClose={() => setIsPhotosGalleryOpen(false)}
         updates={dailyUpdates}
         onUploadNew={() => setIsUpdateDrawerOpen(true)}
+      />
+
+      <SiteProgressDetailModal
+        isOpen={isProgressDetailModalOpen}
+        onClose={() => setIsProgressDetailModalOpen(false)}
+        onUpdateProgress={() => setIsUpdateDrawerOpen(true)}
+        onViewPhotos={() => setIsPhotosGalleryOpen(true)}
+        onFlagDelay={() => setIsIssueModalOpen(true)}
       />
     </div>
   );
