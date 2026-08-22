@@ -115,9 +115,23 @@ export const assignApplicationReviewer = async (
 
 export const requestApplicationDocs = async (
   id: string,
-  payload: { document_items: string[]; instructions?: string }
+  payload: { document_items: string[]; instructions?: string; deadline?: string }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/request-docs/`, payload);
+  return res.data || res;
+};
+
+export const updateDocRequestProgress = async (
+  id: string,
+  payload: {
+    request_id: string;
+    item_name?: string;
+    item_status?: string;
+    note?: string;
+    overall_status?: string;
+  }
+): Promise<Application> => {
+  const res: any = await api.post(`/applications/${id}/update-doc-request/`, payload);
   return res.data || res;
 };
 

@@ -58,8 +58,9 @@ export default function ApplicationsDynamicPage() {
   const fetchApplicationsData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const statusParam = currentStatus === 'requested' ? undefined : currentStatus;
       const [appsData, statsData] = await Promise.all([
-        getApplications({ status: currentStatus, search: searchQuery }),
+        getApplications({ status: statusParam, search: searchQuery }),
         getApplicationStats()
       ]);
       setApplications(appsData);
@@ -74,6 +75,10 @@ export default function ApplicationsDynamicPage() {
   useEffect(() => {
     fetchApplicationsData();
   }, [fetchApplicationsData]);
+
+  const displayedApplications = currentStatus === 'requested'
+    ? applications.filter(a => (a.document_requests?.length || 0) > 0 || a.status === 'UNDER_REVIEW' || a.status === 'SUBMITTED')
+    : applications;
 
   // Dynamic content mapping based on tab
   const getPageContent = () => {
@@ -377,118 +382,185 @@ export default function ApplicationsDynamicPage() {
             </div>
           ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
-              {applications.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => {
-                    setSelectedApplication(app);
-                    setIsDetailDrawerOpen(true);
-                  }}
-                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group bg-white cursor-pointer"
-                >
-                  <div className="flex items-center gap-4 w-1/3">
-                    <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-sm">
-                      <FileText size={20} />
+              {displayedApplications.map((app) => {
+                const docReqs = app.document_requests || [];
+                const latestReq = docReqs.length > 0 ? docReqs[docReqs.length - 1] : null;
+                const reqItems = latestReq?.requested_items || [];
+                const reqProgress = latestReq?.progress || 0;
+
+                return (
+                  <div
+                    key={app.id}
+                    onClick={() => {
+                      setSelectedApplication(app);
+                      setIsDetailDrawerOpen(true);
+                    }}
+                    className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group bg-white cursor-pointer gap-4"
+                  >
+                    <div className="flex items-center gap-4 min-w-[280px]">
+                      <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-sm">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">
+                          {app.project_name || app.title}
+                        </h4>
+                        <p className="text-xs text-slate-400 font-semibold">{app.application_reference}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">
-                        {app.project_name || app.title}
-                      </h4>
-                      <p className="text-xs text-slate-400 font-semibold">{app.application_reference}</p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 w-1/4">
-                    <User size={14} className="text-slate-400 shrink-0" />
-                    <span className="text-xs font-medium text-slate-600 line-clamp-1">{app.applicant_name}</span>
-                  </div>
+                    {/* If requested mode or has doc requests, render live progress badge & requirements */}
+                    {docReqs.length > 0 ? (
+                      <div className="flex-1 max-w-md px-2 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-700 flex items-center gap-1">
+                            <FileCheck size={13} className="text-blue-600" /> {docReqs.length} Document Requirement Batch(es)
+                          </span>
+                          <span className="font-extrabold text-blue-700 text-[11px]">{reqProgress}% Verified</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              reqProgress === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                            }`}
+                            style={{ width: `${reqProgress}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {reqItems.slice(0, 2).map((it: string, i: number) => (
+                            <span key={i} className="px-2 py-0.5 bg-slate-50 border border-slate-200/80 rounded-md text-[10px] font-medium text-slate-600 truncate max-w-[160px]">
+                              ✓ {it}
+                            </span>
+                          ))}
+                          {reqItems.length > 2 && (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md text-[10px] font-bold">
+                              +{reqItems.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 min-w-[160px]">
+                          <User size={14} className="text-slate-400 shrink-0" />
+                          <span className="text-xs font-medium text-slate-600 line-clamp-1">{app.applicant_name}</span>
+                        </div>
 
-                  <div className="flex items-center gap-2 w-1/5">
-                    <Calendar size={14} className="text-slate-400 shrink-0" />
-                    <span className="text-xs font-medium text-slate-600">
-                      {app.submission_date ? new Date(app.submission_date).toLocaleDateString() : new Date(app.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
+                        <div className="flex items-center gap-2 min-w-[140px]">
+                          <Calendar size={14} className="text-slate-400 shrink-0" />
+                          <span className="text-xs font-medium text-slate-600">
+                            {app.submission_date ? new Date(app.submission_date).toLocaleDateString() : new Date(app.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </>
+                    )}
 
-                  <div className="flex items-center gap-6 justify-end">
-                    <div className="flex flex-col items-end">
-                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1 ${app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
-                        app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                    <div className="flex items-center gap-4 justify-end shrink-0">
+                      <div className="flex flex-col items-end">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                          app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                          app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
                           app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                            app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
-                              app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
-                                'bg-slate-100 text-slate-700'
+                          app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
+                          app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
+                          'bg-slate-100 text-slate-700'
                         }`}>
-                        {app.status}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400">{app.application_type}</span>
+                          {app.status}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">{app.application_type}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedApplication(app);
+                          setIsDetailDrawerOpen(true);
+                        }}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                      >
+                        <ArrowUpRight size={18} />
+                      </button>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedApplication(app);
-                        setIsDetailDrawerOpen(true);
-                      }}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
-                    >
-                      <ArrowUpRight size={18} />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {applications.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => {
-                    setSelectedApplication(app);
-                    setIsDetailDrawerOpen(true);
-                  }}
-                  className="p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg transition-all group bg-white flex flex-col cursor-pointer"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                      <FileText size={20} />
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
-                      app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+              {displayedApplications.map((app) => {
+                const docReqs = app.document_requests || [];
+                const latestReq = docReqs.length > 0 ? docReqs[docReqs.length - 1] : null;
+                const reqProgress = latestReq?.progress || 0;
+
+                return (
+                  <div
+                    key={app.id}
+                    onClick={() => {
+                      setSelectedApplication(app);
+                      setIsDetailDrawerOpen(true);
+                    }}
+                    className="p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg transition-all group bg-white flex flex-col cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <FileText size={20} />
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                        app.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                        app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
                         app.status === 'UNDER_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                          app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
-                            app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
-                              'bg-slate-100 text-slate-700'
+                        app.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-700' :
+                        app.status === 'CONDITIONAL_APPROVAL' ? 'bg-teal-100 text-teal-700' :
+                        'bg-slate-100 text-slate-700'
                       }`}>
-                      {app.status}
-                    </span>
-                  </div>
-
-                  <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1 line-clamp-1">
-                    {app.project_name || app.title}
-                  </h4>
-                  <p className="text-xs text-slate-400 font-semibold mb-4">{app.application_reference}</p>
-
-                  <div className="flex flex-col gap-2 mt-auto mb-4 text-[11px] text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <User size={13} className="text-slate-400 shrink-0" />
-                      <span className="font-medium truncate">{app.applicant_name}</span>
+                        {app.status}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar size={13} className="text-slate-400 shrink-0" />
-                      <span className="font-medium">
-                        {app.submission_date ? new Date(app.submission_date).toLocaleDateString() : new Date(app.created_at).toLocaleDateString()}
+
+                    <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1 line-clamp-1">
+                      {app.project_name || app.title}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-semibold mb-3">{app.application_reference}</p>
+
+                    {/* Progress indicator if document requests are active */}
+                    {docReqs.length > 0 && (
+                      <div className="mb-4 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/60 space-y-1">
+                        <div className="flex justify-between text-[11px] font-bold">
+                          <span className="text-slate-600">Doc Verification</span>
+                          <span className="text-blue-700">{reqProgress}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              reqProgress === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                            }`}
+                            style={{ width: `${reqProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-2 mt-auto mb-4 text-[11px] text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <User size={13} className="text-slate-400 shrink-0" />
+                        <span className="font-medium truncate">{app.applicant_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar size={13} className="text-slate-400 shrink-0" />
+                        <span className="font-medium">
+                          {app.submission_date ? new Date(app.submission_date).toLocaleDateString() : new Date(app.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{app.application_type}</span>
+                      <span className="text-xs font-bold text-blue-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                        Review <ArrowUpRight size={12} />
                       </span>
                     </div>
                   </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{app.application_type}</span>
-                    <span className="text-xs font-bold text-blue-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                      Review <ArrowUpRight size={12} />
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

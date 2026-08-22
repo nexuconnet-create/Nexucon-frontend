@@ -4,9 +4,13 @@ import React, { useState } from 'react';
 import { 
   X, FileText, CheckCircle, XCircle, Clock, AlertTriangle, 
   Calendar, User, Building2, MapPin, ShieldCheck, ArrowRight,
-  ClipboardCheck, Send, Plus, ChevronRight, AlertCircle, FileSearch, RefreshCw
+  ClipboardCheck, Send, Plus, ChevronRight, AlertCircle, FileSearch, RefreshCw,
+  Check, FileCheck, CheckCircle2, History
 } from 'lucide-react';
-import { Application, transitionApplication, assignApplicationReviewer, updateApplicationReviewItem } from '@/services/applications';
+import { 
+  Application, transitionApplication, assignApplicationReviewer, 
+  updateApplicationReviewItem, updateDocRequestProgress 
+} from '@/services/applications';
 import { useRouter } from 'next/navigation';
 
 interface ApplicationDetailSideDrawerProps {
@@ -27,6 +31,7 @@ export default function ApplicationDetailSideDrawer({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'overview' | 'checklist' | 'documents' | 'requested_docs' | 'history'>('overview');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [conditionalNotes, setConditionalNotes] = useState('');
   const [showDecisionModal, setShowDecisionModal] = useState<'APPROVED' | 'REJECTED' | 'CONDITIONAL_APPROVAL' | null>(null);
@@ -66,6 +71,27 @@ export default function ApplicationDetailSideDrawer({
       if (onUpdated) onUpdated();
     } catch (err: any) {
       console.error("Checklist update failed", err);
+    }
+  };
+
+  const handleDocItemStatusUpdate = async (requestId: string, itemName: string, newStatus: 'VERIFIED' | 'SUBMITTED' | 'REJECTED' | 'PENDING') => {
+    setUpdatingItemId(`${requestId}-${itemName}`);
+    try {
+      await updateDocRequestProgress(application.id, {
+        request_id: requestId,
+        item_name: itemName,
+        item_status: newStatus,
+        note: `Marked ${itemName} as ${newStatus} by regulatory reviewer.`
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `${itemName} marked as ${newStatus}`, type: 'success' } 
+      }));
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to update requirement progress';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+    } finally {
+      setUpdatingItemId(null);
     }
   };
 
@@ -289,11 +315,11 @@ export default function ApplicationDetailSideDrawer({
 
           {/* Dedicated Requested Documents Tab */}
           {activeTab === 'requested_docs' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-bold text-[#022C4F]">Statutory Document Requests</h4>
-                  <p className="text-xs text-slate-500">Formal document requirements dispatched to the applicant.</p>
+                  <p className="text-xs text-slate-500">Track and update fulfillment progress for required engineering & compliance documents.</p>
                 </div>
                 {onRequestDocs && (
                   <button 
@@ -306,42 +332,178 @@ export default function ApplicationDetailSideDrawer({
               </div>
 
               {docRequests.length > 0 ? (
-                <div className="space-y-3">
-                  {docRequests.map((req: any, idx: number) => (
-                    <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <FileText size={14} className="text-blue-600" /> Request Batch #{idx + 1}
-                        </span>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold uppercase">
-                          {req.status || 'Pending Submission'}
-                        </span>
-                      </div>
+                <div className="space-y-4">
+                  {docRequests.map((req: any, idx: number) => {
+                    const items = req.requested_items || [];
+                    const itemsProgress = req.items_progress || {};
+                    const verifiedCount = items.filter((it: string) => 
+                      itemsProgress[it] === 'VERIFIED' || itemsProgress[it] === 'PASSED' || itemsProgress[it] === 'APPROVED'
+                    ).length;
+                    const progressPct = req.progress !== undefined 
+                      ? req.progress 
+                      : (items.length > 0 ? Math.round((verifiedCount / items.length) * 100) : 0);
 
-                      {req.requested_items && (
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Requested Items:</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {req.requested_items.map((item: string, i: number) => (
-                              <span key={i} className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700">
-                                ✓ {item}
+                    return (
+                      <div key={idx} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 shadow-sm">
+                        
+                        {/* Request Header */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/80">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-[#022C4F] flex items-center gap-1.5">
+                                <FileText size={15} className="text-blue-600" /> {req.id || `REQ-${idx+1}`}
                               </span>
-                            ))}
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                progressPct === 100 
+                                  ? 'bg-emerald-100 text-emerald-800' 
+                                  : progressPct > 0 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {progressPct === 100 ? 'Completed' : (req.status || 'Pending Submission')}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Issued by: <strong className="text-slate-700">{req.requested_by || 'Government Desk'}</strong> • {req.requested_at ? new Date(req.requested_at).toLocaleDateString() : 'Recent'}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target SLA Deadline</span>
+                            <span className="text-xs font-bold text-blue-700 flex items-center justify-end gap-1">
+                              <Clock size={12} /> {req.deadline || '7 Days'}
+                            </span>
                           </div>
                         </div>
-                      )}
 
-                      {req.instructions && (
-                        <p className="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100 leading-relaxed">
-                          {req.instructions}
-                        </p>
-                      )}
+                        {/* Progress Bar */}
+                        <div>
+                          <div className="flex items-center justify-between text-xs mb-1.5 font-bold">
+                            <span className="text-slate-600 flex items-center gap-1">
+                              <CheckCircle2 size={13} className="text-emerald-600" /> Fulfillment Progress
+                            </span>
+                            <span className="text-blue-700">{verifiedCount} of {items.length} verified ({progressPct}%)</span>
+                          </div>
+                          <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 rounded-full ${
+                                progressPct === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                              }`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                        </div>
 
-                      <div className="text-[10px] text-slate-400">
-                        Issued: {req.requested_at ? new Date(req.requested_at).toLocaleString() : 'Recent'}
+                        {/* Itemized Requirements List with Interactive Status */}
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                            Requested Items & Verification Status:
+                          </span>
+                          <div className="space-y-2">
+                            {items.map((item: string, i: number) => {
+                              const itemState = itemsProgress[item] || 'PENDING';
+                              const isItemUpdating = updatingItemId === `${req.id}-${item}`;
+
+                              return (
+                                <div key={i} className="p-3 bg-white border border-slate-200/80 rounded-xl flex flex-wrap items-center justify-between gap-2 hover:border-slate-300 transition-all">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                                      itemState === 'VERIFIED' || itemState === 'PASSED'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : itemState === 'SUBMITTED'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : itemState === 'REJECTED'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-slate-100 text-slate-500'
+                                    }`}>
+                                      {itemState === 'VERIFIED' || itemState === 'PASSED' ? <Check size={13} /> : i + 1}
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-bold text-slate-800">{item}</p>
+                                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                                        itemState === 'VERIFIED' || itemState === 'PASSED'
+                                          ? 'text-emerald-700'
+                                          : itemState === 'SUBMITTED'
+                                          ? 'text-blue-700'
+                                          : itemState === 'REJECTED'
+                                          ? 'text-red-700'
+                                          : 'text-amber-700'
+                                      }`}>
+                                        Status: {itemState}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Verification Actions */}
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      disabled={isItemUpdating}
+                                      onClick={() => handleDocItemStatusUpdate(req.id, item, 'VERIFIED')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                                        itemState === 'VERIFIED' || itemState === 'PASSED'
+                                          ? 'bg-emerald-600 text-white shadow-xs'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                                      }`}
+                                    >
+                                      <Check size={12} /> Pass
+                                    </button>
+                                    <button
+                                      disabled={isItemUpdating}
+                                      onClick={() => handleDocItemStatusUpdate(req.id, item, 'SUBMITTED')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                                        itemState === 'SUBMITTED'
+                                          ? 'bg-blue-600 text-white shadow-xs'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+                                      }`}
+                                    >
+                                      <Clock size={12} /> Received
+                                    </button>
+                                    <button
+                                      disabled={isItemUpdating}
+                                      onClick={() => handleDocItemStatusUpdate(req.id, item, 'REJECTED')}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                                        itemState === 'REJECTED'
+                                          ? 'bg-red-600 text-white shadow-xs'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-700'
+                                      }`}
+                                    >
+                                      <X size={12} /> Revision
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Instructions */}
+                        {req.instructions && (
+                          <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100/60">
+                            <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">Official Instructions / Requirements:</span>
+                            <p className="text-xs text-slate-700 leading-relaxed">{req.instructions}</p>
+                          </div>
+                        )}
+
+                        {/* Timeline / Status History */}
+                        {req.status_history && req.status_history.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200/60">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                              <History size={12} /> Progress Update Log:
+                            </span>
+                            <div className="space-y-1 text-[11px] text-slate-500">
+                              {req.status_history.map((log: any, logIdx: number) => (
+                                <div key={logIdx} className="flex items-start gap-2">
+                                  <span className="text-slate-400 shrink-0">• {log.updated_at ? new Date(log.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Log'}:</span>
+                                  <span>{log.note || log.status} {log.updated_by ? `(${log.updated_by})` : ''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-3">

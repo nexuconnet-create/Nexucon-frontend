@@ -81,7 +81,8 @@ export default function RequestDocumentsModal({
       if (application) {
         await requestApplicationDocs(application.id, {
           document_items: items,
-          instructions: `${instructions} (Deadline: ${deadlineDays} days)`
+          instructions: instructions,
+          deadline: `${deadlineDays} Days`
         });
       }
       
