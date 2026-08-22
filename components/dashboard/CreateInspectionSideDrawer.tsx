@@ -43,17 +43,26 @@ export default function CreateInspectionSideDrawer({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProjectId) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a project', type: 'error' } }));
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a project site', type: 'error' } }));
       return;
     }
 
     setIsSubmitting(true);
     try {
+      let isoDate: string | undefined = undefined;
+      if (scheduledDate) {
+        try {
+          isoDate = new Date(scheduledDate).toISOString();
+        } catch {
+          isoDate = undefined;
+        }
+      }
+
       await createInspection({
         project: selectedProjectId,
         inspection_type: inspectionType,
         priority,
-        scheduled_date: scheduledDate || undefined,
+        scheduled_date: isoDate,
         summary_notes: summaryNotes
       });
 
@@ -63,7 +72,17 @@ export default function CreateInspectionSideDrawer({
       onClose();
       if (onCreated) onCreated();
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to create inspection request';
+      let msg = 'Failed to create inspection request';
+      if (err.response?.data) {
+        if (err.response.data.message) {
+          msg = err.response.data.message;
+        } else if (err.response.data.errors) {
+          const fieldErrors = Object.entries(err.response.data.errors)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join('; ');
+          msg = `Validation failed: ${fieldErrors}`;
+        }
+      }
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);

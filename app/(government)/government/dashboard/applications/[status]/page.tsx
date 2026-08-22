@@ -611,6 +611,7 @@ export default function ApplicationsDynamicPage() {
       <CreateInspectionSideDrawer
         isOpen={isScheduleInspectionDrawerOpen}
         onClose={() => setIsScheduleInspectionDrawerOpen(false)}
+        onCreated={fetchApplicationsData}
       />
     </div>
   );
