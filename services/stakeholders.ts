@@ -178,6 +178,11 @@ export const getInspectors = async (params?: Record<string, any>): Promise<Inspe
   return unwrapList<Inspector>(response);
 };
 
+export const createInspector = async (data: Partial<Inspector>): Promise<Inspector> => {
+  const response = await api.post('/stakeholders/inspectors/', data);
+  return unwrapItem<Inspector>(response);
+};
+
 export const reassignInspectorZone = async (id: string, zone: string): Promise<Inspector> => {
   const response = await api.post(`/stakeholders/inspectors/${id}/reassign-zone/`, { zone });
   return unwrapItem<Inspector>(response);

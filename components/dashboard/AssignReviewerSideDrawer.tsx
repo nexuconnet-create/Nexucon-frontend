@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Search, ChevronDown, AlertCircle, UserPlus, ShieldCheck, 
-  Send, User, Building2, CheckCircle2, Clock, Mail, Award, Check
+  Send, User, Building2, CheckCircle2, Clock, Mail, Award, Check, RefreshCw
 } from 'lucide-react';
 import { Application, assignApplicationReviewer } from '@/services/applications';
-import { getInspectors, Inspector } from '@/services/stakeholders';
+import { getInspectors, createInspector, Inspector } from '@/services/stakeholders';
 import { CustomSelect } from '@/components/CustomSelect';
 
 interface AssignReviewerSideDrawerProps {
@@ -16,25 +16,6 @@ interface AssignReviewerSideDrawerProps {
   onAssign?: () => void;
 }
 
-interface ReviewerItem {
-  id: string;
-  name: string;
-  role: string;
-  organization: string;
-  zone?: string;
-  rating?: string;
-  isInspector?: boolean;
-  activeCount?: number;
-  email?: string;
-}
-
-const DEFAULT_REVIEWERS: ReviewerItem[] = [
-  { id: "REV-01", name: "Engr. Babatunde Fashola", role: "Principal Structural Reviewer", organization: "Lagos State Building Control Agency", zone: "Zone 1 (Island)", rating: "4.9", isInspector: true, activeCount: 3, email: "b.fashola@lasbca.gov.ng" },
-  { id: "REV-02", name: "Arch. Amina Mohammed", role: "Lead Architectural Examiner", organization: "Ministry of Physical Planning", zone: "Zone 2 (Ikeja)", rating: "4.8", isInspector: false, activeCount: 2, email: "a.mohammed@mpp.gov.ng" },
-  { id: "REV-03", name: "Engr. Chukwuma Obi", role: "Senior MEP & Fire Safety Inspector", organization: "Fire & Safety Regulatory Board", zone: "Zone 4 (Lekki)", rating: "4.9", isInspector: true, activeCount: 1, email: "c.obi@safetyboard.gov.ng" },
-  { id: "REV-04", name: "Dr. Kemi Adeyemi", role: "Geotechnical & Soil Specialist", organization: "Materials Testing Council", zone: "All Zones", rating: "5.0", isInspector: false, activeCount: 4, email: "k.adeyemi@mat-testing.org" },
-];
-
 export default function AssignReviewerSideDrawer({
   isOpen,
   onClose,
@@ -43,10 +24,9 @@ export default function AssignReviewerSideDrawer({
 }: AssignReviewerSideDrawerProps) {
   const [activeTab, setActiveTab] = useState<'select' | 'invite'>('select');
   const [searchQuery, setSearchQuery] = useState('');
-  const [reviewers, setReviewers] = useState<ReviewerItem[]>(DEFAULT_REVIEWERS);
-  const [selectedReviewerId, setSelectedReviewerId] = useState<string>('');
+  const [inspectors, setInspectors] = useState<Inspector[]>([]);
+  const [selectedInspectorId, setSelectedInspectorId] = useState<string>('');
   const [assignmentRole, setAssignmentRole] = useState('Primary Reviewer');
-  const [mustApprove, setMustApprove] = useState(true);
   const [reviewDeadline, setReviewDeadline] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,57 +34,51 @@ export default function AssignReviewerSideDrawer({
   // Invite form state
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteDiscipline, setInviteDiscipline] = useState('Structural Engineering');
-  const [inviteOrg, setInviteOrg] = useState('State Building Control Authority');
-  const [inviteRole, setInviteRole] = useState('Primary Reviewer');
-  const [inviteNote, setInviteNote] = useState('You have been nominated to review regulatory building submittals.');
+  const [inviteDiscipline, setInviteDiscipline] = useState('Structural Integrity Inspector');
+  const [inviteType, setInviteType] = useState('Internal (Gov)');
+  const [inviteZone, setInviteZone] = useState('Zone 1 (Island & Lekki)');
+  const [inviteNote, setInviteNote] = useState('Official invitation to conduct regulatory reviews and site inspections.');
+
+  const fetchRegisteredInspectors = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getInspectors();
+      const list = Array.isArray(data) ? data : [];
+      setInspectors(list);
+      if (list.length > 0) {
+        setSelectedInspectorId(list[0].id || list[0].inspector_id);
+      } else {
+        setSelectedInspectorId('');
+      }
+    } catch (err) {
+      console.error("Failed to load registered inspectors from database", err);
+      setInspectors([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
-    setIsLoading(true);
-    getInspectors()
-      .then(inspectors => {
-        if (inspectors && inspectors.length > 0) {
-          const mapped: ReviewerItem[] = inspectors.map(insp => ({
-            id: insp.id || insp.inspector_id,
-            name: insp.name,
-            role: insp.role_title || "Field Compliance Inspector",
-            organization: "State Regulatory Authority",
-            zone: insp.assigned_zone,
-            rating: insp.pass_rate || "4.8",
-            isInspector: true,
-            activeCount: insp.active_inspections || 0,
-            email: `${insp.name.toLowerCase().replace(/\s+/g, '.')}@regulatory.gov.ng`
-          }));
-          // Merge unique
-          const combined = [...mapped, ...DEFAULT_REVIEWERS.filter(d => !mapped.some(m => m.name === d.name))];
-          setReviewers(combined);
-          if (combined.length > 0) setSelectedReviewerId(combined[0].id);
-        } else {
-          setSelectedReviewerId(DEFAULT_REVIEWERS[0].id);
-        }
-      })
-      .catch(err => {
-        console.error("Failed to fetch inspectors in real-time", err);
-        setSelectedReviewerId(DEFAULT_REVIEWERS[0].id);
-      })
-      .finally(() => setIsLoading(false));
+    fetchRegisteredInspectors();
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const filteredReviewers = reviewers.filter(r => 
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (r.zone && r.zone.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredInspectors = inspectors.filter(insp => 
+    insp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (insp.role_title && insp.role_title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (insp.assigned_zone && insp.assigned_zone.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (insp.inspector_id && insp.inspector_id.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const selectedReviewer = reviewers.find(r => r.id === selectedReviewerId);
+  const selectedInspector = inspectors.find(
+    i => i.id === selectedInspectorId || i.inspector_id === selectedInspectorId
+  );
 
   const handleConfirmAssignment = async () => {
-    if (!selectedReviewer) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a reviewer or inspector', type: 'error' } }));
+    if (!selectedInspector) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select an inspector from the registered database', type: 'error' } }));
       return;
     }
 
@@ -112,20 +86,20 @@ export default function AssignReviewerSideDrawer({
     try {
       if (application?.id) {
         await assignApplicationReviewer(application.id, {
-          reviewer_id: selectedReviewer.id,
-          reviewer_name: selectedReviewer.name,
+          reviewer_id: selectedInspector.id || selectedInspector.inspector_id,
+          reviewer_name: selectedInspector.name,
           review_deadline: reviewDeadline || undefined
         });
       }
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Assigned ${selectedReviewer.name} as ${assignmentRole} in real-time`, type: 'success' } 
+        detail: { message: `Assigned ${selectedInspector.name} (${selectedInspector.role_title}) in real-time`, type: 'success' } 
       }));
       
       onClose();
       if (onAssign) onAssign();
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to assign reviewer';
+      const msg = err.response?.data?.message || 'Failed to assign inspector';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
@@ -134,49 +108,47 @@ export default function AssignReviewerSideDrawer({
 
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteName.trim() || !inviteEmail.trim()) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Name and email are required', type: 'error' } }));
+    if (!inviteName.trim()) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Inspector name is required', type: 'error' } }));
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const newReviewer: ReviewerItem = {
-        id: `REV-INV-${Date.now().toString().slice(-4)}`,
+      // 1. Create inspector in backend database
+      const created = await createInspector({
         name: inviteName.trim(),
-        role: `${inviteDiscipline} Specialist`,
-        organization: inviteOrg,
-        zone: "Assigned Project Zone",
-        rating: "New",
-        isInspector: inviteRole.includes('Inspector'),
-        activeCount: 1,
-        email: inviteEmail.trim()
-      };
+        role_title: inviteDiscipline,
+        inspector_type: inviteType,
+        assigned_zone: inviteZone,
+        active_inspections: 0,
+        pass_rate: '100%',
+        ncrs_issued: 0
+      });
 
-      setReviewers(prev => [newReviewer, ...prev]);
-      setSelectedReviewerId(newReviewer.id);
-      setAssignmentRole(inviteRole);
-
+      // 2. Assign to active application if selected
       if (application?.id) {
         await assignApplicationReviewer(application.id, {
-          reviewer_id: newReviewer.id,
-          reviewer_name: newReviewer.name,
+          reviewer_id: created.id || created.inspector_id,
+          reviewer_name: created.name,
           review_deadline: reviewDeadline || undefined
         });
       }
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Invitation dispatched to ${inviteEmail}. Added & assigned as reviewer.`, type: 'success' } 
+        detail: { message: `${created.name} registered into database and assigned as inspector. Invitation dispatched to ${inviteEmail || 'user'}.`, type: 'success' } 
       }));
 
-      // Reset invite fields
+      // Reset form & reload database inspectors
       setInviteName('');
       setInviteEmail('');
+      await fetchRegisteredInspectors();
       setActiveTab('select');
       onClose();
       if (onAssign) onAssign();
     } catch (err: any) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to send invitation', type: 'error' } }));
+      const msg = err.response?.data?.message || err.message || 'Failed to register and invite inspector';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
     }
@@ -193,8 +165,8 @@ export default function AssignReviewerSideDrawer({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
           <div>
-            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Reviewer Oversight</span>
-            <h2 className="text-xl font-black text-[#022C4F]">Assign Reviewer & Inspector</h2>
+            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Government Regulatory Desk</span>
+            <h2 className="text-xl font-black text-[#022C4F]">Assign Certified Inspector / Reviewer</h2>
             {application && (
               <p className="text-xs text-slate-500 mt-0.5">
                 {application.application_reference} • {application.project_name}
@@ -219,7 +191,7 @@ export default function AssignReviewerSideDrawer({
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck size={15} className="text-blue-600" /> Available Reviewers & Inspectors ({reviewers.length})
+            <ShieldCheck size={15} className="text-blue-600" /> Database Inspectors ({inspectors.length})
           </button>
           <button
             onClick={() => setActiveTab('invite')}
@@ -229,11 +201,11 @@ export default function AssignReviewerSideDrawer({
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <UserPlus size={15} className="text-emerald-600" /> ➕ Invite New Reviewer
+            <UserPlus size={15} className="text-emerald-600" /> ➕ Invite & Register Reviewer
           </button>
         </div>
 
-        {/* TAB 1: Select Available Inspector / Reviewer */}
+        {/* TAB 1: Select Registered Database Inspector */}
         {activeTab === 'select' && (
           <div className="flex-1 overflow-y-auto flex flex-col space-y-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             
@@ -244,30 +216,43 @@ export default function AssignReviewerSideDrawer({
                 type="text" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter by name, discipline, zone, or agency..." 
+                placeholder="Search database inspectors by name, zone, or ID..." 
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            {/* Reviewers List */}
-            <div className="space-y-2.5">
+            {/* Live Database Inspectors List */}
+            <div className="space-y-2.5 flex-1">
               {isLoading ? (
-                <div className="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                  Loading certified reviewers and inspectors in real-time...
+                <div className="p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
+                  <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  Querying registered database inspectors in real-time...
                 </div>
-              ) : filteredReviewers.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 text-slate-400 text-xs">
-                  No reviewers found matching "{searchQuery}".
+              ) : filteredInspectors.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                  <ShieldCheck size={32} className="text-slate-300 mx-auto" />
+                  <h4 className="text-sm font-bold text-slate-700">No Registered Inspectors Found</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {searchQuery 
+                      ? `No registered inspector matches "${searchQuery}".`
+                      : "There are currently no inspectors registered on the database. You can invite and register new reviewers directly."}
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('invite')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus size={14} /> ➕ Invite & Register First Reviewer
+                  </button>
                 </div>
               ) : (
-                filteredReviewers.map((rev) => {
-                  const isSelected = selectedReviewerId === rev.id;
+                filteredInspectors.map((insp) => {
+                  const inspId = insp.id || insp.inspector_id;
+                  const isSelected = selectedInspectorId === inspId;
 
                   return (
                     <div 
-                      key={rev.id}
-                      onClick={() => setSelectedReviewerId(rev.id)}
+                      key={inspId}
+                      onClick={() => setSelectedInspectorId(inspId)}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
                         isSelected 
                           ? 'border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-600' 
@@ -279,28 +264,26 @@ export default function AssignReviewerSideDrawer({
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                             isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
                           }`}>
-                            {rev.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            {insp.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-extrabold text-[#022C4F]">{rev.name}</h4>
-                              {rev.isInspector && (
-                                <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
-                                  Inspector
-                                </span>
-                              )}
+                              <h4 className="text-xs font-extrabold text-[#022C4F]">{insp.name}</h4>
+                              <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-100 text-blue-800 uppercase tracking-wider">
+                                {insp.inspector_id}
+                              </span>
                             </div>
-                            <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{rev.role}</p>
-                            <p className="text-[10px] text-slate-400">{rev.organization} {rev.zone ? `• ${rev.zone}` : ''}</p>
+                            <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{insp.role_title}</p>
+                            <p className="text-[10px] text-slate-400">{insp.inspector_type} • Zone: {insp.assigned_zone}</p>
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end">
                           <span className="text-[10px] font-bold text-slate-500">
-                            {rev.activeCount} active case(s)
+                            {insp.active_inspections} active inspection(s)
                           </span>
                           <span className="text-[10px] font-semibold text-emerald-600">
-                            ★ {rev.rating} rating
+                            {insp.pass_rate} pass rate
                           </span>
                         </div>
                       </div>
@@ -310,7 +293,7 @@ export default function AssignReviewerSideDrawer({
                         <div className="pt-3 mt-1 border-t border-blue-200/60 grid grid-cols-2 gap-3 animate-in fade-in duration-200">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                              Assignment Role
+                              Reviewer Authority Role
                             </label>
                             <CustomSelect
                               value={assignmentRole}
@@ -328,7 +311,7 @@ export default function AssignReviewerSideDrawer({
 
                           <div>
                             <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                              Target SLA Deadline
+                              Target Review SLA Deadline
                             </label>
                             <input 
                               type="date"
@@ -346,32 +329,42 @@ export default function AssignReviewerSideDrawer({
             </div>
 
             {/* Action Footer */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
               <button 
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                onClick={fetchRegisteredInspectors}
+                className="text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1.5 cursor-pointer"
               >
-                Cancel
+                <RefreshCw size={12} /> Refresh DB List
               </button>
-              <button 
-                type="button"
-                onClick={handleConfirmAssignment}
-                disabled={isSubmitting || !selectedReviewer}
-                className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033b6a] text-white rounded-xl text-xs font-bold shadow-md shadow-[#022C4F]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Check size={14} /> {isSubmitting ? 'Assigning in Real-Time...' : 'Confirm Real-Time Assignment'}
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleConfirmAssignment}
+                  disabled={isSubmitting || !selectedInspector}
+                  className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033b6a] text-white rounded-xl text-xs font-bold shadow-md shadow-[#022C4F]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Check size={14} /> {isSubmitting ? 'Assigning in Real-Time...' : 'Confirm Real-Time Assignment'}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 2: Invite New Reviewer */}
+        {/* TAB 2: Invite & Register New Reviewer in Database */}
         {activeTab === 'invite' && (
           <form onSubmit={handleSendInvite} className="flex-1 overflow-y-auto flex flex-col space-y-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             
             <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs text-emerald-900 leading-relaxed font-medium">
-              <span className="font-bold">Official Registration:</span> Inviting an external engineer or certified officer sends an encrypted credentials invitation to their email and provisions their reviewer seat immediately.
+              <span className="font-bold">Database Registration:</span> Submitting this form registers the inspector record directly in the backend database and sends an official reviewer invitation link to their email.
             </div>
 
             <div>
@@ -396,7 +389,7 @@ export default function AssignReviewerSideDrawer({
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="e.g. a.balogun@regulatory.gov.ng"
+                placeholder="e.g. a.balogun@lasbca.gov.ng"
                 required
                 className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
@@ -405,18 +398,18 @@ export default function AssignReviewerSideDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Engineering Discipline
+                  Inspector Discipline / Role
                 </label>
                 <CustomSelect
                   value={inviteDiscipline}
                   onChange={(val) => setInviteDiscipline(val)}
                   options={[
-                    { value: "Structural Engineering", label: "Structural Engineering" },
-                    { value: "Civil & Foundation", label: "Civil & Foundation" },
-                    { value: "MEP & Fire Safety", label: "MEP & Fire Safety" },
-                    { value: "Architectural Examiner", label: "Architectural Examiner" },
-                    { value: "Geotechnical / Soil", label: "Geotechnical / Soil" },
-                    { value: "Environmental Impact", label: "Environmental Impact" }
+                    { value: "Structural Integrity Inspector", label: "Structural Integrity Inspector" },
+                    { value: "Senior MEP & Infrastructure Inspector", label: "Senior MEP & Infrastructure Inspector" },
+                    { value: "Senior Geodetic & GNSS Survey Inspector", label: "Senior Geodetic & GNSS Survey Inspector" },
+                    { value: "Fire & Site Safety Inspector", label: "Fire & Site Safety Inspector" },
+                    { value: "Environmental & Drainage Inspector", label: "Environmental & Drainage Inspector" },
+                    { value: "Lead Architectural Examiner", label: "Lead Architectural Examiner" }
                   ]}
                   placeholder="Discipline..."
                 />
@@ -424,38 +417,41 @@ export default function AssignReviewerSideDrawer({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Assigned Authority Role
+                  Inspector Classification
                 </label>
                 <CustomSelect
-                  value={inviteRole}
-                  onChange={(val) => setInviteRole(val)}
+                  value={inviteType}
+                  onChange={(val) => setInviteType(val)}
                   options={[
-                    { value: "Primary Reviewer", label: "Primary Reviewer" },
-                    { value: "Compliance Inspector", label: "Compliance Inspector" },
-                    { value: "Advisory Specialist", label: "Advisory Specialist" },
-                    { value: "Lead Approver", label: "Lead Approver" }
+                    { value: "Internal (Gov)", label: "Internal (Government Staff)" },
+                    { value: "Third-Party Accredited", label: "Third-Party Accredited" },
+                    { value: "Independent Specialist", label: "Independent Specialist" }
                   ]}
-                  placeholder="Role..."
+                  placeholder="Classification..."
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Organization / Government Agency
+                Assigned Jurisdiction Zone
               </label>
-              <input
-                type="text"
-                value={inviteOrg}
-                onChange={(e) => setInviteOrg(e.target.value)}
-                placeholder="e.g. Lagos State Physical Planning Directorate"
-                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              <CustomSelect
+                value={inviteZone}
+                onChange={(val) => setInviteZone(val)}
+                options={[
+                  { value: "Zone 1 (Island & Lekki)", label: "Zone 1 (Island & Lekki)" },
+                  { value: "Zone 2 (Ikeja & Mainland)", label: "Zone 2 (Ikeja & Mainland)" },
+                  { value: "Zone 3 (Ibeju-Lekki & Free Zone)", label: "Zone 3 (Ibeju-Lekki & Free Zone)" },
+                  { value: "All Zones (Statewide)", label: "All Zones (Statewide)" }
+                ]}
+                placeholder="Zone..."
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Personalized Onboarding Note
+                Personalized Onboarding Directives
               </label>
               <textarea
                 value={inviteNote}
@@ -471,14 +467,14 @@ export default function AssignReviewerSideDrawer({
                 onClick={() => setActiveTab('select')}
                 className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                Back
+                Back to List
               </button>
               <button 
                 type="submit"
                 disabled={isSubmitting}
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <Send size={14} /> {isSubmitting ? 'Sending Invite & Assigning...' : 'Send Invitation & Assign Reviewer'}
+                <Send size={14} /> {isSubmitting ? 'Registering & Inviting...' : 'Register to DB & Send Invitation'}
               </button>
             </div>
           </form>
