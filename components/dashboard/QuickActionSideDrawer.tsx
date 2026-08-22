@@ -80,6 +80,23 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
     }
   };
 
+  const getActionSubtitle = () => {
+    if (actionTitle.includes("Document")) return "Select a project to inspect architectural drawings, permits, and structural submittals.";
+    if (actionTitle.includes("BIM")) return "Select a project to view 3D IFC models, element properties, and clash reports.";
+    if (actionTitle.includes("Activity") || actionTitle.includes("Progress")) return "Select a project to inspect field observations, daily photo logs, and site progress.";
+    if (actionTitle.includes("Monitor")) return "Select a project to open dedicated real-time compliance and stage monitoring.";
+    return "Select a project to view complete statutory and regulatory records.";
+  };
+
+  const getGlobalShortcut = () => {
+    if (actionTitle.includes("Document")) return { label: "Browse Global Documents Vault", path: "/government/dashboard/documents/project" };
+    if (actionTitle.includes("BIM")) return { label: "Browse Global BIM Models", path: "/government/dashboard/bim/models" };
+    if (actionTitle.includes("Activity") || actionTitle.includes("Monitor") || actionTitle.includes("Progress")) return { label: "Open Live Site Monitoring", path: "/government/dashboard/monitoring/live" };
+    return null;
+  };
+
+  const globalShortcut = getGlobalShortcut();
+
   return (
     <>
       <div
@@ -99,18 +116,35 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
             <h2 className="text-xl font-extrabold text-[#022C4F]">
               {actionTitle || "Select Project"}
             </h2>
+            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{getActionSubtitle()}</p>
           </div>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
+        {/* Global Shortcut Banner */}
+        {globalShortcut && (
+          <div className="px-6 pt-4 shrink-0">
+            <button
+              onClick={() => {
+                onClose();
+                router.push(globalShortcut.path);
+              }}
+              className="w-full py-2 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer"
+            >
+              <span>{globalShortcut.label}</span>
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        )}
+
         {/* Search */}
         <div className="p-6 pb-2 shrink-0 bg-[#F4F7F9]">
-          <p className="text-xs text-gray-500 mb-4 font-medium">Select a project to apply this action to:</p>
+          <p className="text-xs text-gray-500 mb-3 font-medium">Or choose a specific project below:</p>
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
@@ -139,7 +173,7 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
               <button 
                 key={project.id}
                 onClick={() => handleProjectSelect(project)}
-                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all text-left flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all text-left flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex flex-col gap-1.5 overflow-hidden pr-4">
                   <div className="flex items-center gap-2 mb-1">

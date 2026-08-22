@@ -264,10 +264,28 @@ export default function ProjectsDynamicPage() {
               <button
                 key={idx}
                 onClick={() => {
-                  setSelectedQuickAction(action);
-                  setIsQuickActionDrawerOpen(true);
+                  if (action === "Open Project Monitoring" || action === "Monitor Project" || action === "Open Project Monitor") {
+                    router.push('/government/dashboard/monitoring/live');
+                  } else if (action === "Schedule Inspection" || action === "Schedule Re-Inspection") {
+                    router.push('/government/dashboard/inspections/requests');
+                  } else if (action === "Review Submission" || action === "Approve / Reject") {
+                    router.push('/government/dashboard/approvals/pending');
+                  } else if (action === "View Approval History") {
+                    router.push('/government/dashboard/approvals/history');
+                  } else if (action === "View Flag Details" || action === "Create Corrective Action" || action === "Escalate Issue") {
+                    router.push('/government/dashboard/compliance/ncrs');
+                  } else if (action === "Add to Registry") {
+                    router.push('/government/dashboard/stakeholders/developers');
+                  } else if (action === "Verify Site Coordinates") {
+                    router.push('/government/dashboard/integrations/tersus');
+                  } else if (action === "Generate Monitoring Report" || action === "Generate Tribunal Report" || action === "Review Final Report") {
+                    router.push('/government/dashboard/analytics/performance');
+                  } else {
+                    setSelectedQuickAction(action);
+                    setIsQuickActionDrawerOpen(true);
+                  }
                 }}
-                className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group"
+                className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group cursor-pointer"
               >
                 {action}
                 <ArrowUpRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -364,7 +382,11 @@ export default function ProjectsDynamicPage() {
           ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
               {displayedProjects.map((project) => (
-                <div key={project.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white">
+                <div 
+                  key={project.id} 
+                  onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
+                  className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white cursor-pointer"
+                >
                   <div className="flex items-center gap-4 w-1/3">
                     <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                       <Building2 size={20} />
@@ -410,7 +432,13 @@ export default function ProjectsDynamicPage() {
                         </div>
                       )}
                     </div>
-                    <button className="p-2 text-slate-400 hover:text-[#022C4F] hover:bg-slate-100 rounded-lg transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`);
+                      }}
+                      className="p-2 text-slate-400 hover:text-[#022C4F] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    >
                       <MoreVertical size={18} />
                     </button>
                   </div>
@@ -420,7 +448,11 @@ export default function ProjectsDynamicPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {displayedProjects.map((project) => (
-                <div key={project.id} className="p-5 rounded-2xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-lg transition-all group bg-white flex flex-col">
+                <div 
+                  key={project.id} 
+                  onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
+                  className="p-5 rounded-2xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-lg transition-all group bg-white flex flex-col cursor-pointer"
+                >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                       <Building2 size={20} />
@@ -469,7 +501,13 @@ export default function ProjectsDynamicPage() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-end">
-                    <button className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`);
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
                       View Project <ArrowUpRight size={12} />
                     </button>
                   </div>
