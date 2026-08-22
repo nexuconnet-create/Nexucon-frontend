@@ -92,9 +92,15 @@ export const getApplicationStats = async (): Promise<ApplicationStats> => {
   return res.data || res;
 };
 
+const unwrapApp = (res: any): Application => {
+  if (res && res.data && typeof res.data === 'object' && res.data.id) return res.data;
+  if (res && res.id) return res;
+  return res;
+};
+
 export const createApplication = async (payload: CreateApplicationPayload): Promise<Application> => {
   const res: any = await api.post('/applications/', payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const transitionApplication = async (
@@ -102,7 +108,7 @@ export const transitionApplication = async (
   payload: { status: string; reason?: string; conditions?: string }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/transition/`, payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const assignApplicationReviewer = async (
@@ -110,7 +116,7 @@ export const assignApplicationReviewer = async (
   payload: { reviewer_id?: string | number; reviewer_name?: string; review_deadline?: string }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/assign-reviewer/`, payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const requestApplicationDocs = async (
@@ -118,7 +124,7 @@ export const requestApplicationDocs = async (
   payload: { document_items: string[]; instructions?: string; deadline?: string }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/request-docs/`, payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const updateDocRequestProgress = async (
@@ -132,7 +138,7 @@ export const updateDocRequestProgress = async (
   }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/update-doc-request/`, payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const updateApplicationReviewItem = async (
@@ -140,7 +146,7 @@ export const updateApplicationReviewItem = async (
   payload: { item_id: string; status: 'PASSED' | 'FAILED' | 'PENDING'; notes?: string }
 ): Promise<Application> => {
   const res: any = await api.post(`/applications/${id}/update-review-item/`, payload);
-  return res.data || res;
+  return unwrapApp(res);
 };
 
 export const getReviewQueue = async (): Promise<Application[]> => {

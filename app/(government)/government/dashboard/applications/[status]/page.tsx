@@ -406,6 +406,11 @@ export default function ApplicationsDynamicPage() {
                           {app.project_name || app.title}
                         </h4>
                         <p className="text-xs text-slate-400 font-semibold">{app.application_reference}</p>
+                        {app.status === 'REJECTED' && app.decision_reason && (
+                          <span className="inline-block text-[10px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded-md mt-1 border border-red-100 max-w-[260px] truncate">
+                            Refusal: {app.decision_reason}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -519,7 +524,12 @@ export default function ApplicationsDynamicPage() {
                     <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1 line-clamp-1">
                       {app.project_name || app.title}
                     </h4>
-                    <p className="text-xs text-slate-400 font-semibold mb-3">{app.application_reference}</p>
+                    <p className="text-xs text-slate-400 font-semibold mb-2">{app.application_reference}</p>
+                    {app.status === 'REJECTED' && app.decision_reason && (
+                      <div className="mb-3 px-2.5 py-1 bg-red-50 text-red-700 rounded-lg text-[10px] font-semibold border border-red-100 line-clamp-2">
+                        Refusal: {app.decision_reason}
+                      </div>
+                    )}
 
                     {/* Progress indicator if document requests are active */}
                     {docReqs.length > 0 && (
