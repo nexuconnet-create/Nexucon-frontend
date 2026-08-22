@@ -13,9 +13,11 @@ function AcceptInviteContent() {
 
   const token = searchParams.get("token") || "";
   const emailParam = searchParams.get("email") || "";
+  const roleParam = searchParams.get("role") || "";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(emailParam);
+  const [role, setRole] = useState(roleParam || "Government Agency Head");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +34,10 @@ function AcceptInviteContent() {
         setFullName(username.charAt(0).toUpperCase() + username.slice(1).replace(/[._]/g, " "));
       }
     }
-  }, [emailParam]);
+    if (roleParam) {
+      setRole(roleParam);
+    }
+  }, [emailParam, roleParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +63,12 @@ function AcceptInviteContent() {
       
       setIsSuccess(true);
       setTimeout(() => {
-        router.push("/government/dashboard");
+        // Direct to Command Center for agency heads / directors or role-based landing
+        if (role.toLowerCase().includes("inspector") || role.toLowerCase().includes("field")) {
+          router.push("/government/dashboard/monitoring/live");
+        } else {
+          router.push("/government/dashboard/command-center");
+        }
       }, 1500);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to activate account. Please try again.");
@@ -75,13 +85,17 @@ function AcceptInviteContent() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold uppercase tracking-wider mb-3">
             <ShieldCheck size={14} className="text-blue-600" />
-            Official Authority Onboarding
+            {role || "Government Authority"} Onboarding
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
             Activate Your Account
           </h1>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Set your security credentials to access the Nexucon Building Regulatory Portal
+            {role.toLowerCase().includes("inspector") 
+              ? "Access Mobile Site Inspections, Field Telemetry & Stop-Work Tools"
+              : role.toLowerCase().includes("director") || role.toLowerCase().includes("head")
+              ? "Access Government Command Center, Executive Analytics & Seal Approvals"
+              : "Set your security credentials to access the Nexucon Portal"}
           </p>
         </div>
 

@@ -127,10 +127,12 @@ export default function InviteUserModal({
                 onChange={(e) => setRole(e.target.value)}
                 className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium"
               >
-                <option value="System Administrator">System Administrator</option>
-                <option value="City Planner">City Planner</option>
-                <option value="Lead Inspector">Lead Inspector</option>
-                <option value="Reviewer">Reviewer</option>
+                <option value="Government Agency Head">🏛️ Government Agency Head / Director</option>
+                <option value="Lead Field Building Inspector">🔍 Field Building Inspector</option>
+                <option value="Technical Reviewer">📐 Technical Reviewer / Plan Examiner</option>
+                <option value="Compliance Officer">⚖️ Compliance & Enforcement Officer</option>
+                <option value="City Planner">🗺️ City & Urban Planner</option>
+                <option value="System Administrator">🛡️ System Administrator</option>
               </select>
             </div>
 
