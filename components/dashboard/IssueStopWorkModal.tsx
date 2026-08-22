@@ -93,7 +93,7 @@ export default function IssueStopWorkModal({
       onClose();
       if (onSuccess) onSuccess(swo);
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Failed to issue Stop-Work Order';
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to issue Stop-Work Order';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
