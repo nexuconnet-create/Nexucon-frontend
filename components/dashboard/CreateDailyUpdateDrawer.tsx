@@ -4,9 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Camera, Plus, Activity, CloudSun, MapPin, Building2, 
   UploadCloud, Image as ImageIcon, Link as LinkIcon, RefreshCw, 
-  ShieldCheck, AlertTriangle, CheckCircle, Trash2, SwitchCamera, Sparkles
+  ShieldCheck, AlertTriangle, CheckCircle, Trash2, SwitchCamera, 
+  Sparkles, Eye, Check
 } from 'lucide-react';
-import { createDailySiteUpdate, DailySiteUpdate } from '@/services/monitoring';
+import { createDailySiteUpdate, getDailySiteUpdates, DailySiteUpdate } from '@/services/monitoring';
 import { getProjects, Project } from '@/services/projects';
 import { CustomSelect } from '@/components/CustomSelect';
 
@@ -29,11 +30,13 @@ export default function CreateDailyUpdateDrawer({
   const [weatherCondition, setWeatherCondition] = useState('Clear / Sunny');
   const [workforceCount, setWorkforceCount] = useState(30);
 
-  // Photo Input Method State: 'upload' | 'camera' | 'link'
+  // Active uploaded / selected photos for current update
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [existingProjectPhotos, setExistingProjectPhotos] = useState<string[]>([]);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  // Photo Input Method: 'upload' | 'camera' | 'link'
   const [photoTab, setPhotoTab] = useState<'upload' | 'camera' | 'link'>('upload');
-  const [photos, setPhotos] = useState<string[]>([
-    'https://images.unsplash.com/photo-1541888946425-d0fbb180c5f2?auto=format&fit=crop&w=1200&q=80'
-  ]);
   const [isUploadingToCloudinary, setIsUploadingToCloudinary] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState('');
 
@@ -67,6 +70,26 @@ export default function CreateDailyUpdateDrawer({
       })
       .catch(err => console.error("Failed to load projects", err));
   }, [isOpen]);
+
+  // Load existing project photos whenever selected project changes
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    getDailySiteUpdates({ search: selectedProjectId })
+      .then(res => {
+        const updates: DailySiteUpdate[] = Array.isArray(res) ? res : ((res as any).results || []);
+        const matching = updates.filter(u => u.project === selectedProjectId || u.project_name === selectedProjectId);
+        const collected: string[] = [];
+        matching.forEach(u => {
+          if (Array.isArray(u.photos)) {
+            u.photos.forEach(p => {
+              if (p && !collected.includes(p)) collected.push(p);
+            });
+          }
+        });
+        setExistingProjectPhotos(collected);
+      })
+      .catch(err => console.error("Failed to load existing project photos", err));
+  }, [selectedProjectId]);
 
   // Clean up camera stream on unmount
   useEffect(() => {
@@ -250,6 +273,14 @@ export default function CreateDailyUpdateDrawer({
     }
   };
 
+  const handleToggleExistingPhoto = (url: string) => {
+    if (photos.includes(url)) {
+      setPhotos(photos.filter(p => p !== url));
+    } else {
+      setPhotos([...photos, url]);
+    }
+  };
+
   const handleRemovePhoto = (idx: number) => {
     setPhotos(photos.filter((_, i) => i !== idx));
   };
@@ -298,16 +329,16 @@ export default function CreateDailyUpdateDrawer({
           onClose();
         }}
       />
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[620px] bg-white p-7 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300">
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[640px] bg-white p-7 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-5 border-b border-slate-100 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 uppercase tracking-wider">
-                Cloudinary Sync
+                Cloudinary Storage
               </span>
-              <span className="text-xs text-slate-400 font-bold">Field Telemetry</span>
+              <span className="text-xs text-slate-400 font-bold">Live Field Telemetry</span>
             </div>
             <h2 className="text-xl font-black text-[#022C4F] flex items-center gap-2 mt-1">
               <Camera className="text-blue-600" size={22} /> Daily Site & Photo Update
@@ -329,7 +360,7 @@ export default function CreateDailyUpdateDrawer({
           {/* Construction Project Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Active Construction Project
+              Target Construction Project
             </label>
             <CustomSelect
               value={selectedProjectId}
@@ -413,17 +444,17 @@ export default function CreateDailyUpdateDrawer({
             />
           </div>
 
-          {/* Photo Upload Section with 3 Methods */}
+          {/* Photo Capture & Upload Section */}
           <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <label className="block text-xs font-black text-[#022C4F] uppercase tracking-wider">
-                  Site Progress Evidence & Photography
+                  Site Evidence & Progress Photographs
                 </label>
-                <p className="text-[11px] text-slate-500">Live Camera, Device Upload, or Verified Secure Link</p>
+                <p className="text-[11px] text-slate-500">Live Camera, Device Files, or Verified Secure Link</p>
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800">
-                {photos.length} Photo{photos.length === 1 ? '' : 's'}
+                {photos.length} Selected
               </span>
             </div>
 
@@ -532,7 +563,7 @@ export default function CreateDailyUpdateDrawer({
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 group-hover:bg-blue-100 text-blue-600 flex items-center justify-center mb-2 transition-colors">
                     <UploadCloud size={24} />
                   </div>
-                  <h4 className="text-xs font-black text-[#022C4F]">Click to upload or drag & drop</h4>
+                  <h4 className="text-xs font-black text-[#022C4F]">Click to upload or drag & drop photos</h4>
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                     JPEG, PNG, WebP, HEIC (Auto-uploaded to Cloudinary)
                   </p>
@@ -599,14 +630,43 @@ export default function CreateDailyUpdateDrawer({
               </div>
             )}
 
-            {/* Gallery Thumbnail Preview Strip */}
-            {photos.length > 0 && (
-              <div className="pt-2">
+            {/* Uploaded / Selected Pictures for this Update */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-700">
+                  Attached Pictures ({photos.length})
+                </span>
+                {photos.length > 0 && (
+                  <button 
+                    type="button"
+                    onClick={() => setPhotos([])} 
+                    className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              {photos.length === 0 ? (
+                <div className="py-6 border border-dashed border-slate-200 rounded-xl text-center bg-white text-slate-400">
+                  <ImageIcon size={24} className="mx-auto mb-1 text-slate-300" />
+                  <p className="text-xs font-semibold">No pictures attached for this update yet.</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Use the camera, upload from device, or enter a verified URL.</p>
+                </div>
+              ) : (
                 <div className="grid grid-cols-3 gap-2.5">
                   {photos.map((p, idx) => (
                     <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white h-24 shadow-sm">
                       <img src={p} alt={`Site evidence ${idx + 1}`} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoUrl(p)}
+                          className="p-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
+                          title="Preview full size"
+                        >
+                          <Eye size={13} />
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(idx)}
@@ -622,8 +682,48 @@ export default function CreateDailyUpdateDrawer({
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Historical Uploaded Pictures for this Project */}
+            {existingProjectPhotos.length > 0 && (
+              <div className="pt-3 border-t border-slate-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-amber-500" />
+                    All Uploaded Photos on this Project ({existingProjectPhotos.length})
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {existingProjectPhotos.map((p, idx) => {
+                    const isSelected = photos.includes(p);
+                    return (
+                      <div 
+                        key={idx} 
+                        onClick={() => handleToggleExistingPhoto(p)}
+                        className={`relative group rounded-xl overflow-hidden border h-20 shadow-sm cursor-pointer transition-all ${
+                          isSelected ? 'ring-2 ring-blue-500 border-blue-500' : 'border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <img src={p} alt={`Project photo ${idx + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        
+                        {isSelected ? (
+                          <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow">
+                            <Check size={11} />
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
+                            + Add
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
           </div>
 
           {/* Footer Actions */}
@@ -649,6 +749,28 @@ export default function CreateDailyUpdateDrawer({
 
         </form>
       </div>
+
+      {/* Full Size Preview Modal */}
+      {previewPhotoUrl && (
+        <div 
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-[150] flex items-center justify-center p-4"
+          onClick={() => setPreviewPhotoUrl(null)}
+        >
+          <div className="relative max-w-3xl w-full max-h-[80vh] flex items-center justify-center">
+            <button 
+              onClick={() => setPreviewPhotoUrl(null)}
+              className="absolute -top-10 right-0 w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+            <img 
+              src={previewPhotoUrl} 
+              alt="Full Preview" 
+              className="max-h-[75vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl border border-white/10" 
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }
