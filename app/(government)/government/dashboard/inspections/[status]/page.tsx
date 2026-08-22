@@ -537,7 +537,36 @@ export default function InspectionsDynamicPage() {
         isOpen={isFindingModalOpen}
         onClose={() => setIsFindingModalOpen(false)}
         inspection={selectedInspection}
-        onSuccess={fetchInspectionsData}
+        onSuccess={(newFinding) => {
+          if (newFinding && selectedInspection) {
+            const inspId = selectedInspection.id;
+            setSelectedInspection(prev => {
+              if (!prev || prev.id !== inspId) return prev;
+              const existing = prev.findings || [];
+              return {
+                ...prev,
+                findings: [newFinding, ...existing],
+                findings_count: existing.length + 1
+              };
+            });
+
+            setInspections(prev => prev.map(item => {
+              if (item.id !== inspId) return item;
+              const existing = item.findings || [];
+              return {
+                ...item,
+                findings: [newFinding, ...existing],
+                findings_count: existing.length + 1
+              };
+            }));
+
+            setStats(prev => ({
+              ...prev,
+              findings: prev.findings + 1
+            }));
+          }
+          fetchInspectionsData();
+        }}
       />
 
       <IssueStopWorkModal

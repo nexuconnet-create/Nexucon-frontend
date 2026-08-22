@@ -9,7 +9,7 @@ interface LogFindingModalProps {
   isOpen: boolean;
   onClose: () => void;
   inspection: Inspection | null;
-  onSuccess?: () => void;
+  onSuccess?: (newFinding?: any) => void;
 }
 
 export default function LogFindingModal({
@@ -37,20 +37,24 @@ export default function LogFindingModal({
 
     setIsSubmitting(true);
     try {
-      await logInspectionFinding(inspection.id, {
-        title,
-        description,
+      const newFinding = await logInspectionFinding(inspection.id, {
+        title: title.trim(),
+        description: description.trim(),
         severity,
         category,
-        corrective_action_required: correctiveAction,
+        corrective_action_required: correctiveAction.trim(),
         requires_reinspection: requiresReinspection
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Inspection defect finding recorded', type: 'success' } 
+        detail: { message: `Inspection defect finding logged in real-time (${newFinding.finding_reference || 'Recorded'})`, type: 'success' } 
       }));
+      
+      setTitle('');
+      setDescription('');
+      setCorrectiveAction('');
       onClose();
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(newFinding);
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to log finding';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
