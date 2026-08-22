@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, Send, ShieldAlert } from 'lucide-react';
 import { createSiteIssue, SiteIssue } from '@/services/monitoring';
+import { createStopWorkOrder } from '@/services/inspections';
 import { getProjects, Project } from '@/services/projects';
 import { CustomSelect } from '@/components/CustomSelect';
 
@@ -22,6 +23,7 @@ export default function ReportIssueModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('MEDIUM');
+  const [enforceStopWork, setEnforceStopWork] = useState(false);
   const [assignedToName, setAssignedToName] = useState('Site Engineer');
   const [dueDate, setDueDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,13 +57,27 @@ export default function ReportIssueModal({
         project: selectedProjectId,
         title: title.trim(),
         description: description.trim(),
-        severity,
+        severity: enforceStopWork ? 'CRITICAL' : severity,
         assigned_to_name: assignedToName,
-        due_date: dueDate || undefined
-      });
+        due_date: dueDate || undefined,
+        enforce_stop_work: enforceStopWork
+      } as any);
+
+      if (enforceStopWork) {
+        await createStopWorkOrder({
+          project: selectedProjectId,
+          reason: `${title.trim()}: ${description.trim() || 'Immediate site safety and building regulation breach.'}`,
+          severity: 'CRITICAL'
+        });
+      }
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Site issue reported successfully', type: 'success' } 
+        detail: { 
+          message: enforceStopWork 
+            ? 'Stop-Work Order enforced! Site suspended and registered in Stop-Work Orders Registry.'
+            : 'Site issue reported successfully', 
+          type: 'success' 
+        } 
       }));
       onClose();
       if (onSuccess) onSuccess(issue);
@@ -170,6 +186,30 @@ export default function ReportIssueModal({
             />
           </div>
 
+          <div className="p-3.5 bg-rose-50 border border-rose-200/80 rounded-2xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <ShieldAlert size={18} className="text-rose-600 shrink-0" />
+              <div>
+                <label htmlFor="enforce-swo-checkbox" className="text-xs font-bold text-rose-900 cursor-pointer block">
+                  Enforce Statutory Stop-Work Order
+                </label>
+                <p className="text-[10px] text-rose-700 font-medium">
+                  Immediately suspends site construction and registers in Stop-Work Orders Registry
+                </p>
+              </div>
+            </div>
+            <input
+              id="enforce-swo-checkbox"
+              type="checkbox"
+              checked={enforceStopWork}
+              onChange={(e) => {
+                setEnforceStopWork(e.target.checked);
+                if (e.target.checked) setSeverity('CRITICAL');
+              }}
+              className="w-4 h-4 text-rose-600 rounded border-rose-300 focus:ring-rose-500 cursor-pointer"
+            />
+          </div>
+
           <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
             <button
               type="button"
@@ -181,9 +221,11 @@ export default function ReportIssueModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                enforceStopWork ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+              }`}
             >
-              <Send size={14} /> {isSubmitting ? 'Submitting...' : 'Report Issue'}
+              <Send size={14} /> {isSubmitting ? 'Submitting...' : (enforceStopWork ? 'Issue Stop-Work & Report Defect' : 'Report Issue')}
             </button>
           </div>
         </form>

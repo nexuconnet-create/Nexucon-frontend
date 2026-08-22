@@ -406,7 +406,11 @@ export default function MonitoringDetailSideDrawer({
                 type="button"
                 onClick={() => {
                   onClose();
-                  router.push('/government/dashboard/inspections/stop-work');
+                  if (onAction) {
+                    onAction('ISSUE_STOP_WORK', data);
+                  } else {
+                    router.push('/government/dashboard/inspections/stop-work');
+                  }
                 }}
                 className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
               >

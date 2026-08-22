@@ -23,6 +23,7 @@ import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawe
 import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
 import SiteProgressDetailModal from '@/components/dashboard/SiteProgressDetailModal';
 import MonitoringDetailSideDrawer, { MonitoringDetailItem } from '@/components/dashboard/MonitoringDetailSideDrawer';
+import IssueStopWorkModal from '@/components/dashboard/IssueStopWorkModal';
 
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
@@ -60,6 +61,8 @@ export default function MonitoringDynamicPage() {
   const [selectedMilestone, setSelectedMilestone] = useState<ConstructionMilestone | null>(null);
   const [isVerificationDrawerOpen, setIsVerificationDrawerOpen] = useState(false);
   const [selectedDetailItem, setSelectedDetailItem] = useState<MonitoringDetailItem | null>(null);
+  const [isStopWorkModalOpen, setIsStopWorkModalOpen] = useState(false);
+  const [selectedProjectForStopWork, setSelectedProjectForStopWork] = useState<any>(null);
 
   const fetchMonitoringData = useCallback(async () => {
     setIsLoading(true);
@@ -807,7 +810,25 @@ export default function MonitoringDynamicPage() {
           } else if (action === 'VERIFY_MILESTONE') {
             setSelectedMilestone(payload);
             setIsMilestoneModalOpen(true);
+          } else if (action === 'ISSUE_STOP_WORK') {
+            setSelectedProjectForStopWork({
+              id: payload.project,
+              name: payload.project_name
+            });
+            setIsStopWorkModalOpen(true);
           }
+        }}
+      />
+
+      <IssueStopWorkModal
+        isOpen={isStopWorkModalOpen}
+        onClose={() => setIsStopWorkModalOpen(false)}
+        project={selectedProjectForStopWork}
+        onSuccess={() => {
+          fetchMonitoringData();
+          window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: 'Stop-Work Order enforced. Site suspended & registered in Stop-Work Registry!', type: 'success' }
+          }));
         }}
       />
     </div>
