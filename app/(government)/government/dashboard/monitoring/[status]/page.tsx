@@ -20,6 +20,7 @@ import CreateObservationModal from '@/components/dashboard/CreateObservationModa
 import ReportIssueModal from '@/components/dashboard/ReportIssueModal';
 import VerifyMilestoneModal from '@/components/dashboard/VerifyMilestoneModal';
 import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawer';
+import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
 
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
@@ -49,6 +50,7 @@ export default function MonitoringDynamicPage() {
 
   // Modals & Drawers
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
+  const [isPhotosGalleryOpen, setIsPhotosGalleryOpen] = useState(false);
   const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
@@ -169,7 +171,9 @@ export default function MonitoringDynamicPage() {
   const content = getPageContent();
 
   const handleQuickAction = (action: string) => {
-    if (action.includes("Daily Photo") || action.includes("Update Site Progress") || action.includes("Upload Daily")) {
+    if (action.includes("View Latest Daily Photos") || action.includes("View Latest Daily") || action.includes("Latest Daily") || action.includes("Photos")) {
+      setIsPhotosGalleryOpen(true);
+    } else if (action.includes("Daily Photo") || action.includes("Update Site Progress") || action.includes("Upload Daily")) {
       setIsUpdateDrawerOpen(true);
     } else if (action.includes("Field Observation")) {
       setIsObservationModalOpen(true);
@@ -349,7 +353,11 @@ export default function MonitoringDynamicPage() {
                 ) : viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {dailyUpdates.map(update => (
-                      <div key={update.id} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group">
+                      <div 
+                        key={update.id} 
+                        onClick={() => setIsPhotosGalleryOpen(true)}
+                        className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group cursor-pointer"
+                      >
                         {/* Site Photo Header */}
                         <div className="relative h-48 bg-slate-100 overflow-hidden">
                           {update.photos && update.photos.length > 0 ? (
@@ -420,7 +428,10 @@ export default function MonitoringDynamicPage() {
                     {dailyUpdates.map(update => (
                       <div key={update.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
                         <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                          <div 
+                            onClick={() => setIsPhotosGalleryOpen(true)}
+                            className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                          >
                             {update.photos && update.photos.length > 0 ? (
                               <img src={update.photos[0]} alt={update.project_name} className="w-full h-full object-cover" />
                             ) : (
@@ -430,7 +441,12 @@ export default function MonitoringDynamicPage() {
                             )}
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{update.project_name}</h4>
+                            <h4 
+                              onClick={() => setIsPhotosGalleryOpen(true)}
+                              className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors cursor-pointer"
+                            >
+                              {update.project_name}
+                            </h4>
                             <p className="text-xs text-slate-400 font-semibold">{update.update_reference} • {update.update_type.replace('_', ' ')}</p>
                           </div>
                         </div>
@@ -733,6 +749,13 @@ export default function MonitoringDynamicPage() {
         isOpen={isVerificationDrawerOpen}
         onClose={() => setIsVerificationDrawerOpen(false)}
         onSuccess={fetchMonitoringData}
+      />
+
+      <DailyPhotosGalleryModal
+        isOpen={isPhotosGalleryOpen}
+        onClose={() => setIsPhotosGalleryOpen(false)}
+        updates={dailyUpdates}
+        onUploadNew={() => setIsUpdateDrawerOpen(true)}
       />
     </div>
   );
