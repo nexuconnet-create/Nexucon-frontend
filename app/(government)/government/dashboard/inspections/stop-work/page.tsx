@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { getStopWorkOrders, getStopWorkOrderStats, StopWorkOrder, StopWorkOrderStats } from "@/services/inspections";
 import LiftStopWorkModal from "@/components/dashboard/LiftStopWorkModal";
-import CreateInspectionSideDrawer from "@/components/dashboard/CreateInspectionSideDrawer";
+import IssueStopWorkModal from "@/components/dashboard/IssueStopWorkModal";
 import TopRightControls from "@/components/dashboard/TopRightControls";
 import { useRouter } from "next/navigation";
 
@@ -27,7 +27,7 @@ export default function StopWorkOrders() {
   // Modal States
   const [selectedSWOForLift, setSelectedSWOForLift] = useState<StopWorkOrder | null>(null);
   const [isLiftModalOpen, setIsLiftModalOpen] = useState(false);
-  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
 
   const fetchSWOData = useCallback(async () => {
     setIsLoading(true);
@@ -58,26 +58,28 @@ export default function StopWorkOrders() {
   return (
     <div className="w-full min-h-screen pb-16 pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
+        <div className="max-w-3xl">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center text-white shadow-lg shadow-rose-600/30">
               <AlertOctagon size={20} />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">Stop-Work Orders Registry</h1>
+            <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">Stop-Work Orders Registry</h1>
           </div>
-          <p className="text-gray-500 text-sm ml-[52px]">Enforce regulatory compliance by tracking site suspensions, violations, and official order liftings.</p>
+          <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">Enforce regulatory compliance by tracking site suspensions, violations, and official order liftings.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setIsCreateDrawerOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors shadow-lg shadow-rose-900/20 text-xs font-bold"
-          >
-            <AlertOctagon size={16} />
-            <span>Issue New Order</span>
-          </button>
-          <TopRightControls />
-        </div>
+        <TopRightControls />
+      </div>
+
+      {/* Action Button Above KPI */}
+      <div className="flex items-center justify-end shrink-0 mb-6">
+        <button 
+          onClick={() => setIsIssueModalOpen(true)}
+          className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+        >
+          <AlertOctagon size={16} />
+          <span>Issue Stop-Work Order</span>
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -251,10 +253,20 @@ export default function StopWorkOrders() {
         onSuccess={fetchSWOData}
       />
 
-      <CreateInspectionSideDrawer
-        isOpen={isCreateDrawerOpen}
-        onClose={() => setIsCreateDrawerOpen(false)}
-        onCreated={fetchSWOData}
+      <IssueStopWorkModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+        onSuccess={(newSWO) => {
+          if (newSWO) {
+            setOrders(prev => [newSWO, ...prev]);
+            setStats(prev => ({
+              ...prev,
+              active: prev.active + 1,
+              total: prev.total + 1
+            }));
+          }
+          fetchSWOData();
+        }}
       />
     </div>
   );
