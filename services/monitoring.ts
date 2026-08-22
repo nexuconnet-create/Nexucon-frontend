@@ -155,8 +155,13 @@ export const getDailySiteUpdates = async (params?: {
   status?: string;
   search?: string;
 }): Promise<DailySiteUpdate[]> => {
-  const res: any = await api.get('/monitoring/updates/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/monitoring/updates/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getDailySiteUpdates fallback notice:', err);
+    return [];
+  }
 };
 
 export const createDailySiteUpdate = async (payload: {
@@ -181,8 +186,13 @@ export const getFieldObservations = async (params?: {
   status?: string;
   search?: string;
 }): Promise<FieldObservation[]> => {
-  const res: any = await api.get('/monitoring/observations/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/monitoring/observations/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getFieldObservations fallback notice:', err);
+    return [];
+  }
 };
 
 export const createFieldObservation = async (payload: {
@@ -214,8 +224,13 @@ export const getSiteIssues = async (params?: {
   status?: string;
   search?: string;
 }): Promise<SiteIssue[]> => {
-  const res: any = await api.get('/monitoring/issues/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/monitoring/issues/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getSiteIssues fallback notice:', err);
+    return [];
+  }
 };
 
 export const createSiteIssue = async (payload: {
@@ -249,8 +264,13 @@ export const getMilestones = async (params?: {
   status?: string;
   search?: string;
 }): Promise<ConstructionMilestone[]> => {
-  const res: any = await api.get('/monitoring/milestones/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/monitoring/milestones/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getMilestones fallback notice:', err);
+    return [];
+  }
 };
 
 export const createMilestone = async (payload: {
@@ -283,8 +303,13 @@ export const getSiteVerifications = async (params?: {
   status?: string;
   search?: string;
 }): Promise<SiteVerification[]> => {
-  const res: any = await api.get('/monitoring/verifications/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/monitoring/verifications/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getSiteVerifications fallback notice:', err);
+    return [];
+  }
 };
 
 export const createSiteVerification = async (payload: {
@@ -302,8 +327,20 @@ export const createSiteVerification = async (payload: {
 
 // Statistics Overview
 export const getMonitoringStats = async (): Promise<MonitoringStats> => {
-  const res: any = await api.get('/monitoring/stats/overview/');
-  return res.data || res;
+  try {
+    const res: any = await api.get('/monitoring/stats/overview/');
+    return res.data || res;
+  } catch (err) {
+    console.warn('getMonitoringStats notice:', err);
+    return {
+      live: { active_sites: 0, daily_photos: 0, drone_surveys: 0, active_observations: 0 },
+      progress: { on_schedule: 0, delayed: 0, milestone_reached: 0, progress_reports: 0 },
+      observations: { active: 0, quality: 0, safety: 0, resolved: 0 },
+      issues: { open: 0, critical: 0, under_review: 0, resolved: 0 },
+      milestones: { due_this_week: 0, verified: 0, delayed: 0, upcoming: 0 },
+      verification: { pending: 0, verified: 0, variance_detected: 0, active_devices: 0 }
+    };
+  }
 };
 
 export interface ProgrammePhase {
@@ -362,9 +399,14 @@ export interface ProjectProgressDetails {
 
 // Project Progress Endpoints
 export const getProjectProgress = async (projectId?: string): Promise<ProjectProgressDetails | ProjectProgressDetails[]> => {
-  const params = projectId ? { project: projectId } : undefined;
-  const res: any = await api.get('/monitoring/progress/', { params });
-  return res.data || res;
+  try {
+    const params = projectId ? { project: projectId } : undefined;
+    const res: any = await api.get('/monitoring/progress/', { params });
+    return res.data || res;
+  } catch (err) {
+    console.warn('getProjectProgress fallback notice:', err);
+    return [];
+  }
 };
 
 export const updateProjectProgress = async (payload: {
