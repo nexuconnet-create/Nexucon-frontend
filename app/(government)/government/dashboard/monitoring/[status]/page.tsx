@@ -20,6 +20,10 @@ import CreateObservationModal from '@/components/dashboard/CreateObservationModa
 import ReportIssueModal from '@/components/dashboard/ReportIssueModal';
 import VerifyMilestoneModal from '@/components/dashboard/VerifyMilestoneModal';
 import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawer';
+import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
+import SiteProgressDetailModal from '@/components/dashboard/SiteProgressDetailModal';
+import MonitoringDetailSideDrawer, { MonitoringDetailItem } from '@/components/dashboard/MonitoringDetailSideDrawer';
+import IssueStopWorkModal from '@/components/dashboard/IssueStopWorkModal';
 
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
@@ -49,11 +53,16 @@ export default function MonitoringDynamicPage() {
 
   // Modals & Drawers
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
+  const [isPhotosGalleryOpen, setIsPhotosGalleryOpen] = useState(false);
+  const [isProgressDetailModalOpen, setIsProgressDetailModalOpen] = useState(false);
   const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<ConstructionMilestone | null>(null);
   const [isVerificationDrawerOpen, setIsVerificationDrawerOpen] = useState(false);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<MonitoringDetailItem | null>(null);
+  const [isStopWorkModalOpen, setIsStopWorkModalOpen] = useState(false);
+  const [selectedProjectForStopWork, setSelectedProjectForStopWork] = useState<any>(null);
 
   const fetchMonitoringData = useCallback(async () => {
     setIsLoading(true);
@@ -169,7 +178,13 @@ export default function MonitoringDynamicPage() {
   const content = getPageContent();
 
   const handleQuickAction = (action: string) => {
-    if (action.includes("Daily Photo") || action.includes("Update Site Progress") || action.includes("Upload Daily")) {
+    if (action.includes("View Progress Details") || action.includes("Review Progress Report") || action.includes("Progress Details")) {
+      setIsProgressDetailModalOpen(true);
+    } else if (action.includes("Flag Delayed Progress")) {
+      setIsIssueModalOpen(true);
+    } else if (action.includes("View Latest Daily Photos") || action.includes("View Latest Daily") || action.includes("Latest Daily") || action.includes("Photos")) {
+      setIsPhotosGalleryOpen(true);
+    } else if (action.includes("Daily Photo") || action.includes("Update Site Progress") || action.includes("Upload Daily")) {
       setIsUpdateDrawerOpen(true);
     } else if (action.includes("Field Observation")) {
       setIsObservationModalOpen(true);
@@ -349,7 +364,11 @@ export default function MonitoringDynamicPage() {
                 ) : viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {dailyUpdates.map(update => (
-                      <div key={update.id} className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group">
+                      <div 
+                        key={update.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'update', data: update })}
+                        className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col group cursor-pointer"
+                      >
                         {/* Site Photo Header */}
                         <div className="relative h-48 bg-slate-100 overflow-hidden">
                           {update.photos && update.photos.length > 0 ? (
@@ -418,9 +437,19 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {dailyUpdates.map(update => (
-                      <div key={update.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={update.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'update', data: update })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsPhotosGalleryOpen(true);
+                            }}
+                            className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                          >
                             {update.photos && update.photos.length > 0 ? (
                               <img src={update.photos[0]} alt={update.project_name} className="w-full h-full object-cover" />
                             ) : (
@@ -430,7 +459,9 @@ export default function MonitoringDynamicPage() {
                             )}
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{update.project_name}</h4>
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">
+                              {update.project_name}
+                            </h4>
                             <p className="text-xs text-slate-400 font-semibold">{update.update_reference} • {update.update_type.replace('_', ' ')}</p>
                           </div>
                         </div>
@@ -455,7 +486,10 @@ export default function MonitoringDynamicPage() {
                             {update.status}
                           </span>
                           <button 
-                            onClick={() => router.push(`/government/dashboard/projects/view/${update.project}/monitoring`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/government/dashboard/projects/view/${update.project}/monitoring`);
+                            }}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
                           >
                             <ArrowUpRight size={18} />
@@ -477,13 +511,17 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {observations.map(obs => (
-                      <div key={obs.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={obs.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'observation', data: obs })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-orange-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
                             <Eye size={20} />
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{obs.title}</h4>
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-orange-600 transition-colors">{obs.title}</h4>
                             <p className="text-xs text-slate-400 font-semibold">{obs.observation_reference} • {obs.project_name}</p>
                           </div>
                         </div>
@@ -524,7 +562,11 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {issues.map(iss => (
-                      <div key={iss.id} className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={iss.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'issue', data: iss })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
                             <AlertTriangle size={20} />
@@ -571,10 +613,7 @@ export default function MonitoringDynamicPage() {
                     {milestones.map(m => (
                       <div 
                         key={m.id} 
-                        onClick={() => {
-                          setSelectedMilestone(m);
-                          setIsMilestoneModalOpen(true);
-                        }}
+                        onClick={() => setSelectedDetailItem({ type: 'milestone', data: m })}
                         className="p-4 rounded-2xl border border-slate-100 hover:border-emerald-200 hover:shadow-md transition-all bg-white flex items-center justify-between cursor-pointer group"
                       >
                         <div className="flex items-center gap-4 w-1/3">
@@ -599,7 +638,14 @@ export default function MonitoringDynamicPage() {
                           }`}>
                             {m.status}
                           </span>
-                          <button className="px-3 py-1 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-bold border border-slate-200 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMilestone(m);
+                              setIsMilestoneModalOpen(true);
+                            }}
+                            className="px-3 py-1 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-bold border border-slate-200 transition-colors cursor-pointer"
+                          >
                             Audit & Sign
                           </button>
                         </div>
@@ -619,7 +665,11 @@ export default function MonitoringDynamicPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {verifications.map(vrf => (
-                      <div key={vrf.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group">
+                      <div 
+                        key={vrf.id} 
+                        onClick={() => setSelectedDetailItem({ type: 'verification', data: vrf })}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                      >
                         <div className="flex items-center gap-4 w-1/3">
                           <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                             <Compass size={20} />
@@ -734,6 +784,54 @@ export default function MonitoringDynamicPage() {
         onClose={() => setIsVerificationDrawerOpen(false)}
         onSuccess={fetchMonitoringData}
       />
+
+      <DailyPhotosGalleryModal
+        isOpen={isPhotosGalleryOpen}
+        onClose={() => setIsPhotosGalleryOpen(false)}
+        updates={dailyUpdates}
+        onUploadNew={() => setIsUpdateDrawerOpen(true)}
+      />
+
+      <SiteProgressDetailModal
+        isOpen={isProgressDetailModalOpen}
+        onClose={() => setIsProgressDetailModalOpen(false)}
+        onUpdateProgress={() => setIsUpdateDrawerOpen(true)}
+        onViewPhotos={() => setIsPhotosGalleryOpen(true)}
+        onFlagDelay={() => setIsIssueModalOpen(true)}
+      />
+
+      <MonitoringDetailSideDrawer
+        isOpen={!!selectedDetailItem}
+        onClose={() => setSelectedDetailItem(null)}
+        item={selectedDetailItem}
+        onAction={(action, payload) => {
+          if (action === 'VIEW_PHOTOS') {
+            setIsPhotosGalleryOpen(true);
+          } else if (action === 'VERIFY_MILESTONE') {
+            setSelectedMilestone(payload);
+            setIsMilestoneModalOpen(true);
+          } else if (action === 'ISSUE_STOP_WORK') {
+            setSelectedProjectForStopWork({
+              id: payload.project,
+              name: payload.project_name
+            });
+            setIsStopWorkModalOpen(true);
+          }
+        }}
+      />
+
+      <IssueStopWorkModal
+        isOpen={isStopWorkModalOpen}
+        onClose={() => setIsStopWorkModalOpen(false)}
+        project={selectedProjectForStopWork}
+        onSuccess={() => {
+          fetchMonitoringData();
+          window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: 'Stop-Work Order enforced. Site suspended & registered in Stop-Work Registry!', type: 'success' }
+          }));
+        }}
+      />
     </div>
   );
 }
+
