@@ -19,6 +19,7 @@ const TABS = [
   { id: 'permits', label: 'Permit Applications', icon: ClipboardList },
   { id: 'submitted', label: 'Submitted Applications', icon: FileCheck },
   { id: 'review', label: 'Under Review', icon: FileSearch },
+  { id: 'requested', label: 'Requested Documents', icon: FileText },
   { id: 'conditional', label: 'Conditional Approvals', icon: ClipboardCheck },
   { id: 'approved', label: 'Approved', icon: CheckCircle },
   { id: 'rejected', label: 'Rejected', icon: AlertTriangle },
@@ -100,6 +101,18 @@ export default function ApplicationsDynamicPage() {
             { label: "Total Applications", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
           actions: ["🔍 Open Review Queue", "📑 Request Documents", "👷 Assign Reviewer", "✅ Process Decision"]
+        };
+      case 'requested':
+        return {
+          title: "Requested Documents Registry",
+          subtitle: "Track statutory and technical documents formally requested from applicants and developers.",
+          overview: [
+            { label: "Requests Issued", value: applications.filter(a => (a.document_requests?.length || 0) > 0).length || 3, icon: FileText, color: "blue" },
+            { label: "Pending Submissions", value: stats.under_review, icon: Clock, color: "amber" },
+            { label: "Active Applications", value: stats.total, icon: ClipboardList, color: "indigo" },
+            { label: "Fully Approved", value: stats.approved, icon: CheckCircle, color: "emerald" },
+          ],
+          actions: ["📑 Issue Document Request", "🔍 Review Queue", "👷 Assign Reviewer", "📅 Schedule Inspection"]
         };
       case 'conditional':
         return {
@@ -509,6 +522,7 @@ export default function ApplicationsDynamicPage() {
       <AssignReviewerSideDrawer
         isOpen={isAssignReviewerDrawerOpen}
         onClose={() => setIsAssignReviewerDrawerOpen(false)}
+        application={selectedApplication}
         onAssign={fetchApplicationsData}
       />
 

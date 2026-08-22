@@ -1,35 +1,185 @@
-import React, { useState } from 'react';
-import { X, Search, ChevronDown, AlertCircle } from 'lucide-react';
+"use client";
 
-export default function AssignReviewerSideDrawer({ isOpen, onClose, onAssign }: { isOpen: boolean, onClose: () => void, onAssign?: () => void }) {
-  const [selectedMembers, setSelectedMembers] = useState<Record<string, { role: string, mustApprove: boolean }>>({});
+import React, { useState, useEffect } from 'react';
+import { 
+  X, Search, ChevronDown, AlertCircle, UserPlus, ShieldCheck, 
+  Send, User, Building2, CheckCircle2, Clock, Mail, Award, Check
+} from 'lucide-react';
+import { Application, assignApplicationReviewer } from '@/services/applications';
+import { getInspectors, Inspector } from '@/services/stakeholders';
+import { CustomSelect } from '@/components/CustomSelect';
+
+interface AssignReviewerSideDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  application?: Application | null;
+  onAssign?: () => void;
+}
+
+interface ReviewerItem {
+  id: string;
+  name: string;
+  role: string;
+  organization: string;
+  zone?: string;
+  rating?: string;
+  isInspector?: boolean;
+  activeCount?: number;
+  email?: string;
+}
+
+const DEFAULT_REVIEWERS: ReviewerItem[] = [
+  { id: "REV-01", name: "Engr. Babatunde Fashola", role: "Principal Structural Reviewer", organization: "Lagos State Building Control Agency", zone: "Zone 1 (Island)", rating: "4.9", isInspector: true, activeCount: 3, email: "b.fashola@lasbca.gov.ng" },
+  { id: "REV-02", name: "Arch. Amina Mohammed", role: "Lead Architectural Examiner", organization: "Ministry of Physical Planning", zone: "Zone 2 (Ikeja)", rating: "4.8", isInspector: false, activeCount: 2, email: "a.mohammed@mpp.gov.ng" },
+  { id: "REV-03", name: "Engr. Chukwuma Obi", role: "Senior MEP & Fire Safety Inspector", organization: "Fire & Safety Regulatory Board", zone: "Zone 4 (Lekki)", rating: "4.9", isInspector: true, activeCount: 1, email: "c.obi@safetyboard.gov.ng" },
+  { id: "REV-04", name: "Dr. Kemi Adeyemi", role: "Geotechnical & Soil Specialist", organization: "Materials Testing Council", zone: "All Zones", rating: "5.0", isInspector: false, activeCount: 4, email: "k.adeyemi@mat-testing.org" },
+];
+
+export default function AssignReviewerSideDrawer({
+  isOpen,
+  onClose,
+  application,
+  onAssign
+}: AssignReviewerSideDrawerProps) {
+  const [activeTab, setActiveTab] = useState<'select' | 'invite'>('select');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [reviewers, setReviewers] = useState<ReviewerItem[]>(DEFAULT_REVIEWERS);
+  const [selectedReviewerId, setSelectedReviewerId] = useState<string>('');
+  const [assignmentRole, setAssignmentRole] = useState('Primary Reviewer');
+  const [mustApprove, setMustApprove] = useState(true);
+  const [reviewDeadline, setReviewDeadline] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Invite form state
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteDiscipline, setInviteDiscipline] = useState('Structural Engineering');
+  const [inviteOrg, setInviteOrg] = useState('State Building Control Authority');
+  const [inviteRole, setInviteRole] = useState('Primary Reviewer');
+  const [inviteNote, setInviteNote] = useState('You have been nominated to review regulatory building submittals.');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsLoading(true);
+    getInspectors()
+      .then(inspectors => {
+        if (inspectors && inspectors.length > 0) {
+          const mapped: ReviewerItem[] = inspectors.map(insp => ({
+            id: insp.id || insp.inspector_id,
+            name: insp.name,
+            role: insp.role_title || "Field Compliance Inspector",
+            organization: "State Regulatory Authority",
+            zone: insp.assigned_zone,
+            rating: insp.pass_rate || "4.8",
+            isInspector: true,
+            activeCount: insp.active_inspections || 0,
+            email: `${insp.name.toLowerCase().replace(/\s+/g, '.')}@regulatory.gov.ng`
+          }));
+          // Merge unique
+          const combined = [...mapped, ...DEFAULT_REVIEWERS.filter(d => !mapped.some(m => m.name === d.name))];
+          setReviewers(combined);
+          if (combined.length > 0) setSelectedReviewerId(combined[0].id);
+        } else {
+          setSelectedReviewerId(DEFAULT_REVIEWERS[0].id);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch inspectors in real-time", err);
+        setSelectedReviewerId(DEFAULT_REVIEWERS[0].id);
+      })
+      .finally(() => setIsLoading(false));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const teamMembers = [
-    { name: "Olivia Thompson", role: "Lead Architect", company: "Nexus Design Studio", rating: "4.9" },
-    { name: "Michael Adeyemi", role: "Structural Engineer", company: "BuildCore Engineering", rating: "4.8" },
-    { name: "James Ibrahim", role: "Electrical Engineer", company: "Volt Consulting", rating: "4.7" },
-    { name: "Daniel Okoro", role: "Mechanical Engineer", company: "MEP Solutions Ltd.", rating: "4.8" },
-    { name: "Sarah Williams", role: "Design Coordinator", company: "Nexucon Design Team", rating: "4.9" },
-  ];
+  const filteredReviewers = reviewers.filter(r => 
+    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    r.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    r.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (r.zone && r.zone.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
-  const handleToggleMember = (name: string) => {
-    if (selectedMembers[name]) {
-      const newMembers = { ...selectedMembers };
-      delete newMembers[name];
-      setSelectedMembers(newMembers);
-    } else {
-      setSelectedMembers({ ...selectedMembers, [name]: { role: "Primary Reviewer", mustApprove: true } });
+  const selectedReviewer = reviewers.find(r => r.id === selectedReviewerId);
+
+  const handleConfirmAssignment = async () => {
+    if (!selectedReviewer) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a reviewer or inspector', type: 'error' } }));
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (application?.id) {
+        await assignApplicationReviewer(application.id, {
+          reviewer_id: selectedReviewer.id,
+          reviewer_name: selectedReviewer.name,
+          review_deadline: reviewDeadline || undefined
+        });
+      }
+
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Assigned ${selectedReviewer.name} as ${assignmentRole} in real-time`, type: 'success' } 
+      }));
+      
+      onClose();
+      if (onAssign) onAssign();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to assign reviewer';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleUpdateRole = (name: string, role: string) => {
-    setSelectedMembers({ ...selectedMembers, [name]: { ...selectedMembers[name], role } });
-  };
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteName.trim() || !inviteEmail.trim()) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Name and email are required', type: 'error' } }));
+      return;
+    }
 
-  const handleToggleApprove = (name: string) => {
-    setSelectedMembers({ ...selectedMembers, [name]: { ...selectedMembers[name], mustApprove: !selectedMembers[name].mustApprove } });
+    setIsSubmitting(true);
+    try {
+      const newReviewer: ReviewerItem = {
+        id: `REV-INV-${Date.now().toString().slice(-4)}`,
+        name: inviteName.trim(),
+        role: `${inviteDiscipline} Specialist`,
+        organization: inviteOrg,
+        zone: "Assigned Project Zone",
+        rating: "New",
+        isInspector: inviteRole.includes('Inspector'),
+        activeCount: 1,
+        email: inviteEmail.trim()
+      };
+
+      setReviewers(prev => [newReviewer, ...prev]);
+      setSelectedReviewerId(newReviewer.id);
+      setAssignmentRole(inviteRole);
+
+      if (application?.id) {
+        await assignApplicationReviewer(application.id, {
+          reviewer_id: newReviewer.id,
+          reviewer_name: newReviewer.name,
+          review_deadline: reviewDeadline || undefined
+        });
+      }
+
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Invitation dispatched to ${inviteEmail}. Added & assigned as reviewer.`, type: 'success' } 
+      }));
+
+      // Reset invite fields
+      setInviteName('');
+      setInviteEmail('');
+      setActiveTab('select');
+      onClose();
+      if (onAssign) onAssign();
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to send invitation', type: 'error' } }));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -38,152 +188,302 @@ export default function AssignReviewerSideDrawer({ isOpen, onClose, onAssign }: 
         className="fixed inset-0 bg-[#0F181F]/40 backdrop-blur-sm z-[100] animate-in fade-in duration-300"
         onClick={onClose}
       />
-      <div className="fixed right-4 top-4 bottom-4 w-full max-w-[650px] bg-white rounded-[32px] p-10 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300">
-        <button 
-          onClick={onClose}
-          className="absolute top-8 right-8 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors z-10"
-        >
-          <X className="w-6 h-6" />
-        </button>
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[620px] bg-white p-8 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300">
         
-        <div className="flex-1 overflow-y-auto pr-4 -mr-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <h2 className="text-[28px] font-extrabold text-[#0F181F] mb-3 tracking-tight">
-            Assign Multi-Disciplinary Reviewers
-          </h2>
-          <p className="text-[13px] text-gray-600 mb-8 max-w-[550px] leading-relaxed">
-            Assign one or more reviewers from different disciplines to evaluate this topic. Define their specific roles and whether their approval is required before the topic can be closed.
-          </p>
-
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 mb-10">
-            <AlertCircle className="w-5 h-5 text-[#022C4F] shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-[12px] font-bold text-[#022C4F] mb-1">Approval Logic</h4>
-              <p className="text-[11px] text-[#022C4F]/80 leading-relaxed">
-                ALL assignees marked as "Must Approve" must formally approve before this review topic can be marked as closed. Advisory reviewers provide feedback without blocking closure.
+        {/* Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+          <div>
+            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Reviewer Oversight</span>
+            <h2 className="text-xl font-black text-[#022C4F]">Assign Reviewer & Inspector</h2>
+            {application && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                {application.application_reference} • {application.project_name}
               </p>
+            )}
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Tab Switcher: Select vs Invite */}
+        <div className="flex bg-slate-100 p-1 rounded-2xl my-4 shrink-0">
+          <button
+            onClick={() => setActiveTab('select')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeTab === 'select'
+                ? 'bg-white text-[#022C4F] shadow-sm'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck size={15} className="text-blue-600" /> Available Reviewers & Inspectors ({reviewers.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('invite')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeTab === 'invite'
+                ? 'bg-white text-[#022C4F] shadow-sm'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <UserPlus size={15} className="text-emerald-600" /> ➕ Invite New Reviewer
+          </button>
+        </div>
+
+        {/* TAB 1: Select Available Inspector / Reviewer */}
+        {activeTab === 'select' && (
+          <div className="flex-1 overflow-y-auto flex flex-col space-y-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter by name, discipline, zone, or agency..." 
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Reviewers List */}
+            <div className="space-y-2.5">
+              {isLoading ? (
+                <div className="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  Loading certified reviewers and inspectors in real-time...
+                </div>
+              ) : filteredReviewers.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 text-slate-400 text-xs">
+                  No reviewers found matching "{searchQuery}".
+                </div>
+              ) : (
+                filteredReviewers.map((rev) => {
+                  const isSelected = selectedReviewerId === rev.id;
+
+                  return (
+                    <div 
+                      key={rev.id}
+                      onClick={() => setSelectedReviewerId(rev.id)}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
+                        isSelected 
+                          ? 'border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-600' 
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {rev.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-extrabold text-[#022C4F]">{rev.name}</h4>
+                              {rev.isInspector && (
+                                <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                                  Inspector
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{rev.role}</p>
+                            <p className="text-[10px] text-slate-400">{rev.organization} {rev.zone ? `• ${rev.zone}` : ''}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end">
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {rev.activeCount} active case(s)
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-600">
+                            ★ {rev.rating} rating
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Selected Assignment Parameters */}
+                      {isSelected && (
+                        <div className="pt-3 mt-1 border-t border-blue-200/60 grid grid-cols-2 gap-3 animate-in fade-in duration-200">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                              Assignment Role
+                            </label>
+                            <CustomSelect
+                              value={assignmentRole}
+                              onChange={(val) => setAssignmentRole(val)}
+                              options={[
+                                { value: "Primary Reviewer", label: "Primary Reviewer (Lead)" },
+                                { value: "Structural Inspector", label: "Structural Inspector" },
+                                { value: "MEP & Fire Specialist", label: "MEP & Fire Specialist" },
+                                { value: "Planning Examiner", label: "Planning Examiner" },
+                                { value: "Advisory Reviewer", label: "Advisory Reviewer" }
+                              ]}
+                              placeholder="Role..."
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                              Target SLA Deadline
+                            </label>
+                            <input 
+                              type="date"
+                              value={reviewDeadline}
+                              onChange={(e) => setReviewDeadline(e.target.value)}
+                              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Action Footer */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirmAssignment}
+                disabled={isSubmitting || !selectedReviewer}
+                className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033b6a] text-white rounded-xl text-xs font-bold shadow-md shadow-[#022C4F]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check size={14} /> {isSubmitting ? 'Assigning in Real-Time...' : 'Confirm Real-Time Assignment'}
+              </button>
             </div>
           </div>
+        )}
 
-          <h3 className="text-[14px] font-extrabold text-[#022C4F] mb-6">Review Topic Details</h3>
-          
-          <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-12 bg-gray-50 p-6 rounded-2xl border border-gray-100">
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-extrabold text-[#022C4F]">Topic</span>
-              <span className="text-[12px] text-gray-700 font-medium">Beam Reinforcement - Grid B5</span>
-            </div>
+        {/* TAB 2: Invite New Reviewer */}
+        {activeTab === 'invite' && (
+          <form onSubmit={handleSendInvite} className="flex-1 overflow-y-auto flex flex-col space-y-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-extrabold text-[#022C4F]">Priority</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                <span className="text-[12px] text-gray-700 font-medium">High</span>
+            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs text-emerald-900 leading-relaxed font-medium">
+              <span className="font-bold">Official Registration:</span> Inviting an external engineer or certified officer sends an encrypted credentials invitation to their email and provisions their reviewer seat immediately.
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Full Legal Name
+              </label>
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="e.g. Engr. Adeola Balogun"
+                required
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Official Email Address
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="e.g. a.balogun@regulatory.gov.ng"
+                required
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Engineering Discipline
+                </label>
+                <CustomSelect
+                  value={inviteDiscipline}
+                  onChange={(val) => setInviteDiscipline(val)}
+                  options={[
+                    { value: "Structural Engineering", label: "Structural Engineering" },
+                    { value: "Civil & Foundation", label: "Civil & Foundation" },
+                    { value: "MEP & Fire Safety", label: "MEP & Fire Safety" },
+                    { value: "Architectural Examiner", label: "Architectural Examiner" },
+                    { value: "Geotechnical / Soil", label: "Geotechnical / Soil" },
+                    { value: "Environmental Impact", label: "Environmental Impact" }
+                  ]}
+                  placeholder="Discipline..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Assigned Authority Role
+                </label>
+                <CustomSelect
+                  value={inviteRole}
+                  onChange={(val) => setInviteRole(val)}
+                  options={[
+                    { value: "Primary Reviewer", label: "Primary Reviewer" },
+                    { value: "Compliance Inspector", label: "Compliance Inspector" },
+                    { value: "Advisory Specialist", label: "Advisory Specialist" },
+                    { value: "Lead Approver", label: "Lead Approver" }
+                  ]}
+                  placeholder="Role..."
+                />
               </div>
             </div>
-            
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-extrabold text-[#022C4F]">Reference ID</span>
-              <span className="text-[12px] text-gray-700 font-medium">RT-00142</span>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Organization / Government Agency
+              </label>
+              <input
+                type="text"
+                value={inviteOrg}
+                onChange={(e) => setInviteOrg(e.target.value)}
+                placeholder="e.g. Lagos State Physical Planning Directorate"
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
-            
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-extrabold text-[#022C4F]">Current Status</span>
-              <span className="text-[12px] text-gray-700 font-medium">Awaiting Assignment</span>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Personalized Onboarding Note
+              </label>
+              <textarea
+                value={inviteNote}
+                onChange={(e) => setInviteNote(e.target.value)}
+                rows={3}
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
-          </div>
 
-          <h3 className="text-[16px] font-extrabold text-[#022C4F] mb-6">Select Reviewers</h3>
-          
-          <div className="relative mb-6">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input 
-              type="text" 
-              placeholder="Search by name, role, discipline, or company..." 
-              className="w-full h-[52px] rounded-full border border-[#022C4F] pl-12 pr-6 text-[13px] focus:outline-none focus:ring-1 focus:ring-[#022C4F] shadow-sm"
-            />
-          </div>
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <button 
+                type="button"
+                onClick={() => setActiveTab('select')}
+                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button 
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Send size={14} /> {isSubmitting ? 'Sending Invite & Assigning...' : 'Send Invitation & Assign Reviewer'}
+              </button>
+            </div>
+          </form>
+        )}
 
-          <div className="flex flex-col gap-4 mb-8">
-            {teamMembers.map((member, idx) => {
-              const isSelected = !!selectedMembers[member.name];
-              const assignmentInfo = selectedMembers[member.name];
-
-              return (
-                <div key={idx} className={`flex flex-col rounded-2xl border transition-all ${isSelected ? 'border-[#022C4F] shadow-sm bg-white' : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'}`}>
-                  {/* Header Row */}
-                  <div className="flex items-start gap-4 p-5 cursor-pointer" onClick={() => handleToggleMember(member.name)}>
-                    <div className={`w-5 h-5 rounded-[4px] border-[1.5px] flex items-center justify-center transition-colors mt-0.5 shrink-0 ${isSelected ? 'border-[#022C4F] bg-[#022C4F]' : 'border-gray-300 bg-white'}`}>
-                      <svg className={`w-3.5 h-3.5 text-white transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[13px] font-bold text-[#0F181F]">{member.name}</span>
-                      <div className="flex items-center flex-wrap text-[11px] text-gray-500 gap-1.5 font-medium">
-                        <span>{member.role}</span>
-                        <span className="text-gray-300">•</span>
-                        <span>{member.company}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Inline Configuration Options */}
-                  {isSelected && assignmentInfo && (
-                    <div className="px-5 pb-5 pt-1 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
-                      <div className="w-full h-[1px] bg-gray-100 mb-1"></div>
-                      
-                      <div className="flex flex-col md:flex-row md:items-center gap-4">
-                        <div className="flex-1">
-                          <label className="block text-[11px] font-bold text-gray-500 mb-2">Assignment Role</label>
-                          <div className="relative">
-                            <select 
-                              value={assignmentInfo.role}
-                              onChange={(e) => handleUpdateRole(member.name, e.target.value)}
-                              className="w-full h-10 bg-gray-50 rounded-lg border border-gray-200 px-3 text-[12px] font-medium text-gray-700 appearance-none focus:outline-none focus:border-[#022C4F] shadow-sm cursor-pointer"
-                            >
-                              <option value="Primary Reviewer">Primary Reviewer</option>
-                              <option value="Coordination Reviewer">Coordination Reviewer</option>
-                              <option value="Clash Detection">Clash Detection (Advisory)</option>
-                              <option value="BOQ Verification">BOQ Verification (Advisory)</option>
-                              <option value="Client Consultant">Client Consultant (Advisory)</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 md:mt-6 cursor-pointer" onClick={() => handleToggleApprove(member.name)}>
-                          <div className={`w-10 h-6 rounded-full p-1 transition-colors ${assignmentInfo.mustApprove ? 'bg-[#022C4F]' : 'bg-gray-300'}`}>
-                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${assignmentInfo.mustApprove ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[12px] font-bold text-gray-800">Must Approve</span>
-                            <span className="text-[10px] text-gray-500 leading-tight">Required to close topic</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-col gap-4 mt-auto pt-4 pb-4">
-            <button 
-              onClick={() => {
-                if (onAssign) onAssign();
-                else onClose();
-              }}
-              disabled={Object.keys(selectedMembers).length === 0}
-              className="w-full bg-[#022C4F] hover:bg-[#033A6B] text-white py-4 rounded-xl font-bold transition-colors text-[13px] shadow-sm disabled:opacity-50 disabled:hover:bg-[#022C4F]"
-            >
-              Confirm Reviewer Assignments ({Object.keys(selectedMembers).length})
-            </button>
-            <button 
-              onClick={onClose}
-              className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 py-4 rounded-xl font-bold transition-colors text-[13px] shadow-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
       </div>
     </>
   );

@@ -25,7 +25,7 @@ export default function ApplicationDetailSideDrawer({
   onRequestDocs
 }: ApplicationDetailSideDrawerProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'overview' | 'checklist' | 'documents' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'checklist' | 'documents' | 'requested_docs' | 'history'>('overview');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [decisionReason, setDecisionReason] = useState('');
   const [conditionalNotes, setConditionalNotes] = useState('');
@@ -81,6 +81,8 @@ export default function ApplicationDetailSideDrawer({
     }
   };
 
+  const docRequests = application.document_requests || [];
+
   return (
     <>
       <div 
@@ -103,24 +105,25 @@ export default function ApplicationDetailSideDrawer({
           </div>
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs font-bold">
+        <div className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs font-bold overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'checklist', label: `Review Checklist (${(application.review_items || []).length})` },
-            { id: 'documents', label: `Documents (${(application.attached_documents || []).length})` },
+            { id: 'documents', label: `Submitted Docs (${(application.attached_documents || []).length})` },
+            { id: 'requested_docs', label: `Requested Docs (${docRequests.length})` },
             { id: 'history', label: 'Decision History' }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-2 border-b-2 transition-colors ${
+              className={`pb-2 border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
                 activeTab === tab.id 
                   ? 'border-blue-600 text-blue-600' 
                   : 'border-transparent text-slate-400 hover:text-slate-700'
@@ -213,7 +216,7 @@ export default function ApplicationDetailSideDrawer({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleChecklistToggle(item, 'PASSED')}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                             item.status === 'PASSED' 
                               ? 'bg-emerald-600 text-white' 
                               : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
@@ -223,7 +226,7 @@ export default function ApplicationDetailSideDrawer({
                         </button>
                         <button
                           onClick={() => handleChecklistToggle(item, 'FAILED')}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                             item.status === 'FAILED' 
                               ? 'bg-red-600 text-white' 
                               : 'bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-700'
@@ -250,7 +253,7 @@ export default function ApplicationDetailSideDrawer({
                 {onRequestDocs && (
                   <button 
                     onClick={() => onRequestDocs(application)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
                   >
                     <Plus size={14} /> Request More Docs
                   </button>
@@ -270,7 +273,7 @@ export default function ApplicationDetailSideDrawer({
                           <span className="text-[10px] text-slate-400">{doc.type || 'Technical Drawing'}</span>
                         </div>
                       </div>
-                      <button className="text-xs font-bold text-blue-600 hover:underline">
+                      <button className="text-xs font-bold text-blue-600 hover:underline cursor-pointer">
                         View
                       </button>
                     </div>
@@ -281,6 +284,79 @@ export default function ApplicationDetailSideDrawer({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Dedicated Requested Documents Tab */}
+          {activeTab === 'requested_docs' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-[#022C4F]">Statutory Document Requests</h4>
+                  <p className="text-xs text-slate-500">Formal document requirements dispatched to the applicant.</p>
+                </div>
+                {onRequestDocs && (
+                  <button 
+                    onClick={() => onRequestDocs(application)}
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={14} /> New Document Request
+                  </button>
+                )}
+              </div>
+
+              {docRequests.length > 0 ? (
+                <div className="space-y-3">
+                  {docRequests.map((req: any, idx: number) => (
+                    <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <FileText size={14} className="text-blue-600" /> Request Batch #{idx + 1}
+                        </span>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold uppercase">
+                          {req.status || 'Pending Submission'}
+                        </span>
+                      </div>
+
+                      {req.requested_items && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Requested Items:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {req.requested_items.map((item: string, i: number) => (
+                              <span key={i} className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700">
+                                ✓ {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {req.instructions && (
+                        <p className="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100 leading-relaxed">
+                          {req.instructions}
+                        </p>
+                      )}
+
+                      <div className="text-[10px] text-slate-400">
+                        Issued: {req.requested_at ? new Date(req.requested_at).toLocaleString() : 'Recent'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                  <FileText size={32} className="text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-500">No additional documents have been requested for this application yet.</p>
+                  {onRequestDocs && (
+                    <button 
+                      onClick={() => onRequestDocs(application)}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={14} /> Issue First Document Request
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

@@ -6,9 +6,10 @@ import { getProjectById, Project } from '@/services/projects';
 import { 
   Building2, Activity, FileText, Box, 
   ArrowLeft, MapPin, Calendar, User, CheckCircle, ShieldCheck, 
-  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck
+  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus
 } from 'lucide-react';
 import { getInspections, Inspection } from '@/services/inspections';
+import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
 
 // --- MOCK COMPONENTS FOR TABS --- //
 
@@ -120,55 +121,142 @@ const OverviewTab = ({ project }: { project: Project }) => (
   </div>
 );
 
-const DocumentsTab = () => (
-  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-      <div>
-        <h3 className="text-base font-bold text-[#022C4F]">Project Documents</h3>
-        <p className="text-xs text-slate-500 mt-1">Review architectural drawings, permits, and structural reports.</p>
-      </div>
-      <button className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors">
-        <UploadCloud size={16} /> Upload Document
-      </button>
-    </div>
-    <div className="divide-y divide-slate-100">
-      {[
-        { name: "Architectural_Drawings_v2.pdf", type: "Design", date: "Oct 24, 2026", status: "Approved" },
-        { name: "Structural_Calculation_Report.pdf", type: "Engineering", date: "Oct 25, 2026", status: "Pending Review" },
-        { name: "Environmental_Impact_Assessment.pdf", type: "Compliance", date: "Oct 28, 2026", status: "Approved" },
-        { name: "Site_Survey_Data.dwg", type: "Survey", date: "Nov 02, 2026", status: "Needs Revision" },
-      ].map((doc, idx) => (
-        <div key={idx} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <FileText size={20} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{doc.name}</p>
-              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                <span>{doc.type}</span>
-                <span>•</span>
-                <span>{doc.date}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
-              ${doc.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : ''}
-              ${doc.status === 'Pending Review' ? 'bg-amber-100 text-amber-700' : ''}
-              ${doc.status === 'Needs Revision' ? 'bg-red-100 text-red-700' : ''}
-            `}>
-              {doc.status}
-            </span>
-            <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg">
-              <Eye size={18} />
+const DocumentsTab = ({ project, onRequestDocs }: { project: Project; onRequestDocs: () => void }) => {
+  const [subTab, setSubTab] = useState<'project' | 'requested'>('project');
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <button
+              onClick={() => setSubTab('project')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                subTab === 'project' ? 'bg-[#022C4F] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Project Files & Drawings
+            </button>
+            <button
+              onClick={() => setSubTab('requested')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                subTab === 'requested' ? 'bg-[#022C4F] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Requested Documents
             </button>
           </div>
+          <p className="text-xs text-slate-500">
+            {subTab === 'project' 
+              ? 'Review architectural drawings, permits, and structural engineering files.'
+              : 'Formal technical and compliance requirements dispatched to project developers.'}
+          </p>
         </div>
-      ))}
+
+        <div className="flex items-center gap-2">
+          {subTab === 'requested' ? (
+            <button 
+              onClick={onRequestDocs}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
+            >
+              <Plus size={16} /> Request Document
+            </button>
+          ) : (
+            <button className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors cursor-pointer">
+              <UploadCloud size={16} /> Upload Document
+            </button>
+          )}
+        </div>
+      </div>
+
+      {subTab === 'project' && (
+        <div className="divide-y divide-slate-100">
+          {[
+            { name: "Architectural_Drawings_v2.pdf", type: "Design", date: "Oct 24, 2026", status: "Approved" },
+            { name: "Structural_Calculation_Report.pdf", type: "Engineering", date: "Oct 25, 2026", status: "Pending Review" },
+            { name: "Environmental_Impact_Assessment.pdf", type: "Compliance", date: "Oct 28, 2026", status: "Approved" },
+            { name: "Site_Survey_Data.dwg", type: "Survey", date: "Nov 02, 2026", status: "Needs Revision" },
+          ].map((doc, idx) => (
+            <div key={idx} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{doc.name}</p>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                    <span>{doc.type}</span>
+                    <span>•</span>
+                    <span>{doc.date}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
+                  ${doc.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : ''}
+                  ${doc.status === 'Pending Review' ? 'bg-amber-100 text-amber-700' : ''}
+                  ${doc.status === 'Needs Revision' ? 'bg-red-100 text-red-700' : ''}
+                `}>
+                  {doc.status}
+                </span>
+                <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer">
+                  <Eye size={18} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {subTab === 'requested' && (
+        <div className="p-6 space-y-4">
+          <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+            {[
+              {
+                id: "REQ-001",
+                items: ["Soil Bearing Capacity & Geotechnical Borehole Log", "Stamped Foundation Reinforcement Drawings"],
+                deadline: "7 Days (Statutory SLA)",
+                status: "Pending Developer Submission",
+                issuedAt: "2 days ago"
+              },
+              {
+                id: "REQ-002",
+                items: ["Environmental Impact Assessment (EIA) Approval Letter", "Waste Management Site Protocol"],
+                deadline: "14 Days",
+                status: "Received & Under Review",
+                issuedAt: "5 days ago"
+              }
+            ].map((req, idx) => (
+              <div key={idx} className="p-4 hover:bg-slate-50 transition-colors space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileCheck size={14} className="text-blue-600" /> Requirement #{req.id}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    req.status.includes('Pending') ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {req.status}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {req.items.map((item, i) => (
+                    <span key={i} className="px-2.5 py-1 bg-slate-100 rounded-lg text-xs font-medium text-slate-700">
+                      ✓ {item}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                  <span>Target SLA: <strong className="text-slate-600">{req.deadline}</strong></span>
+                  <span>Issued: {req.issuedAt}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const BIMTab = () => (
   <div className="h-[600px] bg-slate-900 rounded-2xl relative overflow-hidden shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500 group flex items-center justify-center border border-slate-800">
@@ -300,6 +388,7 @@ export default function ProjectMonitoringPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [isRequestDocsOpen, setIsRequestDocsOpen] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('tab')) {
@@ -422,10 +511,20 @@ export default function ProjectMonitoringPage() {
       {/* Tab Content Area */}
       <div className="p-8 max-w-7xl mx-auto">
         {activeTab === 'overview' && <OverviewTab project={project} />}
-        {activeTab === 'documents' && <DocumentsTab />}
+        {activeTab === 'documents' && (
+          <DocumentsTab 
+            project={project} 
+            onRequestDocs={() => setIsRequestDocsOpen(true)} 
+          />
+        )}
         {activeTab === 'bim' && <BIMTab />}
         {activeTab === 'activity' && <ActivityTab projectId={projectId} />}
       </div>
+
+      <RequestDocumentsModal
+        isOpen={isRequestDocsOpen}
+        onClose={() => setIsRequestDocsOpen(false)}
+      />
     </div>
   );
 }
