@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_T5fzGV4i_MxWq29RnxPKmDbJizUWHnPZ6';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = 'Nexucon Email notifications <onboarding@resend.dev>';
 
 export async function POST(req: NextRequest) {
