@@ -13,6 +13,7 @@ import ApplicationDetailSideDrawer from '@/components/dashboard/ApplicationDetai
 import CreateApplicationSideDrawer from '@/components/dashboard/CreateApplicationSideDrawer';
 import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
 import AssignReviewerSideDrawer from '@/components/dashboard/AssignReviewerSideDrawer';
+import CreateInspectionSideDrawer from '@/components/dashboard/CreateInspectionSideDrawer';
 
 const TABS = [
   { id: 'permits', label: 'Permit Applications', icon: ClipboardList },
@@ -48,9 +49,10 @@ export default function ApplicationsDynamicPage() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
-  const [isAssignReviewerDrawerOpen, setIsAssignReviewerDrawerOpen] = useState(false);
   const [isRequestDocsModalOpen, setIsRequestDocsModalOpen] = useState(false);
   const [requestDocsTargetApp, setRequestDocsTargetApp] = useState<Application | null>(null);
+  const [isAssignReviewerDrawerOpen, setIsAssignReviewerDrawerOpen] = useState(false);
+  const [isScheduleInspectionDrawerOpen, setIsScheduleInspectionDrawerOpen] = useState(false);
 
   const fetchApplicationsData = useCallback(async () => {
     setIsLoading(true);
@@ -182,7 +184,7 @@ export default function ApplicationsDynamicPage() {
       }
       setIsAssignReviewerDrawerOpen(true);
     } else if (action.includes("Schedule Inspection") || action.includes("📅")) {
-      router.push('/government/dashboard/inspections/schedule');
+      setIsScheduleInspectionDrawerOpen(true);
     } else if (action.includes("Renewal") || action.includes("🔄")) {
       router.push('/government/dashboard/applications/expired');
     } else if (applications.length > 0) {
@@ -508,6 +510,11 @@ export default function ApplicationsDynamicPage() {
         isOpen={isAssignReviewerDrawerOpen}
         onClose={() => setIsAssignReviewerDrawerOpen(false)}
         onAssign={fetchApplicationsData}
+      />
+
+      <CreateInspectionSideDrawer
+        isOpen={isScheduleInspectionDrawerOpen}
+        onClose={() => setIsScheduleInspectionDrawerOpen(false)}
       />
     </div>
   );

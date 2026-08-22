@@ -10,6 +10,8 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
 import QuickActionSideDrawer from "@/components/dashboard/QuickActionSideDrawer";
+import RequestDocumentsModal from "@/components/dashboard/RequestDocumentsModal";
+import CreateInspectionSideDrawer from "@/components/dashboard/CreateInspectionSideDrawer";
 
 const TABS = [
   { id: 'all', label: 'All Projects', icon: Building2 },
@@ -49,6 +51,8 @@ export default function ProjectsDynamicPage() {
 
   const [isQuickActionDrawerOpen, setIsQuickActionDrawerOpen] = useState(false);
   const [selectedQuickAction, setSelectedQuickAction] = useState("");
+  const [isRequestDocsModalOpen, setIsRequestDocsModalOpen] = useState(false);
+  const [isScheduleInspectionDrawerOpen, setIsScheduleInspectionDrawerOpen] = useState(false);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -186,6 +190,16 @@ export default function ProjectsDynamicPage() {
         actionTitle={selectedQuickAction}
       />
 
+      <RequestDocumentsModal
+        isOpen={isRequestDocsModalOpen}
+        onClose={() => setIsRequestDocsModalOpen(false)}
+      />
+
+      <CreateInspectionSideDrawer
+        isOpen={isScheduleInspectionDrawerOpen}
+        onClose={() => setIsScheduleInspectionDrawerOpen(false)}
+      />
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
         <div className="max-w-3xl">
@@ -266,8 +280,10 @@ export default function ProjectsDynamicPage() {
                 onClick={() => {
                   if (action === "Open Project Monitoring" || action === "Monitor Project" || action === "Open Project Monitor") {
                     router.push('/government/dashboard/monitoring/live');
+                  } else if (action === "Request Documents" || action.includes("Request Document")) {
+                    setIsRequestDocsModalOpen(true);
                   } else if (action === "Schedule Inspection" || action === "Schedule Re-Inspection") {
-                    router.push('/government/dashboard/inspections/requests');
+                    setIsScheduleInspectionDrawerOpen(true);
                   } else if (action === "Review Submission" || action === "Approve / Reject") {
                     router.push('/government/dashboard/approvals/pending');
                   } else if (action === "View Approval History") {

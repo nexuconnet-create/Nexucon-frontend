@@ -13,6 +13,7 @@ import InspectionDetailSideDrawer from '@/components/dashboard/InspectionDetailS
 import CreateInspectionSideDrawer from '@/components/dashboard/CreateInspectionSideDrawer';
 import LogFindingModal from '@/components/dashboard/LogFindingModal';
 import IssueStopWorkModal from '@/components/dashboard/IssueStopWorkModal';
+import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
 
 const TABS = [
   { id: 'requests', label: 'Inspection Requests', icon: FileSearch },
@@ -51,6 +52,7 @@ export default function InspectionsDynamicPage() {
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
   const [isFindingModalOpen, setIsFindingModalOpen] = useState(false);
   const [isStopWorkModalOpen, setIsStopWorkModalOpen] = useState(false);
+  const [isRequestDocsModalOpen, setIsRequestDocsModalOpen] = useState(false);
 
   const fetchInspectionsData = useCallback(async () => {
     setIsLoading(true);
@@ -84,7 +86,7 @@ export default function InspectionsDynamicPage() {
             { label: "Re-Inspections", value: stats.re_inspections, icon: History, color: "purple" },
             { label: "Total in Registry", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
-          actions: ["🔍 Create Inspection Request", "Assign Inspector", "Log Defect Finding", "Issue Stop-Work Order"]
+          actions: ["📅 Schedule Inspection", "📑 Request Documents", "👷 Assign Inspector", "⚠️ Log Defect Finding", "🛑 Issue Stop-Work Order"]
         };
       case 'active':
         return {
@@ -96,7 +98,7 @@ export default function InspectionsDynamicPage() {
             { label: "Defects Logged", value: stats.findings, icon: AlertTriangle, color: "amber" },
             { label: "Completed Reports", value: stats.reports, icon: CheckCircle, color: "indigo" },
           ],
-          actions: ["🔍 Create Inspection Request", "Log Defect Finding", "Issue Stop-Work Order", "Complete Inspection"]
+          actions: ["📅 Schedule Inspection", "📑 Request Documents", "⚠️ Log Defect Finding", "🛑 Issue Stop-Work Order"]
         };
       case 'findings':
         return {
@@ -108,7 +110,7 @@ export default function InspectionsDynamicPage() {
             { label: "Re-Inspections Req.", value: stats.re_inspections, icon: History, color: "blue" },
             { label: "Completed Audits", value: stats.reports, icon: CheckCircle, color: "emerald" },
           ],
-          actions: ["Log Defect Finding", "Issue Stop-Work Order", "Schedule Re-Inspection"]
+          actions: ["⚠️ Log Defect Finding", "📑 Request Documents", "🛑 Issue Stop-Work Order", "🔄 Schedule Re-Inspection"]
         };
       case 'stop-work':
         return {
@@ -120,7 +122,7 @@ export default function InspectionsDynamicPage() {
             { label: "Active Sites", value: stats.active, icon: Activity, color: "blue" },
             { label: "Total Registry", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
-          actions: ["Issue Stop-Work Order", "View Detailed Orders", "Schedule Re-Inspection"]
+          actions: ["🛑 Issue Stop-Work Order", "📑 Request Documents", "🔄 Schedule Re-Inspection"]
         };
       case 're-inspections':
         return {
@@ -132,7 +134,7 @@ export default function InspectionsDynamicPage() {
             { label: "Completed Audits", value: stats.reports, icon: CheckCircle, color: "emerald" },
             { label: "Total Registry", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
-          actions: ["Schedule Re-Inspection", "Assign Inspector", "Log Defect Finding"]
+          actions: ["🔄 Schedule Re-Inspection", "📑 Request Documents", "👷 Assign Inspector"]
         };
       case 'reports':
         return {
@@ -144,7 +146,7 @@ export default function InspectionsDynamicPage() {
             { label: "Active Inspections", value: stats.active, icon: Activity, color: "indigo" },
             { label: "Total Conducted", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
-          actions: ["🔍 Create Inspection Request", "View Detailed Report", "Export Registry CSV"]
+          actions: ["📅 Schedule Inspection", "📑 Request Documents", "📊 Export Registry CSV"]
         };
       default: // requests
         return {
@@ -156,7 +158,7 @@ export default function InspectionsDynamicPage() {
             { label: "Active in Field", value: stats.active, icon: Activity, color: "emerald" },
             { label: "Total Requests", value: stats.total, icon: ClipboardList, color: "slate" },
           ],
-          actions: ["🔍 Create Inspection Request", "Assign Inspector", "Log Defect Finding", "Issue Stop-Work Order"]
+          actions: ["📅 Schedule Inspection", "📑 Request Documents", "👷 Assign Inspector", "⚠️ Log Defect Finding", "🛑 Issue Stop-Work Order"]
         };
     }
   };
@@ -164,9 +166,13 @@ export default function InspectionsDynamicPage() {
   const content = getPageContent();
 
   const handleQuickAction = (action: string) => {
-    if (action.includes("Create Inspection") || action.includes("➕")) {
+    if (action.includes("Request Document") || action.includes("📑")) {
+      setIsRequestDocsModalOpen(true);
+    } else if (action.includes("Schedule Inspection") || action.includes("Create Inspection") || action.includes("📅") || action.includes("➕")) {
       setIsCreateDrawerOpen(true);
-    } else if (action.includes("Stop-Work")) {
+    } else if (action.includes("Schedule Re-Inspection") || action.includes("🔄")) {
+      setIsCreateDrawerOpen(true);
+    } else if (action.includes("Stop-Work") || action.includes("🛑")) {
       if (currentStatus === 'stop-work') {
         router.push('/government/dashboard/inspections/stop-work');
       } else if (inspections.length > 0) {
@@ -175,27 +181,33 @@ export default function InspectionsDynamicPage() {
       } else {
         router.push('/government/dashboard/inspections/stop-work');
       }
-    } else if (action.includes("Log Defect") || action.includes("Log Finding")) {
+    } else if (action.includes("Log Defect") || action.includes("Log Finding") || action.includes("⚠️")) {
       if (inspections.length > 0) {
         setSelectedInspection(selectedInspection || inspections[0]);
         setIsFindingModalOpen(true);
       } else {
         setIsCreateDrawerOpen(true);
       }
-    } else if (action.includes("Assign Inspector") || action.includes("Review Request")) {
+    } else if (action.includes("Assign Inspector") || action.includes("👷")) {
       if (inspections.length > 0) {
         setSelectedInspection(selectedInspection || inspections[0]);
         setIsDetailDrawerOpen(true);
       } else {
         setIsCreateDrawerOpen(true);
       }
-    } else if (action.includes("Schedule Re-Inspection")) {
-      if (inspections.length > 0) {
-        setSelectedInspection(selectedInspection || inspections[0]);
-        setIsDetailDrawerOpen(true);
-      } else {
-        setIsCreateDrawerOpen(true);
-      }
+    } else if (action.includes("Export") || action.includes("📊")) {
+      const csvContent = "data:text/csv;charset=utf-8," + [
+        ["ID", "Project", "Type", "Status", "Date", "Inspector"].join(","),
+        ...inspections.map(i => [i.id, `"${i.project_name || ''}"`, i.inspection_type, i.status, i.scheduled_date || '', `"${i.inspector_name || ''}"`].join(","))
+      ].join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Inspections_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Inspections exported to CSV', type: 'success' } }));
     } else if (inspections.length > 0) {
       setSelectedInspection(selectedInspection || inspections[0]);
       setIsDetailDrawerOpen(true);
@@ -521,6 +533,11 @@ export default function InspectionsDynamicPage() {
         onClose={() => setIsStopWorkModalOpen(false)}
         inspection={selectedInspection}
         onSuccess={fetchInspectionsData}
+      />
+
+      <RequestDocumentsModal
+        isOpen={isRequestDocsModalOpen}
+        onClose={() => setIsRequestDocsModalOpen(false)}
       />
     </div>
   );
