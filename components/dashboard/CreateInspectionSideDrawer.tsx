@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Building2, Plus, Calendar, ShieldCheck, FileText } from 'lucide-react';
 import { createInspection } from '@/services/inspections';
 import { getProjects, Project } from '@/services/projects';
+import { CustomSelect } from '@/components/CustomSelect';
 
 interface CreateInspectionSideDrawerProps {
   isOpen: boolean;
@@ -84,7 +85,7 @@ export default function CreateInspectionSideDrawer({
           </div>
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -94,49 +95,51 @@ export default function CreateInspectionSideDrawer({
           
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Target Construction Site</label>
-            <select
+            <CustomSelect
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              required
-              className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-            >
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.reference_number || p.id.slice(0,8)})</option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedProjectId(val)}
+              options={projects.map(p => ({
+                value: p.id,
+                label: `${p.name} (${p.reference_number || p.id.slice(0, 8)})`
+              }))}
+              placeholder="Select construction site..."
+              searchable={true}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Inspection Type</label>
-              <select
+              <CustomSelect
                 value={inspectionType}
-                onChange={(e) => setInspectionType(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-              >
-                <option value="Foundation Inspection">Foundation Inspection</option>
-                <option value="Structural Review">Structural Review</option>
-                <option value="Site Verification">Site Verification</option>
-                <option value="Safety Audit">Safety Audit</option>
-                <option value="MEP Inspection">MEP Inspection</option>
-                <option value="Drainage & Environmental">Drainage & Environmental</option>
-                <option value="Final Clearance">Final Clearance</option>
-                <option value="Emergency Inspection">Emergency Inspection</option>
-              </select>
+                onChange={(val) => setInspectionType(val)}
+                options={[
+                  { value: "Foundation Inspection", label: "Foundation Inspection" },
+                  { value: "Structural Review", label: "Structural Review" },
+                  { value: "Site Verification", label: "Site Verification" },
+                  { value: "Safety Audit", label: "Safety Audit" },
+                  { value: "MEP Inspection", label: "MEP Inspection" },
+                  { value: "Drainage & Environmental", label: "Drainage & Environmental" },
+                  { value: "Final Clearance", label: "Final Clearance" },
+                  { value: "Emergency Inspection", label: "Emergency Inspection" }
+                ]}
+                placeholder="Select inspection type..."
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Priority</label>
-              <select
+              <CustomSelect
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none transition-all"
-              >
-                <option value="Low">Low</option>
-                <option value="Normal">Normal</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+                onChange={(val) => setPriority(val)}
+                options={[
+                  { value: "Low", label: "Low" },
+                  { value: "Normal", label: "Normal" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                  { value: "Critical", label: "Critical" }
+                ]}
+                placeholder="Select priority..."
+              />
             </div>
           </div>
 

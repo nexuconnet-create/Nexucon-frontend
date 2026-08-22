@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle, AlertOctagon, Send } from 'lucide-react';
 import { Inspection, logInspectionFinding } from '@/services/inspections';
+import { CustomSelect } from '@/components/CustomSelect';
 
 interface LogFindingModalProps {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export default function LogFindingModal({
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -93,31 +94,33 @@ export default function LogFindingModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Severity Level</label>
-              <select
+              <CustomSelect
                 value={severity}
-                onChange={(e) => setSeverity(e.target.value as any)}
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="LOW">Low Severity</option>
-                <option value="MEDIUM">Medium Severity</option>
-                <option value="HIGH">High Severity</option>
-                <option value="CRITICAL">Critical (Stop-Work)</option>
-              </select>
+                onChange={(val) => setSeverity(val as any)}
+                options={[
+                  { value: "LOW", label: "Low Severity" },
+                  { value: "MEDIUM", label: "Medium Severity" },
+                  { value: "HIGH", label: "High Severity" },
+                  { value: "CRITICAL", label: "Critical (Stop-Work)" }
+                ]}
+                placeholder="Select severity..."
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Category</label>
-              <select
+              <CustomSelect
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="STRUCTURAL">Structural Integrity</option>
-                <option value="SAFETY">Site Safety & Scaffolding</option>
-                <option value="ENVIRONMENTAL">Environmental & Drainage</option>
-                <option value="MEP">MEP Engineering</option>
-                <option value="PERMIT_DEVIATION">Permit Deviation</option>
-                <option value="QUALITY">Material Quality</option>
-              </select>
+                onChange={(val) => setCategory(val)}
+                options={[
+                  { value: "STRUCTURAL", label: "Structural Integrity" },
+                  { value: "SAFETY", label: "Site Safety & Scaffolding" },
+                  { value: "ENVIRONMENTAL", label: "Environmental & Drainage" },
+                  { value: "MEP", label: "MEP Engineering" },
+                  { value: "PERMIT_DEVIATION", label: "Permit Deviation" },
+                  { value: "QUALITY", label: "Material Quality" }
+                ]}
+                placeholder="Select category..."
+              />
             </div>
           </div>
 

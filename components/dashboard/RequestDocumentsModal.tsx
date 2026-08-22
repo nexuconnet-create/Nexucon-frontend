@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, FileText, Plus, Trash2, Send, Building2, Calendar, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { Application, requestApplicationDocs } from '@/services/applications';
 import { getProjects, Project } from '@/services/projects';
+import { CustomSelect } from '@/components/CustomSelect';
 
 interface RequestDocumentsModalProps {
   isOpen: boolean;
@@ -132,17 +133,16 @@ export default function RequestDocumentsModal({
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 <Building2 size={14} className="text-blue-600" /> Target Construction Project
               </label>
-              <select
+              <CustomSelect
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.developer_name || p.location || p.id})
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedProjectId(val)}
+                options={projects.map(p => ({
+                  value: p.id,
+                  label: `${p.name} (${p.developer_name || p.location || p.id})`
+                }))}
+                placeholder="Select target project..."
+                searchable={true}
+              />
             </div>
           )}
 
@@ -216,16 +216,17 @@ export default function RequestDocumentsModal({
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Submission Deadline
               </label>
-              <select
+              <CustomSelect
                 value={deadlineDays}
-                onChange={(e) => setDeadlineDays(e.target.value)}
-                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="3">3 Days (Urgent / Critical)</option>
-                <option value="7">7 Working Days (Standard)</option>
-                <option value="14">14 Working Days (Comprehensive)</option>
-                <option value="30">30 Calendar Days (Statutory Window)</option>
-              </select>
+                onChange={(val) => setDeadlineDays(val)}
+                options={[
+                  { value: "3", label: "3 Days (Urgent / Critical)" },
+                  { value: "7", label: "7 Working Days (Standard)" },
+                  { value: "14", label: "14 Working Days (Comprehensive)" },
+                  { value: "30", label: "30 Calendar Days (Statutory Window)" }
+                ]}
+                placeholder="Select deadline..."
+              />
             </div>
 
             <div>
