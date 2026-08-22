@@ -143,7 +143,19 @@ export default function AssignInspectorSideDrawer({
 
     setIsSubmitting(true);
     try {
-      // 1. Create inspector in backend database
+      // 1. Dispatch official Resend email
+      fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inviteEmail.trim(),
+          name: inviteName.trim(),
+          role: inviteDiscipline || 'Field Building Inspector',
+          department: 'Building Inspection & Compliance Unit'
+        })
+      }).catch(e => console.warn('Email dispatch warning:', e));
+
+      // 2. Create inspector in backend database
       const created = await createInspector({
         name: inviteName.trim(),
         role_title: inviteDiscipline,
