@@ -135,11 +135,10 @@ export async function POST(req: NextRequest) {
 
     // If template parameters are passed
     if (!finalHtml) {
-      const host = req.headers.get('host') || 'localhost:3000';
-      const protocol = host.includes('localhost') ? 'http' : 'https';
+      const appBaseUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexucon-frontend-8x3a.vercel.app';
       const token = invite_token || Math.random().toString(36).substring(2, 15);
       const generatedTemp = temp_password || `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
-      const inviteUrl = `${protocol}://${host}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
+      const inviteUrl = `${appBaseUrl.replace(/\/$/, '')}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
 
       if (otp_code) {
         finalSubject = finalSubject || `🔐 ${otp_code} is your Nexucon 2FA Security Passcode`;
