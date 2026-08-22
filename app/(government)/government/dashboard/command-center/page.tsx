@@ -418,7 +418,10 @@ export default function GovernmentCommandCenter() {
                     <li>Review expired permits</li>
                     <li>Verify corrective actions</li>
                   </ul>
-                  <button className="w-full py-2.5 border border-sky-200 text-sky-700 bg-sky-50 rounded-xl text-sm font-semibold hover:bg-sky-100 transition-colors flex items-center justify-center gap-2">
+                  <button 
+                    onClick={() => router.push('/government/dashboard/compliance/overview')}
+                    className="w-full py-2.5 border border-sky-200 text-sky-700 bg-sky-50 rounded-xl text-sm font-semibold hover:bg-sky-100 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
                     View Compliance Dashboard
                   </button>
                 </div>
@@ -474,7 +477,10 @@ export default function GovernmentCommandCenter() {
                       <div className="text-xs text-slate-500 italic p-3 text-center">No inspections scheduled for today.</div>
                     )}
                   </div>
-                  <button className="mt-4 w-full py-2.5 border border-orange-200 text-orange-700 bg-orange-50 rounded-xl text-sm font-semibold hover:bg-orange-100 transition-colors">
+                  <button 
+                    onClick={() => router.push('/government/dashboard/inspections/requests')}
+                    className="mt-4 w-full py-2.5 border border-orange-200 text-orange-700 bg-orange-50 rounded-xl text-sm font-semibold hover:bg-orange-100 transition-colors cursor-pointer"
+                  >
                     View Inspection Schedule
                   </button>
                 </div>
@@ -511,10 +517,10 @@ export default function GovernmentCommandCenter() {
                 </div>
               </div>
               <div className="mt-auto grid grid-cols-2 gap-2">
-                <button className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5"><MapPin size={14} /> Site Map</button>
-                <button className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5"><Activity size={14} /> GNSS Data</button>
-                <button className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5"><CheckCircle size={14} /> Verify Coords</button>
-                <button className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5"><FolderOpen size={14} /> Survey Data</button>
+                <button onClick={() => router.push('/government/dashboard/integrations/tersus')} className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"><MapPin size={14} /> Site Map</button>
+                <button onClick={() => router.push('/government/dashboard/integrations/tersus')} className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"><Activity size={14} /> GNSS Data</button>
+                <button onClick={() => router.push('/government/dashboard/integrations/tersus')} className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"><CheckCircle size={14} /> Verify Coords</button>
+                <button onClick={() => router.push('/government/dashboard/integrations/tersus')} className="py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#022C4F] hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"><FolderOpen size={14} /> Survey Data</button>
               </div>
             </div>
 
@@ -547,10 +553,10 @@ export default function GovernmentCommandCenter() {
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-auto">
-              <button className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors">Open BIM Models</button>
-              <button className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors">Review Design</button>
-              <button className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors">View Model Issues</button>
-              <button className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors">View Approved Models</button>
+              <button onClick={() => router.push('/government/dashboard/bim/models')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">Open BIM Models</button>
+              <button onClick={() => router.push('/government/dashboard/bim/review')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">Review Design</button>
+              <button onClick={() => router.push('/government/dashboard/bim/clashes')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">View Model Issues</button>
+              <button onClick={() => router.push('/government/dashboard/bim/approved')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">View Approved Models</button>
             </div>
           </div>
 
