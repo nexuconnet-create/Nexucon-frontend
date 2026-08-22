@@ -11,6 +11,7 @@ import TopRightControls from "@/components/dashboard/TopRightControls";
 import { getInspections, getInspectionStats, Inspection, InspectionStats } from '@/services/inspections';
 import InspectionDetailSideDrawer from '@/components/dashboard/InspectionDetailSideDrawer';
 import CreateInspectionSideDrawer from '@/components/dashboard/CreateInspectionSideDrawer';
+import AssignInspectorSideDrawer from '@/components/dashboard/AssignInspectorSideDrawer';
 import LogFindingModal from '@/components/dashboard/LogFindingModal';
 import IssueStopWorkModal from '@/components/dashboard/IssueStopWorkModal';
 import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
@@ -50,6 +51,7 @@ export default function InspectionsDynamicPage() {
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
+  const [isAssignInspectorDrawerOpen, setIsAssignInspectorDrawerOpen] = useState(false);
   const [isFindingModalOpen, setIsFindingModalOpen] = useState(false);
   const [isStopWorkModalOpen, setIsStopWorkModalOpen] = useState(false);
   const [isRequestDocsModalOpen, setIsRequestDocsModalOpen] = useState(false);
@@ -191,10 +193,8 @@ export default function InspectionsDynamicPage() {
     } else if (action.includes("Assign Inspector") || action.includes("👷")) {
       if (inspections.length > 0) {
         setSelectedInspection(selectedInspection || inspections[0]);
-        setIsDetailDrawerOpen(true);
-      } else {
-        setIsCreateDrawerOpen(true);
       }
+      setIsAssignInspectorDrawerOpen(true);
     } else if (action.includes("Export") || action.includes("📊")) {
       const csvContent = "data:text/csv;charset=utf-8," + [
         ["ID", "Project", "Type", "Status", "Date", "Inspector"].join(","),
@@ -513,6 +513,18 @@ export default function InspectionsDynamicPage() {
           setSelectedInspection(insp);
           setIsStopWorkModalOpen(true);
         }}
+        onAssignInspector={(insp) => {
+          setSelectedInspection(insp);
+          setIsAssignInspectorDrawerOpen(true);
+        }}
+      />
+
+      <AssignInspectorSideDrawer
+        isOpen={isAssignInspectorDrawerOpen}
+        onClose={() => setIsAssignInspectorDrawerOpen(false)}
+        inspection={selectedInspection}
+        inspectionsList={inspections}
+        onAssigned={fetchInspectionsData}
       />
 
       <CreateInspectionSideDrawer

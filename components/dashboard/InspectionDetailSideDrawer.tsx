@@ -19,6 +19,7 @@ interface InspectionDetailSideDrawerProps {
   onUpdated?: () => void;
   onLogFinding?: (inspection: Inspection) => void;
   onIssueStopWork?: (inspection: Inspection) => void;
+  onAssignInspector?: (inspection: Inspection) => void;
 }
 
 export default function InspectionDetailSideDrawer({
@@ -27,7 +28,8 @@ export default function InspectionDetailSideDrawer({
   inspection,
   onUpdated,
   onLogFinding,
-  onIssueStopWork
+  onIssueStopWork,
+  onAssignInspector
 }: InspectionDetailSideDrawerProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'overview' | 'checklist' | 'findings' | 'telemetry'>('overview');
@@ -164,9 +166,19 @@ export default function InspectionDetailSideDrawer({
               <div className="grid grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Assigned Inspector</span>
-                  <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                    <User size={14} className="text-slate-400" /> {inspection.inspector_name || 'Unassigned'}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <User size={14} className="text-slate-400" /> {inspection.inspector_name || 'Unassigned'}
+                    </p>
+                    {onAssignInspector && (
+                      <button
+                        onClick={() => onAssignInspector(inspection)}
+                        className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        {inspection.inspector_name && inspection.inspector_name !== 'Unassigned' ? 'Reassign' : 'Assign'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Scheduled Date</span>
@@ -348,6 +360,16 @@ export default function InspectionDetailSideDrawer({
           </div>
 
           <div className="flex items-center gap-2">
+            {inspection.status === 'REQUESTED' && onAssignInspector && (
+              <button
+                type="button"
+                onClick={() => onAssignInspector(inspection)}
+                className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033b6a] text-white rounded-xl text-xs font-bold shadow-md shadow-[#022C4F]/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <ShieldCheck size={14} /> Assign Inspector
+              </button>
+            )}
+
             {inspection.status === 'IN_PROGRESS' && (
               <>
                 <button
