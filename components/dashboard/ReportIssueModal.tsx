@@ -53,23 +53,20 @@ export default function ReportIssueModal({
 
     setIsSubmitting(true);
     try {
-      const issue = await createSiteIssue({
+      const issuePayload: any = {
         project: selectedProjectId,
         title: title.trim(),
         description: description.trim(),
         severity: enforceStopWork ? 'CRITICAL' : severity,
-        assigned_to_name: assignedToName,
-        due_date: dueDate || undefined,
+        assigned_to_name: assignedToName || 'Site Engineer',
         enforce_stop_work: enforceStopWork
-      } as any);
+      };
 
-      if (enforceStopWork) {
-        await createStopWorkOrder({
-          project: selectedProjectId,
-          reason: `${title.trim()}: ${description.trim() || 'Immediate site safety and building regulation breach.'}`,
-          severity: 'CRITICAL'
-        });
+      if (dueDate && dueDate.trim()) {
+        issuePayload.due_date = dueDate.trim().split('T')[0];
       }
+
+      const issue = await createSiteIssue(issuePayload);
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { 
@@ -82,7 +79,7 @@ export default function ReportIssueModal({
       onClose();
       if (onSuccess) onSuccess(issue);
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to report site issue';
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to report site issue';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
