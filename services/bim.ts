@@ -230,7 +230,156 @@ export const runTimelineSimulation = async (projectId: string): Promise<BIMProgr
   return unwrapItem<BIMProgressValidation>(response);
 };
 
+export interface BIMConstructionMilestone {
+  id: string;
+  milestone_code: string;
+  project: string;
+  project_name?: string;
+  project_reference?: string;
+  bim_model: string;
+  bim_model_name?: string;
+  bim_model_discipline?: string;
+  bim_model_certified?: boolean;
+  bim_model_status?: string;
+  model_version?: string;
+  model_version_label?: string;
+  model_version_hash?: string;
+  linked_construction_milestone?: string;
+  name: string;
+  phase: 'SUBSTRUCTURE' | 'STRUCTURAL_FRAME' | 'SUPERSTRUCTURE' | 'MEP_ROUGHIN' | 'FACADE_ENVELOPE' | 'FINISHES' | 'COMMISSIONING';
+  description?: string;
+  sequence_order: number;
+  target_date: string;
+  actual_verified_date?: string;
+  bim_elements: Array<{
+    id: string;
+    name?: string;
+    discipline?: string;
+    category?: string;
+    count?: number;
+    lod?: string;
+  }>;
+  tolerance_max_mm: number;
+  bim_deviation_mm: number;
+  gnss_survey_variance_mm: number;
+  gpr_clearance_status: 'NOT_APPLICABLE' | 'PENDING' | 'VERIFIED' | 'ANOMALY_DETECTED';
+  gpr_evidence_notes?: string;
+  verification_status: 'UNVERIFIED' | 'PENDING_REVIEW' | 'VERIFIED' | 'DEVIATION_FLAGGED' | 'RE_VERIFICATION_REQUIRED' | 'COMPLETED';
+  digital_stamp_reference?: string;
+  verified_by?: string;
+  verified_by_name?: string;
+  verified_at?: string;
+  linked_clashes: Array<{
+    id?: string;
+    ref?: string;
+    title?: string;
+    severity?: string;
+    status?: string;
+  }>;
+  linked_inspections: Array<{
+    id?: string;
+    ref?: string;
+    type?: string;
+    outcome?: string;
+    status?: string;
+    date?: string;
+  }>;
+  linked_site_verifications: Array<{
+    id?: string;
+    code?: string;
+    type?: string;
+    status?: string;
+    variance_mm?: number;
+  }>;
+  linked_ncrs: Array<{
+    id?: string;
+    ref?: string;
+    title?: string;
+    severity?: string;
+    status?: string;
+  }>;
+  evidence_vault: Array<{
+    name: string;
+    url: string;
+    file_type: string;
+    category: string;
+    timestamp: string;
+    deviation_mm?: number;
+    reason?: string;
+  }>;
+  verification_requirements?: Record<string, any>;
+  signoff_metadata?: Record<string, any>;
+  gate_checks_summary?: {
+    model_approved: boolean;
+    version_verified: boolean;
+    zero_critical_clashes: boolean;
+    open_critical_clashes_count: number;
+    tolerance_compliant: boolean;
+    inspections_passed: boolean;
+    gpr_clear: boolean;
+    all_gates_passed: boolean;
+    is_stamped: boolean;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GateCheckItem {
+  key: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface BIMMilestoneGateStatus {
+  milestone_id: string;
+  milestone_code: string;
+  all_gates_passed: boolean;
+  gates: GateCheckItem[];
+  blockers: string[];
+  can_digitally_sign: boolean;
+}
+
 export const getBIMStats = async (): Promise<BIMStats> => {
   const response = await api.get('/bim/stats/overview/');
   return unwrapItem<BIMStats>(response);
 };
+
+export const getBIMMilestones = async (params?: Record<string, any>): Promise<BIMConstructionMilestone[]> => {
+  const response = await api.get('/bim/milestones/', { params });
+  return unwrapList<BIMConstructionMilestone>(response);
+};
+
+export const getBIMMilestoneById = async (id: string): Promise<BIMConstructionMilestone> => {
+  const response = await api.get(`/bim/milestones/${id}/`);
+  return unwrapItem<BIMConstructionMilestone>(response);
+};
+
+export const createBIMMilestone = async (data: Partial<BIMConstructionMilestone>): Promise<BIMConstructionMilestone> => {
+  const response = await api.post('/bim/milestones/', data);
+  return unwrapItem<BIMConstructionMilestone>(response);
+};
+
+export const getBIMMilestoneGateStatus = async (id: string): Promise<BIMMilestoneGateStatus> => {
+  const response = await api.get(`/bim/milestones/${id}/gate-status/`);
+  return unwrapItem<BIMMilestoneGateStatus>(response);
+};
+
+export const verifyBIMMilestone = async (id: string, data?: { notes?: string }): Promise<BIMConstructionMilestone> => {
+  const response = await api.post(`/bim/milestones/${id}/verify/`, data || {});
+  return unwrapItem<BIMConstructionMilestone>(response);
+};
+
+export const flagBIMMilestoneDeviation = async (
+  id: string, 
+  data: { deviation_mm: number; reason: string; evidence_name?: string; evidence_url?: string }
+): Promise<BIMConstructionMilestone> => {
+  const response = await api.post(`/bim/milestones/${id}/flag-deviation/`, data);
+  return unwrapItem<BIMConstructionMilestone>(response);
+};
+
+export const requestMilestoneReVerification = async (id: string, data?: { reason?: string }): Promise<BIMConstructionMilestone> => {
+  const response = await api.post(`/bim/milestones/${id}/request-re-verification/`, data || {});
+  return unwrapItem<BIMConstructionMilestone>(response);
+};
+
