@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     if (!finalHtml) {
       const appBaseUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexucon-frontend-8x3a.vercel.app';
       const token = invite_token || Math.random().toString(36).substring(2, 15);
-      const generatedTemp = temp_password || `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
+      const generatedTemp = temp_password || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : Math.random().toString(36).substring(2, 12));
       const inviteUrl = `${appBaseUrl.replace(/\/$/, '')}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
 
       if (otp_code) {
@@ -154,6 +154,11 @@ export async function POST(req: NextRequest) {
         finalSubject = finalSubject || generated.subject;
         finalHtml = generated.html;
       }
+    }
+
+    if (!RESEND_API_KEY) {
+      console.warn('RESEND_API_KEY is not configured in environment variables');
+      return NextResponse.json({ success: false, message: 'Email service not configured (missing RESEND_API_KEY)' });
     }
 
     const res = await fetch('https://api.resend.com/emails', {
