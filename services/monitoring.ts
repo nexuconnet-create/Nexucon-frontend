@@ -197,6 +197,16 @@ export interface ConstructionMilestone {
   updated_at: string;
 }
 
+export interface SiteVerificationTelemetry {
+  satellites_tracked?: number;
+  constellations?: string[];
+  hdop?: number;
+  vdop?: number;
+  rtk_fix_status?: string;
+  correction_latency_sec?: number;
+  base_station_ref?: string;
+}
+
 export interface SiteVerification {
   id: string;
   verification_reference: string;
@@ -204,15 +214,29 @@ export interface SiteVerification {
   project_name: string;
   project_reference: string;
   project_location?: string;
-  method: 'GNSS_RTK_SURVEY' | 'TERSU_ROVER' | 'GPR_SCAN' | 'DRONE_PHOTOGRAMMETRY' | 'TOTAL_STATION';
+  project_status?: string;
+  method: 'GNSS_RTK_SURVEY' | 'TERSU_ROVER' | 'DRONE_PHOTOGRAMMETRY' | 'GPR_SCAN' | 'TOTAL_STATION' | 'SETBACK_AUDIT' | 'LEVEL_ELEVATION' | string;
   device_identifier: string;
-  boundary_coordinates?: any[];
-  captured_coordinates?: { lat?: number; lng?: number; elevation?: number };
+  cadastral_beacon_numbers?: string[];
+  boundary_coordinates?: { point: string; lat: number; lng: number; elevation?: number }[];
+  captured_coordinates?: { lat?: number; lng?: number; elevation?: number; accuracy_horizontal_mm?: number };
   approved_coordinates?: { lat?: number; lng?: number; elevation?: number };
   variance_meters: number;
+  elevation_variance_meters?: number;
+  tolerance_limit_meters?: number;
   variance_detected: boolean;
-  status: 'PENDING_VERIFICATION' | 'VERIFIED' | 'VARIANCE_DETECTED' | 'FLAGGED';
+  encroachment_detected?: boolean;
+  encroachment_details?: string;
+  is_within_tolerance?: boolean;
+  tolerance_status?: 'COMPLIANT' | 'EXCEEDS_TOLERANCE' | 'ENCROACHMENT_DETECTED' | string;
+  telemetry_data?: SiteVerificationTelemetry;
+  evidence_documents?: (MilestoneDocument | any)[];
+  evidence_photos?: string[];
+  digital_cert_ref?: string;
+  signature_hash?: string;
+  status: 'PENDING_VERIFICATION' | 'IN_PROGRESS' | 'VERIFIED' | 'VARIANCE_DETECTED' | 'FLAGGED' | 'RESOLVED' | string;
   verified_by_name?: string;
+  verified_by_role?: string;
   verified_at?: string;
   notes?: string;
   created_at: string;
@@ -464,33 +488,80 @@ export const getMilestoneAuditTrail = async (id: string): Promise<MilestoneAudit
   return Array.isArray(res) ? res : (res?.data || []);
 };
 
-// Site Verifications
+// ==========================================
+// Site Verifications - Database API
+// ==========================================
+
 export const getSiteVerifications = async (params?: {
   project?: string;
   method?: string;
   status?: string;
+  variance_detected?: boolean;
+  encroachment_detected?: boolean;
   search?: string;
 }): Promise<SiteVerification[]> => {
   try {
     const res: any = await api.get('/monitoring/verifications/', { params });
     return Array.isArray(res) ? res : (res?.results || res?.data || []);
   } catch (err) {
-    console.warn('getSiteVerifications fallback notice:', err);
+    console.error('Failed to fetch site verifications from backend:', err);
     return [];
   }
 };
 
-export const createSiteVerification = async (payload: {
-  project: string;
-  method: string;
-  device_identifier?: string;
-  captured_coordinates?: { lat: number; lng: number };
-  approved_coordinates?: { lat: number; lng: number };
-  variance_meters?: number;
-  notes?: string;
-}): Promise<SiteVerification> => {
+export const getSiteVerificationById = async (id: string): Promise<SiteVerification> => {
+  const res: any = await api.get(`/monitoring/verifications/${id}/`);
+  return res.data || res;
+};
+
+export const createSiteVerification = async (payload: Partial<SiteVerification>): Promise<SiteVerification> => {
   const res: any = await api.post('/monitoring/verifications/', payload);
   return res.data || res;
+};
+
+export const certifySiteVerification = async (
+  id: string,
+  payload?: {
+    notes?: string;
+    override_tolerance?: boolean;
+    verified_by_name?: string;
+    verified_by_role?: string;
+  }
+): Promise<SiteVerification> => {
+  const res: any = await api.post(`/monitoring/verifications/${id}/certify/`, payload || {});
+  return res.data || res;
+};
+
+export const flagSiteEncroachment = async (
+  id: string,
+  payload: {
+    reason: string;
+    details?: string;
+  }
+): Promise<SiteVerification> => {
+  const res: any = await api.post(`/monitoring/verifications/${id}/flag-encroachment/`, payload);
+  return res.data || res;
+};
+
+export const attachSiteVerificationEvidence = async (
+  id: string,
+  payload: {
+    documents?: any[];
+    photos?: string[];
+  }
+): Promise<SiteVerification> => {
+  const res: any = await api.post(`/monitoring/verifications/${id}/attach-evidence/`, payload);
+  return res.data || res;
+};
+
+export const getSiteVerificationTelemetry = async (id: string): Promise<SiteVerificationTelemetry> => {
+  const res: any = await api.get(`/monitoring/verifications/${id}/telemetry/`);
+  return res.data || res;
+};
+
+export const getSiteVerificationAuditTrail = async (id: string): Promise<MilestoneAuditEvent[]> => {
+  const res: any = await api.get(`/monitoring/verifications/${id}/audit-trail/`);
+  return Array.isArray(res) ? res : (res?.data || []);
 };
 
 // Statistics Overview
