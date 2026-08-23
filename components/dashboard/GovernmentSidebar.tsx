@@ -150,7 +150,6 @@ const sidebarLinks: SidebarItem[] = [
       { name: "BIM Models", href: "/government/dashboard/bim/models", icon: Box },
       { name: "Model Versions", href: "/government/dashboard/bim/versions", icon: History },
       { name: "Design Review", href: "/government/dashboard/bim/review", icon: FileSearch },
-      { name: "Construction Milestones", href: "/government/dashboard/bim/milestones", icon: Milestone },
       { name: "Model Annotations", href: "/government/dashboard/bim/annotations", icon: FileText },
       { name: "BIM Issues & Clashes", href: "/government/dashboard/bim/issues", icon: AlertTriangle },
       { name: "Progress Validation", href: "/government/dashboard/bim/progress-validation", icon: Activity },
