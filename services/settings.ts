@@ -6,8 +6,11 @@ export interface StaffUser {
   email: string;
   role: string;
   department: string;
+  phone?: string;
+  phone_number?: string;
   status: 'Active' | 'Inactive' | 'Pending';
   lastLogin: string;
+  invited_at?: string;
 }
 
 export interface CustomRole {

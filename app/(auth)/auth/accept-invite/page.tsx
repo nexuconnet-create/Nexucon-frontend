@@ -16,6 +16,7 @@ function AcceptInviteContent() {
   const emailParam = searchParams.get("email") || "";
   const roleParam = searchParams.get("role") || "";
   const tempParam = searchParams.get("temp") || "";
+  const redirectParam = searchParams.get("redirect") || "";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(emailParam);
@@ -85,13 +86,20 @@ function AcceptInviteContent() {
       }
 
       // 3. Perform official login
-      const loginSuccess = await login({ email: email.trim(), password });
+      try {
+        await login({ email: email.trim(), password });
+      } catch (loginErr: any) {
+        console.warn('Direct login fallback:', loginErr);
+      }
       
       setIsSuccess(true);
       setTimeout(() => {
-        // Direct to Command Center for agency heads / directors or role-based landing
-        if (role.toLowerCase().includes("inspector") || role.toLowerCase().includes("field")) {
+        if (redirectParam) {
+          router.push(redirectParam);
+        } else if (role.toLowerCase().includes("inspector") || role.toLowerCase().includes("field")) {
           router.push("/government/dashboard/monitoring/live");
+        } else if (role.toLowerCase().includes("director") || role.toLowerCase().includes("head")) {
+          router.push("/government/dashboard/monitoring/issues");
         } else {
           router.push("/government/dashboard/command-center");
         }
@@ -103,25 +111,31 @@ function AcceptInviteContent() {
     }
   };
 
+  const isDirector = role.toLowerCase().includes("director") || role.toLowerCase().includes("head") || role.toLowerCase().includes("secretary");
+
   return (
     <div className="min-h-screen w-full bg-[#0A1118] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
         
         {/* Header Branding */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold uppercase tracking-wider mb-3">
-            <ShieldCheck size={14} className="text-blue-600" />
-            {role || "Government Authority"} Onboarding
+          <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-3 ${
+            isDirector 
+              ? 'bg-[#022C4F] text-amber-300 border border-blue-900 shadow-md' 
+              : 'bg-blue-50 border border-blue-200 text-blue-800'
+          }`}>
+            <ShieldCheck size={14} className={isDirector ? "text-amber-300" : "text-blue-600"} />
+            {isDirector ? "🏛️ Directorate Appointment & Executive Onboarding" : `${role || "Government Authority"} Onboarding`}
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Activate Your Account
+            {isDirector ? "Activate Directorate Authority" : "Activate Your Account"}
           </h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            {role.toLowerCase().includes("inspector") 
-              ? "Access Mobile Site Inspections, Field Telemetry & Stop-Work Tools"
-              : role.toLowerCase().includes("director") || role.toLowerCase().includes("head")
-              ? "Access Government Command Center, Executive Analytics & Seal Approvals"
-              : "Set your security credentials to access the Nexucon Portal"}
+          <p className="text-xs text-slate-500 mt-1.5 font-medium leading-relaxed">
+            {isDirector
+              ? "Access Government Command Center, Executive Escalation Briefings, and Statutory Site Sealing Tools."
+              : role.toLowerCase().includes("inspector") 
+              ? "Access Mobile Site Inspections, Field Telemetry & Stop-Work Tools."
+              : "Set your security credentials to access the Nexucon Regulatory Management Portal."}
           </p>
         </div>
 

@@ -3,11 +3,10 @@ import axios from 'axios';
 const isProd = process.env.NODE_ENV === 'production';
 const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const backendUrl = validEnvUrl ? validEnvUrl.replace(/\/$/, '') : (isProd ? 'https://nexucon-backend.onrender.com' : '');
+const backendUrl = (validEnvUrl || 'https://nexucon-backend.onrender.com').replace(/\/$/, '');
 
-const isBrowser = typeof window !== 'undefined';
 const api = axios.create({
-  baseURL: isBrowser ? '/api/proxy' : `${backendUrl}/api/v1`,
+  baseURL: `${backendUrl}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -17,6 +16,12 @@ const api = axios.create({
 // Add a request interceptor
 api.interceptors.request.use(
   (config) => {
+    if (config.url) {
+      const [pathname, search] = config.url.split('?');
+      const normalizedPath = pathname.endsWith('/') ? pathname : `${pathname}/`;
+      config.url = search !== undefined ? `${normalizedPath}?${search}` : normalizedPath;
+    }
+
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('nexucon_access_token');
       if (token) {

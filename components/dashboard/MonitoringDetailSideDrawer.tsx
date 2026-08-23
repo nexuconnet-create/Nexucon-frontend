@@ -5,7 +5,7 @@ import {
   X, Camera, Eye, AlertTriangle, ShieldCheck, CheckCircle, 
   Clock, MapPin, Building2, User, Calendar, ArrowUpRight, 
   ExternalLink, Layers, Activity, Compass, AlertCircle, 
-  Check, FileText, ChevronRight, Share2, Sparkles, Plus, AlertOctagon
+  Check, FileText, ChevronRight, Share2, Sparkles, Plus, AlertOctagon, Gavel
 } from 'lucide-react';
 import { 
   DailySiteUpdate, FieldObservation, SiteIssue, 
@@ -402,20 +402,37 @@ export default function MonitoringDetailSideDrawer({
 
           <div className="flex items-center gap-2">
             {type === 'issue' && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  if (onAction) {
-                    onAction('ISSUE_STOP_WORK', data);
-                  } else {
-                    router.push('/government/dashboard/inspections/stop-work');
-                  }
-                }}
-                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <AlertOctagon size={14} /> Stop-Work Order
-              </button>
+              <>
+                {!data.is_escalated && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      if (onAction) {
+                        onAction('ESCALATE_DIRECTORATE', data);
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Gavel size={14} /> Escalate to Directorate
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    if (onAction) {
+                      onAction('ISSUE_STOP_WORK', data);
+                    } else {
+                      router.push('/government/dashboard/inspections/stop-work');
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <AlertOctagon size={14} /> Stop-Work Order
+                </button>
+              </>
             )}
 
             {type === 'update' && onAction && (

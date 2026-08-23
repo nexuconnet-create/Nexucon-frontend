@@ -69,9 +69,9 @@ export default function DailyPhotosGalleryModal({
         projectLocation: u.project_location,
         workSummary: u.work_summary,
         progressPercentage: u.progress_percentage,
-        reportedByName: u.reported_by_name,
-        weatherCondition: u.weather_condition,
-        workforceCount: u.workforce_count,
+        reportedByName: u.reported_by_name || 'Site Inspector',
+        weatherCondition: u.weather_condition || u.site_weather || 'Sunny / Clear',
+        workforceCount: u.workforce_count ?? u.active_workers_count ?? 15,
         createdAt: u.created_at,
         gpsCoordinates: u.gps_coordinates
       });

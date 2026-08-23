@@ -32,10 +32,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const isProd = process.env.NODE_ENV === 'production';
 const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const backendUrl = validEnvUrl ? validEnvUrl.replace(/\/$/, '') : (isProd ? 'https://nexucon-backend.onrender.com' : '');
-
-const isBrowser = typeof window !== 'undefined';
-const API_BASE_URL = isBrowser ? '/api/proxy' : `${backendUrl}/api/v1`;
+const backendUrl = (validEnvUrl || 'https://nexucon-backend.onrender.com').replace(/\/$/, '');
+const API_BASE_URL = `${backendUrl}/api/v1`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);

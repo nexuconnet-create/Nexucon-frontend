@@ -15,6 +15,7 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
 
   const headers: Record<string, string> = {
     'Accept': 'application/json',
+    'User-Agent': req.headers.get('user-agent') || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   };
 
   const authHeader = req.headers.get('authorization');
@@ -41,13 +42,26 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
     }
   }
 
+  const executeFetch = async (attempt: number = 1): Promise<Response> => {
+    try {
+      return await fetch(targetUrl, {
+        method: req.method,
+        headers,
+        body: body || undefined,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(60000)
+      });
+    } catch (err: any) {
+      if (attempt < 2) {
+        console.warn(`[Proxy Retry] Retrying connection to ${targetUrl} (attempt ${attempt + 1})...`);
+        return await executeFetch(attempt + 1);
+      }
+      throw err;
+    }
+  };
+
   try {
-    const backendRes = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body: body || undefined,
-      cache: 'no-store'
-    });
+    const backendRes = await executeFetch(1);
 
     const responseContentType = backendRes.headers.get('content-type') || '';
     const resText = await backendRes.text();
