@@ -7,9 +7,13 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File | null;
     const directUrl = formData.get('url') as string | null;
 
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'fspyt1uw';
-    const apiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY || '226324943154255';
-    const apiSecret = process.env.CLOUDINARY_API_SECRET || 'xEYPJUsx6Gih1uxUBZhiQ9K7VK0';
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME || '';
+    const apiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY || '';
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || '';
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return NextResponse.json({ error: 'Cloudinary credentials not configured' }, { status: 500 });
+    }
 
     if (!file && !directUrl) {
       return NextResponse.json({ error: 'No file or image URL provided' }, { status: 400 });

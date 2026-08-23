@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_T5fzGV4i_MxWq29RnxPKmDbJizUWHnPZ6';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Nexucon Email notifications <notifications@nexucon.net>';
 
 function getRoleTemplate(role: string, name: string, department: string, inviteUrl: string, email: string, tempPassword?: string) {
