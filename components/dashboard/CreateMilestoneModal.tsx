@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { getProjects, Project } from '@/services/projects';
 import { createMilestone, ConstructionMilestone } from '@/services/monitoring';
+import { getBIMModels, BIMModel } from '@/services/bim';
 
 interface CreateMilestoneModalProps {
   isOpen: boolean;
@@ -34,6 +35,9 @@ export default function CreateMilestoneModal({
 }: CreateMilestoneModalProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || '');
+  const [bimModels, setBimModels] = useState<BIMModel[]>([]);
+  const [selectedBimModelId, setSelectedBimModelId] = useState<string>('');
+  const [bimToleranceMaxMm, setBimToleranceMaxMm] = useState<number>(15.0);
   const [name, setName] = useState('');
   const [milestoneCode, setMilestoneCode] = useState('');
   const [phase, setPhase] = useState('SUPERSTRUCTURE');
@@ -79,6 +83,22 @@ export default function CreateMilestoneModal({
     }
   }, [isOpen, defaultProjectId]);
 
+  useEffect(() => {
+    if (selectedProjectId) {
+      getBIMModels({ project: selectedProjectId })
+        .then(res => {
+          const list = Array.isArray(res) ? res : ((res as any).results || []);
+          setBimModels(list);
+          if (list.length > 0) {
+            setSelectedBimModelId(list[0].id);
+          } else {
+            setSelectedBimModelId('');
+          }
+        })
+        .catch(() => setBimModels([]));
+    }
+  }, [selectedProjectId]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,36 +112,32 @@ export default function CreateMilestoneModal({
 
     setIsSubmitting(true);
     try {
-      const selectedProjectObj = projects.find(p => p.id === selectedProjectId);
       const payload: Partial<ConstructionMilestone> = {
         project: selectedProjectId,
-        project_name: selectedProjectObj?.name || 'Construction Project',
-        project_reference: selectedProjectObj?.reference_number || 'PRJ-NEXUCON',
-        project_location: selectedProjectObj?.site_address || selectedProjectObj?.location || 'Lagos, Nigeria',
+        milestone_code: milestoneCode.trim(),
         name: name.trim(),
-        milestone_code: milestoneCode.trim() || `MS-${Math.floor(1000 + Math.random() * 9000)}`,
         phase,
         description: description.trim(),
         planned_start_date: plannedStartDate || undefined,
         target_date: targetDate,
-        duration_days: parseInt(durationDays, 10) || 30,
+        duration_days: parseInt(durationDays) || 30,
         critical_path: criticalPath,
-        sequence_order: parseInt(sequenceOrder, 10) || 1,
-        status: 'PLANNED',
-        progress_percentage: 0,
+        sequence_order: parseInt(sequenceOrder) || 1,
+        linked_bim_model_id: selectedBimModelId || undefined,
+        bim_tolerance_max_mm: bimToleranceMaxMm,
         verification_requirements: verificationReqs,
-        risk_level: 'LOW'
+        status: 'PLANNED',
+        progress_percentage: 0
       };
 
-      const result = await createMilestone(payload);
+      const created = await createMilestone(payload);
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Construction milestone "${name}" successfully scheduled!`, type: 'success' } 
+        detail: { message: `Milestone "${created.name}" successfully added to project programme.`, type: 'success' } 
       }));
-
       onClose();
-      if (onSuccess) onSuccess(result);
+      if (onSuccess) onSuccess(created);
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to create construction milestone';
+      const msg = err.response?.data?.message || err.message || 'Failed to create construction milestone';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
@@ -186,6 +202,39 @@ export default function CreateMilestoneModal({
                 onChange={(e) => setMilestoneCode(e.target.value)}
                 placeholder="e.g. MS-01-PIL"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Associated BIM Model & Tolerance Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-xs font-bold text-[#022C4F]">Associated Approved BIM Model</label>
+              <div className="relative">
+                <Layers className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <select
+                  value={selectedBimModelId}
+                  onChange={(e) => setSelectedBimModelId(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">None / Physical Site Only</option>
+                  {bimModels.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.discipline} • {m.current_version} • {m.is_digitally_certified ? 'Certified' : m.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#022C4F]">BIM Tolerance Max (mm)</label>
+              <input 
+                type="number"
+                step="0.5"
+                value={bimToleranceMaxMm}
+                onChange={(e) => setBimToleranceMaxMm(parseFloat(e.target.value) || 15.0)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>

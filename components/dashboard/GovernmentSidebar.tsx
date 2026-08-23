@@ -41,6 +41,7 @@ import {
   AlertOctagon,
   Calendar,
   MessageSquare,
+  Milestone,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
