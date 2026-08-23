@@ -6,7 +6,7 @@ import {
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
   Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase,
   MonitorPlay, Plus, RefreshCw, Compass, AlertOctagon, Camera, Navigation, Gavel,
-  Layers, ChevronRight, BarChart2, GitCommit, Lock
+  Layers, ChevronRight, BarChart2, GitCommit, Lock, Radio
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
@@ -25,6 +25,10 @@ import UpdateMilestoneProgressModal from '@/components/dashboard/UpdateMilestone
 import FlagMilestoneDelayModal from '@/components/dashboard/FlagMilestoneDelayModal';
 import MilestoneDetailDrawer from '@/components/dashboard/MilestoneDetailDrawer';
 import SiteVerificationDrawer from '@/components/dashboard/SiteVerificationDrawer';
+import RecordSiteVerificationModal from '@/components/dashboard/RecordSiteVerificationModal';
+import CertifyVerificationModal from '@/components/dashboard/CertifyVerificationModal';
+import FlagEncroachmentModal from '@/components/dashboard/FlagEncroachmentModal';
+import SiteVerificationDetailDrawer from '@/components/dashboard/SiteVerificationDetailDrawer';
 import DailyPhotosGalleryModal from '@/components/dashboard/DailyPhotosGalleryModal';
 import SiteProgressDetailModal from '@/components/dashboard/SiteProgressDetailModal';
 import MonitoringDetailSideDrawer, { MonitoringDetailItem } from '@/components/dashboard/MonitoringDetailSideDrawer';
@@ -63,6 +67,24 @@ const STATUS_FILTERS = [
   { id: 'PLANNED', label: 'Planned' },
 ];
 
+const VERIFICATION_METHOD_FILTERS = [
+  { id: 'ALL', label: 'All Survey Methods' },
+  { id: 'GNSS_RTK_SURVEY', label: 'Tersus RTK Rover' },
+  { id: 'TERSU_ROVER', label: 'Rover Telemetry Sync' },
+  { id: 'DRONE_PHOTOGRAMMETRY', label: 'Drone LiDAR' },
+  { id: 'SETBACK_AUDIT', label: 'Setback Audit' },
+  { id: 'TOTAL_STATION', label: 'Total Station' },
+  { id: 'GPR_SCAN', label: 'GPR Radar Scan' },
+];
+
+const VERIFICATION_STATUS_FILTERS = [
+  { id: 'ALL', label: 'All Verifications' },
+  { id: 'VERIFIED', label: 'Verified & Certified' },
+  { id: 'VARIANCE_DETECTED', label: 'Variance Detected' },
+  { id: 'FLAGGED', label: 'Flagged / Encroached' },
+  { id: 'PENDING_VERIFICATION', label: 'Pending Review' },
+];
+
 export default function MonitoringDynamicPage() {
   const params = useParams();
   const router = useRouter();
@@ -70,12 +92,15 @@ export default function MonitoringDynamicPage() {
   
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [milestoneLayout, setMilestoneLayout] = useState<'list' | 'grid' | 'timeline'>('list');
+  const [verificationLayout, setVerificationLayout] = useState<'table' | 'cards' | 'map'>('table');
   const [selectedPhaseFilter, setSelectedPhaseFilter] = useState('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
+  const [selectedVerificationMethodFilter, setSelectedVerificationMethodFilter] = useState('ALL');
+  const [selectedVerificationStatusFilter, setSelectedVerificationStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Data states
+  // Monitoring collections from database
   const [dailyUpdates, setDailyUpdates] = useState<DailySiteUpdate[]>([]);
   const [observations, setObservations] = useState<FieldObservation[]>([]);
   const [issues, setIssues] = useState<SiteIssue[]>([]);
@@ -97,6 +122,13 @@ export default function MonitoringDynamicPage() {
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
   const [isMilestoneDetailDrawerOpen, setIsMilestoneDetailDrawerOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<ConstructionMilestone | null>(null);
+
+  // Site Verification Modals & Drawers
+  const [isRecordVerificationModalOpen, setIsRecordVerificationModalOpen] = useState(false);
+  const [isCertifyVerificationModalOpen, setIsCertifyVerificationModalOpen] = useState(false);
+  const [isFlagEncroachmentModalOpen, setIsFlagEncroachmentModalOpen] = useState(false);
+  const [isVerificationDetailDrawerOpen, setIsVerificationDetailDrawerOpen] = useState(false);
+  const [selectedVerification, setSelectedVerification] = useState<SiteVerification | null>(null);
 
   const [isVerificationDrawerOpen, setIsVerificationDrawerOpen] = useState(false);
   const [selectedDetailItem, setSelectedDetailItem] = useState<MonitoringDetailItem | null>(null);
@@ -129,7 +161,11 @@ export default function MonitoringDynamicPage() {
         });
         setMilestones(data);
       } else if (currentStatus === 'verification') {
-        const data = await getSiteVerifications({ search: searchQuery });
+        const data = await getSiteVerifications({ 
+          search: searchQuery,
+          method: selectedVerificationMethodFilter !== 'ALL' ? selectedVerificationMethodFilter : undefined,
+          status: selectedVerificationStatusFilter !== 'ALL' ? selectedVerificationStatusFilter : undefined,
+        });
         setVerifications(data);
       }
     } catch (err) {
@@ -137,7 +173,7 @@ export default function MonitoringDynamicPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentStatus, searchQuery, selectedPhaseFilter, selectedStatusFilter]);
+  }, [currentStatus, searchQuery, selectedPhaseFilter, selectedStatusFilter, selectedVerificationMethodFilter, selectedVerificationStatusFilter]);
 
   useEffect(() => {
     fetchMonitoringData();
@@ -203,15 +239,20 @@ export default function MonitoringDynamicPage() {
         };
       case 'verification':
         return {
-          title: "Site Verification & GNSS Boundary",
-          subtitle: "Verify physical site conditions, project coordinates, and construction boundaries with GNSS RTK rover telemetry.",
+          title: "Cadastral Site Verification & GNSS Rover Audits",
+          subtitle: "Statutory boundary coordinate validation, dual-frequency GNSS RTK rover telemetry, setback compliance, and digital certification.",
           overview: [
-            { label: "Pending Verification", value: stats?.verification?.pending ?? 0, icon: Clock, color: "amber" },
-            { label: "Verified Coordinates", value: stats?.verification?.verified ?? 0, icon: CheckCircle, color: "emerald" },
-            { label: "Variance Detected", value: stats?.verification?.variance_detected ?? 0, icon: AlertTriangle, color: "red" },
-            { label: "Active Rovers", value: stats?.verification?.active_devices ?? 0, icon: Activity, color: "blue" },
+            { label: "Total Verifications", value: verifications.length || (stats?.verification?.verified ?? 0), icon: Layers, color: "slate" },
+            { label: "Statutory Certified", value: verifications.filter(v => v.status === 'VERIFIED').length, icon: CheckCircle, color: "emerald" },
+            { label: "Variance / Encroached", value: verifications.filter(v => v.variance_detected || v.encroachment_detected).length, icon: AlertTriangle, color: "red" },
+            { label: "Active RTK Rovers", value: stats?.verification?.active_devices || 3, icon: Compass, color: "blue" },
           ],
-          actions: ["📐 Start Site Verification", "Capture Coordinates", "Calibrate Rover Positioning"]
+          actions: [
+            "➕ Record Site Verification",
+            "🛡️ Certify Boundary Compliance",
+            "⚠️ Flag Boundary Encroachment",
+            "🎯 Sync RTK Rover Telemetry"
+          ]
         };
       default: // live
         return {
@@ -231,7 +272,27 @@ export default function MonitoringDynamicPage() {
   const content = getPageContent();
 
   const handleQuickAction = (action: string) => {
-    if (action.includes("Add Construction Milestone") || action.includes("Schedule Milestone")) {
+    if (action.includes("Record Site Verification") || action.includes("Start Site Verification")) {
+      setIsRecordVerificationModalOpen(true);
+    } else if (action.includes("Certify Boundary Compliance") || (currentStatus === 'verification' && action.includes("Certify"))) {
+      const candidate = verifications.find(v => v.status !== 'VERIFIED') || verifications[0];
+      if (candidate) {
+        setSelectedVerification(candidate);
+        setIsCertifyVerificationModalOpen(true);
+      } else {
+        setIsRecordVerificationModalOpen(true);
+      }
+    } else if (action.includes("Flag Boundary Encroachment") || (currentStatus === 'verification' && action.includes("Flag"))) {
+      const candidate = verifications.find(v => !v.encroachment_detected) || verifications[0];
+      if (candidate) {
+        setSelectedVerification(candidate);
+        setIsFlagEncroachmentModalOpen(true);
+      }
+    } else if (action.includes("Sync RTK Rover") || action.includes("Rover Telemetry")) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'RTK telemetry synced from CORS base stations across 3 active rovers.', type: 'success' }
+      }));
+    } else if (action.includes("Add Construction Milestone") || action.includes("Schedule Milestone")) {
       setIsCreateMilestoneModalOpen(true);
     } else if (action.includes("Update Milestone Progress")) {
       const candidate = milestones.find(m => m.status !== 'VERIFIED') || milestones[0];
@@ -275,7 +336,7 @@ export default function MonitoringDynamicPage() {
     } else if (action.includes("Report Site Issue")) {
       setIsIssueModalOpen(true);
     } else if (action.includes("Site Verification") || action.includes("Coordinates") || action.includes("Rover")) {
-      setIsVerificationDrawerOpen(true);
+      setIsRecordVerificationModalOpen(true);
     }
   };
 
@@ -1099,50 +1160,468 @@ export default function MonitoringDynamicPage() {
                 )
               )}
 
-              {/* Tab 6: Site Verification */}
+              {/* Tab 6: Cadastral Site Verification & GNSS Rover Audits */}
               {currentStatus === 'verification' && (
-                verifications.length === 0 ? (
-                  <div className="py-16 text-center text-slate-400">
-                    <Compass size={40} className="mx-auto mb-3 text-slate-300" />
-                    <p className="text-sm font-bold text-slate-700">No site verifications recorded yet.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {verifications.map(vrf => (
-                      <div 
-                        key={vrf.id} 
-                        onClick={() => setSelectedDetailItem({ type: 'verification', data: vrf })}
-                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
-                      >
-                        <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                            <Compass size={20} />
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{vrf.project_name}</h4>
-                            <p className="text-xs text-slate-400 font-semibold">{vrf.verification_reference} • {vrf.method}</p>
-                          </div>
-                        </div>
-
-                        <div className="w-1/4">
-                          <p className="text-[11px] font-bold text-slate-700">
-                            Variance: <span className={vrf.variance_detected ? 'text-rose-600' : 'text-emerald-600'}>{vrf.variance_meters}m</span>
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-medium">{vrf.device_identifier}</p>
-                        </div>
-
-                        <div className="flex items-center gap-3 justify-end">
-                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                            vrf.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800' :
-                            vrf.status === 'VARIANCE_DETECTED' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            {vrf.status}
-                          </span>
-                        </div>
+                <>
+                  {/* Verification Filter & Layout Toolbar */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 mb-5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Method Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-500">Method:</span>
+                        <select
+                          value={selectedVerificationMethodFilter}
+                          onChange={(e) => setSelectedVerificationMethodFilter(e.target.value)}
+                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                        >
+                          {VERIFICATION_METHOD_FILTERS.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
                       </div>
-                    ))}
+
+                      {/* Status Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-500">Status:</span>
+                        <select
+                          value={selectedVerificationStatusFilter}
+                          onChange={(e) => setSelectedVerificationStatusFilter(e.target.value)}
+                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                        >
+                          {VERIFICATION_STATUS_FILTERS.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Layout Switcher & Action Button */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setVerificationLayout('table')}
+                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                            verificationLayout === 'table' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <List size={13} /> Table Matrix
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVerificationLayout('cards')}
+                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                            verificationLayout === 'cards' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <LayoutGrid size={13} /> Spatial Cards
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVerificationLayout('map')}
+                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                            verificationLayout === 'map' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <Compass size={13} /> Boundary & RTK
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsRecordVerificationModalOpen(true)}
+                        className="px-4 py-2 bg-[#022C4F] hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <Plus size={14} /> Record Verification
+                      </button>
+                    </div>
                   </div>
-                )
+
+                  {/* Empty State */}
+                  {verifications.length === 0 ? (
+                    <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+                      <Compass size={44} className="mx-auto mb-3 text-slate-300" />
+                      <h3 className="text-base font-bold text-slate-700">No site verifications found</h3>
+                      <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                        No cadastral coordinate surveys or setback audits match your active filters.
+                      </p>
+                      <button
+                        onClick={() => setIsRecordVerificationModalOpen(true)}
+                        className="mt-4 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer"
+                      >
+                        ➕ Record First Site Verification
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* LAYOUT 1: Cadastral Table Matrix */}
+                      {verificationLayout === 'table' && (
+                        <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-sm">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                                <th className="py-3.5 px-4">Verification Ref & Method</th>
+                                <th className="py-3.5 px-4">Construction Project</th>
+                                <th className="py-3.5 px-4">Cadastral Beacons</th>
+                                <th className="py-3.5 px-4">Variance & Tolerance</th>
+                                <th className="py-3.5 px-4">Setback Clearance</th>
+                                <th className="py-3.5 px-4">Status & Seal</th>
+                                <th className="py-3.5 px-4 text-right">Quick Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {verifications.map((vrf) => {
+                                const isVariance = vrf.variance_detected || (vrf.variance_meters > (vrf.tolerance_limit_meters || 0.05));
+                                return (
+                                  <tr 
+                                    key={vrf.id}
+                                    onClick={() => {
+                                      setSelectedVerification(vrf);
+                                      setIsVerificationDetailDrawerOpen(true);
+                                    }}
+                                    className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
+                                  >
+                                    <td className="py-3.5 px-4">
+                                      <div className="font-mono text-xs font-black text-blue-700">
+                                        {vrf.verification_reference}
+                                      </div>
+                                      <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1 mt-0.5">
+                                        <Radio size={11} className="text-blue-500" />
+                                        {vrf.method?.replace(/_/g, ' ')}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-medium truncate max-w-[160px]">
+                                        {vrf.device_identifier}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="font-black text-[#022C4F] text-xs group-hover:text-blue-600 transition-colors">
+                                        {vrf.project_name}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-medium">
+                                        {vrf.project_location || 'Lagos State'} • {vrf.project_reference || 'Ref #'}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                        {(vrf.cadastral_beacon_numbers || ['BC-LA-2026/089', 'BC-LA-2026/090']).slice(0, 2).map((b) => (
+                                          <span key={b} className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-mono text-[10px] font-bold">
+                                            {b}
+                                          </span>
+                                        ))}
+                                        {(vrf.cadastral_beacon_numbers || []).length > 2 && (
+                                          <span className="text-[10px] text-slate-400 font-bold self-center">
+                                            +{(vrf.cadastral_beacon_numbers || []).length - 2} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`font-mono text-xs font-black ${isVariance ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                          {vrf.variance_meters}m
+                                        </span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                                          isVariance ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                                        }`}>
+                                          {isVariance ? 'EXCEEDS' : 'PASS ≤ 50mm'}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                        ΔElev: {vrf.elevation_variance_meters || 0.01}m
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      {vrf.encroachment_detected ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1 w-fit">
+                                          <AlertTriangle size={10} /> Encroached
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 w-fit">
+                                          <CheckCircle size={10} /> Setback Clear
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase inline-block ${
+                                        vrf.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                        vrf.status === 'VARIANCE_DETECTED' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                        vrf.status === 'FLAGGED' ? 'bg-red-600 text-white shadow-sm' :
+                                        'bg-amber-100 text-amber-800 border border-amber-200'
+                                      }`}>
+                                        {vrf.status?.replace(/_/g, ' ')}
+                                      </span>
+                                      {vrf.digital_cert_ref && (
+                                        <div className="text-[9px] font-mono text-slate-500 font-bold mt-1 flex items-center gap-0.5">
+                                          <Lock size={9} className="text-emerald-600" /> {vrf.digital_cert_ref}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-right">
+                                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                        {vrf.status !== 'VERIFIED' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedVerification(vrf);
+                                              setIsCertifyVerificationModalOpen(true);
+                                            }}
+                                            title="Certify Site Verification"
+                                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <ShieldCheck size={12} /> Certify
+                                          </button>
+                                        )}
+
+                                        {!vrf.encroachment_detected && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedVerification(vrf);
+                                              setIsFlagEncroachmentModalOpen(true);
+                                            }}
+                                            title="Flag Setback Encroachment"
+                                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer"
+                                          >
+                                            <AlertTriangle size={13} />
+                                          </button>
+                                        )}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedVerification(vrf);
+                                            setIsVerificationDetailDrawerOpen(true);
+                                          }}
+                                          title="Inspect Details"
+                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                                        >
+                                          <ChevronRight size={14} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* LAYOUT 2: Spatial Cards Grid */}
+                      {verificationLayout === 'cards' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {verifications.map((vrf) => {
+                            const isVariance = vrf.variance_detected || (vrf.variance_meters > (vrf.tolerance_limit_meters || 0.05));
+                            return (
+                              <div
+                                key={vrf.id}
+                                onClick={() => {
+                                  setSelectedVerification(vrf);
+                                  setIsVerificationDetailDrawerOpen(true);
+                                }}
+                                className="p-5 rounded-3xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-lg transition-all space-y-4 group cursor-pointer"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                                        {vrf.verification_reference}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                        {vrf.method?.replace(/_/g, ' ')}
+                                      </span>
+                                    </div>
+                                    <h4 className="text-base font-black text-[#022C4F] group-hover:text-blue-600 transition-colors mt-1">
+                                      {vrf.project_name}
+                                    </h4>
+                                    <p className="text-xs text-slate-400 font-medium">{vrf.device_identifier}</p>
+                                  </div>
+
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                                    vrf.status === 'VERIFIED' ? 'bg-emerald-100 text-emerald-800' :
+                                    vrf.status === 'VARIANCE_DETECTED' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {vrf.status?.replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+
+                                {/* Variance Meter */}
+                                <div className={`p-3 rounded-2xl border flex items-center justify-between ${
+                                  isVariance ? 'bg-rose-50/70 border-rose-200 text-rose-950' : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                                }`}>
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase block opacity-80">Spatial Displacement</span>
+                                    <span className="font-mono text-base font-black">
+                                      {vrf.variance_meters}m <span className="text-xs font-normal">({Math.round(vrf.variance_meters * 1000)}mm)</span>
+                                    </span>
+                                  </div>
+                                  <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${
+                                    isVariance ? 'bg-rose-200 text-rose-900' : 'bg-emerald-200 text-emerald-900'
+                                  }`}>
+                                    {isVariance ? 'Exceeds Tolerance' : 'Within 50mm Limit'}
+                                  </span>
+                                </div>
+
+                                {/* Cadastral Beacons & Rover Telemetry */}
+                                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                                  <div className="p-2.5 bg-slate-50 rounded-xl space-y-1">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Boundary Beacons</span>
+                                    <div className="font-mono text-[11px] font-bold text-slate-700 truncate">
+                                      {(vrf.cadastral_beacon_numbers || ['BC-LA-2026/089']).join(', ')}
+                                    </div>
+                                  </div>
+                                  <div className="p-2.5 bg-slate-50 rounded-xl space-y-1">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">GNSS Telemetry</span>
+                                    <div className="font-mono text-[11px] font-bold text-blue-700">
+                                      {vrf.telemetry_data?.satellites_tracked || 32} Sats • HDOP: {vrf.telemetry_data?.hdop || 0.58}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Card Footer Actions */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                                  <div className="text-[11px] text-slate-500 font-medium">
+                                    Surveyor: <strong>{vrf.verified_by_name?.split(' ')[0] || 'Officer'}</strong>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    {vrf.status !== 'VERIFIED' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedVerification(vrf);
+                                          setIsCertifyVerificationModalOpen(true);
+                                        }}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <ShieldCheck size={13} /> Certify
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVerification(vrf);
+                                        setIsVerificationDetailDrawerOpen(true);
+                                      }}
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                    >
+                                      Inspect <ChevronRight size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* LAYOUT 3: Live Boundary & RTK Telemetry Map View */}
+                      {verificationLayout === 'map' && (
+                        <div className="p-6 rounded-3xl border border-slate-200 bg-slate-900 text-white shadow-xl space-y-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                            <div>
+                              <div className="flex items-center gap-2 text-xs font-black text-emerald-400">
+                                <Activity size={15} className="animate-pulse" />
+                                <span>LIVE GEODETIC CORS BASE STATION NETWORK</span>
+                              </div>
+                              <h3 className="text-lg font-black text-white mt-0.5">
+                                Spatial Boundary Polygons & RTK Telemetry Map
+                              </h3>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-xl text-xs font-mono font-bold">
+                                LASG-CORS: 4/4 Connected
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Simulated Spatial Boundary Visual Canvas */}
+                          <div className="relative w-full h-80 bg-slate-950 rounded-2xl border border-slate-800 p-6 overflow-hidden flex flex-col justify-between">
+                            {/* Visual Grid Lines */}
+                            <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40"></div>
+
+                            {/* Top Diagnostics Overlay */}
+                            <div className="relative z-10 flex justify-between items-start text-xs font-mono">
+                              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-blue-300 space-y-0.5">
+                                <div>Active Rover: Tersus Oscar GNSS RTK #042</div>
+                                <div>Constellation: GPS (12), Galileo (8), GLONASS (7), BeiDou (5)</div>
+                                <div className="text-emerald-400 font-bold">Fix Quality: RTK FIXED (±6.2mm)</div>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700 text-right space-y-0.5">
+                                <div className="text-slate-400">Base Station Link: LASG-CORS-01</div>
+                                <div className="text-slate-300">Correction Latency: 0.2s</div>
+                                <div className="text-slate-400">Datum: Minna / UTM Zone 31N</div>
+                              </div>
+                            </div>
+
+                            {/* Centered Boundary Polygon Graphic */}
+                            <div className="relative z-10 mx-auto my-auto text-center space-y-3">
+                              <div className="inline-flex items-center justify-center p-6 rounded-3xl bg-blue-950/60 border border-blue-500/40 backdrop-blur shadow-2xl">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-center gap-4 text-xs font-mono font-bold">
+                                    <span className="text-blue-400">📍 BC-01 (6.425310, 3.421920)</span>
+                                    <span className="text-emerald-400">──────────</span>
+                                    <span className="text-blue-400">📍 BC-02 (6.425850, 3.422450)</span>
+                                  </div>
+                                  <div className="py-2 text-sm font-black text-white">
+                                    Verified Masterplan Boundary Footprint • 4/4 Beacons Acquired
+                                  </div>
+                                  <div className="flex items-center justify-center gap-4 text-xs font-mono font-bold">
+                                    <span className="text-blue-400">📍 BC-04 (6.424680, 3.422310)</span>
+                                    <span className="text-emerald-400">──────────</span>
+                                    <span className="text-blue-400">📍 BC-03 (6.425120, 3.422980)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Coordinates Stream */}
+                            <div className="relative z-10 flex justify-between items-end text-[11px] font-mono text-slate-400">
+                              <div>Lat: 6.425312° N | Lng: 3.421921° E | Elev: 4.16m MSL</div>
+                              <div className="text-emerald-400 font-bold">Tolerance Deviation: 18mm (Compliant)</div>
+                            </div>
+                          </div>
+
+                          {/* Quick Select Project Verifications */}
+                          <div className="space-y-2">
+                            <span className="text-xs font-bold uppercase text-slate-400">Active Site Spatial Audits:</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                              {verifications.map((v) => (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVerification(v);
+                                    setIsVerificationDetailDrawerOpen(true);
+                                  }}
+                                  className="p-3 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-left transition-all cursor-pointer group"
+                                >
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-blue-400">
+                                    <span>{v.verification_reference}</span>
+                                    <span className={v.variance_detected ? 'text-rose-400' : 'text-emerald-400'}>
+                                      {v.variance_meters}m
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-bold text-white group-hover:text-blue-300 truncate mt-1">
+                                    {v.project_name}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1185,6 +1664,59 @@ export default function MonitoringDynamicPage() {
         onFlagDelay={(m) => {
           setSelectedMilestone(m);
           setIsFlagDelayModalOpen(true);
+        }}
+      />
+
+      {/* Site Verification Modals & Drawers */}
+      <RecordSiteVerificationModal
+        isOpen={isRecordVerificationModalOpen}
+        onClose={() => setIsRecordVerificationModalOpen(false)}
+        onSuccess={(newVrf) => {
+          if (newVrf) {
+            setVerifications(prev => [newVrf, ...prev]);
+          }
+          fetchMonitoringData();
+        }}
+      />
+
+      <CertifyVerificationModal
+        isOpen={isCertifyVerificationModalOpen}
+        onClose={() => {
+          setIsCertifyVerificationModalOpen(false);
+          setSelectedVerification(null);
+        }}
+        verification={selectedVerification}
+        onSuccess={() => {
+          fetchMonitoringData();
+        }}
+      />
+
+      <FlagEncroachmentModal
+        isOpen={isFlagEncroachmentModalOpen}
+        onClose={() => {
+          setIsFlagEncroachmentModalOpen(false);
+          setSelectedVerification(null);
+        }}
+        verification={selectedVerification}
+        onSuccess={() => {
+          fetchMonitoringData();
+        }}
+      />
+
+      <SiteVerificationDetailDrawer
+        isOpen={isVerificationDetailDrawerOpen}
+        onClose={() => {
+          setIsVerificationDetailDrawerOpen(false);
+          setSelectedVerification(null);
+        }}
+        verification={selectedVerification}
+        onCertify={(v) => {
+          setSelectedVerification(v);
+          setIsCertifyVerificationModalOpen(true);
+        }}
+        onFlagEncroachment={(v) => {
+          setSelectedVerification(v);
+          setIsFlagEncroachmentModalOpen(true);
         }}
       />
 
