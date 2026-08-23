@@ -14,8 +14,10 @@ export interface DailySiteUpdate {
   work_summary: string;
   photos?: string[];
   drone_survey_data?: any;
-  weather_condition: string;
-  workforce_count: number;
+  weather_condition?: string;
+  site_weather?: string;
+  workforce_count?: number;
+  active_workers_count?: number;
   gps_coordinates?: { lat?: number; lng?: number };
   status: 'Active' | 'Pending Verification' | 'Approved' | 'Flagged';
   priority: string;
@@ -68,20 +70,128 @@ export interface SiteIssue {
   updated_at: string;
 }
 
+export interface MilestoneDocument {
+  name: string;
+  url: string;
+  file_type?: string;
+  size?: string;
+  category?: string;
+  verified?: boolean;
+}
+
+export interface MilestoneDependency {
+  id?: string;
+  predecessor_id?: string;
+  code?: string;
+  name?: string;
+  milestone_name?: string;
+  status?: string;
+  is_blocking?: boolean;
+}
+
+export interface MilestoneInspectionLink {
+  id?: string;
+  ref?: string;
+  type: string;
+  status: string;
+  outcome?: string;
+  date?: string;
+}
+
+export interface MilestoneIssueLink {
+  id?: string;
+  ref?: string;
+  title: string;
+  severity: string;
+  status: string;
+}
+
+export interface MilestoneGateCheck {
+  key: string;
+  title: string;
+  status: 'PASSED' | 'FAILED' | 'WARNING';
+  required: boolean;
+  details?: string;
+}
+
+export interface MilestoneGateEvaluation {
+  all_gates_passed: boolean;
+  is_blocked: boolean;
+  gates: MilestoneGateCheck[];
+  blockers: string[];
+  summary?: string;
+}
+
+export interface MilestoneVerificationSignoff {
+  certificate_reference?: string;
+  digital_cert_ref?: string;
+  signature_hash?: string;
+  verified_by_name?: string;
+  verified_by_role?: string;
+  verified_at?: string;
+  signed_at?: string;
+  signer_name?: string;
+  signer_role?: string;
+  notes?: string;
+  override_applied?: boolean;
+  gate_evaluation_summary?: string;
+}
+
+export interface MilestoneAuditEvent {
+  id: string;
+  audit_reference?: string;
+  action: string;
+  user_name: string;
+  user_role?: string;
+  timestamp: string;
+  severity?: string;
+  signature_hash?: string;
+  previous_state?: any;
+  new_state?: any;
+}
+
 export interface ConstructionMilestone {
   id: string;
+  milestone_code: string;
   project: string;
   project_name: string;
   project_reference: string;
+  project_location?: string;
+  project_status?: string;
   name: string;
+  phase: 'SUBSTRUCTURE' | 'STRUCTURAL_FRAME' | 'SUPERSTRUCTURE' | 'MEP_ROUGHIN' | 'FACADE_ENVELOPE' | 'FINISHES' | 'COMMISSIONING' | string;
+  description?: string;
+  sequence_order: number;
+  critical_path: boolean;
+  planned_start_date?: string;
   target_date: string;
+  actual_start_date?: string;
   actual_completion_date?: string;
-  status: 'UPCOMING' | 'DUE_THIS_WEEK' | 'VERIFIED' | 'DELAYED' | 'COMPLETED';
+  baseline_start_date?: string;
+  baseline_end_date?: string;
+  duration_days: number;
+  variance_days: number;
+  status: 'PLANNED' | 'IN_PROGRESS' | 'DUE_THIS_WEEK' | 'PENDING_VERIFICATION' | 'VERIFIED' | 'COMPLETED' | 'DELAYED' | 'BLOCKED' | 'ON_HOLD' | 'UPCOMING';
   progress_percentage: number;
+  physical_progress_notes?: string;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  risk_factors?: string[];
+  dependencies?: MilestoneDependency[];
+  linked_inspection_ids?: MilestoneInspectionLink[];
+  linked_issue_ids?: MilestoneIssueLink[];
+  linked_bim_model_id?: string;
+  bim_deviation_mm?: number;
+  bim_tolerance_max_mm?: number;
+  survey_variance_meters?: number;
+  digital_eye_verified?: boolean;
+  evidence_documents?: (MilestoneDocument | any)[];
+  evidence_photos?: string[];
+  verification_requirements?: Record<string, boolean>;
+  verification_signoff?: MilestoneVerificationSignoff;
+  gate_evaluation?: MilestoneGateEvaluation;
   verified_by_name?: string;
   verified_at?: string;
-  evidence_documents?: string[];
-  is_delayed: boolean;
+  is_delayed?: boolean;
   delay_reason?: string;
   created_at: string;
   updated_at: string;
@@ -135,10 +245,13 @@ export interface MonitoringStats {
     resolved: number;
   };
   milestones: {
+    total?: number;
     due_this_week: number;
     verified: number;
     delayed: number;
     upcoming: number;
+    pending_verification?: number;
+    blocked?: number;
   };
   verification: {
     pending: number;
@@ -245,8 +358,11 @@ export const createSiteIssue = async (payload: {
   return res.data || res;
 };
 
-export const escalateSiteIssue = async (id: string): Promise<SiteIssue> => {
-  const res: any = await api.post(`/monitoring/issues/${id}/escalate/`);
+export const escalateSiteIssue = async (
+  id: string,
+  payload?: { director_name?: string; notes?: string; target_level?: string }
+): Promise<SiteIssue> => {
+  const res: any = await api.post(`/monitoring/issues/${id}/escalate/`, payload || {});
   return res.data || res;
 };
 
@@ -258,42 +374,94 @@ export const resolveSiteIssue = async (
   return res.data || res;
 };
 
-// Construction Milestones
+// ==========================================
+// Construction Milestones - Database API
+// ==========================================
+
 export const getMilestones = async (params?: {
   project?: string;
+  phase?: string;
   status?: string;
+  risk?: string;
+  critical_path?: boolean;
   search?: string;
 }): Promise<ConstructionMilestone[]> => {
   try {
     const res: any = await api.get('/monitoring/milestones/', { params });
-    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+    const list: ConstructionMilestone[] = Array.isArray(res) ? res : (res?.results || res?.data || []);
+    return list;
   } catch (err) {
-    console.warn('getMilestones fallback notice:', err);
+    console.error('Failed to fetch milestones from backend database:', err);
     return [];
   }
 };
 
-export const createMilestone = async (payload: {
-  project: string;
-  name: string;
-  target_date: string;
-  progress_percentage?: number;
-}): Promise<ConstructionMilestone> => {
+export const getMilestoneById = async (id: string): Promise<ConstructionMilestone> => {
+  const res: any = await api.get(`/monitoring/milestones/${id}/`);
+  return res.data || res;
+};
+
+export const createMilestone = async (payload: Partial<ConstructionMilestone>): Promise<ConstructionMilestone> => {
   const res: any = await api.post('/monitoring/milestones/', payload);
   return res.data || res;
 };
 
-export const verifyMilestone = async (id: string): Promise<ConstructionMilestone> => {
-  const res: any = await api.post(`/monitoring/milestones/${id}/verify/`);
+export const updateMilestoneProgress = async (
+  id: string,
+  payload: {
+    progress_percentage: number;
+    physical_progress_notes?: string;
+    evidence_documents?: MilestoneDocument[];
+    evidence_photos?: string[];
+  }
+): Promise<ConstructionMilestone> => {
+  const res: any = await api.post(`/monitoring/milestones/${id}/update-progress/`, payload);
+  return res.data || res;
+};
+
+export const attachMilestoneEvidence = async (
+  id: string,
+  payload: {
+    documents?: MilestoneDocument[];
+    photos?: string[];
+  }
+): Promise<ConstructionMilestone> => {
+  const res: any = await api.post(`/monitoring/milestones/${id}/attach-evidence/`, payload);
+  return res.data || res;
+};
+
+export const submitMilestoneForVerification = async (
+  id: string,
+  payload?: { physical_progress_notes?: string }
+): Promise<ConstructionMilestone> => {
+  const res: any = await api.post(`/monitoring/milestones/${id}/submit-verification/`, payload || {});
+  return res.data || res;
+};
+
+export const verifyMilestone = async (
+  id: string,
+  payload?: { notes?: string; override_gate?: boolean }
+): Promise<ConstructionMilestone> => {
+  const res: any = await api.post(`/monitoring/milestones/${id}/verify/`, payload || {});
   return res.data || res;
 };
 
 export const flagMilestoneDelay = async (
   id: string,
-  payload: { reason: string }
+  payload: { reason: string; revised_target_date?: string }
 ): Promise<ConstructionMilestone> => {
   const res: any = await api.post(`/monitoring/milestones/${id}/flag-delay/`, payload);
   return res.data || res;
+};
+
+export const getMilestoneGateStatus = async (id: string): Promise<MilestoneGateEvaluation> => {
+  const res: any = await api.get(`/monitoring/milestones/${id}/gate-status/`);
+  return res.data || res;
+};
+
+export const getMilestoneAuditTrail = async (id: string): Promise<MilestoneAuditEvent[]> => {
+  const res: any = await api.get(`/monitoring/milestones/${id}/audit-trail/`);
+  return Array.isArray(res) ? res : (res?.data || []);
 };
 
 // Site Verifications

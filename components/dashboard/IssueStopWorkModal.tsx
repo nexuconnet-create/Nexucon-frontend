@@ -72,7 +72,8 @@ export default function IssueStopWorkModal({
       if (inspection?.id) {
         swo = await issueStopWorkOrder(inspection.id, {
           reason: reason.trim(),
-          severity
+          severity,
+          project: targetProject
         });
       } else {
         swo = await createStopWorkOrder({
