@@ -9,15 +9,17 @@ interface UploadBIMModelDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  defaultProjectId?: string;
 }
 
 export default function UploadBIMModelDrawer({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  defaultProjectId
 }: UploadBIMModelDrawerProps) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || '');
   const [name, setName] = useState('');
   const [discipline, setDiscipline] = useState<'Architecture' | 'MEP' | 'Structural' | 'Multi-Disciplinary' | 'Civil/Infrastructure'>('Architecture');
   const [format, setFormat] = useState('IFC4');
@@ -32,10 +34,14 @@ export default function UploadBIMModelDrawer({
       .then(res => {
         const list = Array.isArray(res) ? res : ((res as any).results || []);
         setProjects(list);
-        if (list.length > 0) setSelectedProjectId(list[0].id);
+        if (defaultProjectId) {
+          setSelectedProjectId(defaultProjectId);
+        } else if (list.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(list[0].id);
+        }
       })
       .catch(err => console.error("Failed to load projects", err));
-  }, [isOpen]);
+  }, [isOpen, defaultProjectId]);
 
   if (!isOpen) return null;
 
