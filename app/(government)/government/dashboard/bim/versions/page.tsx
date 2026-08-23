@@ -89,10 +89,16 @@ export default function ModelVersions() {
             <select
               value={selectedModel?.id}
               onChange={(e) => handleModelChange(e.target.value)}
-              className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700"
+              className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {models.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              {Array.from(new Set(models.map(m => m.project_name || 'Lagos State Projects'))).map(pName => (
+                <optgroup key={pName} label={`📁 ${pName}`}>
+                  {models.filter(m => (m.project_name || 'Lagos State Projects') === pName).map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.discipline} • {m.current_version})
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           )}
