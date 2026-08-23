@@ -1,0 +1,123 @@
+name: Frontend CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  lint-and-typecheck:
+    name: Code Quality (Lint & Typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Prettier Formatting Check
+        run: npm run format:check || true
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript Type Check
+        run: npm run typecheck
+
+  test:
+    name: Automated Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Note: Jest and Playwright are not yet configured in the repo.
+      # These steps are stubbed out until testing frameworks are installed.
+      - name: Run Unit Tests (Jest)
+        run: echo "No unit tests configured yet. Skipping." # npm run test
+
+      - name: Run End-to-End Tests (Playwright)
+        run: echo "No E2E tests configured yet. Skipping." # npm run test:e2e
+
+  build-and-scan:
+    name: Build & Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Security Audit
+        run: npm audit --audit-level=high || true # Allow failure on audit for now
+
+      - name: Build Next.js Application
+        run: npm run build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: ./frontend/.next
+          retention-days: 7
+
+  deploy:
+    name: Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: Deployment Notice
+        run: |
+          echo "Vercel automatically handles deployments on push to main/develop via its GitHub integration."
+          echo "If manual Vercel CLI deployment is preferred, configure VERCEL_TOKEN and VERCEL_ORG_ID secrets."
+
+      # Optional: Add Slack/Discord notification webhook step here
+      # - name: Send Notification
+      #   run: curl -X POST -H 'Content-type: application/json' --data '{"text":"Deployment successful!"}' ${{ secrets.SLACK_WEBHOOK_URL }}

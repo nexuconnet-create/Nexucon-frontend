@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nexucon - Construction Supervision & Project Management
 
-## Getting Started
+Nexucon is a centralized construction supervision environment used to monitor, regulate, verify, and manage construction projects. 
 
-First, run the development server:
+## Project Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+This repository is organized into a modular monolith architecture with independent frontend and backend components.
+
+```
+Nexucon/
+├── frontend/                   # Next.js 16 App Router application
+│   ├── app/                    # Next.js routes
+│   │   ├── (government)/       # Government Agency inspection & monitoring dashboard
+│   │   ├── (client)/           # Property owner & developer portal
+│   │   └── (professional)/     # Licensed Architect/Engineer workspace
+│   ├── components/             # Reusable UI components, modals, and side drawers
+│   └── services/               # Frontend API clients and data transformers
+│
+├── backend/                    # Django 5.1 & Django REST Framework application
+│   ├── apps/
+│   │   ├── monitoring/         # Site monitoring, daily logs, milestones, verifications
+│   │   ├── inspections/        # Site inspection scheduling, checklists, and stop-work orders
+│   │   ├── projects/           # Capital projects, metadata, geospatial boundaries
+│   │   ├── accounts/           # Multi-role authentication & JWT handling
+│   │   ├── bim/                # BIM 3D models and clash detection
+│   │   └── audit/              # Immutable audit logging & compliance trail
+│   └── config/                 # Django settings and routing
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Features
+- **Centralized Project Monitoring:** Track construction projects in real-time with comprehensive details including progress, compliance scores, and key personnel.
+- **Document Management:** Securely review, manage, and approve architectural designs, structural calculations, and environmental impact assessments.
+- **BIM Integration:** Built-in interactive 3D WebGL viewer placeholder for structural and architectural models.
+- **Site Activity Tracking:** Real-time timeline of site inspections, field reports, and document approvals.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Technology Stack
 
-## Learn More
+### Frontend
+- Next.js (React)
+- Tailwind CSS
+- TypeScript
 
-To learn more about Next.js, take a look at the following resources:
+### Backend
+- Python 3.11+
+- Django & Django REST Framework (DRF)
+- PostgreSQL with PostGIS (GeoDjango) for spatial data
+- Celery & Redis for asynchronous background tasks
+- JWT Authentication (djangorestframework-simplejwt)
+- OpenAPI Documentation (drf-spectacular)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Prerequisites
+- Docker and Docker Compose
+- Node.js (v20+)
+- Python 3.11+ (for local, non-Docker development)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Local Setup
 
-## Deploy on Vercel
+### 1. Environment Setup
+Copy the example environment file for the backend:
+```bash
+cd backend
+cp .env.example .env
+```
+Update the `.env` file with any required local keys (e.g., AWS S3, Tersus APIs, Autodesk APIs).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. Running the Backend (Docker)
+The backend is fully dockerized for development:
+```bash
+cd backend
+docker compose up --build
+```
+This command spins up:
+- PostgreSQL + PostGIS (Port 5432)
+- Redis (Port 6379)
+- Django API (Port 8000)
+- Celery Worker
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Once running, you can access:
+- API Root: `http://localhost:8000/api/v1/`
+- Swagger UI Documentation: `http://localhost:8000/api/v1/schema/swagger-ui/`
+- Django Admin: `http://localhost:8000/admin/`
+- Health Check: `http://localhost:8000/api/v1/health/`
+
+### 3. Migrations
+To run database migrations inside the Docker container:
+```bash
+cd backend
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
+```
+
+### 4. Running the Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The frontend will be available at `http://localhost:3000`.
+
+## Testing
+Run the backend tests using Pytest:
+```bash
+cd backend
+docker compose exec web pytest
+```
+
+## Development Conventions
+- **Apps**: All Django apps should reside in `backend/apps/`.
+- **API Versioning**: All new routes must be prefixed with `/api/v1/`.
+- **Business Logic**: Keep views thin. Shift complex domain logic to service layers or model methods.
+- **Geospatial Data**: Use GeoDjango's `PointField`, `PolygonField` for anything coordinate-related. Avoid simple float Latitude/Longitude fields.
+
+For detailed architecture information, please refer to the [Government Backend PRD](./docs/GOVERNMENT_BACKEND_PRD.md).
+>>>>>>> feature/inspections-and-reviewer-flow
