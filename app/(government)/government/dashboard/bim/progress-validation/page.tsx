@@ -41,16 +41,21 @@ export default function ProgressValidation() {
   }, [fetchData]);
 
   const handleRunSimulation = async () => {
-    if (!selectedProjectId) return;
+    const pid = selectedProjectId || (projects.length > 0 ? projects[0].id : '');
+    if (!pid) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Please select a project to run timeline simulation.', type: 'warning' } }));
+      return;
+    }
     setIsSimulating(true);
     try {
-      await runTimelineSimulation(selectedProjectId);
+      await runTimelineSimulation(pid);
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { message: '4D Scan-to-BIM schedule simulation executed successfully!', type: 'success' } 
       }));
       fetchData();
-    } catch (err) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to run timeline simulation', type: 'error' } }));
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to run timeline simulation';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSimulating(false);
     }
