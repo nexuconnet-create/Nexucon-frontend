@@ -5,10 +5,14 @@ import { motion } from "framer-motion";
 import { 
   FileSearch, MessageSquare, Check, X, 
   Maximize, Minimize, MousePointer2, Ruler, 
-  BoxSelect, Camera, MoreHorizontal, Send, RefreshCw, Award
+  BoxSelect, Camera, MoreHorizontal, Send, RefreshCw, Award, Box
 } from "lucide-react";
-import { BIMModel, BIMAnnotation, getBIMModels, getBIMAnnotations, createBIMAnnotation, resolveBIMAnnotation, requestBIMChanges } from "@/services/bim";
+import { 
+  BIMModel, BIMAnnotation, getBIMModels, getBIMAnnotations, 
+  createBIMAnnotation, resolveBIMAnnotation 
+} from "@/services/bim";
 import CertifyBIMModelModal from "@/components/dashboard/CertifyBIMModelModal";
+import RequestBIMChangesModal from "@/components/dashboard/RequestBIMChangesModal";
 
 export default function DesignReview() {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -19,17 +23,29 @@ export default function DesignReview() {
   const [newComment, setNewComment] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCertifyModalOpen, setIsCertifyModalOpen] = useState(false);
+  const [isRequestChangesModalOpen, setIsRequestChangesModalOpen] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (selectedModelId?: string) => {
     setIsLoading(true);
     try {
       const modelsData = await getBIMModels();
       setModels(modelsData);
-      const current = modelsData.length > 0 ? modelsData[0] : null;
+      
+      let current = null;
+      if (selectedModelId) {
+        current = modelsData.find(m => m.id === selectedModelId) || null;
+      }
+      if (!current && modelsData.length > 0) {
+        current = modelsData[0];
+      }
       setActiveModel(current);
 
-      const annotationsData = await getBIMAnnotations(current ? { model: current.id } : undefined);
-      setAnnotations(annotationsData);
+      if (current) {
+        const annotationsData = await getBIMAnnotations({ model: current.id });
+        setAnnotations(annotationsData);
+      } else {
+        setAnnotations([]);
+      }
     } catch (err) {
       console.error("Failed to load review data", err);
     } finally {
@@ -40,6 +56,19 @@ export default function DesignReview() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleModelChange = async (modelId: string) => {
+    const found = models.find(m => m.id === modelId) || null;
+    setActiveModel(found);
+    if (found) {
+      try {
+        const annotationsData = await getBIMAnnotations({ model: found.id });
+        setAnnotations(annotationsData);
+      } catch (err) {
+        console.error("Failed to load model annotations", err);
+      }
+    }
+  };
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,28 +113,51 @@ export default function DesignReview() {
     <div className={`w-full ${isFullscreen ? 'fixed inset-0 z-50 bg-gray-100 flex flex-col' : 'min-h-[calc(100vh-8rem)] flex flex-col'}`}>
       
       {/* Header */}
-      <div className={`flex items-center justify-between gap-4 mb-4 ${isFullscreen ? 'p-4 bg-white border-b shadow-sm' : ''}`}>
+      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 ${isFullscreen ? 'p-4 bg-white border-b shadow-sm' : ''}`}>
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-[#022C4F] flex items-center gap-3">
             <FileSearch className="text-blue-500" />
             Design Review: {activeModel ? activeModel.name : 'Model Review'}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {activeModel ? `Reviewing ${activeModel.discipline} Model ${activeModel.current_version} (${activeModel.format})` : 'Multi-Disciplinary Model Examination'}
+            {activeModel ? `Reviewing ${activeModel.discipline} Model ${activeModel.current_version} (${activeModel.format}) • ${activeModel.status}` : 'Multi-Disciplinary Model Examination'}
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {models.length > 1 && (
+            <select
+              value={activeModel?.id || ''}
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
+            >
+              {models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.discipline} {m.current_version})
+                </option>
+              ))}
+            </select>
+          )}
+
           <button 
-            onClick={() => setIsCertifyModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition-colors shadow-sm text-sm font-semibold"
+            onClick={() => fetchData(activeModel?.id)}
+            className="p-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-xl text-xs font-bold transition-all"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={() => setIsRequestChangesModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition-colors shadow-sm text-sm font-semibold cursor-pointer"
           >
             <X size={16} />
             Request Changes
           </button>
+          
           <button 
             onClick={() => setIsCertifyModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-md text-sm font-semibold"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-md text-sm font-semibold cursor-pointer"
           >
             <Award size={16} />
             Approve & Certify
@@ -161,7 +213,14 @@ export default function DesignReview() {
                 <FileSearch size={40} className="text-blue-400" />
               </div>
               <p className="text-gray-300 font-bold">{activeModel ? activeModel.name : 'Interactive 3D WebGL Viewer'}</p>
-              <p className="text-xs text-gray-400 mt-1">LOD: {activeModel?.lod || 'LOD 300'} • Elements: {activeModel?.element_count || 12450}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                LOD: {activeModel?.lod || 'LOD 300'} • Elements: {activeModel?.element_count?.toLocaleString() || '12,450'}
+              </p>
+              {activeModel?.is_digitally_certified && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold">
+                  <Award size={14} /> Digitally Certified by {activeModel.certified_by_name || 'Government Directorate'}
+                </div>
+              )}
             </div>
           </div>
 
@@ -265,7 +324,14 @@ export default function DesignReview() {
         isOpen={isCertifyModalOpen}
         onClose={() => setIsCertifyModalOpen(false)}
         model={activeModel}
-        onSuccess={fetchData}
+        onSuccess={() => fetchData(activeModel?.id)}
+      />
+
+      <RequestBIMChangesModal
+        isOpen={isRequestChangesModalOpen}
+        onClose={() => setIsRequestChangesModalOpen(false)}
+        model={activeModel}
+        onSuccess={() => fetchData(activeModel?.id)}
       />
     </div>
   );
