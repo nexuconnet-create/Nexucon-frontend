@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ClipboardList, Search, Filter, AlertTriangle, CheckCircle2, Calendar, FileText, User, RefreshCw, Download, Building2 } from "lucide-react";
+import { ClipboardList, Search, Filter, AlertTriangle, CheckCircle2, Calendar, FileText, User, RefreshCw, Download, Building2, Plus } from "lucide-react";
 import { Document, getDocuments } from "@/services/documents";
+import UploadInspectionReportDrawer from "@/components/dashboard/UploadInspectionReportDrawer";
 
 export default function InspectionReports() {
   const [reports, setReports] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('All');
+  const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
 
   const fetchReports = useCallback(async () => {
     setIsLoading(true);
@@ -31,8 +33,11 @@ export default function InspectionReports() {
   }, [fetchReports]);
 
   const handleDownload = (doc: Document) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading inspection report "${doc.title}" (${doc.file_size}) from Cloudflare R2...`, type: 'info' } 
+      detail: { message: `Opening inspection report "${doc.title}" (${doc.file_size})...`, type: 'info' } 
     }));
   };
 
@@ -70,6 +75,15 @@ export default function InspectionReports() {
             Inspection Reports & QA/QC Findings
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">Review on-site audit findings, structural QA/QC verification sign-offs, and safety reports.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsUploadDrawerOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20 text-sm font-semibold cursor-pointer"
+          >
+            <Plus size={18} />
+            <span>Upload Inspection Report</span>
+          </button>
         </div>
       </div>
 
@@ -163,7 +177,7 @@ export default function InspectionReports() {
                   </span>
                   <button 
                     onClick={() => handleDownload(report)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
                   >
                     <Download size={14} /> Download PDF
                   </button>
@@ -173,6 +187,13 @@ export default function InspectionReports() {
           ))}
         </div>
       )}
+
+      <UploadInspectionReportDrawer
+        isOpen={isUploadDrawerOpen}
+        onClose={() => setIsUploadDrawerOpen(false)}
+        onSuccess={fetchReports}
+        defaultDiscipline={selectedDiscipline !== 'All' ? selectedDiscipline : undefined}
+      />
     </div>
   );
 }

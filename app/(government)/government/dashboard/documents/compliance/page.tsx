@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileCheck, ShieldCheck, AlertCircle, FileWarning, Search, Filter, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { FileCheck, ShieldCheck, AlertCircle, FileWarning, Search, Filter, Download, ExternalLink, RefreshCw, Plus } from "lucide-react";
 import { Document, DocumentStats, getDocuments, getDocumentStats } from "@/services/documents";
+import UploadComplianceDrawer from "@/components/dashboard/UploadComplianceDrawer";
 
 export default function ComplianceDocuments() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [stats, setStats] = useState<DocumentStats | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
 
   const fetchCompliance = useCallback(async () => {
     setIsLoading(true);
@@ -32,8 +34,11 @@ export default function ComplianceDocuments() {
   }, [fetchCompliance]);
 
   const handleDownload = (doc: Document) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading compliance certificate "${doc.title}" (${doc.file_size}) from Cloudflare R2...`, type: 'info' } 
+      detail: { message: `Opening compliance certificate "${doc.title}" (${doc.file_size})...`, type: 'info' } 
     }));
   };
 
@@ -56,6 +61,15 @@ export default function ComplianceDocuments() {
             Compliance Documents & Statutory Permits
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">Manage regulatory clearance certificates, EIA approvals, and statutory fire certifications.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsUploadDrawerOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/20 text-sm font-semibold cursor-pointer"
+          >
+            <Plus size={18} />
+            <span>Upload Permit / Certificate</span>
+          </button>
         </div>
       </div>
 
@@ -170,8 +184,8 @@ export default function ComplianceDocuments() {
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
                         onClick={() => handleDownload(doc)}
-                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" 
-                        title="Download Certificate"
+                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer" 
+                        title="Download / View from Cloudflare R2"
                       >
                         <Download size={16} />
                       </button>
@@ -183,6 +197,12 @@ export default function ComplianceDocuments() {
           </table>
         )}
       </div>
+
+      <UploadComplianceDrawer
+        isOpen={isUploadDrawerOpen}
+        onClose={() => setIsUploadDrawerOpen(false)}
+        onSuccess={fetchCompliance}
+      />
     </div>
   );
 }
