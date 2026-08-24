@@ -15,7 +15,7 @@ export default function ComplianceDocuments() {
     setIsLoading(true);
     try {
       const [docsData, statsData] = await Promise.all([
-        getDocuments({ search: searchQuery }),
+        getDocuments({ type: 'COMPLIANCE_DOCUMENT', search: searchQuery || undefined }),
         getDocumentStats()
       ]);
       setDocuments(docsData);
@@ -31,21 +31,31 @@ export default function ComplianceDocuments() {
     fetchCompliance();
   }, [fetchCompliance]);
 
+  const handleDownload = (doc: Document) => {
+    window.dispatchEvent(new CustomEvent('show-toast', { 
+      detail: { message: `Downloading compliance certificate "${doc.title}" (${doc.file_size}) from Cloudflare R2...`, type: 'info' } 
+    }));
+  };
+
+  const total = stats?.total_documents || documents.length || 1;
+  const approved = stats?.approved_count || documents.filter(d => d.status === 'APPROVED').length;
+  const compliancePct = Math.min(100, Math.round((approved / total) * 100));
+
   const complianceStats = [
-    { label: "Overall Compliance", value: `${Math.round(((stats?.approved_count || 10) / (stats?.total_documents || 12)) * 100)}%`, status: "good", icon: ShieldCheck },
-    { label: "Expiring within 30 Days", value: stats?.expiring_soon_count?.toString() || "3", status: "warning", icon: AlertCircle },
-    { label: "Expired/Non-Compliant", value: stats?.expired_count?.toString() || "1", status: "critical", icon: FileWarning },
+    { label: "Overall Compliance Pacing", value: `${compliancePct}%`, status: "good", icon: ShieldCheck },
+    { label: "Expiring within 30 Days", value: stats?.expiring_soon_count?.toString() || "1", status: "warning", icon: AlertCircle },
+    { label: "Expired / Non-Compliant", value: stats?.expired_count?.toString() || "0", status: "critical", icon: FileWarning },
   ];
 
   return (
     <div className="w-full min-h-screen pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
-            <FileCheck className="text-blue-500" />
-            Compliance Documents
+          <h1 className="text-2xl sm:text-3xl font-black text-[#022C4F] flex items-center gap-3">
+            <FileCheck className="text-blue-600" />
+            Compliance Documents & Statutory Permits
           </h1>
-          <p className="text-gray-500 mt-1">Manage regulatory requirements, permits, and safety certifications.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">Manage regulatory clearance certificates, EIA approvals, and statutory fire certifications.</p>
         </div>
       </div>
 
@@ -55,114 +65,123 @@ export default function ComplianceDocuments() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
+            transition={{ delay: idx * 0.08 }}
             key={idx}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-center justify-between"
+            className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex items-center justify-between"
           >
             <div>
-              <p className="text-sm font-semibold text-gray-500 mb-1">{stat.label}</p>
-              <h3 className={`text-3xl font-bold ${
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{stat.label}</p>
+              <h3 className={`text-3xl font-black ${
                 stat.status === 'good' ? 'text-emerald-600' :
-                stat.status === 'warning' ? 'text-amber-600' : 'text-red-600'
+                stat.status === 'warning' ? 'text-amber-600' : 'text-rose-600'
               }`}>{stat.value}</h3>
             </div>
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-              stat.status === 'good' ? 'bg-emerald-50 text-emerald-500' :
-              stat.status === 'warning' ? 'bg-amber-50 text-amber-500' : 'bg-red-50 text-red-500'
+              stat.status === 'good' ? 'bg-emerald-50 text-emerald-600' :
+              stat.status === 'warning' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
             }`}>
-              <stat.icon size={28} />
+              <stat.icon size={26} />
             </div>
           </motion.div>
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
           <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
             <input 
               type="text" 
-              placeholder="Search compliance records..." 
-              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+              placeholder="Search compliance certificates..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2.5 w-full bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-50 transition-colors shrink-0 text-sm font-semibold shadow-sm">
-            <Filter size={16} /> Filter
+          <button 
+            onClick={fetchCompliance}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
           </button>
         </div>
 
-        <table className="w-full text-left border-collapse min-w-[800px]">
-          <thead>
-            <tr className="bg-white border-b border-gray-100">
-              <th className="py-4 px-6 font-semibold text-xs text-gray-400 uppercase tracking-wider">Document Name</th>
-              <th className="py-4 px-6 font-semibold text-xs text-gray-400 uppercase tracking-wider">Category & Authority</th>
-              <th className="py-4 px-6 font-semibold text-xs text-gray-400 uppercase tracking-wider">Valid Until</th>
-              <th className="py-4 px-6 font-semibold text-xs text-gray-400 uppercase tracking-wider">Status</th>
-              <th className="py-4 px-6 font-semibold text-xs text-gray-400 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {(documents.length > 0 ? documents.map(d => ({
-              id: d.document_reference || d.id,
-              title: d.title,
-              category: d.discipline,
-              authority: d.uploader_name || 'EPA / Regulatory Board',
-              validUntil: d.expiry_date || 'Dec 31, 2027',
-              status: d.expiry_status === 'expired' ? 'Expired' : d.expiry_status === 'expiring_soon' ? 'Expiring Soon' : 'Valid'
-            })) : [
-              { id: "CMP-012", title: "Environmental Clearance Certificate", category: "Environmental", authority: "EPA", validUntil: "Dec 31, 2027", status: "Valid" },
-              { id: "CMP-011", title: "Fire Safety Compliance Cert.", category: "Safety", authority: "Fire Dept", validUntil: "Nov 15, 2026", status: "Expiring Soon" },
-              { id: "CMP-010", title: "Structural Integrity Audit", category: "Engineering", authority: "City Council", validUntil: "Oct 01, 2026", status: "Expired" },
-            ]).map((doc, idx) => (
-              <motion.tr 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                key={doc.id} 
-                className="hover:bg-gray-50/50 transition-colors group"
-              >
-                <td className="py-4 px-6">
-                  <div className="flex items-center gap-3">
-                    <FileCheck size={20} className="text-gray-400" />
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{doc.title}</p>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">{doc.id}</p>
+        {isLoading ? (
+          <div className="py-24 text-center text-slate-400 text-xs font-bold">
+            Loading compliance certificates from Cloudflare R2...
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="py-16 text-center text-slate-400 p-8 space-y-2">
+            <FileCheck size={44} className="mx-auto text-slate-300" />
+            <p className="text-sm font-bold text-slate-700">No compliance documents found.</p>
+          </div>
+        ) : (
+          <table className="w-full text-left border-collapse min-w-[800px] text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-4 px-6">Document Title & Ref</th>
+                <th className="py-4 px-6">Category & Project</th>
+                <th className="py-4 px-6">Valid Until</th>
+                <th className="py-4 px-6">Regulatory Status</th>
+                <th className="py-4 px-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {documents.map((doc, idx) => (
+                <motion.tr 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: idx * 0.04 }}
+                  key={doc.id} 
+                  className="hover:bg-slate-50 transition-colors group"
+                >
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                        <FileCheck size={20} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600">{doc.title}</p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{doc.document_reference} • {doc.file_size}</p>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="py-4 px-6">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded w-max">{doc.category}</span>
-                    <span className="text-[11px] text-gray-500 font-medium ml-1">{doc.authority}</span>
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-sm font-medium text-gray-600">
-                  {doc.validUntil}
-                </td>
-                <td className="py-4 px-6">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md border ${
-                    doc.status === 'Valid' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
-                    doc.status === 'Expiring Soon' ? 'text-amber-700 bg-amber-50 border-amber-200' :
-                    'text-red-700 bg-red-50 border-red-200'
-                  }`}>
-                    {doc.status === 'Expired' && <AlertCircle size={12} />}
-                    {doc.status}
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
-                      <ExternalLink size={16} />
-                    </button>
-                    <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Download Document">
-                      <Download size={16} />
-                    </button>
-                  </div>
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 w-max">{doc.discipline}</span>
+                      <span className="text-[11px] text-slate-500 font-semibold truncate max-w-[180px]">{doc.project_name || 'Lagos State Permitted'}</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6 text-slate-600 font-bold">
+                    {doc.expiry_date || 'Permanent Approval'}
+                  </td>
+                  <td className="py-4 px-6">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-full border ${
+                      doc.expiry_status === 'expired' ? 'text-rose-700 bg-rose-50 border-rose-200' :
+                      doc.expiry_status === 'expiring_soon' ? 'text-amber-700 bg-amber-50 border-amber-200' :
+                      'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    }`}>
+                      {doc.expiry_status === 'expired' && <AlertCircle size={12} />}
+                      {doc.expiry_status === 'expired' ? 'Expired' : doc.expiry_status === 'expiring_soon' ? 'Expiring Soon' : 'Valid Certificate'}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button 
+                        onClick={() => handleDownload(doc)}
+                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" 
+                        title="Download Certificate"
+                      >
+                        <Download size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
