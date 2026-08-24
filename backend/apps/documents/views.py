@@ -260,10 +260,19 @@ class DocumentStatsViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 
     def list(self, request):
+        return self._compute_stats(request)
+
+    @action(detail=False, methods=['get'], url_path='overview')
+    def overview(self, request):
+        return self._compute_stats(request)
+
+    def _compute_stats(self, request):
         project_id = request.query_params.get('project')
         qs = Document.objects.all()
+        folder_qs = DocumentFolder.objects.all()
         if project_id:
             qs = qs.filter(project_id=project_id)
+            folder_qs = folder_qs.filter(project_id=project_id)
 
         total_docs = qs.count()
         drawings_count = qs.filter(document_type__in=['DRAWING', 'SUBMITTED_DRAWING']).count()
@@ -273,10 +282,13 @@ class DocumentStatsViewSet(viewsets.ViewSet):
         approved_count = qs.filter(status='APPROVED').count()
         pending_count = qs.filter(status__in=['PENDING_REVIEW', 'UNDER_REVIEW']).count()
         stamped_count = qs.filter(is_digitally_stamped=True).count()
+        folders_count = folder_qs.count()
+        templates_count = DocumentTemplate.objects.count()
 
         today = timezone.now().date()
-        expired_count = qs.filter(expiry_date__lt=today).count()
+        expired_count = qs.filter(expiry_date__isnull=False, expiry_date__lt=today).count()
         expiring_soon_count = qs.filter(
+            expiry_date__isnull=False,
             expiry_date__gte=today,
             expiry_date__lte=today + datetime.timedelta(days=30)
         ).count()
@@ -290,8 +302,12 @@ class DocumentStatsViewSet(viewsets.ViewSet):
             "approved_count": approved_count,
             "pending_count": pending_count,
             "stamped_count": stamped_count,
+            "stamped_approvals_count": stamped_count,
+            "folders_count": folders_count,
+            "templates_count": templates_count,
             "expired_count": expired_count,
             "expiring_soon_count": expiring_soon_count,
             "storage_bucket": "nexucondocument",
             "storage_provider": "Cloudflare R2"
         }, status=status.HTTP_200_OK)
+
