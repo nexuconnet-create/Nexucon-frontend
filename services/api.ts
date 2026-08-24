@@ -22,6 +22,13 @@ api.interceptors.request.use(
       config.url = search !== undefined ? `${normalizedPath}?${search}` : normalizedPath;
     }
 
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+      if (typeof (config.headers as any)?.delete === 'function') {
+        (config.headers as any).delete('Content-Type');
+      }
+    }
+
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('nexucon_access_token');
       if (token) {

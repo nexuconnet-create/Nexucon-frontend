@@ -78,6 +78,7 @@ export default function UploadDocumentDrawer({
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
+        formData.append('project', selectedProjectId);
         formData.append('project_id', selectedProjectId);
         formData.append('title', title || selectedFile.name);
         formData.append('folder', folder);
@@ -108,7 +109,18 @@ export default function UploadDocumentDrawer({
       onClose();
       if (onSuccess) onSuccess();
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to upload document';
+      const respData = err.response?.data;
+      let msg = 'Failed to upload document';
+      if (typeof respData === 'string') {
+        msg = respData;
+      } else if (respData?.message) {
+        msg = respData.message;
+      } else if (respData?.error) {
+        msg = respData.error;
+      } else if (respData && typeof respData === 'object') {
+        const firstErr = Object.entries(respData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ');
+        if (firstErr) msg = firstErr;
+      }
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
