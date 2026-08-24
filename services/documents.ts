@@ -156,10 +156,21 @@ const unwrapItem = <T>(res: any): T => {
   return res as T;
 };
 
+const cleanParams = (params?: Record<string, any>): Record<string, any> | undefined => {
+  if (!params) return undefined;
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '' && value !== 'undefined' && value !== 'null') {
+      cleaned[key] = value;
+    }
+  }
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+};
+
 // API Functions
 export const getDocuments = async (params?: Record<string, any>): Promise<Document[]> => {
   try {
-    const response = await api.get('/documents/documents/', { params });
+    const response = await api.get('/documents/documents/', { params: cleanParams(params) });
     return unwrapList<Document>(response);
   } catch (err) {
     console.error("Failed to get documents", err);
@@ -199,7 +210,7 @@ export const createDocumentVersion = async (id: string, data: Partial<DocumentVe
 
 export const getDocumentVersions = async (params?: Record<string, any>): Promise<DocumentVersion[]> => {
   try {
-    const response = await api.get('/documents/versions/', { params });
+    const response = await api.get('/documents/versions/', { params: cleanParams(params) });
     return unwrapList<DocumentVersion>(response);
   } catch (err) {
     console.error("Failed to get document versions", err);
@@ -214,7 +225,7 @@ export const compareDocumentVersions = async (versionA: string, versionB: string
 
 export const getDocumentApprovals = async (params?: Record<string, any>): Promise<DocumentApproval[]> => {
   try {
-    const response = await api.get('/documents/approvals/', { params });
+    const response = await api.get('/documents/approvals/', { params: cleanParams(params) });
     return unwrapList<DocumentApproval>(response);
   } catch (err) {
     console.error("Failed to get document approvals", err);
@@ -229,7 +240,7 @@ export const verifyDocumentApproval = async (id: string): Promise<any> => {
 
 export const getDocumentTemplates = async (params?: Record<string, any>): Promise<DocumentTemplate[]> => {
   try {
-    const response = await api.get('/documents/templates/', { params });
+    const response = await api.get('/documents/templates/', { params: cleanParams(params) });
     return unwrapList<DocumentTemplate>(response);
   } catch (err) {
     console.error("Failed to get document templates", err);
@@ -244,7 +255,7 @@ export const createDocumentTemplate = async (data: Partial<DocumentTemplate>): P
 
 export const getDocumentFolders = async (params?: Record<string, any>): Promise<DocumentFolder[]> => {
   try {
-    const response = await api.get('/documents/folders/', { params });
+    const response = await api.get('/documents/folders/', { params: cleanParams(params) });
     return unwrapList<DocumentFolder>(response);
   } catch (err) {
     console.error("Failed to get document folders", err);
@@ -259,7 +270,7 @@ export const createDocumentFolder = async (data: Partial<DocumentFolder>): Promi
 
 export const getDocumentStats = async (params?: Record<string, any>): Promise<DocumentStats> => {
   try {
-    const response = await api.get('/documents/stats/', { params });
+    const response = await api.get('/documents/stats/', { params: cleanParams(params) });
     const unwrapped = unwrapItem<DocumentStats>(response);
     return unwrapped || {
       total_documents: 0,
