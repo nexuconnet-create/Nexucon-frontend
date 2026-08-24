@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { FileText, Search, Filter, Download, Maximize, Share2, Layers, Plus, RefreshCw, Eye } from "lucide-react";
 import { Document, getDocuments } from "@/services/documents";
-import UploadDocumentDrawer from "@/components/dashboard/UploadDocumentDrawer";
+import UploadDrawingDrawer from "@/components/dashboard/UploadDrawingDrawer";
 
 export default function SubmittedDrawings() {
   const [drawings, setDrawings] = useState<Document[]>([]);
@@ -44,8 +44,11 @@ export default function SubmittedDrawings() {
   };
 
   const handleDownload = (dwg: Document) => {
+    if (dwg.file_url) {
+      window.open(dwg.file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading drawing "${dwg.title}" (${dwg.file_size})...`, type: 'info' } 
+      detail: { message: `Opening drawing "${dwg.title}" (${dwg.file_size})...`, type: 'info' } 
     }));
   };
 
@@ -62,7 +65,7 @@ export default function SubmittedDrawings() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsUploadDrawerOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20 text-sm font-semibold"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20 text-sm font-semibold cursor-pointer"
           >
             <Plus size={18} />
             <span>Upload Drawing</span>
@@ -84,7 +87,7 @@ export default function SubmittedDrawings() {
           </div>
           <button 
             onClick={fetchDrawings}
-            className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
+            className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors shrink-0 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
@@ -96,7 +99,7 @@ export default function SubmittedDrawings() {
             <button 
               key={filter} 
               onClick={() => setSelectedDiscipline(filter)}
-              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${
+              className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
                 selectedDiscipline === filter 
                   ? 'bg-[#022C4F] text-white shadow-sm' 
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
@@ -191,10 +194,11 @@ export default function SubmittedDrawings() {
         </div>
       )}
 
-      <UploadDocumentDrawer
+      <UploadDrawingDrawer
         isOpen={isUploadDrawerOpen}
         onClose={() => setIsUploadDrawerOpen(false)}
         onSuccess={fetchDrawings}
+        defaultDiscipline={selectedDiscipline !== 'All' ? selectedDiscipline : undefined}
       />
     </div>
   );

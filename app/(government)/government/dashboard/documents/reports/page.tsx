@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, Search, Filter, Download, Eye, MoreVertical, Calendar, User, FileBarChart, RefreshCw } from "lucide-react";
+import { FileText, Search, Filter, Download, Eye, MoreVertical, Calendar, User, FileBarChart, RefreshCw, Plus } from "lucide-react";
 import { Document, getDocuments } from "@/services/documents";
+import UploadReportDrawer from "@/components/dashboard/UploadReportDrawer";
 
 export default function TechnicalReports() {
   const [reports, setReports] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('All');
+  const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
 
   const fetchReports = useCallback(async () => {
     setIsLoading(true);
@@ -50,9 +52,12 @@ export default function TechnicalReports() {
     }
   };
 
-  const handleDownload = (docTitle: string, docSize: string) => {
+  const handleDownload = (doc: Document) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading report "${docTitle}" (${docSize}) from Cloudflare R2...`, type: 'info' } 
+      detail: { message: `Opening report "${doc.title}" (${doc.file_size})...`, type: 'info' } 
     }));
   };
 
@@ -65,6 +70,15 @@ export default function TechnicalReports() {
             Technical Reports & Engineering Studies
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">Access detailed geotechnical studies, EIA assessments, and structural calculations.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsUploadDrawerOpen(true)}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20 text-sm font-semibold cursor-pointer"
+          >
+            <Plus size={18} />
+            <span>Upload Report</span>
+          </button>
         </div>
       </div>
 
@@ -174,9 +188,9 @@ export default function TechnicalReports() {
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
-                        onClick={() => handleDownload(report.title, report.file_size)}
-                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" 
-                        title="Download from Cloudflare R2"
+                        onClick={() => handleDownload(report)}
+                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer" 
+                        title="Download / View from Cloudflare R2"
                       >
                         <Download size={16} />
                       </button>
@@ -188,6 +202,13 @@ export default function TechnicalReports() {
           </table>
         )}
       </div>
+
+      <UploadReportDrawer
+        isOpen={isUploadDrawerOpen}
+        onClose={() => setIsUploadDrawerOpen(false)}
+        onSuccess={fetchReports}
+        defaultDiscipline={selectedDiscipline !== 'All' ? selectedDiscipline : undefined}
+      />
     </div>
   );
 }
