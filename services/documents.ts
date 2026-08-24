@@ -158,8 +158,13 @@ const unwrapItem = <T>(res: any): T => {
 
 // API Functions
 export const getDocuments = async (params?: Record<string, any>): Promise<Document[]> => {
-  const response = await api.get('/documents/documents/', { params });
-  return unwrapList<Document>(response);
+  try {
+    const response = await api.get('/documents/documents/', { params });
+    return unwrapList<Document>(response);
+  } catch (err) {
+    console.error("Failed to get documents", err);
+    return [];
+  }
 };
 
 export const getDocumentById = async (id: string): Promise<Document> => {
@@ -193,8 +198,13 @@ export const createDocumentVersion = async (id: string, data: Partial<DocumentVe
 };
 
 export const getDocumentVersions = async (params?: Record<string, any>): Promise<DocumentVersion[]> => {
-  const response = await api.get('/documents/versions/', { params });
-  return unwrapList<DocumentVersion>(response);
+  try {
+    const response = await api.get('/documents/versions/', { params });
+    return unwrapList<DocumentVersion>(response);
+  } catch (err) {
+    console.error("Failed to get document versions", err);
+    return [];
+  }
 };
 
 export const compareDocumentVersions = async (versionA: string, versionB: string): Promise<any> => {
@@ -203,8 +213,13 @@ export const compareDocumentVersions = async (versionA: string, versionB: string
 };
 
 export const getDocumentApprovals = async (params?: Record<string, any>): Promise<DocumentApproval[]> => {
-  const response = await api.get('/documents/approvals/', { params });
-  return unwrapList<DocumentApproval>(response);
+  try {
+    const response = await api.get('/documents/approvals/', { params });
+    return unwrapList<DocumentApproval>(response);
+  } catch (err) {
+    console.error("Failed to get document approvals", err);
+    return [];
+  }
 };
 
 export const verifyDocumentApproval = async (id: string): Promise<any> => {
@@ -213,8 +228,13 @@ export const verifyDocumentApproval = async (id: string): Promise<any> => {
 };
 
 export const getDocumentTemplates = async (params?: Record<string, any>): Promise<DocumentTemplate[]> => {
-  const response = await api.get('/documents/templates/', { params });
-  return unwrapList<DocumentTemplate>(response);
+  try {
+    const response = await api.get('/documents/templates/', { params });
+    return unwrapList<DocumentTemplate>(response);
+  } catch (err) {
+    console.error("Failed to get document templates", err);
+    return [];
+  }
 };
 
 export const createDocumentTemplate = async (data: Partial<DocumentTemplate>): Promise<DocumentTemplate> => {
@@ -223,8 +243,13 @@ export const createDocumentTemplate = async (data: Partial<DocumentTemplate>): P
 };
 
 export const getDocumentFolders = async (params?: Record<string, any>): Promise<DocumentFolder[]> => {
-  const response = await api.get('/documents/folders/', { params });
-  return unwrapList<DocumentFolder>(response);
+  try {
+    const response = await api.get('/documents/folders/', { params });
+    return unwrapList<DocumentFolder>(response);
+  } catch (err) {
+    console.error("Failed to get document folders", err);
+    return [];
+  }
 };
 
 export const createDocumentFolder = async (data: Partial<DocumentFolder>): Promise<DocumentFolder> => {
@@ -233,8 +258,36 @@ export const createDocumentFolder = async (data: Partial<DocumentFolder>): Promi
 };
 
 export const getDocumentStats = async (params?: Record<string, any>): Promise<DocumentStats> => {
-  const response = await api.get('/documents/stats/', { params });
-  return unwrapItem<DocumentStats>(response);
+  try {
+    const response = await api.get('/documents/stats/', { params });
+    const unwrapped = unwrapItem<DocumentStats>(response);
+    return unwrapped || {
+      total_documents: 0,
+      drawings_count: 0,
+      reports_count: 0,
+      compliance_count: 0,
+      inspection_reports_count: 0,
+      approved_count: 0,
+      pending_count: 0,
+      stamped_count: 0,
+      expired_count: 0,
+      expiring_soon_count: 0
+    };
+  } catch (err) {
+    console.error("Failed to get document stats", err);
+    return {
+      total_documents: 0,
+      drawings_count: 0,
+      reports_count: 0,
+      compliance_count: 0,
+      inspection_reports_count: 0,
+      approved_count: 0,
+      pending_count: 0,
+      stamped_count: 0,
+      expired_count: 0,
+      expiring_soon_count: 0
+    };
+  }
 };
 
 export const linkDocumentToBIM = async (id: string, bimModelId: string): Promise<Document> => {
