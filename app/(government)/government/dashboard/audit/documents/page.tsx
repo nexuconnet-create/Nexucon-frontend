@@ -6,8 +6,9 @@ import {
   FileText, Filter, Download, Search, FileSignature, 
   GitCommit, User, Clock, ArrowRight, RefreshCw, Eye 
 } from "lucide-react";
-import { AuditEvent, getAuditEvents, exportAuditLedger } from "@/services/audit";
+import { AuditEvent, getAuditEvents, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
+import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
 
 export default function DocumentHistory() {
   const [docEvents, setDocEvents] = useState<AuditEvent[]>([]);
@@ -15,6 +16,7 @@ export default function DocumentHistory() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const fetchDocHistory = useCallback(async () => {
     setIsLoading(true);
@@ -34,22 +36,6 @@ export default function DocumentHistory() {
   useEffect(() => {
     fetchDocHistory();
   }, [fetchDocHistory]);
-
-  const handleExport = async () => {
-    try {
-      const blob = await exportAuditLedger({ module: 'documents' });
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'text/csv' }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Nexucon_Document_Audit_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Document Version Audit Export downloaded!', type: 'success' } }));
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -75,7 +61,7 @@ export default function DocumentHistory() {
           </button>
 
           <button 
-            onClick={handleExport}
+            onClick={() => setIsExportOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold cursor-pointer"
           >
             <Download size={14} />
@@ -116,9 +102,9 @@ export default function DocumentHistory() {
               <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th className="py-4 px-6">Document Code &amp; Project</th>
                 <th className="py-4 px-6">Action / Event</th>
-                <th className="py-4 px-6">Stamping Officer</th>
-                <th className="py-4 px-6">Timestamp &amp; Hash</th>
-                <th className="py-4 px-6 text-right">State Diff</th>
+                <th className="py-4 px-6">Stamping Authority</th>
+                <th className="py-4 px-6">Timestamp</th>
+                <th className="py-4 px-6 text-right">Audit Delta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
@@ -142,8 +128,8 @@ export default function DocumentHistory() {
                     </div>
                   </td>
                   <td className="py-4 px-6">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                      <FileSignature size={12} /> {ev.action}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      <FileSignature size={12} /> {formatActionTitle(ev.action)}
                     </span>
                   </td>
                   <td className="py-4 px-6">
@@ -157,7 +143,7 @@ export default function DocumentHistory() {
                       <span className="text-slate-700 font-medium">
                         {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(ev.timestamp).toLocaleDateString()}
                       </span>
-                      <span className="font-mono text-[9px] text-slate-400 mt-0.5">{ev.signature_hash}</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">Verified Block</span>
                     </div>
                   </td>
                   <td className="py-4 px-6 text-right">
@@ -166,7 +152,7 @@ export default function DocumentHistory() {
                         setSelectedEvent(ev);
                         setIsDiffOpen(true);
                       }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
                     >
                       <Eye size={12} />
                       <span>Inspect</span>
@@ -184,6 +170,14 @@ export default function DocumentHistory() {
         isOpen={isDiffOpen}
         onClose={() => setIsDiffOpen(false)}
         event={selectedEvent}
+      />
+
+      {/* Multi-Format Export Sidepop Drawer */}
+      <AuditExportDrawer
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        events={docEvents}
+        defaultModule="Document Vault Revisions"
       />
     </div>
   );

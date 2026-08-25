@@ -55,6 +55,47 @@ export interface AuditSummary {
   failed_logins_24h: number;
 }
 
+export const formatActionTitle = (action: string): string => {
+  if (!action) return 'Statutory Action';
+  const customMap: Record<string, string> = {
+    'APPROVAL_DECISION_APPROVED': 'Approval Decision: Approved',
+    'APPROVAL_GRANTED': 'Technical Approval Granted',
+    'INSPECTION_COMPLETED_PASS': 'Inspection Completed: Passed',
+    'DOCUMENT_VERSION_STAMPED': 'Document Version Stamped & Sealed',
+    'USER_ROLE_UPDATED': 'User Role & Permissions Modified',
+    'NCR_FLAGGED_CRITICAL': 'Critical Non-Conformance (NCR) Flagged',
+    'GPR_ANOMALY_RECORDED': 'Subsurface GPR Anomaly Recorded',
+    'BIM_CLASH_MATRIX_RESOLVED': 'BIM 3D Clash Matrix Coordinated',
+    'PERMIT_FINAL_DECISION_GRANTED': 'Permit Final Decision: Granted',
+    'AUDIT_LEDGER_EXPORTED': 'Cryptographic Audit Ledger Exported',
+    'NOTIFICATION_DIRECTIVE_SUBMITTED': 'Statutory Officer Directive Dispatched'
+  };
+
+  if (customMap[action]) return customMap[action];
+
+  return action
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .replace(/\bNcr\b/g, 'NCR')
+    .replace(/\bBim\b/g, 'BIM')
+    .replace(/\bGpr\b/g, 'GPR')
+    .replace(/\bRbba\b/g, 'RBAC');
+};
+
+export const formatResourceTitle = (type: string): string => {
+  if (!type) return 'Record';
+  const customMap: Record<string, string> = {
+    'ApprovalRequest': 'Approval Request',
+    'NonConformanceReport': 'Non-Conformance (NCR)',
+    'PermitDecision': 'Permit Decision',
+    'BIMModel': 'BIM 3D Model',
+    'GPRSurvey': 'GPR Subsurface Survey',
+    'AuditLedger': 'Audit Ledger'
+  };
+  return customMap[type] || type;
+};
+
 const unwrapList = <T>(res: any): T[] => {
   if (!res) return [];
   if (Array.isArray(res)) return res;
