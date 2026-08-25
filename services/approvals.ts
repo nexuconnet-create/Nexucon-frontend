@@ -9,6 +9,17 @@ export interface TechnicalReviewCriteria {
   order: number;
 }
 
+export interface ApprovalComment {
+  id: string;
+  approval_request: string;
+  author?: string;
+  author_name: string;
+  comment_type: 'General' | 'RevisionRequest' | 'ConditionVerification' | 'TechnicalFinding';
+  content: string;
+  attachment_url?: string;
+  created_at: string;
+}
+
 export interface ApprovalDecision {
   id: string;
   decision_reference: string;
@@ -40,8 +51,14 @@ export interface ApprovalRequest {
   value_amount: number;
   doa_level_required: string;
   submitted_by_name: string;
+  assigned_to_name?: string;
   due_date?: string;
   description?: string;
+  source_entity_type?: 'PermitApplication' | 'Document' | 'BIMModel' | 'Inspection' | 'Milestone' | 'ComplianceReview' | 'GPRFinding' | 'General';
+  source_entity_id?: string;
+  source_version_hash?: string;
+  compliance_gate_status?: 'Passed' | 'Blocked' | 'Exempt';
+  conditions_met?: boolean;
   bottleneck?: string;
   days_overdue: number;
   signatories_required: number;
@@ -50,6 +67,7 @@ export interface ApprovalRequest {
   created_at: string;
   decisions?: ApprovalDecision[];
   criteria?: TechnicalReviewCriteria[];
+  comments?: ApprovalComment[];
 }
 
 export interface ApprovalStats {
@@ -91,6 +109,11 @@ export const createApprovalRequest = async (data: Partial<ApprovalRequest>): Pro
   return unwrapItem<ApprovalRequest>(response);
 };
 
+export const assignReviewer = async (id: string, data: { reviewer_name: string }): Promise<ApprovalRequest> => {
+  const response = await api.post(`/approvals/requests/${id}/assign/`, data);
+  return unwrapItem<ApprovalRequest>(response);
+};
+
 export const approveRequest = async (id: string, data?: { notes?: string; pin?: string; conditions?: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/approve/`, data || {});
   return unwrapItem<any>(response);
@@ -101,8 +124,28 @@ export const rejectRequest = async (id: string, data: { reason: string }): Promi
   return unwrapItem<any>(response);
 };
 
+export const requestRevision = async (id: string, data: { revision_notes: string; attachment_url?: string }): Promise<any> => {
+  const response = await api.post(`/approvals/requests/${id}/request-revision/`, data);
+  return unwrapItem<any>(response);
+};
+
 export const requestInfo = async (id: string, data: { query: string }): Promise<any> => {
   const response = await api.post(`/approvals/requests/${id}/request-info/`, data);
+  return unwrapItem<any>(response);
+};
+
+export const addApprovalComment = async (id: string, data: { content: string; comment_type?: string; attachment_url?: string }): Promise<ApprovalComment> => {
+  const response = await api.post(`/approvals/requests/${id}/comments/`, data);
+  return unwrapItem<ApprovalComment>(response);
+};
+
+export const getApprovalComments = async (id: string): Promise<ApprovalComment[]> => {
+  const response = await api.get(`/approvals/requests/${id}/comments/`);
+  return unwrapList<ApprovalComment>(response);
+};
+
+export const checkComplianceGate = async (id: string): Promise<any> => {
+  const response = await api.get(`/approvals/requests/${id}/compliance-gate/`);
   return unwrapItem<any>(response);
 };
 
