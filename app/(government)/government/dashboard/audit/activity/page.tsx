@@ -10,6 +10,7 @@ import {
 import { AuditEvent, getAuditEvents, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
+import PaginationBar from "@/components/dashboard/PaginationBar";
 
 export default function ActivityLog() {
   const [logs, setLogs] = useState<AuditEvent[]>([]);
@@ -19,6 +20,10 @@ export default function ActivityLog() {
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
@@ -37,6 +42,7 @@ export default function ActivityLog() {
 
   useEffect(() => {
     fetchLogs();
+    setCurrentPage(1);
   }, [fetchLogs]);
 
   const handleOpenExport = () => {
@@ -66,6 +72,9 @@ export default function ActivityLog() {
     { key: 'bim', label: 'BIM 3D' },
     { key: 'gpr', label: 'GPR Survey' },
   ];
+
+  // Slice paginated records
+  const paginatedLogs = logs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -107,7 +116,10 @@ export default function ActivityLog() {
             {modules.map((m) => (
               <button
                 key={m.key}
-                onClick={() => setActiveModule(m.key)}
+                onClick={() => {
+                  setActiveModule(m.key);
+                  setCurrentPage(1);
+                }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   activeModule === m.key
                     ? 'bg-[#022C4F] text-white shadow-sm'
@@ -124,7 +136,10 @@ export default function ActivityLog() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search actions, officers, IDs..."
               className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -134,13 +149,13 @@ export default function ActivityLog() {
 
       {/* Activity Timeline List */}
       <div className="space-y-3.5 max-w-5xl">
-        {logs.map((log, idx) => {
+        {paginatedLogs.map((log, idx) => {
           const { icon: LogIcon, color, bg } = getLogIcon(log.action, log.severity);
           return (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.03 }}
+              transition={{ delay: idx * 0.02 }}
               key={log.id}
               className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 hover:border-blue-200 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
             >
@@ -198,6 +213,20 @@ export default function ActivityLog() {
         {logs.length === 0 && !isLoading && (
           <div className="bg-white rounded-3xl border border-slate-200/90 p-12 text-center text-slate-500">
             No activity records found matching filters.
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {logs.length > 0 && (
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden mt-4">
+            <PaginationBar
+              currentPage={currentPage}
+              totalItems={logs.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[5, 10, 20, 50]}
+            />
           </div>
         )}
       </div>

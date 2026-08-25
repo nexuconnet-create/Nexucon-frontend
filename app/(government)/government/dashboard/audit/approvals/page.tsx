@@ -9,6 +9,7 @@ import {
 import { AuditEvent, getAuditEvents, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
+import PaginationBar from "@/components/dashboard/PaginationBar";
 
 export default function ApprovalHistory() {
   const [history, setHistory] = useState<AuditEvent[]>([]);
@@ -17,6 +18,10 @@ export default function ApprovalHistory() {
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const fetchApprovalHistory = useCallback(async () => {
     setIsLoading(true);
@@ -35,6 +40,7 @@ export default function ApprovalHistory() {
 
   useEffect(() => {
     fetchApprovalHistory();
+    setCurrentPage(1);
   }, [fetchApprovalHistory]);
 
   const getStatusBadge = (action: string) => {
@@ -58,6 +64,9 @@ export default function ApprovalHistory() {
       </span>
     );
   };
+
+  // Slice paginated items
+  const paginatedHistory = history.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -99,7 +108,10 @@ export default function ApprovalHistory() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Filter by approval code, project, or signing officer..."
             className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -119,71 +131,83 @@ export default function ApprovalHistory() {
             <p className="text-xs font-bold text-slate-700">No approval history matching criteria.</p>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[750px]">
-            <thead>
-              <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-4 px-6">Approval Record</th>
-                <th className="py-4 px-6">Decision Status</th>
-                <th className="py-4 px-6">Signing Authority</th>
-                <th className="py-4 px-6">Timestamp</th>
-                <th className="py-4 px-6 text-right">Audit Delta</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {history.map((ev, idx) => (
-                <motion.tr 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  key={ev.id || idx}
-                  className="hover:bg-blue-50/30 transition-colors"
-                >
-                  <td className="py-4 px-6">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{ev.project_name}</h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                          {ev.resource_id}
-                        </span>
-                        <span className="text-slate-500 font-semibold text-[10px]">
-                          {formatActionTitle(ev.action)}
-                        </span>
+          <>
+            <table className="w-full text-left border-collapse min-w-[750px]">
+              <thead>
+                <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="py-4 px-6">Approval Record</th>
+                  <th className="py-4 px-6">Decision Status</th>
+                  <th className="py-4 px-6">Signing Authority</th>
+                  <th className="py-4 px-6">Timestamp</th>
+                  <th className="py-4 px-6 text-right">Audit Delta</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {paginatedHistory.map((ev, idx) => (
+                  <motion.tr 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.02 }}
+                    key={ev.id || idx}
+                    className="hover:bg-blue-50/30 transition-colors"
+                  >
+                    <td className="py-4 px-6">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{ev.project_name}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                            {ev.resource_id}
+                          </span>
+                          <span className="text-slate-500 font-semibold text-[10px]">
+                            {formatActionTitle(ev.action)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    {getStatusBadge(ev.action)}
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-800">{ev.user_name}</span>
-                      <span className="text-slate-400 text-[10px]">{ev.user_role}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex flex-col">
-                      <span className="text-slate-700 font-medium">
-                        {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(ev.timestamp).toLocaleDateString()}
-                      </span>
-                      <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">Verified Block</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedEvent(ev);
-                        setIsDiffOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
-                    >
-                      <Eye size={12} />
-                      <span>Inspect</span>
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="py-4 px-6">
+                      {getStatusBadge(ev.action)}
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-800">{ev.user_name}</span>
+                        <span className="text-slate-400 text-[10px]">{ev.user_role}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col">
+                        <span className="text-slate-700 font-medium">
+                          {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(ev.timestamp).toLocaleDateString()}
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">Verified Block</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <button
+                        onClick={() => {
+                          setSelectedEvent(ev);
+                          setIsDiffOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
+                      >
+                        <Eye size={12} />
+                        <span>Inspect</span>
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination */}
+            <PaginationBar
+              currentPage={currentPage}
+              totalItems={history.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[5, 10, 20, 50]}
+            />
+          </>
         )}
       </div>
 
