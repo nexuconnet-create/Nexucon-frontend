@@ -218,8 +218,11 @@ export const getComplianceCertificates = async (params?: Record<string, any>): P
   return unwrapList<ComplianceCertificate>(response);
 };
 
-export const issueComplianceCertificate = async (data: Partial<ComplianceCertificate>): Promise<ComplianceCertificate> => {
-  const response = await api.post('/compliance/certificates/', data);
+export const issueComplianceCertificate = async (data: Partial<ComplianceCertificate> | FormData): Promise<ComplianceCertificate> => {
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+  const response = await api.post('/compliance/certificates/', data, {
+    headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined
+  });
   return unwrapItem<ComplianceCertificate>(response);
 };
 
