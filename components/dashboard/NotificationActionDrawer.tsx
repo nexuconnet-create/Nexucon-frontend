@@ -7,7 +7,7 @@ import {
   Check, ArrowUpRight, MessageSquare, ShieldCheck, Mail, RefreshCw 
 } from 'lucide-react';
 import Link from 'next/link';
-import { Notification, markNotificationRead, acknowledgeNotification } from '@/services/notifications';
+import { Notification, markNotificationRead, acknowledgeNotification, respondToNotification } from '@/services/notifications';
 
 interface NotificationActionDrawerProps {
   isOpen: boolean;
@@ -91,16 +91,16 @@ export default function NotificationActionDrawer({
 
     setIsSubmitting(true);
     try {
-      // Mark as read and record statutory response
-      await markNotificationRead(notification.id);
+      await respondToNotification(notification.id, { comment, action_type: 'DIRECTIVE' });
       setActionSuccess(`Official directive dispatched: "${comment}"`);
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Statutory directive submitted and logged!', type: 'success' } 
+        detail: { message: 'Statutory directive submitted and logged on backend!', type: 'success' } 
       }));
       setComment('');
       if (onUpdated) onUpdated();
     } catch (err) {
       console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to record directive', type: 'error' } }));
     } finally {
       setIsSubmitting(false);
     }
