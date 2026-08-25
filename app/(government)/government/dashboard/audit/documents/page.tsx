@@ -6,8 +6,9 @@ import {
   FileText, Filter, Download, Search, FileSignature, 
   GitCommit, User, Clock, ArrowRight, RefreshCw, Eye 
 } from "lucide-react";
-import { AuditEvent, getAuditEvents, exportAuditLedger, formatActionTitle, formatResourceTitle } from "@/services/audit";
+import { AuditEvent, getAuditEvents, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
+import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
 
 export default function DocumentHistory() {
   const [docEvents, setDocEvents] = useState<AuditEvent[]>([]);
@@ -15,6 +16,7 @@ export default function DocumentHistory() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const fetchDocHistory = useCallback(async () => {
     setIsLoading(true);
@@ -34,22 +36,6 @@ export default function DocumentHistory() {
   useEffect(() => {
     fetchDocHistory();
   }, [fetchDocHistory]);
-
-  const handleExport = async () => {
-    try {
-      const blob = await exportAuditLedger({ module: 'documents' });
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'text/csv' }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Nexucon_Document_Audit_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Document Version Audit Export downloaded!', type: 'success' } }));
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -75,7 +61,7 @@ export default function DocumentHistory() {
           </button>
 
           <button 
-            onClick={handleExport}
+            onClick={() => setIsExportOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold cursor-pointer"
           >
             <Download size={14} />
@@ -184,6 +170,14 @@ export default function DocumentHistory() {
         isOpen={isDiffOpen}
         onClose={() => setIsDiffOpen(false)}
         event={selectedEvent}
+      />
+
+      {/* Multi-Format Export Sidepop Drawer */}
+      <AuditExportDrawer
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        events={docEvents}
+        defaultModule="Document Vault Revisions"
       />
     </div>
   );

@@ -7,8 +7,9 @@ import {
   ShieldAlert, User, Clock, FileSignature, RefreshCw, 
   Search, Eye, ArrowUpRight, ShieldCheck, Building2 
 } from "lucide-react";
-import { AuditEvent, getAuditEvents, exportAuditLedger, formatActionTitle, formatResourceTitle } from "@/services/audit";
+import { AuditEvent, getAuditEvents, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
+import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
 
 export default function ActivityLog() {
   const [logs, setLogs] = useState<AuditEvent[]>([]);
@@ -17,6 +18,7 @@ export default function ActivityLog() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
@@ -37,20 +39,8 @@ export default function ActivityLog() {
     fetchLogs();
   }, [fetchLogs]);
 
-  const handleExportCSV = async () => {
-    try {
-      const blob = await exportAuditLedger({ module: activeModule !== 'ALL' ? activeModule : undefined });
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'text/csv' }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Nexucon_Activity_Audit_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Audit Log CSV Export downloaded!', type: 'success' } }));
-    } catch (err) {
-      console.error(err);
-    }
+  const handleOpenExport = () => {
+    setIsExportOpen(true);
   };
 
   const getLogIcon = (action: string, severity: string) => {
@@ -101,7 +91,7 @@ export default function ActivityLog() {
           </button>
 
           <button 
-            onClick={handleExportCSV}
+            onClick={handleOpenExport}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold cursor-pointer"
           >
             <Download size={14} />
@@ -217,6 +207,14 @@ export default function ActivityLog() {
         isOpen={isDiffOpen}
         onClose={() => setIsDiffOpen(false)}
         event={selectedEvent}
+      />
+
+      {/* Multi-Format Export Sidepop Drawer */}
+      <AuditExportDrawer
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        events={logs}
+        defaultModule="All Activities"
       />
     </div>
   );
