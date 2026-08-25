@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ListTodo, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronDown, BookOpen, RefreshCw } from "lucide-react";
+import { ListTodo, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronDown, BookOpen, RefreshCw, Plus } from "lucide-react";
 import { RegulatoryRequirement, getRequirements, updateRequirementStatus } from "@/services/compliance";
+import CreateRequirementDrawer from "@/components/dashboard/CreateRequirementDrawer";
 
 export default function ComplianceRequirements() {
   const [requirements, setRequirements] = useState<RegulatoryRequirement[]>([]);
   const [expandedSection, setExpandedSection] = useState<string | null>("Environmental Standards");
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
 
   const fetchRequirements = useCallback(async () => {
     setIsLoading(true);
@@ -82,6 +84,14 @@ export default function ComplianceRequirements() {
           </h1>
           <p className="text-gray-500 mt-1">Track statutory building codes, environmental regulations, and safety standards.</p>
         </div>
+
+        <button 
+          onClick={() => setIsCreateDrawerOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold cursor-pointer shrink-0"
+        >
+          <Plus size={16} />
+          Add Requirement
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -201,6 +211,12 @@ export default function ComplianceRequirements() {
           );
         })}
       </div>
+
+      <CreateRequirementDrawer
+        isOpen={isCreateDrawerOpen}
+        onClose={() => setIsCreateDrawerOpen(false)}
+        onSuccess={fetchRequirements}
+      />
     </div>
   );
 }

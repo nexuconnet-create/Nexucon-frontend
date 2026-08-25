@@ -48,11 +48,17 @@ export interface NonConformanceReport {
 export interface RegulatoryRequirement {
   id: string;
   requirement_reference: string;
+  project?: string;
+  project_name?: string;
   category: 'Environmental' | 'Safety & Health' | 'Building Codes' | 'Legal & Planning';
   title: string;
   description?: string;
   authority: string;
   status: 'Compliant' | 'At Risk' | 'Non-Compliant';
+  mandatory?: boolean;
+  evidence_required?: string;
+  verification_method?: string;
+  due_date?: string;
   last_checked: string;
   created_at: string;
 }
@@ -67,9 +73,22 @@ export interface ComplianceReview {
   auditor_name: string;
   stage: 'Initiation' | 'Audit in Progress' | 'Reporting' | 'Final Review' | 'Completed';
   progress: number;
+  findings_count?: number;
+  ncrs_count?: number;
   start_date: string;
   due_date?: string;
   findings_summary?: string;
+  created_at: string;
+}
+
+export interface EscalationRule {
+  id: string;
+  rule_name: string;
+  trigger_category: 'BIM' | 'Inspection' | 'Quality' | 'Safety' | 'Worker' | 'General';
+  action_required: string;
+  escalation_level: number;
+  sla_hours: number;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -159,6 +178,11 @@ export const getRequirements = async (params?: Record<string, any>): Promise<Reg
   return unwrapList<RegulatoryRequirement>(response);
 };
 
+export const createRequirement = async (data: Partial<RegulatoryRequirement>): Promise<RegulatoryRequirement> => {
+  const response = await api.post('/compliance/requirements/', data);
+  return unwrapItem<RegulatoryRequirement>(response);
+};
+
 export const updateRequirementStatus = async (id: string, data: { status: string }): Promise<RegulatoryRequirement> => {
   const response = await api.post(`/compliance/requirements/${id}/update-status/`, data);
   return unwrapItem<RegulatoryRequirement>(response);
@@ -172,6 +196,21 @@ export const getComplianceReviews = async (params?: Record<string, any>): Promis
 export const createComplianceReview = async (data: Partial<ComplianceReview>): Promise<ComplianceReview> => {
   const response = await api.post('/compliance/reviews/', data);
   return unwrapItem<ComplianceReview>(response);
+};
+
+export const advanceReviewStage = async (id: string, data: { stage: string; findings_summary?: string }): Promise<ComplianceReview> => {
+  const response = await api.post(`/compliance/reviews/${id}/advance-stage/`, data);
+  return unwrapItem<ComplianceReview>(response);
+};
+
+export const getEscalationRules = async (params?: Record<string, any>): Promise<EscalationRule[]> => {
+  const response = await api.get('/compliance/escalation-rules/', { params });
+  return unwrapList<EscalationRule>(response);
+};
+
+export const toggleEscalationRule = async (id: string): Promise<EscalationRule> => {
+  const response = await api.post(`/compliance/escalation-rules/${id}/toggle-active/`);
+  return unwrapItem<EscalationRule>(response);
 };
 
 export const getComplianceCertificates = async (params?: Record<string, any>): Promise<ComplianceCertificate[]> => {
@@ -192,4 +231,9 @@ export const verifyCertificateAuthenticity = async (id: string): Promise<any> =>
 export const getComplianceStats = async (): Promise<ComplianceStats> => {
   const response = await api.get('/compliance/stats/overview/');
   return unwrapItem<ComplianceStats>(response);
+};
+
+export const generateComplianceReport = async (): Promise<any> => {
+  const response = await api.get('/compliance/stats/generate-report/');
+  return unwrapItem<any>(response);
 };

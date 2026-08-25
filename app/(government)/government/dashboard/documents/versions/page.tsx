@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { History, ArrowRight, FileText, UploadCloud, FileDiff, GitBranch, Download, Eye, RefreshCw, Building2 } from "lucide-react";
 import { Document, DocumentVersion, getDocuments, getDocumentVersions } from "@/services/documents";
 import UploadDocumentVersionModal from "@/components/dashboard/UploadDocumentVersionModal";
+import { CustomSelect } from "@/components/CustomSelect";
 
 export default function DocumentVersions() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -20,7 +21,7 @@ export default function DocumentVersions() {
       const docsData = await getDocuments();
       setDocuments(docsData);
       
-      const active = docsData.length > 0 ? docsData[0] : null;
+      const active = docsData.length > 0 ? (selectedDocument ? docsData.find(d => d.id === selectedDocument.id) || docsData[0] : docsData[0]) : null;
       setSelectedDocument(active);
 
       if (active) {
@@ -33,11 +34,11 @@ export default function DocumentVersions() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedDocument]);
 
   useEffect(() => {
     fetchVersionsData();
-  }, [fetchVersionsData]);
+  }, []);
 
   const handleDocumentChange = async (docId: string) => {
     const found = documents.find(d => d.id === docId) || null;
@@ -50,20 +51,20 @@ export default function DocumentVersions() {
   };
 
   const handleDownload = (v: DocumentVersion) => {
+    const targetUrl = v.file_url || selectedDocument?.file_url;
+    if (targetUrl) {
+      window.open(targetUrl, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading revision ${v.version_label} (${v.file_size}) from Cloudflare R2...`, type: 'info' } 
+      detail: { message: `Opening revision ${v.version_label} (${v.file_size}) from Cloudflare R2...`, type: 'info' } 
     }));
   };
 
-  // Group documents by project
-  const projectGroups = useMemo(() => {
-    const map = new Map<string, Document[]>();
-    for (const doc of documents) {
-      const projName = doc.project_name || 'General Projects';
-      if (!map.has(projName)) map.set(projName, []);
-      map.get(projName)!.push(doc);
-    }
-    return Array.from(map.entries());
+  const selectOptions = useMemo(() => {
+    return documents.map(d => ({
+      value: d.id,
+      label: `${d.project_name ? `${d.project_name} • ` : ''}${d.title} (${d.current_version})`
+    }));
   }, [documents]);
 
   return (
@@ -84,28 +85,24 @@ export default function DocumentVersions() {
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Track revisions, author provenance, cryptographic SHA-256 hashes, and download previous document states from Cloudflare R2.</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          {documents.length > 1 && (
-            <select
-              value={selectedDocument?.id}
-              onChange={(e) => handleDocumentChange(e.target.value)}
-              className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 max-w-[280px] truncate shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            >
-              {projectGroups.map(([projName, docList]) => (
-                <optgroup key={projName} label={`📁 ${projName}`}>
-                  {docList.map(d => (
-                    <option key={d.id} value={d.id}>{d.title} ({d.current_version})</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {documents.length > 0 && (
+            <div className="w-full sm:w-72">
+              <CustomSelect
+                value={selectedDocument?.id || ''}
+                onChange={handleDocumentChange}
+                options={selectOptions}
+                placeholder="Select target document..."
+                searchable={true}
+              />
+            </div>
           )}
           <button 
             onClick={() => setIsVersionModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-xs font-bold cursor-pointer"
+            className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-xs font-bold cursor-pointer shrink-0"
           >
             <UploadCloud size={16} />
-            Upload New Revision
+            <span>Upload New Revision</span>
           </button>
         </div>
       </div>

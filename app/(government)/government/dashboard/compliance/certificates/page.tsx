@@ -51,8 +51,11 @@ export default function ComplianceCertificates() {
   };
 
   const handleDownload = (cert: ComplianceCertificate) => {
+    if (cert.certificate_file_url) {
+      window.open(cert.certificate_file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading official certificate PDF for "${cert.title}"...`, type: 'info' } 
+      detail: { message: `Opening official certificate PDF for "${cert.title}" from Cloudflare R2...`, type: 'info' } 
     }));
   };
 
