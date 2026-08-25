@@ -6,14 +6,18 @@ export interface AuditEvent {
   user?: string;
   user_name: string;
   user_role: string;
+  user_email?: string;
   action: string;
+  event_type?: string;
   resource_type: string;
   resource_id: string;
   project_name: string;
   ip_address?: string;
+  user_agent?: string;
   timestamp: string;
   previous_state?: Record<string, any>;
   new_state?: Record<string, any>;
+  metadata?: Record<string, any>;
   severity: 'Normal' | 'Warning' | 'High' | 'Critical';
   signature_hash: string;
   is_verified: boolean;
@@ -25,6 +29,7 @@ export interface AuditDiff {
   resource_type: string;
   resource_id: string;
   user_name: string;
+  user_role: string;
   timestamp: string;
   changes_count: number;
   changes: Array<{ field: string; previous: any; current: any }>;
@@ -87,4 +92,11 @@ export const verifyAuditHashChain = async (): Promise<HashChainVerification> => 
 export const getAuditSummary = async (): Promise<AuditSummary> => {
   const response = await api.get('/audit/events/summary/');
   return unwrapItem<AuditSummary>(response);
+};
+
+export const exportAuditLedger = async (filters?: Record<string, any>): Promise<Blob> => {
+  const response = await api.post('/audit/events/export/', filters || {}, {
+    responseType: 'blob'
+  });
+  return response.data || response;
 };
