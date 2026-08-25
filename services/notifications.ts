@@ -110,7 +110,8 @@ export const markNotificationRead = async (id: string): Promise<Notification> =>
 };
 
 export const markAllNotificationsRead = async (category?: string): Promise<any> => {
-  const response = await api.post('/notifications/read-all/', { category });
+  const payload = category ? { category } : {};
+  const response = await api.post('/notifications/read-all/', payload);
   return unwrapItem<any>(response);
 };
 
