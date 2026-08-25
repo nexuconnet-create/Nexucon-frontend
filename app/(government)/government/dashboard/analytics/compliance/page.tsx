@@ -2,224 +2,162 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, ShieldCheck, Leaf, AlertTriangle, Download, Filter, TrendingUp, CalendarDays, RefreshCw } from "lucide-react";
-import { createGeneratedReport, getGeneratedReports, GeneratedReport } from "@/services/analytics";
-import ReportBuilderDrawer from "@/components/dashboard/ReportBuilderDrawer";
+import { 
+  FileText, ShieldCheck, Leaf, AlertTriangle, Download, 
+  Filter, TrendingUp, CalendarDays, RefreshCw, ArrowUpRight, 
+  CheckCircle2, XCircle, Clock, ShieldAlert 
+} from "lucide-react";
+import { ComplianceAnalyticsData, getComplianceAnalytics, createGeneratedReport } from "@/services/analytics";
+import Link from "next/link";
 
 export default function ComplianceReportsAnalytics() {
-  const [reports, setReports] = useState<GeneratedReport[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [data, setData] = useState<ComplianceAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchReports = useCallback(async () => {
+  const fetchCompliance = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getGeneratedReports();
-      if (data.length > 0) {
-        setReports(data);
-      } else {
-        setReports([
-          {
-            id: "1",
-            report_reference: "REP-992",
-            title: "Q3 Full Safety Audit",
-            report_type: "Compliance",
-            format: "PDF",
-            modules_included: ["Compliance & Regulatory", "Inspection Analytics"],
-            status: "Ready",
-            generated_by_name: "Safety Inspectorate",
-            created_at: "2026-10-01"
-          },
-          {
-            id: "2",
-            report_reference: "REP-991",
-            title: "Sept Emissions Log",
-            report_type: "Compliance",
-            format: "PDF",
-            modules_included: ["Compliance & Regulatory"],
-            status: "Ready",
-            generated_by_name: "Environmental Board",
-            created_at: "2026-09-30"
-          },
-          {
-            id: "3",
-            report_reference: "REP-990",
-            title: "Structural Code Verification",
-            report_type: "Compliance",
-            format: "PDF",
-            modules_included: ["Structural Risk Assessment"],
-            status: "Ready",
-            generated_by_name: "Building Control",
-            created_at: "2026-09-15"
-          }
-        ]);
-      }
+      const res = await getComplianceAnalytics();
+      setData(res);
     } catch (err) {
-      console.error("Failed to load reports", err);
+      console.error("Failed to load compliance analytics", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchReports();
-  }, [fetchReports]);
+    fetchCompliance();
+  }, [fetchCompliance]);
 
-  const complianceScores = [
-    { title: "Safety & Health (OSHA)", score: 94, trend: "+2", icon: ShieldCheck, color: "text-blue-600", bg: "bg-blue-50", fill: "bg-blue-500" },
-    { title: "Environmental Protection", score: 88, trend: "-1", icon: Leaf, color: "text-emerald-600", bg: "bg-emerald-50", fill: "bg-emerald-500" },
-    { title: "Building Code & Structural", score: 98, trend: "0", icon: AlertTriangle, color: "text-purple-600", bg: "bg-purple-50", fill: "bg-purple-500" },
-  ];
+  const handleExportComplianceReport = async () => {
+    try {
+      const rep = await createGeneratedReport({
+        title: "Statutory Compliance & Regulatory Enforcement Report",
+        format: "PDF",
+        modules_included: ["Compliance & Regulatory", "Inspection Analytics"]
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+      }));
+      if (rep.file_url) window.open(rep.file_url, '_blank');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
-            <FileText className="text-blue-500" />
-            Compliance Analytics & Scorecards
+            <ShieldCheck className="text-emerald-500" />
+            Compliance &amp; Regulatory Enforcement Analytics
           </h1>
-          <p className="text-gray-500 mt-1">Aggregate scorecards and historical reports for regulatory adherence.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            Track portfolio statutory compliance adherence, open non-conformance reports (NCRs), and expiring fitness certificates.
+          </p>
         </div>
-        
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-3 self-start md:self-auto">
           <button 
-            onClick={fetchReports}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            onClick={fetchCompliance}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
+
           <button 
-            onClick={() => setIsDrawerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold"
+            onClick={handleExportComplianceReport}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
           >
-            <Download size={16} />
-            Generate Master Report
+            <Download size={14} />
+            <span>Export Compliance Report</span>
           </button>
         </div>
       </div>
 
-      {/* Scorecards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {complianceScores.map((item, idx) => (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            key={idx}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-          >
-            <div className="flex items-start justify-between mb-6">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${item.bg} ${item.color}`}>
-                <item.icon size={24} />
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Compliance Score</span>
-                <p className="text-3xl font-bold text-gray-900">{item.score}<span className="text-lg text-gray-400">%</span></p>
-              </div>
-            </div>
-            
-            <h3 className="font-bold text-gray-700 mb-4">{item.title}</h3>
-            
-            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
-              <div className={`h-full ${item.fill} rounded-full`} style={{ width: `${item.score}%` }}></div>
-            </div>
-            <div className="flex justify-between items-center text-xs font-semibold">
-              <span className="text-gray-400">Target: 95%</span>
-              <span className={`flex items-center gap-1 ${item.trend.startsWith('+') ? 'text-emerald-600' : item.trend.startsWith('-') ? 'text-red-600' : 'text-gray-500'}`}>
-                {item.trend !== "0" && <TrendingUp size={12} className={item.trend.startsWith('-') ? 'rotate-180' : ''} />}
-                {item.trend}% this month
+      {/* Top Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-sm">
+          <span className="text-xs font-bold text-emerald-800">Compliance Rate</span>
+          <p className="text-3xl font-black text-emerald-700 mt-2">{data?.compliance_rate_percentage || 83.3}%</p>
+          <span className="text-[11px] font-bold text-emerald-600 mt-1 block">
+            Compliant: {data?.compliant_projects_count || 20} Projects
+          </span>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-red-100 shadow-sm">
+          <span className="text-xs font-bold text-red-800">Critical Open NCRs</span>
+          <p className="text-3xl font-black text-red-700 mt-2">{data?.critical_ncrs_count || 3}</p>
+          <span className="text-[11px] font-bold text-red-600 mt-1 block">
+            Total Open: {data?.open_ncrs_count || 8} NCRs
+          </span>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-amber-100 shadow-sm">
+          <span className="text-xs font-bold text-amber-800">Overdue CAPAs</span>
+          <p className="text-3xl font-black text-amber-700 mt-2">{data?.corrective_actions_overdue || 4}</p>
+          <span className="text-[11px] font-bold text-amber-600 mt-1 block">
+            Total Action Tasks: {data?.corrective_actions_total || 18}
+          </span>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Expiring Certificates</span>
+          <p className="text-3xl font-black text-slate-900 mt-2">{data?.compliance_certificates_expiring_soon || 6}</p>
+          <span className="text-[11px] font-bold text-slate-400 mt-1 block">
+            Valid Vault: {data?.compliance_certificates_valid || 142} Active
+          </span>
+        </div>
+      </div>
+
+      {/* Operational Drill-Down Links */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-black text-slate-900">Non-Conformance Reports (NCR) Queue</h2>
+              <span className="px-2.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-bold">
+                {data?.open_ncrs_count || 8} Active Deviations
               </span>
             </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Incident Tracking Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Incident Rate Trends</h2>
-            <select className="border border-gray-200 rounded-xl text-sm px-3 py-1 text-gray-600 bg-white focus:outline-none">
-              <option>6 Months</option>
-              <option>12 Months</option>
-            </select>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Investigate specific structural, safety, or environmental deviations flagged during inspections and site monitoring.
+            </p>
           </div>
-          
-          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 flex items-center justify-center relative overflow-hidden min-h-[300px]">
-             <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-               <path d="M0,80 Q25,70 50,85 T100,50 L100,100 L0,100 Z" fill="rgba(239, 68, 68, 0.1)" />
-               <path d="M0,80 Q25,70 50,85 T100,50" fill="none" stroke="#EF4444" strokeWidth="2" />
-             </svg>
-             <div className="z-10 text-center bg-white/90 p-4 rounded-2xl backdrop-blur-sm border border-gray-100 shadow-sm">
-               <p className="text-xs font-bold uppercase text-gray-500">Peak Incidents (July)</p>
-               <p className="text-xl font-bold text-red-600">12 Logged</p>
-             </div>
-          </div>
-        </motion.div>
-
-        {/* Recent Generated Reports */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Generated Reports Log</h2>
-          
-          <div className="space-y-4">
-            {reports.slice(0, 4).map(report => (
-              <div 
-                key={report.id} 
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('show-toast', { 
-                    detail: { message: `Downloading ${report.report_reference}: ${report.title}...`, type: 'info' } 
-                  }));
-                }}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group hover:border-blue-200 hover:bg-blue-50/20 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 text-gray-400 flex items-center justify-center group-hover:text-blue-500 transition-colors">
-                    <FileText size={18} />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">{report.title}</h4>
-                    <div className="flex items-center gap-2 mt-1 text-xs">
-                      <span className="font-mono font-bold text-gray-500">{report.report_reference}</span>
-                      <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                      <span className="text-gray-500 flex items-center gap-1"><CalendarDays size={12} /> {new Date(report.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200">
-                    {report.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <button 
-            onClick={() => setIsDrawerOpen(true)}
-            className="w-full mt-4 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-semibold"
+          <Link
+            href="/government/dashboard/compliance/non-conformances"
+            className="w-full py-3 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
           >
-            Create New Report
-          </button>
-        </motion.div>
-      </div>
+            <span>Open NCR Management Console</span>
+            <ArrowUpRight size={14} />
+          </Link>
+        </div>
 
-      <ReportBuilderDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        onSuccess={fetchReports}
-      />
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-black text-slate-900">Corrective Actions (CAPA) Kanban</h2>
+              <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-xs font-bold">
+                {data?.corrective_actions_total || 18} Tracked Tasks
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed mb-6">
+              Track task workflows and statutory corrective actions to close compliance deviations through drag-and-drop Kanban.
+            </p>
+          </div>
+          <Link
+            href="/government/dashboard/compliance/corrective-actions"
+            className="w-full py-3 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <span>Open CAPA Kanban Board</span>
+            <ArrowUpRight size={14} />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,193 +1,175 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import { 
   BarChart, Activity, Map, Building2, TrendingUp, AlertTriangle, 
-  MapPin, Users, Target, Download
+  MapPin, Users, Target, Download, RefreshCw, Lock, ShieldAlert, Award 
 } from "lucide-react";
-import ReportBuilderDrawer from "@/components/dashboard/ReportBuilderDrawer";
+import { IndustryAnalyticsData, getIndustryAnalytics, createGeneratedReport } from "@/services/analytics";
 
 export default function IndustryPerformancePage() {
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [data, setData] = useState<IndustryAnalyticsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isForbidden, setIsForbidden] = useState(false);
+
+  const fetchIndustry = useCallback(async () => {
+    setIsLoading(true);
+    setIsForbidden(false);
+    try {
+      const res = await getIndustryAnalytics();
+      setData(res);
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        setIsForbidden(true);
+      } else {
+        console.error("Failed to load industry analytics", err);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchIndustry();
+  }, [fetchIndustry]);
+
+  const handleExportIndustryReport = async () => {
+    try {
+      const rep = await createGeneratedReport({
+        title: "Industry Performance & Sector Benchmark Report",
+        format: "PDF",
+        modules_included: ["Project Performance", "Compliance & Regulatory"]
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+      }));
+      if (rep.file_url) window.open(rep.file_url, '_blank');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (isForbidden) {
+    return (
+      <div className="w-full min-h-[60vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4 border border-amber-200">
+          <Lock size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-900 mb-2">Restricted Government Intelligence</h2>
+        <p className="text-xs text-slate-500 max-w-md mb-6 leading-relaxed">
+          Access to Industry Performance and Sector Benchmarking requires the <span className="font-mono font-bold text-slate-800">analytics.view_industry</span> permission. Contact your system administrator or directorate lead for access authorization.
+        </p>
+        <button
+          onClick={fetchIndustry}
+          className="px-5 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+        >
+          Retry Authorization Check
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div className="w-full min-h-screen pb-12">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#022C4F] flex items-center gap-3">
-            <BarChart className="text-blue-600" size={32} />
-            Industry Performance Dashboard
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
+            <BarChart className="text-blue-500" />
+            Industry Performance &amp; Sector Intelligence
           </h1>
-          <p className="text-gray-500 mt-1 max-w-3xl">
-            High-level view for government leadership: Industry compliance trends, geographic hotspots, infrastructure needs, and resource utilization.
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            Macro analysis of construction sectors, LGA geographic hotspots, and tier-1 contractor compliance benchmarking.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-3 self-start md:self-auto">
           <button 
-            onClick={() => setIsDrawerOpen(true)}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2 shadow-sm text-sm"
+            onClick={fetchIndustry}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+            title="Refresh"
           >
-            <Download size={18} />
-            Export Industry Report
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={handleExportIndustryReport}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+          >
+            <Download size={14} />
+            <span>Export Industry Report</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Metric 1 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-500 mb-1">Total Active Projects</p>
-              <h3 className="text-3xl font-bold text-[#022C4F]">12,450</h3>
+      {/* Sector Distribution Breakdown */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 mb-8">
+        <h2 className="text-base font-black text-slate-900 mb-4">Construction Sector Distribution &amp; Compliance</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(data?.sector_distribution || []).map((sec, i) => (
+            <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800">{sec.sector}</span>
+                <span className="text-xs font-black text-blue-700">{sec.share_percentage}%</span>
+              </div>
+              <p className="text-[11px] text-slate-500">{sec.projects_count.toLocaleString()} Active Projects</p>
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Avg Compliance</span>
+                <span className="font-bold text-emerald-700">{sec.avg_compliance}%</span>
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
-              <Building2 size={20} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="flex items-center text-emerald-600 font-medium">
-              <TrendingUp size={14} className="mr-1" /> +15%
-            </span>
-            <span className="text-slate-400">vs last year</span>
-          </div>
-        </div>
-
-        {/* Metric 2 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-500 mb-1">Compliance Rate</p>
-              <h3 className="text-3xl font-bold text-[#022C4F]">84.2%</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
-              <Target size={20} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="flex items-center text-emerald-600 font-medium">
-              <TrendingUp size={14} className="mr-1" /> +2.4%
-            </span>
-            <span className="text-slate-400">vs last quarter</span>
-          </div>
-        </div>
-
-        {/* Metric 3 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-500 mb-1">Critical Violations</p>
-              <h3 className="text-3xl font-bold text-[#022C4F]">342</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-600">
-              <AlertTriangle size={20} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="flex items-center text-red-600 font-medium">
-              <TrendingUp size={14} className="mr-1" /> +12%
-            </span>
-            <span className="text-slate-400">vs last quarter</span>
-          </div>
-        </div>
-
-        {/* Metric 4 */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-500 mb-1">Inspector Utilization</p>
-              <h3 className="text-3xl font-bold text-[#022C4F]">92%</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
-              <Users size={20} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="flex items-center text-amber-600 font-medium">
-              <AlertTriangle size={14} className="mr-1" /> Overloaded
-            </span>
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Compliance Trends Chart */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
-              <Activity size={18} className="text-blue-500" />
-              Industry Compliance Trends (YTD)
-            </h3>
-            <select className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-slate-600 outline-none">
-              <option>2026</option>
-              <option>2025</option>
-            </select>
-          </div>
-          
-          <div className="h-64 flex items-end justify-between gap-2 px-2">
-            {[45, 52, 48, 61, 59, 68, 75, 71, 82, 85, 81, 89].map((val, idx) => (
-              <div key={idx} className="w-full relative group flex flex-col justify-end h-full">
-                <div 
-                  className="w-full bg-blue-500/20 hover:bg-blue-500 rounded-t-sm transition-all duration-300 relative"
-                  style={{ height: `${val}%` }}
-                >
-                  <div className="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-[#022C4F] text-white text-xs py-1 px-2 rounded shadow-lg transition-opacity whitespace-nowrap z-10">
-                    {val}% Compliant
-                  </div>
+      {/* LGA Hotspots & Contractor Benchmarking */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-7">
+        {/* LGA Distribution */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7">
+          <h2 className="text-base font-black text-slate-900 mb-4">Geographic Distribution (Lagos LGAs)</h2>
+          <div className="space-y-3">
+            {(data?.lga_distribution || []).map((lga, i) => (
+              <div key={i} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">{lga.lga}</h4>
+                  <p className="text-[10px] text-slate-400">{lga.projects_count.toLocaleString()} Projects</p>
                 </div>
-                <div className="text-center mt-2 text-xs font-medium text-slate-400">
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][idx]}
+                <div className="text-right text-xs">
+                  <span className="font-bold text-emerald-700 block">{lga.compliance_rate}% Compliance</span>
+                  <span className={`text-[10px] font-bold ${lga.risk_level === 'High' ? 'text-red-600' : 'text-slate-400'}`}>
+                    {lga.risk_level} Risk
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Geographic Hotspots */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
-              <Map size={18} className="text-red-500" />
-              Violation Hotspots (LGA)
-            </h3>
-          </div>
-          
-          <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1">
-            {[
-              { lga: 'Eti-Osa', violations: 142, trend: '+12%' },
-              { lga: 'Ikeja', violations: 98, trend: '+5%' },
-              { lga: 'Surulere', violations: 87, trend: '-2%' },
-              { lga: 'Lagos Island', violations: 76, trend: '+15%' },
-              { lga: 'Alimosho', violations: 54, trend: '-8%' },
-              { lga: 'Kosofe', violations: 41, trend: '0%' },
-            ].map((area, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50/50 transition-colors">
+        {/* Contractor Benchmarking Leaderboard */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7">
+          <h2 className="text-base font-black text-slate-900 mb-4">Contractor Compliance Leaderboard</h2>
+          <div className="space-y-3">
+            {(data?.contractor_benchmarking || []).map((cb, i) => (
+              <div key={i} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                    <MapPin size={14} />
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+                    #{cb.rank}
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-700">{area.lga}</h4>
-                    <p className="text-xs text-slate-500">{area.violations} critical violations</p>
+                    <h4 className="font-bold text-xs text-slate-900">{cb.contractor}</h4>
+                    <p className="text-[10px] text-slate-400">{cb.projects} Monitored Projects</p>
                   </div>
                 </div>
-                <div className={`text-xs font-bold ${area.trend.startsWith('+') ? 'text-red-500' : 'text-emerald-500'}`}>
-                  {area.trend}
+                <div className="text-right text-xs">
+                  <span className="font-bold text-emerald-700 block">{cb.compliance_rating}</span>
+                  <span className="text-[10px] text-slate-400">Statutory Score</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
-
-      <ReportBuilderDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-      />
     </div>
   );
 }

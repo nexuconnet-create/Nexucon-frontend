@@ -2,23 +2,21 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Building, Clock, Users, Activity, TrendingDown, CheckCircle2, MoreHorizontal, RefreshCw } from "lucide-react";
-import { DepartmentPerformanceMetric, getDepartmentPerformance, getExecutiveKPIs, ExecutiveKPIs } from "@/services/analytics";
+import { 
+  Building, Clock, Users, Activity, TrendingDown, 
+  CheckCircle2, MoreHorizontal, RefreshCw, ShieldCheck 
+} from "lucide-react";
+import { AgencyAnalyticsData, getAgencyPerformance } from "@/services/analytics";
 
 export default function AgencyPerformance() {
-  const [departments, setDepartments] = useState<DepartmentPerformanceMetric[]>([]);
-  const [kpis, setKpis] = useState<ExecutiveKPIs | null>(null);
+  const [data, setData] = useState<AgencyAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAgencyData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [deptData, kpiData] = await Promise.all([
-        getDepartmentPerformance(),
-        getExecutiveKPIs()
-      ]);
-      setDepartments(deptData);
-      setKpis(kpiData);
+      const res = await getAgencyPerformance();
+      setData(res);
     } catch (err) {
       console.error("Failed to load agency performance", err);
     } finally {
@@ -32,192 +30,92 @@ export default function AgencyPerformance() {
 
   return (
     <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <Building className="text-blue-500" />
-            Agency & Reviewer Performance
+            Agency Operational SLAs &amp; Reviewer Performance
           </h1>
-          <p className="text-gray-500 mt-1">Track approval SLAs, review turnaround times, and departmental workload.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            Track statutory permit turnaround, inspection completion rates, and departmental workload distribution.
+          </p>
         </div>
+
         <button 
           onClick={fetchAgencyData}
-          className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors self-start md:self-auto"
+          className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors self-start md:self-auto cursor-pointer"
           title="Refresh"
         >
           <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Clock size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">Average Turnaround</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">{kpis?.average_turnaround_days || 13.5} <span className="text-lg text-gray-500 font-semibold">Days</span></p>
-            <p className="text-sm font-semibold text-emerald-600 flex items-center gap-1 mt-1">
-              <TrendingDown size={14} /> 1.2 days faster than last quarter
-            </p>
-          </div>
-        </motion.div>
+      {/* Top Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Permit Review SLA</span>
+          <p className="text-3xl font-black text-slate-900 mt-2">{data?.permit_review_sla_days || 4.2} Days</p>
+          <span className="text-[11px] font-bold text-emerald-600 mt-1 block">Target: &lt; 5.0 Days</span>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">SLA Compliance</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">{kpis?.sla_compliance_rate || 88.2}%</p>
-            <p className="text-sm font-semibold text-gray-500 mt-1">
-              Target: 90.0%
-            </p>
-          </div>
-        </motion.div>
+        <div className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-sm">
+          <span className="text-xs font-bold text-emerald-800">Inspection Completion</span>
+          <p className="text-3xl font-black text-emerald-700 mt-2">{data?.inspection_completion_rate || 92.4}%</p>
+          <span className="text-[11px] font-bold text-emerald-600 mt-1 block">SLA Adherence</span>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Users size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">Pending Review Workload</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">{kpis?.pending_approvals_count || 42}</p>
-            <p className="text-sm font-semibold text-amber-600 mt-1">
-              Active items awaiting sign-off
-            </p>
-          </div>
-        </motion.div>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Approval Turnaround</span>
+          <p className="text-3xl font-black text-blue-700 mt-2">{data?.approval_turnaround_days || 3.8} Days</p>
+          <span className="text-[11px] font-bold text-blue-600 mt-1 block">Directorate Sign-off</span>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Active Workload</span>
+          <p className="text-3xl font-black text-slate-900 mt-2">{data?.active_workload_items || 56}</p>
+          <span className="text-[11px] font-bold text-slate-400 mt-1 block">Assigned Items in Queue</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Department Breakdown */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Department Performance</h2>
-            <button className="text-gray-400 hover:text-gray-700 transition-colors"><MoreHorizontal size={20} /></button>
-          </div>
-
-          <div className="space-y-6">
-            {departments.map((dept, i) => (
-              <div key={dept.id || i}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
-                      <Activity size={16} />
+      {/* Department Workload Table */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100">
+          <h2 className="text-base font-black text-slate-900">Departmental Turnaround &amp; Efficiency Breakdown</h2>
+        </div>
+        <table className="w-full text-left border-collapse min-w-[700px]">
+          <thead>
+            <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="py-4 px-6">Department Name</th>
+              <th className="py-4 px-6">Avg Turnaround</th>
+              <th className="py-4 px-6">Target SLA</th>
+              <th className="py-4 px-6">Efficiency %</th>
+              <th className="py-4 px-6 text-right">Active Queue</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs">
+            {(data?.departments || []).map((dept, i) => (
+              <tr key={dept.id || i} className="hover:bg-blue-50/30 transition-colors">
+                <td className="py-4 px-6 font-bold text-slate-900">{dept.name}</td>
+                <td className="py-4 px-6 font-bold text-slate-700">{dept.turnaround_days} Days</td>
+                <td className="py-4 px-6 font-medium text-slate-400">{dept.target_days} Days</td>
+                <td className="py-4 px-6">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-emerald-700">{dept.efficiency_percentage}%</span>
+                    <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-600 rounded-full" style={{ width: `${dept.efficiency_percentage}%` }} />
                     </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-gray-900">{dept.department_name}</h4>
-                      <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Target: {dept.target_days} Days ({dept.pending_reviews_count} Pending)</p>
-                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-bold text-sm ${Number(dept.turnaround_days) > Number(dept.target_days) ? 'text-red-600' : 'text-gray-900'}`}>{dept.turnaround_days} Days Avg</p>
-                    <p className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border inline-block mt-1 ${
-                      dept.workload_level === 'Critical' ? 'bg-red-50 text-red-700 border-red-200' :
-                      dept.workload_level === 'High' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                      'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    }`}>
-                      {dept.workload_level} Load
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${dept.efficiency_percentage}%` }}></div>
-                  </div>
-                  <span className="text-xs font-bold text-gray-600 w-8">{dept.efficiency_percentage}%</span>
-                </div>
-              </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                    {dept.pending_reviews_count} Pending
+                  </span>
+                </td>
+              </tr>
             ))}
-          </div>
-        </motion.div>
-
-        {/* Bottleneck Analysis */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
-        >
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Workflow Bottleneck Analysis</h2>
-          
-          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 p-6 flex flex-col justify-center">
-            <h4 className="text-sm font-bold text-gray-700 mb-4 text-center">Average Time Spent in Stage (Days)</h4>
-            
-            <div className="space-y-4">
-               <div>
-                 <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
-                   <span>1. Initial Submission & Triage</span>
-                   <span>1.5 Days</span>
-                 </div>
-                 <div className="w-full h-4 bg-gray-200 rounded-r-full flex">
-                   <div className="h-full bg-blue-400 rounded-r-full" style={{ width: '15%' }}></div>
-                 </div>
-               </div>
-
-               <div>
-                 <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
-                   <span>2. Technical & Engineering Review</span>
-                   <span className="text-red-600">8.2 Days</span>
-                 </div>
-                 <div className="w-[85%] h-4 bg-gray-200 rounded-r-full flex">
-                   <div className="h-full bg-red-500 rounded-r-full" style={{ width: '82%' }}></div>
-                 </div>
-               </div>
-
-               <div>
-                 <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
-                   <span>3. Cross-Department Coordination</span>
-                   <span>3.4 Days</span>
-                 </div>
-                 <div className="w-[60%] h-4 bg-gray-200 rounded-r-full flex">
-                   <div className="h-full bg-amber-400 rounded-r-full" style={{ width: '34%' }}></div>
-                 </div>
-               </div>
-
-               <div>
-                 <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
-                   <span>4. Executive Sign-off / Permit Sealing</span>
-                   <span>0.4 Days</span>
-                 </div>
-                 <div className="w-[30%] h-4 bg-gray-200 rounded-r-full flex">
-                   <div className="h-full bg-emerald-500 rounded-r-full" style={{ width: '4%' }}></div>
-                 </div>
-               </div>
-            </div>
-            
-            <p className="text-xs text-center text-gray-500 mt-6 font-medium">
-              Technical review phase accounts for <span className="font-bold text-gray-700">60%</span> of total agency processing time.
-            </p>
-          </div>
-        </motion.div>
+          </tbody>
+        </table>
       </div>
     </div>
   );

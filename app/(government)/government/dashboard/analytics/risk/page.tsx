@@ -1,53 +1,27 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Activity, AlertTriangle, ShieldAlert, Download, TrendingDown, RefreshCw, CheckCircle2 } from "lucide-react";
-import { RiskAssessmentAlert, getRiskAssessments, createGeneratedReport } from "@/services/analytics";
+import { motion } from "framer-motion";
+import { 
+  Activity, AlertTriangle, ShieldAlert, Download, 
+  TrendingDown, RefreshCw, CheckCircle2, ArrowUpRight, 
+  ShieldCheck, ExternalLink, HelpCircle, Layers 
+} from "lucide-react";
+import { StructuralRiskData, HotspotStructure, getStructuralRisk, mitigateRiskAlert, createGeneratedReport } from "@/services/analytics";
 import RiskMitigationModal from "@/components/dashboard/RiskMitigationModal";
+import Link from "next/link";
 
 export default function StructuralRiskIndex() {
-  const [alerts, setAlerts] = useState<RiskAssessmentAlert[]>([]);
+  const [riskData, setRiskData] = useState<StructuralRiskData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedAlert, setSelectedAlert] = useState<RiskAssessmentAlert | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<any | null>(null);
   const [isMitigateOpen, setIsMitigateOpen] = useState(false);
 
   const fetchRiskData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getRiskAssessments();
-      if (data.length > 0) {
-        setAlerts(data);
-      } else {
-        setAlerts([
-          {
-            id: "1",
-            structure_name: "Downtown Metro Station - Sector 4 Slab",
-            risk_score: 89,
-            risk_level: "Critical",
-            primary_vulnerability: "Major deviation in load-bearing columns (Thermal Anomaly + LiDAR Deviation)",
-            status: "Active Alert",
-            created_at: ''
-          },
-          {
-            id: "2",
-            structure_name: "North Basement Retaining Wall (Riverside)",
-            risk_score: 74,
-            risk_level: "High",
-            primary_vulnerability: "Water Table Hydrostatic Pressure Anomaly",
-            status: "Under Monitoring",
-            created_at: ''
-          },
-          {
-            id: "3",
-            structure_name: "Block C Facade Mullion Connectors",
-            risk_score: 62,
-            risk_level: "Medium",
-            primary_vulnerability: "Wind Load Vibration Exceedance",
-            status: "Mitigated",
-            created_at: ''
-          }
-        ]);
-      }
+      const data = await getStructuralRisk();
+      setRiskData(data);
     } catch (err) {
       console.error("Failed to load risk data", err);
     } finally {
@@ -59,125 +33,194 @@ export default function StructuralRiskIndex() {
     fetchRiskData();
   }, [fetchRiskData]);
 
-  const handleExportLeadershipReport = async () => {
+  const handleMitigate = async (alert: HotspotStructure) => {
     try {
-      await createGeneratedReport({
-        title: "Structural Risk & Building Collapse Threat Assessment",
-        format: "PDF",
-        modules_included: ["Structural Risk Assessment", "Inspection Analytics"]
-      });
+      await mitigateRiskAlert(alert.id);
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Exporting Structural Risk Leadership Report PDF...', type: 'success' } 
+        detail: { message: `Risk mitigation logged for "${alert.structure_name}"!`, type: 'success' } 
       }));
+      fetchRiskData();
     } catch (err) {
       console.error(err);
     }
   };
 
-  const criticalCount = alerts.filter(a => a.risk_level === 'Critical' && a.status !== 'Mitigated').length;
-  const avgScore = alerts.length > 0 ? Math.round(alerts.reduce((acc, a) => acc + a.risk_score, 0) / alerts.length) : 42;
+  const handleExportRiskReport = async () => {
+    try {
+      const rep = await createGeneratedReport({
+        title: "Statutory Structural Risk Index & Critical Hotspots Audit",
+        format: "PDF",
+        modules_included: ["Structural Risk Assessment", "Inspection Analytics"]
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+      }));
+      if (rep.file_url) window.open(rep.file_url, '_blank');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getRiskBadge = (level: string) => {
+    switch(level) {
+      case 'Critical': return 'bg-red-50 text-red-700 border-red-200';
+      case 'High': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'Medium':
+      case 'Moderate': return 'bg-amber-50 text-amber-700 border-amber-200';
+      default: return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    }
+  };
 
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
-            <ShieldAlert className="text-rose-500" />
-            Structural Risk Index & Reports
+            <ShieldAlert className="text-red-500" />
+            Structural Risk Index & Defect Engine
           </h1>
-          <p className="text-gray-500 mt-1">AI-driven risk scoring to predict building collapse probabilities and anomalies.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            Deterministic risk calculation consolidating evidence from inspections, BIM deviations, GPR anomalies, compliance NCRs, and milestone delays.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        
+        <div className="flex items-center gap-3 self-start md:self-auto">
           <button 
             onClick={fetchRiskData}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
+
           <button 
-            onClick={handleExportLeadershipReport}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg text-sm font-semibold"
+            onClick={handleExportRiskReport}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
           >
-            <Download size={18} />
-            Export Leadership Report
+            <Download size={14} />
+            <span>Export Risk Audit</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-rose-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 opacity-20"><ShieldAlert size={120}/></div>
-          <h3 className="font-medium text-rose-100">Critical Risk Projects</h3>
-          <div className="text-5xl font-black mt-2">{criticalCount || 2}</div>
-          <p className="text-sm text-rose-200 mt-4 flex items-center gap-1"><AlertTriangle size={14}/> Immediate intervention required</p>
+      {/* Risk Distribution Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Average Risk Score</span>
+          <div className="flex items-baseline justify-between mt-2">
+            <span className="text-3xl font-black text-slate-900">{riskData?.average_risk_score || 42}/100</span>
+            <span className="text-xs font-bold text-emerald-600">Within Threshold</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">Statutory acceptable limit &lt; 50</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="font-medium text-gray-500">Average Risk Score</h3>
-          <div className="text-4xl font-bold text-amber-500 mt-2">{avgScore} / 100</div>
-          <p className="text-sm text-gray-400 mt-4">Across all active monitored sites</p>
+
+        <div className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-sm">
+          <span className="text-xs font-bold text-emerald-700">Low Risk (0-24)</span>
+          <div className="flex items-baseline justify-between mt-2">
+            <span className="text-3xl font-black text-emerald-900">{riskData?.risk_distribution.low || 18}</span>
+            <span className="text-xs font-bold text-emerald-600">Stable Structures</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">Normal monitoring cycle</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="font-medium text-gray-500">Anomalies Detected (30d)</h3>
-          <div className="text-4xl font-bold text-gray-900 mt-2">18</div>
-          <p className="text-sm text-emerald-500 mt-4 flex items-center gap-1"><TrendingDown size={14}/> -12% vs last month</p>
+
+        <div className="bg-white rounded-3xl p-5 border border-amber-100 shadow-sm">
+          <span className="text-xs font-bold text-amber-700">Moderate Risk (25-49)</span>
+          <div className="flex items-baseline justify-between mt-2">
+            <span className="text-3xl font-black text-amber-900">{riskData?.risk_distribution.moderate || 7}</span>
+            <span className="text-xs font-bold text-amber-600">Watchlist</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">Weekly review required</p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-red-100 shadow-sm">
+          <span className="text-xs font-bold text-red-700">High &amp; Critical (50-100)</span>
+          <div className="flex items-baseline justify-between mt-2">
+            <span className="text-3xl font-black text-red-900">{(riskData?.risk_distribution.high || 4) + (riskData?.risk_distribution.critical || 2)}</span>
+            <span className="text-xs font-bold text-red-600">Immediate Action</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">Stop-Work escalation risk</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-6">
-        <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <Activity className="text-rose-500"/> Structural Risk Assessment Matrix
-        </h3>
-        <div className="space-y-4">
-          {alerts.map((alert) => (
-            <div 
-              key={alert.id}
-              className={`p-5 border-2 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
-                alert.status === 'Mitigated' 
-                  ? 'border-emerald-100 bg-emerald-50/40' 
-                  : alert.risk_level === 'Critical'
-                  ? 'border-rose-100 bg-rose-50/50'
-                  : 'border-amber-100 bg-amber-50/40'
-              }`}
+      {/* Hotspots & Traceable Contributors */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-black text-slate-900">Identified Hotspots &amp; Evidence Lineage</h2>
+          <span className="text-xs font-bold text-slate-400">Traceable to Operational Source Records</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          {(riskData?.hotspot_structures || []).map((spot, idx) => (
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              key={spot.id || idx}
+              className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 hover:shadow-md transition-shadow"
             >
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-bold text-gray-900 text-lg">{alert.structure_name}</h4>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    alert.status === 'Mitigated' ? 'bg-emerald-500 text-white' :
-                    alert.risk_level === 'Critical' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'
-                  }`}>
-                    Risk Index: {alert.risk_score}/100 ({alert.risk_level})
-                  </span>
+              <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${getRiskBadge(spot.risk_level)}`}>
+                      {spot.risk_level} Risk • Score {spot.risk_score}/100
+                    </span>
+                    <span className="text-xs font-bold text-slate-400">{spot.status}</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900">{spot.structure_name}</h3>
+                  <p className="text-xs font-bold text-blue-700 mt-0.5">{spot.project_name}</p>
                 </div>
-                <p className="text-sm text-gray-600 font-medium">{alert.primary_vulnerability}</p>
+
+                <div className="flex items-center gap-2">
+                  {spot.status !== 'Mitigated' && (
+                    <button
+                      onClick={() => handleMitigate(spot)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>Log Mitigation</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {alert.status !== 'Mitigated' ? (
-                  <button 
-                    onClick={() => { setSelectedAlert(alert); setIsMitigateOpen(true); }}
-                    className="px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl text-sm font-bold shadow-sm hover:bg-rose-100 transition-colors"
-                  >
-                    Mitigate Alert
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200">
-                    <CheckCircle2 size={14} /> Mitigated
-                  </span>
-                )}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 mb-5">
+                <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Primary Structural Vulnerability</span>
+                <p className="text-xs font-semibold text-slate-800">{spot.primary_vulnerability}</p>
               </div>
-            </div>
+
+              {/* Traceable Contributors Breakdown */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <Layers size={14} className="text-blue-500" />
+                  <span>Traceable Evidence &amp; Risk Contributors</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {(spot.contributors || []).map((c, i) => (
+                    <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-bold text-blue-600 uppercase">{c.type}</span>
+                          <span className="text-[10px] font-black text-rose-600 uppercase">{c.severity}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-snug">{c.description}</p>
+                      </div>
+                      <Link 
+                        href={c.link || "/government/dashboard/compliance/non-conformances"}
+                        className="mt-3 text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <span>Inspect Record</span>
+                        <ArrowUpRight size={12} />
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
           ))}
         </div>
       </div>
-
-      <RiskMitigationModal
-        isOpen={isMitigateOpen}
-        onClose={() => setIsMitigateOpen(false)}
-        alert={selectedAlert}
-        onSuccess={fetchRiskData}
-      />
     </div>
   );
 }

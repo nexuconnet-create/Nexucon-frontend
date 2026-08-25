@@ -2,192 +2,230 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { BarChart, TrendingUp, TrendingDown, Clock, DollarSign, Activity, Calendar, Download, RefreshCw } from "lucide-react";
-import { ExecutiveKPIs, getExecutiveKPIs, createGeneratedReport } from "@/services/analytics";
+import { 
+  BarChart, TrendingUp, TrendingDown, Clock, DollarSign, 
+  Activity, Calendar, Download, RefreshCw, ShieldCheck, 
+  AlertTriangle, ArrowUpRight, CheckCircle2, Eye, Filter 
+} from "lucide-react";
+import { ProjectPerformanceData, getProjectPerformance, createGeneratedReport } from "@/services/analytics";
+import Link from "next/link";
 
 export default function ProjectPerformance() {
-  const [kpis, setKpis] = useState<ExecutiveKPIs | null>(null);
+  const [data, setData] = useState<ProjectPerformanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lgaFilter, setLgaFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
 
-  const fetchKPIs = useCallback(async () => {
+  const fetchPerformance = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getExecutiveKPIs();
-      setKpis(data);
+      const params: Record<string, any> = {};
+      if (lgaFilter) params.lga = lgaFilter;
+      if (statusFilter !== 'All') params.status = statusFilter;
+      const res = await getProjectPerformance(params);
+      setData(res);
     } catch (err) {
-      console.error("Failed to load KPIs", err);
+      console.error("Failed to load performance analytics", err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [lgaFilter, statusFilter]);
 
   useEffect(() => {
-    fetchKPIs();
-  }, [fetchKPIs]);
+    fetchPerformance();
+  }, [fetchPerformance]);
 
   const handleExportDashboard = async () => {
     try {
-      await createGeneratedReport({
+      const rep = await createGeneratedReport({
         title: "Executive Project Performance & EVM Summary",
         format: "PDF",
         modules_included: ["Project Performance", "Financial Overview"]
       });
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Exporting Executive Project Performance report...', type: 'success' } 
+        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
       }));
+      if (rep.file_url) window.open(rep.file_url, '_blank');
     } catch (err) {
       console.error(err);
     }
   };
 
   const metricCards = [
-    { label: "Overall Health Index", value: kpis?.structural_safety_index || "94.8%", trend: "+1.2%", positive: true, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-    { label: "Schedule Performance (SPI)", value: "0.95", trend: "-0.02", positive: false, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
-    { label: "Cost Performance (CPI)", value: "1.04", trend: "+0.01", positive: true, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
+    { label: "Overall Safety Index", value: data?.structural_safety_index || "94.8%", trend: "+1.2%", positive: true, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+    { label: "Schedule Index (SPI)", value: data ? data.schedule_performance_index.toFixed(2) : "0.96", trend: "-0.02", positive: false, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
+    { label: "Cost Index (CPI)", value: data ? data.cost_performance_index.toFixed(2) : "1.03", trend: "+0.01", positive: true, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
+    { label: "Intervention Required", value: data ? `${data.projects_requiring_intervention} Projects` : "4 Projects", trend: "High Priority", positive: false, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" },
   ];
+
+  const getHealthBadge = (health: string) => {
+    switch(health) {
+      case 'Good': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'At Risk': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Critical': return 'bg-red-50 text-red-700 border-red-200';
+      default: return 'bg-slate-50 text-slate-700 border-slate-200';
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <BarChart className="text-blue-500" />
-            Project Performance Analytics
+            Project Performance & Portfolio Analytics
           </h1>
-          <p className="text-gray-500 mt-1">High-level executive overview of project health, schedule, and cost performance.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">Multi-dimensional analysis of physical completion, schedule adherence (SPI), cost variance (CPI), and regulatory risk.</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-start md:self-auto">
           <button 
-            onClick={fetchKPIs}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            onClick={fetchPerformance}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 shadow-sm">
-            <Calendar size={16} className="text-gray-400" />
-            <span>Q3 2026</span>
-          </div>
+          
           <button 
             onClick={handleExportDashboard}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm font-semibold"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
           >
-            <Download size={16} />
-            Export Dashboard
+            <Download size={14} />
+            <span>Export EVM Summary</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {metricCards.map((kpi, idx) => (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            key={idx}
-            className={`bg-white rounded-2xl border ${kpi.border} shadow-sm p-6 relative overflow-hidden`}
-          >
-            <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full ${kpi.bg} opacity-50`}></div>
-            <div className="relative z-10 flex justify-between items-start mb-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${kpi.bg} ${kpi.color}`}>
-                <kpi.icon size={24} />
+      {/* Top Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        {metricCards.map((metric, i) => {
+          const Icon = metric.icon;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              key={i}
+              className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-slate-500">{metric.label}</span>
+                <div className={`w-9 h-9 rounded-xl ${metric.bg} ${metric.color} flex items-center justify-center`}>
+                  <Icon size={18} />
+                </div>
               </div>
-              <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-                kpi.positive ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
-              }`}>
-                {kpi.positive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {kpi.trend}
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-slate-900">{metric.value}</span>
+                <span className={`text-[11px] font-bold ${metric.positive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {metric.trend}
+                </span>
               </div>
-            </div>
-            <p className="text-sm font-semibold text-gray-500 mb-1">{kpi.label}</p>
-            <h3 className="text-3xl font-bold text-gray-900">{kpi.value}</h3>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Trend Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[400px] flex flex-col"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Performance Index Trends</h2>
-            <div className="flex gap-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
-                <span className="w-3 h-3 rounded-full bg-emerald-500"></span> SPI
-              </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
-                <span className="w-3 h-3 rounded-full bg-blue-500"></span> CPI
-              </div>
-            </div>
+      {/* Performance Matrix Table */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden mb-8">
+        <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black text-slate-900">Project Performance Matrix</h2>
+            <p className="text-xs text-slate-500">Live health derived from milestones, inspection findings, and statutory compliance status.</p>
           </div>
-          
-          <div className="flex-1 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 relative overflow-hidden flex items-end p-4 gap-2">
-            {[40, 60, 45, 80, 55, 90, 75, 85, 60, 95, 80, 85].map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col justify-end gap-1 h-full group relative">
-                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap">
-                  Week {i+1}: {val}%
-                </div>
-                <div 
-                  className="w-full bg-emerald-500/80 rounded-t-sm hover:bg-emerald-400 transition-colors" 
-                  style={{ height: `${val}%` }}
-                ></div>
-                <div 
-                  className="w-full bg-blue-500/80 rounded-t-sm hover:bg-blue-400 transition-colors" 
-                  style={{ height: `${val > 20 ? val - 15 : val}%` }}
-                ></div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
 
-        {/* Right Sidebar - Status Breakdown */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
-        >
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Phase Completion</h2>
-          
-          <div className="space-y-6 flex-1">
-            {[
-              { name: "Design & Engineering", progress: 100, color: "bg-emerald-500" },
-              { name: "Procurement", progress: 85, color: "bg-blue-500" },
-              { name: "Site Prep & Foundation", progress: 92, color: "bg-blue-500" },
-              { name: "Structural Framing", progress: 45, color: "bg-amber-500" },
-              { name: "MEP Rough-in", progress: 10, color: "bg-purple-500" },
-            ].map((phase, i) => (
-              <div key={i}>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-semibold text-gray-700">{phase.name}</span>
-                  <span className="font-bold text-gray-900">{phase.progress}%</span>
-                </div>
-                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full ${phase.color} rounded-full`}
-                    style={{ width: `${phase.progress}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400">Total Portfolio: {data?.total_projects || 28} Projects</span>
           </div>
-          
-          <div className="mt-8 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-            <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2 mb-1">
-              <TrendingDown size={16} className="text-amber-600" />
-              Critical Path Alert
-            </h4>
-            <p className="text-xs text-amber-700 leading-relaxed">
-              Structural framing is currently 5% behind schedule due to delayed steel deliveries in Zone 3.
-            </p>
-          </div>
-        </motion.div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead>
+              <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th className="py-4 px-6">Project & Reference</th>
+                <th className="py-4 px-6">Progress %</th>
+                <th className="py-4 px-6">Schedule</th>
+                <th className="py-4 px-6">Compliance</th>
+                <th className="py-4 px-6">Inspections</th>
+                <th className="py-4 px-6">Risk Score</th>
+                <th className="py-4 px-6">Overall Health</th>
+                <th className="py-4 px-6 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs font-medium">
+              {(data?.projects || []).map((proj, idx) => (
+                <motion.tr 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  key={proj.id || idx}
+                  className="hover:bg-blue-50/30 transition-colors group"
+                >
+                  <td className="py-4 px-6">
+                    <div>
+                      <h4 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-xs sm:text-sm">{proj.name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-mono font-bold text-slate-400">{proj.reference_number}</span>
+                        <span className="text-[10px] text-slate-400">• {proj.lga}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="w-32 space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold">
+                        <span>{proj.progress_percentage}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-600 rounded-full transition-all" 
+                          style={{ width: `${proj.progress_percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                      proj.schedule_status === 'On Track' || proj.schedule_status === 'Ahead'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {proj.schedule_status}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 font-bold text-slate-700">
+                    {proj.compliance_percentage}%
+                  </td>
+                  <td className="py-4 px-6 font-bold text-slate-700">
+                    {proj.inspections_count} Verified
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-mono font-bold text-xs ${proj.risk_score > 60 ? 'text-red-600' : 'text-slate-800'}`}>
+                        {proj.risk_score}/100
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getHealthBadge(proj.overall_health)}`}>
+                      {proj.overall_health}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 text-right">
+                    <Link
+                      href="/government/dashboard/projects"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+                    >
+                      <span>Inspect</span>
+                      <ArrowUpRight size={13} />
+                    </Link>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
