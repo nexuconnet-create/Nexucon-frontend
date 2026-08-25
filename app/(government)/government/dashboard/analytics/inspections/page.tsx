@@ -2,203 +2,138 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { PieChart, Calendar, TrendingDown, ClipboardCheck, AlertOctagon, Activity, ChevronRight, RefreshCw } from "lucide-react";
-import { ExecutiveKPIs, getExecutiveKPIs, OfficerPerformanceRecord, getOfficerPerformance } from "@/services/analytics";
+import { 
+  PieChart, Calendar, TrendingDown, ClipboardCheck, 
+  AlertOctagon, Activity, ChevronRight, RefreshCw, 
+  CheckCircle2, XCircle, Award, User, Clock 
+} from "lucide-react";
+import { InspectionAnalyticsData, getInspectionAnalytics } from "@/services/analytics";
 
 export default function InspectionAnalytics() {
-  const [kpis, setKpis] = useState<ExecutiveKPIs | null>(null);
-  const [officers, setOfficers] = useState<OfficerPerformanceRecord[]>([]);
+  const [data, setData] = useState<InspectionAnalyticsData | null>(null);
+  const [period, setPeriod] = useState('monthly');
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchInspectionData = useCallback(async () => {
+  const fetchInspections = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [kpiData, officerData] = await Promise.all([
-        getExecutiveKPIs(),
-        getOfficerPerformance()
-      ]);
-      setKpis(kpiData);
-      setOfficers(officerData);
+      const res = await getInspectionAnalytics(period);
+      setData(res);
     } catch (err) {
       console.error("Failed to load inspection analytics", err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
-    fetchInspectionData();
-  }, [fetchInspectionData]);
-
-  const defectCategories = [
-    { name: "Concrete & Rebar", count: 145, percentage: 35, color: "bg-blue-500" },
-    { name: "Structural Steel", count: 82, percentage: 20, color: "bg-amber-500" },
-    { name: "Safety Violations", count: 65, percentage: 16, color: "bg-red-500" },
-    { name: "MEP Routing", count: 48, percentage: 12, color: "bg-purple-500" },
-    { name: "Site Cleanliness", count: 40, percentage: 10, color: "bg-emerald-500" },
-    { name: "Other", count: 30, percentage: 7, color: "bg-gray-400" },
-  ];
+    fetchInspections();
+  }, [fetchInspections]);
 
   return (
     <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <PieChart className="text-blue-500" />
-            Inspection Analytics & Defects
+            Inspection Quality &amp; Defect Analytics
           </h1>
-          <p className="text-gray-500 mt-1">Quality control insights, pass/fail trends, and defect categorizations.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">Pass/fail ratios, defect severity categorizations, and field inspector throughput.</p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <select 
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none cursor-pointer"
+          >
+            <option value="daily">Daily View</option>
+            <option value="weekly">Weekly View</option>
+            <option value="monthly">Monthly Aggregate</option>
+            <option value="quarterly">Quarterly Report</option>
+          </select>
+
           <button 
-            onClick={fetchInspectionData}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            onClick={fetchInspections}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
-          <select className="bg-white border border-gray-200 text-sm font-semibold text-gray-600 rounded-xl px-3 py-2 shadow-sm focus:outline-none">
-            <option>Last 30 Days</option>
-            <option>Last 90 Days</option>
-            <option>Year to Date</option>
-          </select>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <ClipboardCheck size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">Total Completed Inspections</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">{kpis?.completed_inspections_count || 312}</p>
-            <p className="text-sm font-semibold text-emerald-600 flex items-center gap-1 mt-1">
-              +12% from last reporting period
-            </p>
-          </div>
-        </motion.div>
+      {/* Top Metrics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Total Inspections</span>
+          <p className="text-3xl font-black text-slate-900 mt-2">{data?.total_inspections || 248}</p>
+          <span className="text-[11px] font-bold text-blue-600 mt-1 block">Completed: {data?.completed_inspections || 201}</span>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Activity size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">First-Time Pass Rate</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">84.2%</p>
-            <p className="text-sm font-semibold text-emerald-600 flex items-center gap-1 mt-1">
-              +3.4% above quality benchmark
-            </p>
-          </div>
-        </motion.div>
+        <div className="bg-white rounded-3xl p-5 border border-emerald-100 shadow-sm">
+          <span className="text-xs font-bold text-emerald-800">Pass Rate</span>
+          <p className="text-3xl font-black text-emerald-700 mt-2">{data?.pass_rate_percentage || 81.0}%</p>
+          <span className="text-[11px] font-bold text-emerald-600 mt-1 block">Target: &gt; 80%</span>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between"
-        >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <AlertOctagon size={20} />
-            </div>
-            <h3 className="font-bold text-gray-700">Active Non-Conformances</h3>
-          </div>
-          <div className="mt-4">
-            <p className="text-4xl font-bold text-gray-900">{kpis?.open_ncrs_count || 8}</p>
-            <p className="text-sm font-semibold text-gray-500 mt-1">
-              Currently undergoing CAPA remediation
-            </p>
-          </div>
-        </motion.div>
+        <div className="bg-white rounded-3xl p-5 border border-red-100 shadow-sm">
+          <span className="text-xs font-bold text-red-800">Failed / Stop-Work</span>
+          <p className="text-3xl font-black text-red-700 mt-2">{data?.failed_inspections || 25}</p>
+          <span className="text-[11px] font-bold text-red-600 mt-1 block">Re-inspections: {data?.re_inspections_count || 18}</span>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">Avg Completion Time</span>
+          <p className="text-3xl font-black text-slate-900 mt-2">{data?.average_completion_hours || 4.2}h</p>
+          <span className="text-[11px] font-bold text-slate-400 mt-1 block">Site check-in to sign-off</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Defect Categories */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
-        >
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Defects by Category</h2>
-          
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-7 mb-8">
+        {/* Defect Categories Breakdown */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7">
+          <h2 className="text-base font-black text-slate-900 mb-4">Inspection Findings by Discipline</h2>
           <div className="space-y-4">
-            {defectCategories.map((cat, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <div className="w-36 shrink-0">
-                  <p className="text-sm font-semibold text-gray-700">{cat.name}</p>
+            {(data?.defect_categories || []).map((cat, i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold">
+                  <span className="text-slate-800">{cat.name}</span>
+                  <span className="text-slate-500">{cat.count} findings ({cat.percentage}%)</span>
                 </div>
-                <div className="flex-1">
-                  <div className="h-3.5 bg-gray-100 rounded-full overflow-hidden w-full relative">
-                    <div 
-                      className={`h-full ${cat.color} rounded-full transition-all duration-1000`}
-                      style={{ width: `${cat.percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="w-16 text-right shrink-0">
-                  <p className="text-sm font-bold text-gray-900">{cat.count}</p>
-                  <p className="text-[10px] text-gray-500 font-semibold">{cat.percentage}%</p>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-600 rounded-full" style={{ width: `${cat.percentage}%` }} />
                 </div>
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
 
-        {/* Inspector Workload & Performance */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Lead Inspector Throughput</h2>
-          </div>
-
-          <div className="flex-1 space-y-4">
-            {officers.map((officer, i) => (
-              <div key={officer.id || i} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 font-bold flex items-center justify-center shadow-sm text-sm">
-                    {officer.officer_name.replace('Engr. ', '').replace('Arc. ', '').charAt(0)}
+        {/* Inspector Rankings */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7">
+          <h2 className="text-base font-black text-slate-900 mb-4">Inspector Performance Leaderboard</h2>
+          <div className="space-y-3">
+            {(data?.officer_rankings || []).map((officer, i) => (
+              <div key={officer.id || i} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+                    #{officer.rank}
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 text-sm">{officer.officer_name}</h4>
-                    <p className="text-xs font-semibold text-gray-500">{officer.role}</p>
+                    <h4 className="font-bold text-slate-900 text-xs">{officer.name}</h4>
+                    <p className="text-[10px] text-slate-400">{officer.role}</p>
                   </div>
                 </div>
-                <div className="flex gap-6 text-right">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-gray-400">Inspections</p>
-                    <p className="font-bold text-gray-900 text-sm">{officer.inspections_completed}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-gray-400">SLA Adherence</p>
-                    <p className="font-bold text-emerald-600 text-sm">
-                      {officer.sla_adherence_rate}%
-                    </p>
-                  </div>
+
+                <div className="text-right text-xs">
+                  <span className="font-bold text-emerald-700 block">{officer.sla_adherence_rate}% SLA</span>
+                  <span className="text-[10px] text-slate-400">{officer.inspections_completed} Completed</span>
                 </div>
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
