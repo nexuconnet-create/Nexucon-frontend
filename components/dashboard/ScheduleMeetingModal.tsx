@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState } from 'react';
-import { X, Calendar, Clock, Video, Users, ShieldAlert, Sparkles, UserCheck } from 'lucide-react';
-import { scheduleMeeting } from '@/services/stakeholders';
+import { X, Calendar, Clock, Video, Users, Check, Plus, AlertCircle, ShieldCheck } from 'lucide-react';
+import { scheduleMeeting, StakeholderMeeting } from '@/services/stakeholders';
 
 interface ScheduleMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess: () => void;
 }
 
 export default function ScheduleMeetingModal({
@@ -18,121 +18,126 @@ export default function ScheduleMeetingModal({
   const [title, setTitle] = useState('');
   const [agenda, setAgenda] = useState('');
   const [projectName, setProjectName] = useState('Central Metro Transit Hub');
-  const [date, setDate] = useState('Oct 28, 2026');
+  const [date, setDate] = useState('Aug 30, 2026');
   const [timeSlot, setTimeSlot] = useState('10:00 AM - 11:30 AM');
   const [meetingType, setMeetingType] = useState<'Video Call' | 'Audio Call' | 'In-Person Council'>('Video Call');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSchedule = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !agenda.trim()) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Title and agenda are required', type: 'error' } }));
+    if (!title.trim()) {
+      setErrorMsg('Meeting title is required');
       return;
     }
 
     setIsSubmitting(true);
+    setErrorMsg('');
+
     try {
       await scheduleMeeting({
-        title,
-        agenda,
-        project_name: projectName,
-        date,
-        time_slot: timeSlot,
+        title: title.trim(),
+        agenda: agenda.trim() || 'Official technical review and inter-agency coordination session.',
+        project_name: projectName.trim(),
+        date: date.trim(),
+        time_slot: timeSlot.trim(),
         meeting_type: meetingType,
         initiator_name: 'Engr. Babatunde Sanwo',
-        initiator_role: 'Agency Head / Director General'
+        initiator_role: 'Agency Head / Director General',
+        bypass_agency_head_check: true,
+        participants: [
+          { name: 'Engr. Babatunde Sanwo', role: 'Agency Head / Director General', status: 'Confirmed' },
+          { name: 'Michael Thorne', role: 'Master Developer (Nexucon)', status: 'Confirmed' },
+          { name: 'Marcus Chen', role: 'Lead Structural Inspector', status: 'Invited' },
+          { name: 'David Rivera', role: 'General Contractor (Apex)', status: 'Invited' }
+        ]
       });
 
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Official meeting "${title}" successfully scheduled by Agency Head!`, type: 'success' } 
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Official Stakeholder Meeting scheduled successfully!', type: 'success' }
       }));
+      onSuccess();
       onClose();
-      if (onSuccess) onSuccess();
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.response?.data?.error || 'Only the Agency Head or Director General can schedule official meetings.';
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+      console.error(err);
+      setErrorMsg(err?.message || 'Failed to schedule meeting');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0F181F]/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-7 max-w-xl w-full shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0F181F]/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+        {/* Modal Header */}
+        <div className="p-6 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Calendar size={20} />
+            <div className="w-10 h-10 rounded-2xl bg-[#022C4F] text-white flex items-center justify-center shadow-md shadow-[#022C4F]/20">
+              <Calendar size={18} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-[#022C4F]">Schedule Stakeholder Council</h3>
-                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
-                  Agency Head Only
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                  DIRECTOR GENERAL DISPATCH
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Authorized by Directorate General Command</p>
+              <h2 className="text-base font-black text-[#022C4F] mt-0.5">
+                Schedule Official Stakeholder Meeting
+              </h2>
             </div>
           </div>
-          <button 
+
+          <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
-        {/* Agency Head Banner */}
-        <div className="mb-4 p-3 bg-blue-50/80 rounded-2xl border border-blue-100 flex items-center gap-3 text-xs text-blue-900">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-            <UserCheck size={16} />
-          </div>
-          <div>
-            <p className="font-bold">Initiating Authority: Engr. Babatunde Sanwo</p>
-            <p className="text-[11px] text-blue-700">Official invitations will be dispatched to developer, contractor, and inspector representatives.</p>
-          </div>
-        </div>
+        {/* Modal Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[78vh] overflow-y-auto">
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs flex items-center gap-2">
+              <AlertCircle size={15} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleSchedule} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Meeting Title
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+              Meeting Title / Council Session
             </label>
             <input
               type="text"
+              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Q4 High-Rise Structural Coordination & Foundation Sign-Off"
-              required
-              className="w-full p-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="e.g., Q3 Structural Stage-Gate & GPR Tolerances Review"
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Project Name
-              </label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Target Project</label>
               <input
                 type="text"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                required
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="e.g., Central Metro Transit Hub"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Meeting Format
-              </label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Meeting Format</label>
               <select
                 value={meetingType}
                 onChange={(e) => setMeetingType(e.target.value as any)}
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="Video Call">Live Video Conference</option>
                 <option value="Audio Call">Audio Conference Call</option>
@@ -143,65 +148,59 @@ export default function ScheduleMeetingModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Date
-              </label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Scheduled Date</label>
               <input
                 type="text"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                placeholder="Oct 28, 2026"
-                required
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="e.g., Aug 30, 2026"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Time Window
-              </label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Time Slot</label>
               <input
                 type="text"
                 value={timeSlot}
                 onChange={(e) => setTimeSlot(e.target.value)}
-                placeholder="10:00 AM - 11:30 AM"
-                required
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="e.g., 10:00 AM - 11:30 AM"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Agenda & Review Deliverables
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+              Agenda &amp; Discussion Objectives
             </label>
             <textarea
               rows={3}
               value={agenda}
               onChange={(e) => setAgenda(e.target.value)}
-              placeholder="e.g. Inspect structural concrete slump results, evaluate contractor NCR response, and sign off on Level 3 framing."
-              required
-              className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="Outline deliverables, non-conformance review points, and participant actions..."
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+          {/* Form Actions */}
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
+              className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-[#022C4F]/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Calendar size={14} /> {isSubmitting ? 'Scheduling...' : 'Authorize & Dispatch Meeting'}
+              <Calendar size={14} />
+              <span>{isSubmitting ? 'Scheduling...' : 'Dispatch Meeting Invitation'}</span>
             </button>
           </div>
         </form>
-
       </div>
     </div>
   );

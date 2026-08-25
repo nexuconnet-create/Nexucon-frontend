@@ -2,28 +2,43 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Users, Search, Filter, ShieldCheck, MapPin, Scale, Leaf, Ear, Shield, RefreshCw } from "lucide-react";
+import { 
+  Users, Search, Filter, ShieldCheck, MapPin, Scale, 
+  Leaf, Ear, Shield, RefreshCw, Plus, ExternalLink 
+} from "lucide-react";
 import { Consultant, getConsultants } from "@/services/stakeholders";
+import CreateStakeholderModal from "@/components/dashboard/CreateStakeholderModal";
+import PaginationBar from "@/components/dashboard/PaginationBar";
 
 export default function ConsultantsDirectory() {
   const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [activeSpecialty, setActiveSpecialty] = useState("ALL");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
 
   const fetchConsultants = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getConsultants({ search: search.trim() || undefined });
+      const params: Record<string, any> = {};
+      if (activeSpecialty !== "ALL") params.specialty = activeSpecialty;
+      if (search.trim()) params.search = search.trim();
+      const data = await getConsultants(params);
       setConsultants(data);
     } catch (err) {
       console.error("Failed to load consultants", err);
     } finally {
       setIsLoading(false);
     }
-  }, [search]);
+  }, [activeSpecialty, search]);
 
   useEffect(() => {
     fetchConsultants();
+    setCurrentPage(1);
   }, [fetchConsultants]);
 
   const getConsultantIcon = (specialty: string) => {
@@ -32,48 +47,86 @@ export default function ConsultantsDirectory() {
     return Ear;
   };
 
+  const specialties = ["ALL", "Environmental", "Geotechnical", "Structural", "BIM", "Safety"];
+  const paginatedConsultants = consultants.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="w-full min-h-screen pb-12">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <Users className="text-blue-500" />
-            Third-Party Advisory & Consultants
+            Third-Party Advisory &amp; Consultants
           </h1>
-          <p className="text-gray-500 mt-1">Directory of specialized advisory firms for environmental, legal, and safety oversight.</p>
+          <p className="text-gray-500 mt-1 text-xs sm:text-sm">
+            Directory of specialized advisory firms for environmental, geotechnical, BIM, and safety oversight.
+          </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button 
             onClick={fetchConsultants}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors bg-white cursor-pointer"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
+
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Register Consultant</span>
+          </button>
           
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <div className="relative min-w-[220px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
             <input 
               type="text" 
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search consultants..." 
-              className="pl-9 pr-4 py-2 w-64 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm bg-white"
+              className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm bg-white"
             />
           </div>
         </div>
       </div>
 
+      {/* Filter Tabs */}
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-3.5 mb-6 flex items-center gap-1.5 overflow-x-auto">
+        {specialties.map((spec) => (
+          <button
+            key={spec}
+            onClick={() => {
+              setActiveSpecialty(spec);
+              setCurrentPage(1);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeSpecialty === spec
+                ? 'bg-[#022C4F] text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {spec}
+          </button>
+        ))}
+      </div>
+
+      {/* Consultants Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {consultants.map((firm, idx) => {
+        {paginatedConsultants.map((firm, idx) => {
           const IconComponent = getConsultantIcon(firm.specialty);
 
           return (
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.08 }}
+              transition={{ delay: idx * 0.04 }}
               key={firm.id}
               className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow relative"
             >
@@ -92,12 +145,11 @@ export default function ConsultantsDirectory() {
               </div>
 
               <div className="p-6 flex-1 flex flex-col relative pt-8">
-                {/* Overlapping ID Badge */}
                 <div className="absolute -top-4 left-6 bg-white border border-gray-200 shadow-sm px-3 py-1.5 rounded-xl text-xs font-mono font-bold text-gray-700">
                   {firm.consultant_id}
                 </div>
 
-                <h2 className="text-lg font-bold text-gray-900 mb-1">{firm.name}</h2>
+                <h2 className="text-base font-bold text-gray-900 mb-1">{firm.name}</h2>
                 <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mb-4">
                   <span className="bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-gray-700 uppercase tracking-wider font-bold">{firm.specialty}</span>
                   <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
@@ -119,9 +171,9 @@ export default function ConsultantsDirectory() {
                         detail: { message: `Opening advisory dossier for ${firm.name}...`, type: 'info' } 
                       }));
                     }}
-                    className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-blue-600 hover:bg-gray-50 shadow-sm transition-colors"
+                    className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-blue-600 hover:bg-gray-50 shadow-sm transition-colors cursor-pointer"
                   >
-                    View Profile
+                    View Dossier
                   </button>
                 </div>
               </div>
@@ -131,10 +183,32 @@ export default function ConsultantsDirectory() {
 
         {consultants.length === 0 && !isLoading && (
           <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center text-gray-500 text-sm col-span-3">
-            No consultant advisory firms found.
+            No consultant advisory firms found matching criteria.
           </div>
         )}
       </div>
+
+      {/* Pagination Bar */}
+      {consultants.length > 0 && (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mt-6">
+          <PaginationBar
+            currentPage={currentPage}
+            totalItems={consultants.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[3, 6, 12, 24]}
+          />
+        </div>
+      )}
+
+      {/* Create Consultant Modal */}
+      <CreateStakeholderModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={fetchConsultants}
+        initialCategory="consultant"
+      />
     </div>
   );
 }

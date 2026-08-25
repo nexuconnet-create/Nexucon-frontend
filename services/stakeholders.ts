@@ -14,6 +14,7 @@ export interface Developer {
   color_theme: string;
   is_active: boolean;
   is_blacklisted: boolean;
+  created_at?: string;
 }
 
 export interface Contractor {
@@ -29,6 +30,7 @@ export interface Contractor {
   specialties: string[];
   color_theme: string;
   is_blacklisted: boolean;
+  created_at?: string;
 }
 
 export interface Consultant {
@@ -41,6 +43,7 @@ export interface Consultant {
   hq_location: string;
   description?: string;
   color_theme: string;
+  created_at?: string;
 }
 
 export interface Inspector {
@@ -53,6 +56,7 @@ export interface Inspector {
   active_inspections: number;
   pass_rate: string;
   ncrs_issued: number;
+  created_at?: string;
 }
 
 export interface LicensedProfessional {
@@ -66,6 +70,7 @@ export interface LicensedProfessional {
   expiry_date: string;
   active_projects_count: number;
   is_verified: boolean;
+  created_at?: string;
 }
 
 export interface ProjectStakeholderTeam {
@@ -74,12 +79,8 @@ export interface ProjectStakeholderTeam {
   project_name: string;
   location: string;
   status: string;
-  team_data: {
-    developer?: { name: string; role: string; initials: string };
-    contractor?: { name: string; role: string; initials: string };
-    architect?: { name: string; role: string; initials: string };
-    inspector?: { name: string; role: string; initials: string };
-  };
+  team_data: Record<string, { name: string; role: string; initials: string }>;
+  created_at?: string;
 }
 
 export interface BlacklistRecord {
@@ -91,6 +92,15 @@ export interface BlacklistRecord {
   incident_count: number;
   status: 'Blacklisted' | 'Monitoring' | 'Suspended';
   blacklisted_at: string;
+}
+
+export interface MeetingActionItem {
+  id: string;
+  title: string;
+  assignee_name: string;
+  due_date: string;
+  is_completed: boolean;
+  created_at?: string;
 }
 
 export interface StakeholderMeeting {
@@ -107,8 +117,20 @@ export interface StakeholderMeeting {
   room_id: string;
   status: 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled';
   participants: Array<{ name: string; role: string; status: string }>;
+  action_items?: MeetingActionItem[];
   minutes_notes?: string;
-  created_at: string;
+  created_at?: string;
+}
+
+export interface MessageTranslation {
+  id?: string;
+  message_id: string;
+  target_language: string;
+  language_name: string;
+  translated_content: string;
+  original_content: string;
+  provider: string;
+  is_cached: boolean;
 }
 
 export interface StakeholderMessage {
@@ -121,7 +143,8 @@ export interface StakeholderMessage {
   attachment_url?: string;
   attachment_name?: string;
   is_urgent: boolean;
-  created_at: string;
+  translations?: MessageTranslation[];
+  created_at?: string;
 }
 
 export interface StakeholderStats {
@@ -163,6 +186,11 @@ export const getContractors = async (params?: Record<string, any>): Promise<Cont
   return unwrapList<Contractor>(response);
 };
 
+export const createContractor = async (data: Partial<Contractor>): Promise<Contractor> => {
+  const response = await api.post('/stakeholders/contractors/', data);
+  return unwrapItem<Contractor>(response);
+};
+
 export const validateContractorLicense = async (id: string): Promise<any> => {
   const response = await api.post(`/stakeholders/contractors/${id}/validate-license/`);
   return unwrapItem<any>(response);
@@ -171,6 +199,11 @@ export const validateContractorLicense = async (id: string): Promise<any> => {
 export const getConsultants = async (params?: Record<string, any>): Promise<Consultant[]> => {
   const response = await api.get('/stakeholders/consultants/', { params });
   return unwrapList<Consultant>(response);
+};
+
+export const createConsultant = async (data: Partial<Consultant>): Promise<Consultant> => {
+  const response = await api.post('/stakeholders/consultants/', data);
+  return unwrapItem<Consultant>(response);
 };
 
 export const getInspectors = async (params?: Record<string, any>): Promise<Inspector[]> => {
@@ -193,9 +226,34 @@ export const getLicensedProfessionals = async (params?: Record<string, any>): Pr
   return unwrapList<LicensedProfessional>(response);
 };
 
+export const createLicensedProfessional = async (data: Partial<LicensedProfessional>): Promise<LicensedProfessional> => {
+  const response = await api.post('/stakeholders/professionals/', data);
+  return unwrapItem<LicensedProfessional>(response);
+};
+
+export const verifyLicensedProfessional = async (id: string): Promise<LicensedProfessional> => {
+  const response = await api.post(`/stakeholders/professionals/${id}/verify-license/`);
+  return unwrapItem<LicensedProfessional>(response);
+};
+
 export const getProjectTeams = async (params?: Record<string, any>): Promise<ProjectStakeholderTeam[]> => {
   const response = await api.get('/stakeholders/teams/', { params });
   return unwrapList<ProjectStakeholderTeam>(response);
+};
+
+export const addTeamMember = async (teamId: string, roleKey: string, memberData: { name: string; role: string; initials: string }): Promise<ProjectStakeholderTeam> => {
+  const response = await api.post(`/stakeholders/teams/${teamId}/add-member/`, {
+    role_key: roleKey,
+    member_data: memberData
+  });
+  return unwrapItem<ProjectStakeholderTeam>(response);
+};
+
+export const removeTeamMember = async (teamId: string, roleKey: string): Promise<ProjectStakeholderTeam> => {
+  const response = await api.post(`/stakeholders/teams/${teamId}/remove-member/`, {
+    role_key: roleKey
+  });
+  return unwrapItem<ProjectStakeholderTeam>(response);
 };
 
 export const getBlacklistRecords = async (): Promise<BlacklistRecord[]> => {
@@ -213,7 +271,7 @@ export const getMeetings = async (): Promise<StakeholderMeeting[]> => {
   return unwrapList<StakeholderMeeting>(response);
 };
 
-export const scheduleMeeting = async (data: Partial<StakeholderMeeting>): Promise<StakeholderMeeting> => {
+export const scheduleMeeting = async (data: Partial<StakeholderMeeting> & { bypass_agency_head_check?: boolean }): Promise<StakeholderMeeting> => {
   const response = await api.post('/stakeholders/meetings/', data);
   return unwrapItem<StakeholderMeeting>(response);
 };
@@ -221,6 +279,11 @@ export const scheduleMeeting = async (data: Partial<StakeholderMeeting>): Promis
 export const startMeeting = async (id: string): Promise<any> => {
   const response = await api.post(`/stakeholders/meetings/${id}/start/`);
   return unwrapItem<any>(response);
+};
+
+export const addMeetingActionItem = async (meetingId: string, itemData: { title: string; assignee_name?: string; due_date?: string }): Promise<MeetingActionItem> => {
+  const response = await api.post(`/stakeholders/meetings/${meetingId}/add-action-item/`, itemData);
+  return unwrapItem<MeetingActionItem>(response);
 };
 
 export const getMessages = async (params?: { channel?: string }): Promise<StakeholderMessage[]> => {
@@ -231,6 +294,13 @@ export const getMessages = async (params?: { channel?: string }): Promise<Stakeh
 export const sendMessage = async (data: Partial<StakeholderMessage>): Promise<StakeholderMessage> => {
   const response = await api.post('/stakeholders/messages/', data);
   return unwrapItem<StakeholderMessage>(response);
+};
+
+export const translateMessage = async (messageId: string, targetLanguage: 'yo' | 'ig' | 'ha' | 'en'): Promise<MessageTranslation> => {
+  const response = await api.post(`/stakeholders/messages/${messageId}/translate/`, {
+    target_language: targetLanguage
+  });
+  return unwrapItem<MessageTranslation>(response);
 };
 
 export const getStakeholderStats = async (): Promise<StakeholderStats> => {
