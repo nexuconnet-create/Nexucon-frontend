@@ -5,19 +5,22 @@ import { motion } from "framer-motion";
 import { 
   ShieldAlert, AlertTriangle, CheckCircle2, Clock, 
   MapPin, PhoneCall, RefreshCw, SlidersHorizontal, 
-  ExternalLink, Check, BellRing, Mail 
+  ExternalLink, Check, BellRing, Mail, MessageSquare 
 } from "lucide-react";
 import { 
   Notification, getNotifications, 
   markNotificationRead, acknowledgeNotification, 
   markAllNotificationsRead 
 } from "@/services/notifications";
+import NotificationActionDrawer from "@/components/dashboard/NotificationActionDrawer";
 import NotificationPreferencesModal from "@/components/dashboard/NotificationPreferencesModal";
 
 export default function EmergencyNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isPrefsOpen, setIsPrefsOpen] = useState(false);
 
   const fetchEmergency = useCallback(async () => {
@@ -37,6 +40,11 @@ export default function EmergencyNotifications() {
   useEffect(() => {
     fetchEmergency();
   }, [fetchEmergency]);
+
+  const handleOpenAction = (notif: Notification) => {
+    setSelectedNotif(notif);
+    setIsDrawerOpen(true);
+  };
 
   const handleAcknowledge = async (id: string) => {
     try {
@@ -64,7 +72,7 @@ export default function EmergencyNotifications() {
 
   const handleMarkAllRead = async () => {
     try {
-      await markAllNotificationsRead();
+      await markAllNotificationsRead('EMERGENCY');
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { message: 'All emergency alerts marked as read', type: 'success' } 
       }));
@@ -100,7 +108,7 @@ export default function EmergencyNotifications() {
             className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
           >
             <SlidersHorizontal size={14} className="text-slate-500" />
-            <span>Email &amp; Alert Settings</span>
+            <span>Email Settings</span>
           </button>
 
           <button 
@@ -190,14 +198,22 @@ export default function EmergencyNotifications() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                  <button
+                    onClick={() => handleOpenAction(notif)}
+                    className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Attend Dispatch</span>
+                  </button>
+
                   {!notif.is_acknowledged ? (
                     <button
                       onClick={() => handleAcknowledge(notif.id)}
                       className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 size={14} />
-                      <span>Acknowledge Dispatch</span>
+                      <span>Quick Acknowledge</span>
                     </button>
                   ) : (
                     <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
@@ -221,6 +237,14 @@ export default function EmergencyNotifications() {
           ))
         )}
       </div>
+
+      {/* Sidepop Action Drawer */}
+      <NotificationActionDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        notification={selectedNotif}
+        onUpdated={fetchEmergency}
+      />
 
       {/* Preferences Modal */}
       <NotificationPreferencesModal

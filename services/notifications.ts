@@ -120,6 +120,11 @@ export const acknowledgeNotification = async (id: string): Promise<Notification>
   return unwrapItem<Notification>(response);
 };
 
+export const respondToNotification = async (id: string, data: { comment: string; action_type?: string }): Promise<Notification> => {
+  const response = await api.post(`/notifications/${id}/respond/`, data);
+  return unwrapItem<Notification>(response);
+};
+
 export const acknowledgeCriticalIncident = acknowledgeNotification;
 
 export const getUnreadCounts = async (): Promise<UnreadCounts> => {
