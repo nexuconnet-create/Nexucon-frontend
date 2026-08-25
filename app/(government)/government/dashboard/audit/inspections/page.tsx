@@ -6,7 +6,7 @@ import {
   History, Filter, Download, Search, CheckCircle2, 
   XCircle, FileWarning, ExternalLink, RefreshCw, Eye 
 } from "lucide-react";
-import { AuditEvent, getAuditEvents, exportAuditLedger } from "@/services/audit";
+import { AuditEvent, getAuditEvents, exportAuditLedger, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 
 export default function InspectionHistory() {
@@ -139,7 +139,7 @@ export default function InspectionHistory() {
                 <th className="py-4 px-6">Inspection Code &amp; Site</th>
                 <th className="py-4 px-6">Outcome</th>
                 <th className="py-4 px-6">Lead Inspector</th>
-                <th className="py-4 px-6">Timestamp &amp; Hash</th>
+                <th className="py-4 px-6">Timestamp</th>
                 <th className="py-4 px-6 text-right">Details</th>
               </tr>
             </thead>
@@ -159,7 +159,9 @@ export default function InspectionHistory() {
                         <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
                           {ev.resource_id}
                         </span>
-                        <span className="text-slate-400 text-[10px]">• Ref: {ev.audit_reference}</span>
+                        <span className="text-slate-500 font-semibold text-[10px]">
+                          {formatActionTitle(ev.action)}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -177,7 +179,7 @@ export default function InspectionHistory() {
                       <span className="text-slate-700 font-medium">
                         {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(ev.timestamp).toLocaleDateString()}
                       </span>
-                      <span className="font-mono text-[9px] text-slate-400 mt-0.5">{ev.signature_hash}</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">Verified Block</span>
                     </div>
                   </td>
                   <td className="py-4 px-6 text-right">
@@ -186,7 +188,7 @@ export default function InspectionHistory() {
                         setSelectedEvent(ev);
                         setIsDiffOpen(true);
                       }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
                     >
                       <Eye size={12} />
                       <span>Inspect</span>

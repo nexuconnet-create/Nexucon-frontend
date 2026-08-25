@@ -6,7 +6,7 @@ import {
   Activity, Users, Search, Filter, Shield, Key, 
   Clock, ShieldAlert, ArrowUpRight, RefreshCw, Eye, Download 
 } from "lucide-react";
-import { AuditEvent, AuditSummary, getAuditEvents, getAuditSummary, exportAuditLedger } from "@/services/audit";
+import { AuditEvent, AuditSummary, getAuditEvents, getAuditSummary, exportAuditLedger, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 
 export default function UserActivityLog() {
@@ -164,8 +164,8 @@ export default function UserActivityLog() {
               <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th className="py-4 px-6">Official / Actor</th>
                 <th className="py-4 px-6">Action &amp; Target</th>
-                <th className="py-4 px-6">IP / Location</th>
-                <th className="py-4 px-6">Timestamp &amp; Hash</th>
+                <th className="py-4 px-6">IP / Network Station</th>
+                <th className="py-4 px-6">Timestamp</th>
                 <th className="py-4 px-6 text-right">Details</th>
               </tr>
             </thead>
@@ -186,13 +186,13 @@ export default function UserActivityLog() {
                   </td>
                   <td className="py-4 px-6">
                     <div>
-                      <span className="font-bold text-slate-800">{ev.action}</span>
-                      <div className="text-slate-400 text-[10px] mt-0.5">
-                        Target: <code className="text-blue-600">{ev.resource_type} ({ev.resource_id})</code>
+                      <span className="font-bold text-slate-900">{formatActionTitle(ev.action)}</span>
+                      <div className="text-slate-500 text-[11px] mt-0.5 font-medium">
+                        Target: {formatResourceTitle(ev.resource_type)} <span className="text-blue-700 font-semibold">({ev.resource_id})</span>
                       </div>
                     </div>
                   </td>
-                  <td className="py-4 px-6 text-slate-500 font-mono text-[11px]">
+                  <td className="py-4 px-6 text-slate-600 font-medium text-xs">
                     {ev.ip_address || "192.168.10.42 (Internal GovNet)"}
                   </td>
                   <td className="py-4 px-6">
@@ -200,7 +200,7 @@ export default function UserActivityLog() {
                       <span className="text-slate-700 font-medium">
                         {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(ev.timestamp).toLocaleDateString()}
                       </span>
-                      <span className="font-mono text-[9px] text-slate-400 mt-0.5">{ev.signature_hash}</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">Verified Block</span>
                     </div>
                   </td>
                   <td className="py-4 px-6 text-right">
@@ -209,7 +209,7 @@ export default function UserActivityLog() {
                         setSelectedEvent(ev);
                         setIsDiffOpen(true);
                       }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
                     >
                       <Eye size={12} />
                       <span>Inspect</span>

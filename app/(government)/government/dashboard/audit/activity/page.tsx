@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { 
   History, Filter, Download, FileText, CheckCircle2, 
   ShieldAlert, User, Clock, FileSignature, RefreshCw, 
-  Search, Eye, ArrowUpRight 
+  Search, Eye, ArrowUpRight, ShieldCheck, Building2 
 } from "lucide-react";
-import { AuditEvent, getAuditEvents, exportAuditLedger } from "@/services/audit";
+import { AuditEvent, getAuditEvents, exportAuditLedger, formatActionTitle, formatResourceTitle } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 
 export default function ActivityLog() {
@@ -164,15 +164,15 @@ export default function ActivityLog() {
                       {log.audit_reference}
                     </span>
                     <span className="text-xs font-bold text-slate-700">
-                      {log.resource_type}: <code className="text-blue-600">{log.resource_id}</code>
+                      {formatResourceTitle(log.resource_type)}: <span className="text-blue-700 font-semibold">{log.resource_id}</span>
                     </span>
-                    <span className="text-[10px] font-bold uppercase text-slate-400">
+                    <span className="text-[10px] font-bold text-slate-400">
                       • {log.project_name}
                     </span>
                   </div>
 
                   <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                    {log.action}
+                    {formatActionTitle(log.action)}
                   </h3>
 
                   <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 font-medium flex-wrap">
@@ -195,10 +195,10 @@ export default function ActivityLog() {
                     setSelectedEvent(log);
                     setIsDiffOpen(true);
                   }}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                 >
                   <Eye size={13} />
-                  <span>Inspect Diff</span>
+                  <span>Inspect Audit Details</span>
                 </button>
               </div>
             </motion.div>

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { 
   AuditEvent, getAuditEvents, verifyAuditHashChain, 
-  HashChainVerification, exportAuditLedger 
+  HashChainVerification, exportAuditLedger, formatActionTitle, formatResourceTitle 
 } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 
@@ -186,8 +186,8 @@ export default function AuditRecords() {
                 <th className="py-4 px-6">Block Ref &amp; Action</th>
                 <th className="py-4 px-6">Resource Target</th>
                 <th className="py-4 px-6">Actor &amp; Role</th>
-                <th className="py-4 px-6">Cryptographic Hash</th>
-                <th className="py-4 px-6 text-right">Delta</th>
+                <th className="py-4 px-6">Cryptographic Seal</th>
+                <th className="py-4 px-6 text-right">Audit Delta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
@@ -207,14 +207,14 @@ export default function AuditRecords() {
                         </span>
                         <span className="w-2 h-2 rounded-full bg-emerald-500" title="Verified Block"></span>
                       </div>
-                      <span className="font-bold text-slate-900 text-xs">{ev.action}</span>
+                      <span className="font-bold text-slate-900 text-xs">{formatActionTitle(ev.action)}</span>
                     </div>
                   </td>
                   <td className="py-4 px-6">
                     <div>
-                      <span className="font-bold text-slate-800">{ev.resource_type}</span>
+                      <span className="font-bold text-slate-800">{formatResourceTitle(ev.resource_type)}</span>
                       <div className="text-slate-400 text-[10px] mt-0.5">
-                        ID: <code className="text-blue-600">{ev.resource_id}</code> • {ev.project_name}
+                        ID: <span className="text-blue-700 font-semibold">{ev.resource_id}</span> • {ev.project_name}
                       </div>
                     </div>
                   </td>
@@ -225,7 +225,7 @@ export default function AuditRecords() {
                     </div>
                   </td>
                   <td className="py-4 px-6 font-mono text-[10px] text-slate-600">
-                    <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200 inline-block font-semibold">
+                    <div className="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-block font-semibold">
                       {ev.signature_hash}
                     </div>
                   </td>
@@ -235,10 +235,10 @@ export default function AuditRecords() {
                         setSelectedEvent(ev);
                         setIsDiffOpen(true);
                       }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
                     >
                       <Eye size={12} />
-                      <span>Inspect Diff</span>
+                      <span>Inspect</span>
                     </button>
                   </td>
                 </motion.tr>
