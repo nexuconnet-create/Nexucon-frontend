@@ -12,6 +12,7 @@ import {
 } from "@/services/audit";
 import AuditDiffModal from "@/components/dashboard/AuditDiffModal";
 import AuditExportDrawer from "@/components/dashboard/AuditExportDrawer";
+import PaginationBar from "@/components/dashboard/PaginationBar";
 
 export default function AuditRecords() {
   const [records, setRecords] = useState<AuditEvent[]>([]);
@@ -23,6 +24,10 @@ export default function AuditRecords() {
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true);
@@ -41,6 +46,7 @@ export default function AuditRecords() {
 
   useEffect(() => {
     fetchRecords();
+    setCurrentPage(1);
   }, [fetchRecords]);
 
   const handleVerifyChain = async () => {
@@ -57,6 +63,9 @@ export default function AuditRecords() {
       setIsVerifying(false);
     }
   };
+
+  // Slice paginated items
+  const paginatedRecords = records.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -128,7 +137,10 @@ export default function AuditRecords() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Search by audit reference, hash, actor, or entity ID..."
             className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -138,7 +150,10 @@ export default function AuditRecords() {
           {["ALL", "Normal", "Warning", "High", "Critical"].map((sev) => (
             <button
               key={sev}
-              onClick={() => setSeverityFilter(sev)}
+              onClick={() => {
+                setSeverityFilter(sev);
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 severityFilter === sev
                   ? 'bg-[#022C4F] text-white shadow-sm'
@@ -164,71 +179,83 @@ export default function AuditRecords() {
             <p className="text-xs font-bold text-slate-700">No audit records found matching query.</p>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[750px]">
-            <thead>
-              <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-4 px-6">Block Ref &amp; Action</th>
-                <th className="py-4 px-6">Resource Target</th>
-                <th className="py-4 px-6">Actor &amp; Role</th>
-                <th className="py-4 px-6">Cryptographic Seal</th>
-                <th className="py-4 px-6 text-right">Audit Delta</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {records.map((ev, idx) => (
-                <motion.tr 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  key={ev.id || idx}
-                  className="hover:bg-blue-50/30 transition-colors"
-                >
-                  <td className="py-4 px-6">
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                          {ev.audit_reference}
-                        </span>
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" title="Verified Block"></span>
+          <>
+            <table className="w-full text-left border-collapse min-w-[750px]">
+              <thead>
+                <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="py-4 px-6">Block Ref &amp; Action</th>
+                  <th className="py-4 px-6">Resource Target</th>
+                  <th className="py-4 px-6">Actor &amp; Role</th>
+                  <th className="py-4 px-6">Cryptographic Seal</th>
+                  <th className="py-4 px-6 text-right">Audit Delta</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {paginatedRecords.map((ev, idx) => (
+                  <motion.tr 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.02 }}
+                    key={ev.id || idx}
+                    className="hover:bg-blue-50/30 transition-colors"
+                  >
+                    <td className="py-4 px-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                            {ev.audit_reference}
+                          </span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" title="Verified Block"></span>
+                        </div>
+                        <span className="font-bold text-slate-900 text-xs">{formatActionTitle(ev.action)}</span>
                       </div>
-                      <span className="font-bold text-slate-900 text-xs">{formatActionTitle(ev.action)}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div>
-                      <span className="font-bold text-slate-800">{formatResourceTitle(ev.resource_type)}</span>
-                      <div className="text-slate-400 text-[10px] mt-0.5">
-                        ID: <span className="text-blue-700 font-semibold">{ev.resource_id}</span> • {ev.project_name}
+                    </td>
+                    <td className="py-4 px-6">
+                      <div>
+                        <span className="font-bold text-slate-800">{formatResourceTitle(ev.resource_type)}</span>
+                        <div className="text-slate-400 text-[10px] mt-0.5">
+                          ID: <span className="text-blue-700 font-semibold">{ev.resource_id}</span> • {ev.project_name}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-800">{ev.user_name}</span>
-                      <span className="text-slate-400 text-[10px]">{ev.user_role}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 font-mono text-[10px] text-slate-600">
-                    <div className="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-block font-semibold">
-                      {ev.signature_hash}
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedEvent(ev);
-                        setIsDiffOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
-                    >
-                      <Eye size={12} />
-                      <span>Inspect</span>
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-800">{ev.user_name}</span>
+                        <span className="text-slate-400 text-[10px]">{ev.user_role}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 font-mono text-[10px] text-slate-600">
+                      <div className="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 inline-block font-semibold">
+                        {ev.signature_hash}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <button
+                        onClick={() => {
+                          setSelectedEvent(ev);
+                          setIsDiffOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
+                      >
+                        <Eye size={12} />
+                        <span>Inspect</span>
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination */}
+            <PaginationBar
+              currentPage={currentPage}
+              totalItems={records.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[5, 10, 20, 50]}
+            />
+          </>
         )}
       </div>
 
