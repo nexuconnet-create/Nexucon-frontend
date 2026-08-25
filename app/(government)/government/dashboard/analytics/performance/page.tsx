@@ -165,7 +165,12 @@ export default function ProjectPerformance() {
                 >
                   <td className="py-4 px-6">
                     <div>
-                      <h4 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-xs sm:text-sm">{proj.name}</h4>
+                      <Link 
+                        href={`/government/dashboard/projects/view/${proj.id}`}
+                        className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-xs sm:text-sm hover:underline"
+                      >
+                        {proj.name}
+                      </Link>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-mono font-bold text-slate-400">{proj.reference_number}</span>
                         <span className="text-[10px] text-slate-400">• {proj.lga}</span>
@@ -214,10 +219,10 @@ export default function ProjectPerformance() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <Link
-                      href="/government/dashboard/projects"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+                      href={`/government/dashboard/projects/view/${proj.id}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-slate-900/10 cursor-pointer"
                     >
-                      <span>Inspect</span>
+                      <span>View Details</span>
                       <ArrowUpRight size={13} />
                     </Link>
                   </td>

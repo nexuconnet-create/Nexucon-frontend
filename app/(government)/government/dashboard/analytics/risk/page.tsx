@@ -207,7 +207,15 @@ export default function StructuralRiskIndex() {
                         <p className="text-xs text-slate-600 leading-snug">{c.description}</p>
                       </div>
                       <Link 
-                        href={c.link || "/government/dashboard/compliance/non-conformances"}
+                        href={
+                          c.link && c.link !== "/government/dashboard/inspections" && c.link !== "/government/dashboard/bim"
+                            ? c.link
+                            : (c.type?.toLowerCase().includes("bim")
+                                ? "/government/dashboard/bim/clashes"
+                                : (c.type?.toLowerCase().includes("insp")
+                                    ? "/government/dashboard/inspections/findings"
+                                    : "/government/dashboard/compliance/non-conformances"))
+                        }
                         className="mt-3 text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
                       >
                         <span>Inspect Record</span>

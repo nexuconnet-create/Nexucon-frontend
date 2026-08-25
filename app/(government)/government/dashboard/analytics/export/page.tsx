@@ -4,23 +4,39 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   FileText, Download, Calendar, CheckCircle2, Circle, 
-  FileType2, Search, LayoutTemplate, RefreshCw, ExternalLink, ShieldCheck 
+  FileType2, Search, LayoutTemplate, RefreshCw, ExternalLink, 
+  ShieldCheck, Eye, Printer, Sparkles 
 } from "lucide-react";
 import { 
   GeneratedReport, getGeneratedReports, 
   createGeneratedReport, downloadGeneratedReport 
 } from "@/services/analytics";
+import { 
+  generateAndDownloadDocument, 
+  compileReportData, 
+  generatePDFReport, 
+  generateCSVReport, 
+  ReportConfig, 
+  GeneratedDocumentResult 
+} from "@/utils/documentGenerator";
+import ReportPreviewModal from "@/components/dashboard/ReportPreviewModal";
 
 export default function ExportReports() {
   const [reports, setReports] = useState<GeneratedReport[]>([]);
   const [selectedModules, setSelectedModules] = useState<string[]>([
-    'Project Performance', 'Compliance & Regulatory'
+    'Project Performance', 'Compliance & Regulatory', 'Structural Risk Assessment'
   ]);
-  const [format, setFormat] = useState<'PDF' | 'CSV' | 'XLSX'>('PDF');
+  const [format, setFormat] = useState<'PDF' | 'CSV' | 'XLSX' | 'JSON'>('PDF');
+  const [reportTitle, setReportTitle] = useState('Comprehensive Statutory Executive Audit Report');
   const [startDate, setStartDate] = useState('2026-07-01');
   const [endDate, setEndDate] = useState('2026-09-30');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Preview Modal States
+  const [previewResult, setPreviewResult] = useState<GeneratedDocumentResult | null>(null);
+  const [activeConfig, setActiveConfig] = useState<ReportConfig | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const availableModules = [
     "Project Performance",
@@ -29,12 +45,9 @@ export default function ExportReports() {
     "Compliance & Regulatory",
     "Financial Overview",
     "Agency Performance SLAs",
-    "Detailed Approval Logs",
-    "BIM Clash Summaries",
     "Structural Risk Assessment",
     "Inspector Performance",
-    "Annual Building Safety Report",
-    "Emergency Response Report"
+    "Annual Building Safety Report"
   ];
 
   const fetchReports = useCallback(async () => {
@@ -68,26 +81,39 @@ export default function ExportReports() {
     }
 
     setIsSubmitting(true);
+    const reportRef = `REP-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const config: ReportConfig = {
+      title: reportTitle || `Statutory Government Intelligence Report (${format})`,
+      reportReference: reportRef,
+      format,
+      modules: selectedModules,
+      startDate,
+      endDate,
+      generatedBy: "Director General / Agency Head"
+    };
+
     try {
-      const rep = await createGeneratedReport({
-        title: `Leadership Summary Report (${format})`,
+      // 1. Generate & trigger file download directly in browser
+      const docResult = await generateAndDownloadDocument(config);
+
+      // 2. Persist in backend archive
+      await createGeneratedReport({
+        title: config.title,
+        report_reference: reportRef,
         format,
         modules_included: selectedModules,
         period_start: startDate,
-        period_end: endDate
+        period_end: endDate,
+        file_size: docResult.fileSize
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+        detail: { message: `Report "${reportRef}" generated and downloaded successfully!`, type: 'success' } 
       }));
 
       fetchReports();
-
-      // Trigger download
-      if (rep.file_url) {
-        window.open(rep.file_url, '_blank');
-      }
     } catch (err: any) {
+      console.error("Failed to generate report", err);
       const msg = err.response?.data?.message || 'Failed to generate report';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
@@ -95,14 +121,56 @@ export default function ExportReports() {
     }
   };
 
-  const handleDownloadReport = async (rep: GeneratedReport) => {
+  const handlePreviewReport = async () => {
+    if (selectedModules.length === 0) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Select at least one module', type: 'error' } }));
+      return;
+    }
+
+    setIsSubmitting(true);
+    const reportRef = `REP-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const config: ReportConfig = {
+      title: reportTitle || `Statutory Government Intelligence Report (${format})`,
+      reportReference: reportRef,
+      format,
+      modules: selectedModules,
+      startDate,
+      endDate,
+      generatedBy: "Director General / Agency Head"
+    };
+
     try {
-      const res = await downloadGeneratedReport(rep.id);
+      const data = await compileReportData(config.modules);
+      const docResult = format === 'PDF' 
+        ? generatePDFReport(config, data)
+        : generateCSVReport(config, data);
+
+      setPreviewResult(docResult);
+      setActiveConfig(config);
+      setIsPreviewOpen(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDownloadArchivedReport = async (rep: GeneratedReport) => {
+    const config: ReportConfig = {
+      title: rep.title,
+      reportReference: rep.report_reference,
+      format: (rep.format as any) || 'PDF',
+      modules: rep.modules_included || selectedModules,
+      startDate: rep.period_start || startDate,
+      endDate: rep.period_end || endDate,
+      generatedBy: rep.generated_by_name || "Agency Officer"
+    };
+
+    try {
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { message: `Downloading report "${rep.report_reference}"...`, type: 'info' } 
       }));
-      const dlUrl = res.download_url || rep.file_url;
-      if (dlUrl) window.open(dlUrl, '_blank');
+      await generateAndDownloadDocument(config);
     } catch (err) {
       console.error(err);
     }
@@ -118,7 +186,7 @@ export default function ExportReports() {
             Statutory Analytics Export &amp; Custom Report Generator
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">
-            Generate and export custom statutory intelligence reports in PDF, CSV, or Excel formats.
+            Build and export custom statutory intelligence reports in PDF, CSV, Excel, or JSON formats with digital verification stamps.
           </p>
         </div>
 
@@ -131,36 +199,51 @@ export default function ExportReports() {
         </button>
       </div>
 
-      {/* Generator Configuration Card */}
+      {/* Document Generator Configuration Card */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 mb-8 space-y-6">
-        <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-          <LayoutTemplate size={18} className="text-blue-600" />
-          <span>Select Analytics Modules to Include</span>
-        </h2>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+            Custom Report Title
+          </label>
+          <input 
+            type="text"
+            value={reportTitle}
+            onChange={(e) => setReportTitle(e.target.value)}
+            placeholder="e.g. Q3 Comprehensive Safety & Compliance Report"
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
 
-        {/* Module Selection Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {availableModules.map((moduleName, i) => {
-            const isSelected = selectedModules.includes(moduleName);
-            return (
-              <div 
-                key={i}
-                onClick={() => toggleModule(moduleName)}
-                className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                  isSelected 
-                    ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-sm' 
-                    : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                <span className="text-xs">{moduleName}</span>
-                {isSelected ? (
-                  <CheckCircle2 size={16} className="text-blue-600" />
-                ) : (
-                  <Circle size={16} className="text-slate-300" />
-                )}
-              </div>
-            );
-          })}
+        <div>
+          <h2 className="text-base font-black text-slate-900 flex items-center gap-2 mb-3">
+            <LayoutTemplate size={18} className="text-blue-600" />
+            <span>Select Analytics Modules to Include in Document</span>
+          </h2>
+
+          {/* Module Selection Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {availableModules.map((moduleName, i) => {
+              const isSelected = selectedModules.includes(moduleName);
+              return (
+                <div 
+                  key={i}
+                  onClick={() => toggleModule(moduleName)}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                    isSelected 
+                      ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-sm' 
+                      : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-xs">{moduleName}</span>
+                  {isSelected ? (
+                    <CheckCircle2 size={16} className="text-blue-600" />
+                  ) : (
+                    <Circle size={16} className="text-slate-300" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Filter & Format Controls */}
@@ -194,7 +277,7 @@ export default function ExportReports() {
               Export File Format
             </label>
             <div className="flex gap-2">
-              {(['PDF', 'CSV', 'XLSX'] as const).map(fmt => (
+              {(['PDF', 'CSV', 'XLSX', 'JSON'] as const).map(fmt => (
                 <button
                   key={fmt}
                   type="button"
@@ -212,23 +295,39 @@ export default function ExportReports() {
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-100 flex justify-end">
-          <button
-            onClick={handleGenerateAndDownload}
-            disabled={isSubmitting}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <Download size={15} />
-            <span>{isSubmitting ? 'Generating Report...' : `Generate & Download ${format}`}</span>
-          </button>
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Sparkles size={15} className="text-blue-500" />
+            <span>Includes cryptographic verification hash &amp; government executive seal</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePreviewReport}
+              disabled={isSubmitting}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Eye size={14} />
+              <span>Preview Document</span>
+            </button>
+
+            <button
+              onClick={handleGenerateAndDownload}
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-md shadow-slate-900/10 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Download size={14} />
+              <span>{isSubmitting ? 'Generating Document...' : `Generate & Export ${format}`}</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Generated Reports Archive */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-black text-slate-900">Recent Generated Reports Archive</h2>
-          <span className="text-xs font-bold text-slate-400">Stored on Cloudflare R2</span>
+          <h2 className="text-base font-black text-slate-900">Generated Reports Archive</h2>
+          <span className="text-xs font-bold text-slate-400">Stored with Immutable Audit Log</span>
         </div>
 
         {reports.length === 0 ? (
@@ -282,9 +381,9 @@ export default function ExportReports() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <button
-                      onClick={() => handleDownloadReport(rep)}
+                      onClick={() => handleDownloadArchivedReport(rep)}
                       className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors border border-slate-200 hover:border-blue-200 cursor-pointer"
-                      title="Download Report"
+                      title="Download Generated Report"
                     >
                       <Download size={15} />
                     </button>
@@ -295,6 +394,14 @@ export default function ExportReports() {
           </table>
         )}
       </div>
+
+      {/* Document Preview Modal */}
+      <ReportPreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        result={previewResult}
+        config={activeConfig}
+      />
     </div>
   );
 }
