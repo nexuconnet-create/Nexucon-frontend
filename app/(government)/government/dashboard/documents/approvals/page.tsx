@@ -4,10 +4,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle, ShieldCheck, Download, Award, FileSignature, FileText, Share2, Stamp, RefreshCw } from "lucide-react";
 import { DocumentApproval, getDocumentApprovals } from "@/services/documents";
+import ShareVerificationCertificateModal from "@/components/dashboard/ShareVerificationCertificateModal";
 
 export default function ApprovalRecords() {
   const [approvals, setApprovals] = useState<DocumentApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedApprovalForShare, setSelectedApprovalForShare] = useState<DocumentApproval | null>(null);
 
   const fetchApprovals = useCallback(async () => {
     setIsLoading(true);
@@ -26,15 +28,16 @@ export default function ApprovalRecords() {
   }, [fetchApprovals]);
 
   const handleDownload = (doc: DocumentApproval) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
+    }
     window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Downloading officially stamped PDF with verification seal for "${doc.document_title || doc.approval_reference}"...`, type: 'success' } 
+      detail: { message: `Opening officially stamped PDF with verification seal for "${doc.document_title || doc.approval_reference}"...`, type: 'success' } 
     }));
   };
 
   const handleShare = (doc: DocumentApproval) => {
-    window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: `Shareable verification link copied to clipboard for ${doc.approval_reference}!`, type: 'info' } 
-    }));
+    setSelectedApprovalForShare(doc);
   };
 
   return (
@@ -156,14 +159,14 @@ export default function ApprovalRecords() {
                 <div className="mt-8 pt-6 border-t border-gray-100 flex items-center gap-4">
                   <button 
                     onClick={() => handleDownload(doc)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-colors text-xs"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-colors text-xs cursor-pointer shadow-blue-600/20"
                   >
                     <Download size={16} />
                     Download Stamped PDF
                   </button>
                   <button 
                     onClick={() => handleShare(doc)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-colors text-xs"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-colors text-xs cursor-pointer"
                   >
                     <Share2 size={16} />
                     Share Verification Certificate
@@ -174,6 +177,12 @@ export default function ApprovalRecords() {
           ))}
         </div>
       )}
+
+      <ShareVerificationCertificateModal
+        isOpen={Boolean(selectedApprovalForShare)}
+        onClose={() => setSelectedApprovalForShare(null)}
+        approval={selectedApprovalForShare}
+      />
     </div>
   );
 }
