@@ -6,9 +6,10 @@ import {
   AlertTriangle, Search, Filter, Plus, Calendar, User, ArrowRight, 
   Eye, ShieldAlert, AlertOctagon, Gavel, RefreshCw, CheckCircle 
 } from "lucide-react";
-import { NonConformanceReport, getNCRs, closeNCR } from "@/services/compliance";
+import { NonConformanceReport, getNCRs } from "@/services/compliance";
 import LogNCRDrawer from "@/components/dashboard/LogNCRDrawer";
 import EscalateNCRModal from "@/components/dashboard/EscalateNCRModal";
+import VerifyCloseNCRModal from "@/components/dashboard/VerifyCloseNCRModal";
 
 export default function NonConformances() {
   const [ncrs, setNcrs] = useState<NonConformanceReport[]>([]);
@@ -20,6 +21,8 @@ export default function NonConformances() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [isEscalateModalOpen, setIsEscalateModalOpen] = useState(false);
   const [selectedNcr, setSelectedNcr] = useState<NonConformanceReport | null>(null);
+  const [isVerifyCloseModalOpen, setIsVerifyCloseModalOpen] = useState(false);
+  const [selectedNcrForClose, setSelectedNcrForClose] = useState<NonConformanceReport | null>(null);
 
   const fetchNCRs = useCallback(async () => {
     setIsLoading(true);
@@ -41,17 +44,9 @@ export default function NonConformances() {
     fetchNCRs();
   }, [fetchNCRs]);
 
-  const handleCloseNCR = async (ncr: NonConformanceReport) => {
-    if (!confirm(`Are you sure you want to verify and close "${ncr.ncr_reference}"?`)) return;
-    try {
-      await closeNCR(ncr.id, { resolution_notes: 'Verified and approved by compliance officer.' });
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `NCR ${ncr.ncr_reference} successfully resolved and closed!`, type: 'success' } 
-      }));
-      fetchNCRs();
-    } catch (err: any) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to close NCR', type: 'error' } }));
-    }
+  const handleCloseNCR = (ncr: NonConformanceReport) => {
+    setSelectedNcrForClose(ncr);
+    setIsVerifyCloseModalOpen(true);
   };
 
   const getSeverityStyle = (severity: string) => {
@@ -307,6 +302,13 @@ export default function NonConformances() {
         isOpen={isEscalateModalOpen}
         onClose={() => setIsEscalateModalOpen(false)}
         ncr={selectedNcr}
+        onSuccess={fetchNCRs}
+      />
+
+      <VerifyCloseNCRModal
+        isOpen={isVerifyCloseModalOpen}
+        onClose={() => setIsVerifyCloseModalOpen(false)}
+        ncr={selectedNcrForClose}
         onSuccess={fetchNCRs}
       />
     </div>
