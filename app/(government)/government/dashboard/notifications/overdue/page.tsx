@@ -2,12 +2,24 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Clock, Filter, CheckCircle2, UserCircle, BellRing, Mail, MessageSquare, RefreshCw } from "lucide-react";
-import { Notification, getNotifications, pingAssignee, markAllNotificationsRead } from "@/services/notifications";
+import { 
+  Clock, Filter, CheckCircle2, UserCircle, 
+  BellRing, Mail, MessageSquare, RefreshCw, 
+  SlidersHorizontal 
+} from "lucide-react";
+import { 
+  Notification, getNotifications, 
+  pingAssignee, markAllNotificationsRead 
+} from "@/services/notifications";
+import NotificationActionDrawer from "@/components/dashboard/NotificationActionDrawer";
+import NotificationPreferencesModal from "@/components/dashboard/NotificationPreferencesModal";
 
 export default function OverdueActions() {
   const [actions, setActions] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isPrefsOpen, setIsPrefsOpen] = useState(false);
 
   const fetchOverdueActions = useCallback(async () => {
     setIsLoading(true);
@@ -25,11 +37,16 @@ export default function OverdueActions() {
     fetchOverdueActions();
   }, [fetchOverdueActions]);
 
+  const handleOpenAction = (notif: Notification) => {
+    setSelectedNotif(notif);
+    setIsDrawerOpen(true);
+  };
+
   const handlePing = async (id: string, method: 'Email' | 'Chat' | 'Bell') => {
     try {
       const res = await pingAssignee(id, method);
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: res.message || `Ping dispatched via ${method}!`, type: 'success' } 
+        detail: { message: res.message || `SLA Ping dispatched via ${method}!`, type: 'success' } 
       }));
     } catch (err) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to dispatch ping', type: 'error' } }));
@@ -59,98 +76,96 @@ export default function OverdueActions() {
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></div>
               )}
             </div>
-            Overdue Actions & SLA Breaches
+            Overdue Actions &amp; SLA Reminders
           </h1>
-          <p className="text-gray-500 mt-1">System-generated alerts for tasks that have missed their regulatory SLA.</p>
+          <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            Tracking overdue technical reviews, permit turnaround breaches, and contractor milestones.
+          </p>
         </div>
         
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsPrefsOpen(true)}
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <SlidersHorizontal size={14} className="text-slate-500" />
+            <span>Email Settings</span>
+          </button>
+
           <button 
             onClick={fetchOverdueActions}
-            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer bg-white"
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
+
           <button 
             onClick={handleMarkAllRead}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-semibold"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-xs font-bold cursor-pointer"
           >
-            <CheckCircle2 size={16} />
+            <CheckCircle2 size={14} />
             Mark All as Read
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl">
-        {actions.map((action, idx) => (
+      <div className="space-y-4 max-w-5xl">
+        {actions.map((act, idx) => (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.08 }}
-            key={action.id}
-            className={`flex flex-col p-6 rounded-3xl border transition-all ${
-              !action.is_read ? 'bg-white border-blue-200 shadow-md ring-1 ring-blue-500/10' : 'bg-gray-50/50 border-gray-100 shadow-sm opacity-80'
+            transition={{ delay: idx * 0.04 }}
+            key={act.id}
+            className={`p-5 sm:p-6 rounded-3xl border transition-all ${
+              !act.is_read ? 'bg-white border-red-200 shadow-md ring-1 ring-red-500/10' : 'bg-slate-50/70 border-slate-200 shadow-sm opacity-85'
             }`}
           >
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h3 className={`text-base font-bold mb-1 ${!action.is_read ? 'text-gray-900' : 'text-gray-700'}`}>
-                  {action.title}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                    Overdue Breach
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-slate-500">
+                    {act.notification_reference}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    • Logged {new Date(act.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <h3 className="text-base font-bold text-slate-900 mt-1">
+                  {act.title}
                 </h3>
-                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
-                  <span className="font-mono font-bold text-blue-600">{action.notification_reference}</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                  <span>{action.location || 'Site Sector'}</span>
-                </div>
-              </div>
-              
-              {/* Overdue Badge */}
-              <div className="shrink-0 flex flex-col items-end">
-                <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-xl text-xs font-bold border bg-red-50 text-red-700 border-red-200">
-                  4 Days Overdue
-                </span>
-                <span className="text-[10px] text-gray-400 font-bold uppercase mt-1">Due: Oct 05, 2026</span>
-              </div>
-            </div>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1">
+                  {act.message}
+                </p>
 
-            <p className="text-xs text-gray-600 mb-6 bg-red-50/30 p-3 rounded-2xl border border-red-100/40">
-              {action.message}
-            </p>
-            
-            <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-                  <UserCircle size={18} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assignee</p>
-                  <p className="text-xs font-bold text-gray-900">{action.snippet || 'Sarah Jenkins (Environmental)'}</p>
+                <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <UserCircle size={14} className="text-slate-400" />
+                    <span>Target: {act.recipient_role || 'Directorate Lead'}</span>
+                  </span>
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => handlePing(action.id, 'Email')}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors" 
-                  title="Send Email Reminder"
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
+                <button
+                  onClick={() => handlePing(act.id, 'Email')}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Dispatch Reminder Email"
                 >
-                  <Mail size={16} />
+                  <Mail size={12} /> Ping Email
                 </button>
-                <button 
-                  onClick={() => handlePing(action.id, 'Chat')}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors" 
-                  title="Send Chat Message"
+
+                <button
+                  onClick={() => handleOpenAction(act)}
+                  className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <MessageSquare size={16} />
-                </button>
-                <button 
-                  onClick={() => handlePing(action.id, 'Bell')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 ${
-                    !action.is_read ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <BellRing size={14} /> Ping Assignee
+                  <MessageSquare size={13} />
+                  <span>Attend / Directive</span>
                 </button>
               </div>
             </div>
@@ -158,11 +173,25 @@ export default function OverdueActions() {
         ))}
 
         {actions.length === 0 && !isLoading && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-500 col-span-2">
-            No overdue actions at this time.
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-12 text-center text-slate-500">
+            No overdue actions. All SLAs operating within threshold.
           </div>
         )}
       </div>
+
+      {/* Quick Action Sidepop Drawer */}
+      <NotificationActionDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        notification={selectedNotif}
+        onUpdated={fetchOverdueActions}
+      />
+
+      {/* Preferences Modal */}
+      <NotificationPreferencesModal
+        isOpen={isPrefsOpen}
+        onClose={() => setIsPrefsOpen(false)}
+      />
     </div>
   );
 }
