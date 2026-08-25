@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   MessageSquare, Send, Paperclip, AlertTriangle, Users, 
   Hash, ShieldCheck, Clock, RefreshCw, UserCheck, Languages, 
-  ChevronDown, Check, Sparkles, Globe 
+  ChevronDown, Check, Sparkles, Globe, Loader2 
 } from "lucide-react";
 import { 
   StakeholderMessage, getMessages, sendMessage, 
@@ -44,7 +44,7 @@ export default function StakeholderMessages() {
     try {
       const data = await getMessages({ channel: activeChannel });
       setMessages(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load messages", err);
     } finally {
       setIsLoading(false);
@@ -57,25 +57,52 @@ export default function StakeholderMessages() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
+    const textToSend = inputMessage.trim();
+    if (!textToSend) return;
 
     setIsSending(true);
+
+    // Optimistic message placeholder
+    const optimisticMsg: StakeholderMessage = {
+      id: `temp-${Date.now()}`,
+      channel_name: activeChannel,
+      message_text: textToSend,
+      is_urgent: isUrgent,
+      sender_name: 'Engr. Babatunde Sanwo',
+      sender_role: 'Agency Head / Director General',
+      project_name: 'Central Metro Transit Hub',
+      created_at: new Date().toISOString()
+    };
+
+    setMessages(prev => [...prev, optimisticMsg]);
+    setInputMessage('');
+    const prevUrgent = isUrgent;
+    setIsUrgent(false);
+
     try {
-      await sendMessage({
+      const created = await sendMessage({
         channel_name: activeChannel,
-        message_text: inputMessage.trim(),
-        is_urgent: isUrgent,
+        message_text: textToSend,
+        is_urgent: prevUrgent,
         sender_name: 'Engr. Babatunde Sanwo',
-        sender_role: 'Agency Head / Director General'
+        sender_role: 'Agency Head / Director General',
+        project_name: 'Central Metro Transit Hub'
       });
-      setInputMessage('');
-      setIsUrgent(false);
-      fetchMessages();
+
+      if (created && created.id) {
+        setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? created : m));
+      }
+
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: `Message broadcasted to #${activeChannel}`, type: 'success' }
       }));
-    } catch (err) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to send message', type: 'error' } }));
+      fetchMessages();
+    } catch (err: any) {
+      console.error("Failed to send message", err);
+      const errMsg = err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to broadcast message';
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Send notice: ${errMsg}`, type: 'error' } 
+      }));
     } finally {
       setIsSending(false);
     }
@@ -96,19 +123,23 @@ export default function StakeholderMessages() {
     setTranslatingId(messageId);
     try {
       const result = await translateMessage(messageId, langCode);
-      setTranslatedMap(prev => ({
-        ...prev,
-        [messageId]: result
-      }));
+      if (result && result.translated_content) {
+        setTranslatedMap(prev => ({
+          ...prev,
+          [messageId]: result
+        }));
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { 
+            message: `Translated to ${result.language_name} (${result.provider})`, 
+            type: 'success' 
+          }
+        }));
+      }
+    } catch (err: any) {
+      console.error("Translation error:", err);
+      const errMsg = err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Translation service unavailable';
       window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { 
-          message: `Translated to ${result.language_name} (${result.provider})`, 
-          type: 'success' 
-        }
-      }));
-    } catch (err) {
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: 'Translation service unavailable', type: 'error' }
+        detail: { message: `Translation: ${errMsg}`, type: 'error' }
       }));
     } finally {
       setTranslatingId(null);
@@ -176,7 +207,7 @@ export default function StakeholderMessages() {
               <p className="font-black text-[#022C4F]">Multilingual Engine</p>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Google Cloud Translation with preserved terminology for <strong>BIM, GPR, GNSS, NCR, &amp; COREN</strong>.
+              Google Cloud Translation with preserved terminology for <strong>BIM, GPR, GNSS, RTK, NCR, &amp; COREN</strong>.
             </p>
           </div>
         </div>
@@ -211,8 +242,8 @@ export default function StakeholderMessages() {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  key={msg.id}
+                  transition={{ delay: idx * 0.02 }}
+                  key={msg.id || idx}
                   className={`flex flex-col relative ${
                     msg.is_urgent 
                       ? 'p-4 rounded-2xl bg-red-50/80 border border-red-200' 
@@ -246,10 +277,15 @@ export default function StakeholderMessages() {
                       <div className="relative">
                         <button
                           type="button"
+                          disabled={isTranslating}
                           onClick={() => setOpenTranslateMenuId(isMenuOpen ? null : msg.id)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
                         >
-                          <Languages size={11} className="text-blue-600" />
+                          {isTranslating ? (
+                            <Loader2 size={11} className="animate-spin text-blue-600" />
+                          ) : (
+                            <Languages size={11} className="text-blue-600" />
+                          )}
                           <span>{isTranslating ? 'Translating...' : activeTranslation ? activeTranslation.language_name : 'Translate'}</span>
                           <ChevronDown size={10} />
                         </button>
@@ -350,7 +386,8 @@ export default function StakeholderMessages() {
                 disabled={isSending || !inputMessage.trim()}
                 className="px-5 py-3 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-2xl text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md shadow-[#022C4F]/20 cursor-pointer"
               >
-                <Send size={14} /> <span>{isSending ? 'Sending...' : 'Send'}</span>
+                {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                <span>{isSending ? 'Sending...' : 'Send'}</span>
               </button>
             </div>
           </form>
