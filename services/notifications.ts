@@ -6,7 +6,8 @@ export interface Notification {
   recipient?: string;
   recipient_name?: string;
   recipient_role: string;
-  category: 'CRITICAL' | 'APPLICATIONS' | 'INSPECTIONS' | 'COMPLIANCE' | 'APPROVALS' | 'OVERDUE' | 'GENERAL';
+  category: 'CRITICAL' | 'APPLICATIONS' | 'INSPECTIONS' | 'COMPLIANCE' | 'APPROVALS' | 'EMERGENCY' | 'OVERDUE' | 'BIM' | 'GPR' | 'DOCUMENTS' | 'MILESTONES' | 'GENERAL';
+  event_type?: string;
   title: string;
   message: string;
   snippet?: string;
@@ -20,21 +21,52 @@ export interface Notification {
   is_read: boolean;
   read_at?: string;
   is_acknowledged: boolean;
+  acknowledged_by?: string;
   acknowledged_by_name?: string;
   acknowledged_at?: string;
   email_sent: boolean;
+  email_id?: string;
+  metadata?: Record<string, any>;
   created_at: string;
 }
 
-export interface NotificationPreference {
+export interface EmailDelivery {
   id: string;
-  email_critical_alerts: boolean;
-  email_daily_digest: boolean;
-  email_approval_requests: boolean;
-  email_inspection_updates: boolean;
-  email_compliance_ncrs: boolean;
-  sms_emergency_alerts: boolean;
-  in_app_sound: boolean;
+  delivery_reference: string;
+  notification?: string;
+  recipient_email: string;
+  template_key: string;
+  subject: string;
+  provider: string;
+  provider_message_id?: string;
+  status: 'QUEUED' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'FAILED' | 'RETRYING' | 'CANCELLED';
+  attempt_count: number;
+  last_attempt_at?: string;
+  sent_at?: string;
+  delivered_at?: string;
+  failed_at?: string;
+  failure_reason?: string;
+  idempotency_key?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationPreference {
+  id?: string;
+  in_app_enabled: boolean;
+  email_enabled: boolean;
+  email_applications: boolean;
+  email_inspections: boolean;
+  email_approvals: boolean;
+  email_compliance: boolean;
+  email_emergency: boolean;
+  email_overdue: boolean;
+  email_critical: boolean;
+  email_bim: boolean;
+  email_gpr: boolean;
+  email_documents: boolean;
+  email_milestones: boolean;
 }
 
 export interface UnreadCounts {
@@ -44,6 +76,7 @@ export interface UnreadCounts {
   inspections: number;
   compliance: number;
   approvals: number;
+  emergency: number;
   overdue: number;
 }
 
@@ -66,8 +99,8 @@ export const getNotifications = async (params?: Record<string, any>): Promise<No
   return unwrapList<Notification>(response);
 };
 
-export const createNotification = async (data: Partial<Notification>): Promise<Notification> => {
-  const response = await api.post('/notifications/', data);
+export const getNotification = async (id: string): Promise<Notification> => {
+  const response = await api.get(`/notifications/${id}/`);
   return unwrapItem<Notification>(response);
 };
 
@@ -76,27 +109,20 @@ export const markNotificationRead = async (id: string): Promise<Notification> =>
   return unwrapItem<Notification>(response);
 };
 
-export const markAllNotificationsRead = async (category?: string): Promise<{ status: string; marked_read_count: number }> => {
-  const response = await api.post('/notifications/mark-all-read/', { category });
-  return unwrapItem<{ status: string; marked_read_count: number }>(response);
+export const markAllNotificationsRead = async (category?: string): Promise<any> => {
+  const payload = category ? { category } : {};
+  const response = await api.post('/notifications/read-all/', payload);
+  return unwrapItem<any>(response);
 };
 
-export const acknowledgeCriticalIncident = async (id: string): Promise<Notification> => {
+export const acknowledgeNotification = async (id: string): Promise<Notification> => {
   const response = await api.post(`/notifications/${id}/acknowledge/`);
   return unwrapItem<Notification>(response);
 };
 
-export const soundSiteAlarm = async (data: { location: string; reason: string }): Promise<Notification> => {
-  const response = await api.post('/notifications/sound-alarm/', data);
-  return unwrapItem<Notification>(response);
-};
+export const acknowledgeCriticalIncident = acknowledgeNotification;
 
-export const pingAssignee = async (id: string, method: 'Email' | 'Chat' | 'Bell' = 'Email'): Promise<{ status: string; message: string }> => {
-  const response = await api.post(`/notifications/${id}/ping/`, { method });
-  return unwrapItem<{ status: string; message: string }>(response);
-};
-
-export const getUnreadNotificationCounts = async (): Promise<UnreadCounts> => {
+export const getUnreadCounts = async (): Promise<UnreadCounts> => {
   const response = await api.get('/notifications/unread-counts/');
   return unwrapItem<UnreadCounts>(response);
 };
@@ -107,6 +133,36 @@ export const getNotificationPreferences = async (): Promise<NotificationPreferen
 };
 
 export const updateNotificationPreferences = async (data: Partial<NotificationPreference>): Promise<NotificationPreference> => {
-  const response = await api.patch('/notifications/preferences/', data);
+  const response = await api.put('/notifications/preferences/', data);
   return unwrapItem<NotificationPreference>(response);
+};
+
+export const getEmailDeliveries = async (params?: Record<string, any>): Promise<EmailDelivery[]> => {
+  const response = await api.get('/notifications/deliveries/', { params });
+  return unwrapList<EmailDelivery>(response);
+};
+
+export const triggerTestNotification = async (data: Partial<Notification>): Promise<Notification> => {
+  const response = await api.post('/notifications/trigger-test/', data);
+  return unwrapItem<Notification>(response);
+};
+
+export const createNotification = triggerTestNotification;
+
+export const pingAssignee = async (id: string, method: string = 'Email'): Promise<any> => {
+  return triggerTestNotification({
+    category: 'OVERDUE',
+    title: `SLA Ping (${method}): Overdue Action Reminder`,
+    message: `Automated statutory officer ping dispatched via ${method} for overdue regulatory action (${id}).`
+  });
+};
+
+export const soundSiteAlarm = async (data: any): Promise<any> => {
+  return triggerTestNotification({
+    category: 'EMERGENCY',
+    title: `🚨 SITE ALARM SOUNDED: ${data?.incident_type || 'Safety Evacuation'}`,
+    message: data?.reason || 'Immediate site alarm activated by government incident controller.',
+    priority: 'Critical',
+    location: data?.location || 'Monitored Site'
+  });
 };
