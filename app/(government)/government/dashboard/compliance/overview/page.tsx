@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, AlertTriangle, Activity, FileCheck, ArrowUpRight, ArrowDownRight, Clock, ChevronRight, RefreshCw } from "lucide-react";
-import { ComplianceStats, getComplianceStats, getNCRs, getComplianceCertificates, NonConformanceReport, ComplianceCertificate } from "@/services/compliance";
+import { ComplianceStats, getComplianceStats, getNCRs, getComplianceCertificates, generateComplianceReport, NonConformanceReport, ComplianceCertificate } from "@/services/compliance";
 
 export default function ComplianceOverview() {
   const [stats, setStats] = useState<ComplianceStats | null>(null);
@@ -61,10 +61,21 @@ export default function ComplianceOverview() {
     { id: '2', title: "Submit Emissions & EIA Report", date: "Oct 28, 2026", daysLeft: 8 }
   ];
 
-  const handleGenerateReport = () => {
-    window.dispatchEvent(new CustomEvent('show-toast', { 
-      detail: { message: 'Generating comprehensive regulatory compliance report PDF...', type: 'info' } 
-    }));
+  const handleGenerateReport = async () => {
+    try {
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Generating comprehensive regulatory compliance report PDF...', type: 'info' } 
+      }));
+      const res = await generateComplianceReport();
+      if (res?.report_download_url) {
+        window.open(res.report_download_url, '_blank');
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Compliance Report generated and downloaded!', type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
