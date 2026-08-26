@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Video, Phone, PhoneOff, Mic, MicOff, VideoOff, Share2, 
@@ -11,20 +11,43 @@ import {
   Radio, Copy, Globe, RefreshCw, UserCheck, ShieldAlert,
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
-  MonitorPlay, Camera, Cast
+  MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2,
+  CheckCircle, BadgeCheck
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
-  addMeetingActionItem, MeetingActionItem 
+  addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote 
 } from "@/services/stakeholders";
+import { sendEmailViaResend } from "@/services/email";
+
+interface ConnectedParticipant {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  time: string;
+  status: 'Live In Room' | 'Dispatched';
+  isLocalUser?: boolean;
+  isMicOn?: boolean;
+  isVideoOn?: boolean;
+  isHandRaised?: boolean;
+}
 
 export default function MeetingRoomPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const meetingId = (params?.id as string) || '';
 
   const [meeting, setMeeting] = useState<StakeholderMeeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Local User Identity in this Meeting Session
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string; email: string }>({
+    name: searchParams?.get('guest_name') || 'Engr. Babatunde Sanwo',
+    role: searchParams?.get('role') || 'Agency Head / Director General',
+    email: searchParams?.get('email') || 'head@regulator.gov.ng'
+  });
 
   // Audio/Video Local Stream & Controls
   const [isMicOn, setIsMicOn] = useState(true);
@@ -32,7 +55,6 @@ export default function MeetingRoomPage() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [activeSpeaker, setActiveSpeaker] = useState<'sanwo' | 'thorne' | 'chen' | 'rivera'>('sanwo');
   
   // WebRTC Local Video / Screen Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -49,32 +71,57 @@ export default function MeetingRoomPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Active Sidebar Tab
-  const [activeTab, setActiveTab] = useState<'action_items' | 'minutes' | 'voting' | 'chat'>('action_items');
+  const [activeTab, setActiveTab] = useState<'invite' | 'action_items' | 'minutes' | 'voting' | 'chat'>('invite');
+
+  // Live Connected Participants List (Only Real Attendees)
+  const [participants, setParticipants] = useState<ConnectedParticipant[]>([
+    { 
+      id: 'user-local', 
+      name: `${currentUser.name} (You)`, 
+      email: currentUser.email, 
+      role: currentUser.role, 
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+      status: 'Live In Room', 
+      isLocalUser: true, 
+      isMicOn: true, 
+      isVideoOn: true, 
+      isHandRaised: false 
+    }
+  ]);
+
+  // Live Email Invite State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState('Master Developer');
+  const [inviteCustomNote, setInviteCustomNote] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
   // Collaboration State
   const [minutesText, setMinutesText] = useState('');
   const [isSavingMinutes, setIsSavingMinutes] = useState(false);
   const [newActionTitle, setNewActionTitle] = useState('');
-  const [newActionAssignee, setNewActionAssignee] = useState('Engr. Babatunde Sanwo');
+  const [newActionAssignee, setNewActionAssignee] = useState(currentUser.name);
   const [actionItems, setActionItems] = useState<MeetingActionItem[]>([]);
   const [isAddingAction, setIsAddingAction] = useState(false);
 
-  // Chat State
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([
-    { sender: 'Engr. Babatunde Sanwo', role: 'Agency Head', text: 'Welcome to the platform council session. We are reviewing the Level 5 slab casting certification.', time: '10:02 AM' },
-    { sender: 'Marcus Chen', role: 'Inspector', text: 'Telemetry GPR scan confirms rebar spacing compliance along Grid 4.', time: '10:04 AM' },
-    { sender: 'David Rivera', role: 'Contractor', text: 'Ready to proceed with concrete pour once quorum vote is recorded.', time: '10:05 AM' }
-  ]);
+  // Chat State (Starts Clean for Real Attendee Messaging)
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([]);
   const [newChatMessage, setNewChatMessage] = useState('');
 
   // Voting State
   const [voteStatus, setVoteStatus] = useState<'IDLE' | 'VOTED_YES' | 'VOTED_NO'>('IDLE');
-  const [quorumVotes, setQuorumVotes] = useState({ yes: 3, no: 0, total: 4 });
+  const [quorumVotes, setQuorumVotes] = useState({ yes: 0, no: 0, total: 1 });
 
   // Timer
-  const [elapsedSeconds, setElapsedSeconds] = useState(248); // 4m 08s
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Initialize Local Media Stream if permitted
+  // Standard live URL using production domain
+  const getLiveMeetingUrl = () => {
+    return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
+  };
+
+  // 1. Initialize Local Media Stream (Camera & Mic)
   useEffect(() => {
     let streamInstance: MediaStream | null = null;
     const initMedia = async () => {
@@ -88,7 +135,7 @@ export default function MeetingRoomPage() {
           }
         }
       } catch (err) {
-        console.warn("Local media stream initial notice (using interactive avatar tile):", err);
+        console.warn("Camera/mic permission notice:", err);
       }
     };
     initMedia();
@@ -112,28 +159,214 @@ export default function MeetingRoomPage() {
     }
   }, [isVideoOn, isMicOn, localStream]);
 
-  // Screen Share Handler
+  // 2. Multi-Tier Presence & Live Synchronization
+  useEffect(() => {
+    if (!meetingId) return;
+
+    // A. Handshake with Next.js Serverless Presence API
+    const joinServerless = async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/presence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'join',
+            participant: {
+              name: currentUser.name,
+              role: currentUser.role,
+              email: currentUser.email,
+              isMicOn,
+              isVideoOn,
+              isHandRaised
+            }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.participants) {
+            updateParticipantsFromData(data.participants);
+          }
+          if (data && data.votes) {
+            setQuorumVotes(data.votes);
+          }
+          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+            setChatMessages(data.chatMessages);
+          }
+        }
+      } catch (e) {
+        // quiet fallback
+      }
+    };
+    joinServerless();
+
+    // B. Also register on Django backend PostgreSQL database
+    joinMeeting(meetingId, {
+      name: currentUser.name,
+      role: currentUser.role,
+      email: currentUser.email
+    }).catch(() => {});
+
+    // C. Poll Presence API every 2.5 seconds for real-time synchronization across different devices
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/presence`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.participants) {
+            updateParticipantsFromData(data.participants);
+          }
+          if (data && data.votes) {
+            setQuorumVotes(data.votes);
+          }
+          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+            setChatMessages(data.chatMessages);
+          }
+        }
+      } catch (err) {
+        // silent
+      }
+    }, 2500);
+
+    // D. Cross-Tab Presence Synchronization via BroadcastChannel
+    let broadcast: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        broadcast = new BroadcastChannel(`nexucon_presence_${meetingId}`);
+        broadcast.postMessage({
+          type: 'USER_JOINED',
+          user: {
+            id: `p-${Date.now()}`,
+            name: currentUser.name,
+            email: currentUser.email,
+            role: currentUser.role,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Live In Room',
+            isHandRaised,
+            isMicOn,
+            isVideoOn
+          }
+        });
+
+        broadcast.onmessage = (event) => {
+          if (event.data?.type === 'USER_JOINED') {
+            const newUser = event.data.user;
+            setParticipants(prev => {
+              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name || p.name.includes(newUser.name));
+              if (!exists) {
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                  detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
+                }));
+                return [...prev, { ...newUser, isLocalUser: false }];
+              } else {
+                return prev.map(p => (p.email === newUser.email || p.name === newUser.name) ? { ...p, status: 'Live In Room' } : p);
+              }
+            });
+          } else if (event.data?.type === 'HAND_RAISE') {
+            const { name, isHandRaised: raised } = event.data;
+            setParticipants(prev => prev.map(p => p.name.includes(name) ? { ...p, isHandRaised: raised } : p));
+            if (raised) {
+              window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: `✋ ${name} raised their hand to speak`, type: 'info' }
+              }));
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: `Connected to Live Council Session as ${currentUser.name}`, type: 'success' }
+    }));
+
+    return () => {
+      clearInterval(pollTimer);
+      if (broadcast) broadcast.close();
+    };
+  }, [meetingId, currentUser]);
+
+  const updateParticipantsFromData = (remoteList: any[]) => {
+    setParticipants(prev => {
+      const merged: ConnectedParticipant[] = [];
+      const seen = new Set<string>();
+
+      // 1. Add current user as local user
+      const isLocal = true;
+      merged.push({
+        id: 'user-local',
+        name: `${currentUser.name} (You)`,
+        email: currentUser.email,
+        role: currentUser.role,
+        time: '10:00 AM',
+        status: 'Live In Room',
+        isLocalUser: true,
+        isMicOn,
+        isVideoOn,
+        isHandRaised
+      });
+      seen.add(currentUser.name.toLowerCase());
+      if (currentUser.email) seen.add(currentUser.email.toLowerCase());
+
+      // 2. Add remote participants
+      for (const p of remoteList) {
+        const cleanName = (p.name || '').replace('(You)', '').trim();
+        const cleanEmail = (p.email || '').trim().toLowerCase();
+        
+        if (cleanName.toLowerCase() === currentUser.name.toLowerCase() || (cleanEmail && cleanEmail === currentUser.email.toLowerCase())) {
+          continue;
+        }
+
+        if (!seen.has(cleanName.toLowerCase())) {
+          seen.add(cleanName.toLowerCase());
+          if (cleanEmail) seen.add(cleanEmail);
+
+          merged.push({
+            id: p.id || `p-${Math.random()}`,
+            name: cleanName,
+            email: p.email || '',
+            role: p.role || 'Stakeholder Representative',
+            time: p.time || p.joined_at || '10:00 AM',
+            status: p.status === 'Live In Room' ? 'Live In Room' : 'Dispatched',
+            isLocalUser: false,
+            isMicOn: p.isMicOn ?? true,
+            isVideoOn: p.isVideoOn ?? false,
+            isHandRaised: p.isHandRaised ?? false
+          });
+        }
+      }
+
+      return merged;
+    });
+  };
+
+  // Screen Share Handler (Interactive Screen / BIM Model Sharing)
   const handleToggleScreenShare = async () => {
     if (!isScreenSharing) {
       try {
         if (navigator.mediaDevices?.getDisplayMedia) {
-          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
           setScreenStream(stream);
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
           if (screenShareVideoRef.current) {
             screenShareVideoRef.current.srcObject = stream;
           }
+          window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: 'Screen sharing started (Broadcasting live in 60 FPS)', type: 'success' }
+          }));
+
           stream.getVideoTracks()[0].onended = () => {
             setIsScreenSharing(false);
             setScreenStream(null);
+            window.dispatchEvent(new CustomEvent('show-toast', {
+              detail: { message: 'Screen sharing ended', type: 'info' }
+            }));
           };
         } else {
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
         }
       } catch (err) {
-        console.warn("Screen share cancelled or not supported");
+        console.warn("Screen share cancelled or not allowed:", err);
         setIsScreenSharing(false);
       }
     } else {
@@ -142,23 +375,122 @@ export default function MeetingRoomPage() {
         setScreenStream(null);
       }
       setIsScreenSharing(false);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Screen sharing stopped', type: 'info' }
+      }));
     }
   };
 
+  // Mic Toggle Handler
+  const handleToggleMic = () => {
+    const nextState = !isMicOn;
+    setIsMicOn(nextState);
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = nextState;
+      });
+    }
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: nextState ? 'Microphone unmuted (Live audio stream)' : 'Microphone muted', type: nextState ? 'success' : 'info' }
+    }));
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'heartbeat',
+        participant: { name: currentUser.name, isMicOn: nextState }
+      })
+    }).catch(() => {});
+  };
+
+  // Camera Toggle Handler
+  const handleToggleVideo = async () => {
+    const nextState = !isVideoOn;
+    setIsVideoOn(nextState);
+
+    if (nextState) {
+      if (!localStream) {
+        try {
+          if (navigator.mediaDevices?.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isMicOn });
+            setLocalStream(stream);
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = stream;
+            }
+          }
+        } catch (e) {}
+      } else {
+        localStream.getVideoTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Camera started (Live video stream)', type: 'success' }
+      }));
+    } else {
+      if (localStream) {
+        localStream.getVideoTracks().forEach(track => {
+          track.enabled = false;
+        });
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Camera turned off (Avatar active)', type: 'info' }
+      }));
+    }
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'heartbeat',
+        participant: { name: currentUser.name, isVideoOn: nextState }
+      })
+    }).catch(() => {});
+  };
+
+  // Raise Hand Handler
+  const handleToggleRaiseHand = () => {
+    const nextState = !isHandRaised;
+    setIsHandRaised(nextState);
+
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: nextState ? '✋ Hand raised! Notified council moderator.' : 'Hand lowered.', 
+        type: nextState ? 'warning' : 'info' 
+      }
+    }));
+
+    // Broadcast across presence API
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'raise_hand',
+        participant: { name: currentUser.name, isHandRaised: nextState }
+      })
+    }).catch(() => {});
+
+    // Broadcast across local channel
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel(`nexucon_presence_${meetingId}`);
+        bc.postMessage({
+          type: 'HAND_RAISE',
+          name: currentUser.name,
+          isHandRaised: nextState
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  };
+
+  // Timer
   useEffect(() => {
     const timer = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Speaker switching simulation for connected council realism
-  useEffect(() => {
-    const speakerInterval = setInterval(() => {
-      const speakers: Array<'sanwo' | 'thorne' | 'chen' | 'rivera'> = ['sanwo', 'chen', 'thorne', 'rivera'];
-      setActiveSpeaker(speakers[Math.floor(Math.random() * speakers.length)]);
-    }, 12000);
-    return () => clearInterval(speakerInterval);
   }, []);
 
   const formatElapsed = (sec: number) => {
@@ -200,6 +532,115 @@ export default function MeetingRoomPage() {
   useEffect(() => {
     fetchMeetingDetails();
   }, [meetingId]);
+
+  // Handle Email Invitation Dispatch via Resend
+  const handleSendEmailInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    setIsSendingInvite(true);
+    const liveUrl = `${getLiveMeetingUrl()}?guest_name=${encodeURIComponent(inviteName.trim() || 'Guest Stakeholder')}&role=${encodeURIComponent(inviteRole)}&email=${encodeURIComponent(inviteEmail.trim())}`;
+    const formattedSubject = `🏛️ Live Meeting Invitation: ${meeting?.title || 'Project Coordination Session'} [${meeting?.meeting_reference || 'MTG-1092'}]`;
+
+    const htmlContent = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #060D15; color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 20px; border: 1px solid #1e293b;">
+        <div style="text-align: center; margin-bottom: 28px;">
+          <div style="background-color: rgba(34, 197, 94, 0.15); display: inline-block; padding: 8px 18px; border-radius: 9999px; font-size: 11px; font-weight: 800; color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.35); text-transform: uppercase; letter-spacing: 0.05em;">
+            🔴 Live Council Deliberation Active
+          </div>
+          <h1 style="color: #ffffff; font-size: 22px; font-weight: 900; margin: 16px 0 6px 0; letter-spacing: -0.02em;">Nexucon Regulatory Directorate</h1>
+          <p style="color: #94a3b8; font-size: 13px; margin: 0;">State Ministry of Physical Planning & Urban Development</p>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 24px; border-radius: 16px; border: 1px solid #334155; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
+          <div style="font-size: 11px; font-weight: 700; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+            Statutory Council Session
+          </div>
+          <h2 style="color: #ffffff; font-size: 18px; font-weight: 800; margin: 0 0 16px 0;">${meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</h2>
+          
+          <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8; width: 140px;">Meeting Ref:</td>
+              <td style="padding: 6px 0; font-family: monospace; font-weight: 800; color: #60a5fa;">${meeting?.meeting_reference || 'MTG-1092'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Project:</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${meeting?.project_name || 'Central Metro Transit Hub'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Invited Role:</td>
+              <td style="padding: 6px 0; color: #fbbf24; font-weight: 700;">${inviteRole}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Convened By:</td>
+              <td style="padding: 6px 0; color: #ffffff; font-weight: 600;">Engr. Babatunde Sanwo (Agency Head)</td>
+            </tr>
+          </table>
+
+          ${inviteCustomNote ? `
+            <div style="margin-top: 16px; padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 8px; border-left: 3px solid #3b82f6; font-size: 12px; color: #e2e8f0; font-style: italic;">
+              "${inviteCustomNote}"
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="text-align: center; margin-bottom: 28px;">
+          <a href="${liveUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 15px 32px; border-radius: 14px; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4); letter-spacing: -0.01em;">
+            Join Live Meeting Room Now →
+          </a>
+        </div>
+
+        <div style="background-color: #090e17; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 11px; color: #94a3b8; word-break: break-all; text-align: center; border: 1px solid #1e293b; margin-bottom: 24px;">
+          Direct Link: <a href="${liveUrl}" style="color: #60a5fa; text-decoration: none;">${liveUrl}</a>
+        </div>
+
+        <p style="font-size: 11px; color: #64748b; text-align: center; line-height: 1.6; margin: 0;">
+          This official dispatch was transmitted via Resend Cloud Engine on behalf of the Executive Regulatory Council.<br/>
+          Protected under Digital Regulatory Telemetry & Building Audit Protocol.
+        </p>
+      </div>
+    `;
+
+    try {
+      const res = await sendEmailViaResend({
+        to: inviteEmail.trim(),
+        subject: formattedSubject,
+        html: htmlContent,
+        type: 'INVITE_DIRECTOR'
+      });
+
+      if (res.success) {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Live invitation dispatched via Resend to ${inviteEmail.trim()}`, type: 'success' }
+        }));
+        
+        const newInvited: ConnectedParticipant = {
+          id: `p-${Date.now()}`,
+          name: inviteName.trim() || inviteEmail.split('@')[0],
+          email: inviteEmail.trim(),
+          role: inviteRole,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'Dispatched'
+        };
+
+        setParticipants(prev => [...prev, newInvited]);
+        setInviteEmail('');
+        setInviteName('');
+        setInviteCustomNote('');
+        setIsInviteModalOpen(false);
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: res.error || 'Failed to dispatch email invite via Resend', type: 'error' }
+        }));
+      }
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Network error dispatching invite', type: 'error' }
+      }));
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
 
   const handleSaveMinutes = async () => {
     if (!meeting) return;
@@ -252,19 +693,27 @@ export default function MeetingRoomPage() {
     if (!newChatMessage.trim()) return;
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setChatMessages(prev => [
-      ...prev,
-      {
-        sender: 'Engr. Babatunde Sanwo',
-        role: 'Agency Head',
-        text: newChatMessage.trim(),
-        time
-      }
-    ]);
+    const msgObj = {
+      sender: currentUser.name,
+      role: currentUser.role,
+      text: newChatMessage.trim(),
+      time
+    };
+
+    setChatMessages(prev => [...prev, msgObj]);
     setNewChatMessage('');
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'chat',
+        message: msgObj
+      })
+    }).catch(() => {});
   };
 
-  const handleCastVote = (vote: 'YES' | 'NO') => {
+  const handleCastVote = async (vote: 'YES' | 'NO') => {
     if (vote === 'YES') {
       setVoteStatus('VOTED_YES');
       setQuorumVotes(prev => ({ ...prev, yes: prev.yes + 1 }));
@@ -278,6 +727,26 @@ export default function MeetingRoomPage() {
         detail: { message: 'Dissenting vote logged in official ledger', type: 'info' }
       }));
     }
+
+    // Broadcast across Presence API
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'vote',
+        vote: { voter_name: currentUser.name, vote }
+      })
+    }).catch(() => {});
+
+    // Save in Django DB
+    try {
+      await castMeetingVote(meetingId, {
+        voter_name: currentUser.name,
+        voter_role: currentUser.role,
+        vote,
+        resolution_title: 'Signoff for 5th Floor Slab Concrete Casting'
+      });
+    } catch (e) {}
   };
 
   // Google Meet URL
@@ -289,13 +758,15 @@ export default function MeetingRoomPage() {
   const webrtcRoomName = `NexuconCouncil-${(meeting?.meeting_reference || 'Room').replace(/[^a-zA-Z0-9]/g, '')}`;
   const webrtcEmbedUrl = `https://meet.jit.si/${webrtcRoomName}#config.startWithAudioMuted=false&config.prejoinPageEnabled=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','closedcaptions','desktop','fullscreen','fodeviceselection','hangup','chat','recording','etherpad','sharedvideo','settings','raisehand','videoquality','filmstrip','feedback','stats','shortcuts','tileview']`;
 
+  const activeInRoomCount = participants.filter(p => p.status === 'Live In Room').length;
+
   return (
     <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans">
       
       {/* Top Header Bar (Full-Bleed Glassmorphism) */}
       <header className="h-16 px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0">
         
-        {/* Left: Meeting Info & Live Indicator */}
+        {/* Left: Meeting Info & Live Connected Indicator */}
         <div className="flex items-center gap-3.5">
           <button
             onClick={() => router.push('/government/dashboard/stakeholders/meetings')}
@@ -313,16 +784,19 @@ export default function MeetingRoomPage() {
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
                 {meeting?.meeting_reference || 'MTG-1092'}
               </span>
-              <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                LIVE IN-PLATFORM
+                <span>LIVE ({activeInRoomCount} IN ROOM)</span>
               </span>
               <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
                 ⏱️ {formatElapsed(elapsedSeconds)}
               </span>
             </div>
-            <h1 className="text-sm font-black text-white truncate max-w-[260px] sm:max-w-md mt-0.5">
-              {meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}
+            <h1 className="text-sm font-black text-white truncate max-w-[240px] sm:max-w-md mt-0.5 flex items-center gap-2">
+              <span>{meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</span>
+              <span className="text-[11px] font-normal text-slate-400 hidden md:inline">
+                • Connected as <span className="text-emerald-400 font-bold">{currentUser.name}</span>
+              </span>
             </h1>
           </div>
         </div>
@@ -330,8 +804,18 @@ export default function MeetingRoomPage() {
         {/* Right Action Controls */}
         <div className="flex items-center gap-2.5">
           
+          {/* Top Quick Invite Button */}
+          <button
+            onClick={() => setIsInviteModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+            title="Send Email Invitation via Resend"
+          >
+            <UserPlus size={15} />
+            <span className="hidden sm:inline">Invite User</span>
+          </button>
+
           {/* Stage Engine Switcher */}
-          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden md:flex items-center">
+          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden lg:flex items-center">
             <button
               onClick={() => setStageMode('native_council')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -365,7 +849,7 @@ export default function MeetingRoomPage() {
               }`}
             >
               <Globe size={13} />
-              <span>Google Meet Launch</span>
+              <span>Google Meet</span>
             </button>
           </div>
 
@@ -376,7 +860,7 @@ export default function MeetingRoomPage() {
             title={layoutMode === 'grid' ? 'Switch to Spotlight View' : 'Switch to Grid View'}
           >
             <LayoutGrid size={15} />
-            <span className="hidden lg:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
+            <span className="hidden xl:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
           </button>
 
           {/* Browser Fullscreen Toggle */}
@@ -393,11 +877,11 @@ export default function MeetingRoomPage() {
             href={meetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             title="Launch Google Meet App"
           >
             <ExternalLink size={14} />
-            <span className="hidden sm:inline">Launch Meet App</span>
+            <span className="hidden sm:inline">Meet App</span>
           </a>
 
           {/* Leave Button */}
@@ -424,7 +908,7 @@ export default function MeetingRoomPage() {
           {/* Stage Area */}
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
             
-            {/* MODE 1: EMBEDDED WEBRTC MULTI-PARTY VIDEO BRIDGE (No X-Frame-Options Deny) */}
+            {/* MODE 1: EMBEDDED WEBRTC MULTI-PARTY VIDEO BRIDGE */}
             {stageMode === 'webrtc_bridge' ? (
               <div className="flex-1 rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-950 flex flex-col relative shadow-2xl">
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
@@ -500,10 +984,10 @@ export default function MeetingRoomPage() {
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
-                          <span>{isScreenSharing ? 'Active Screen / Revit BIM Model Stream' : 'Spotlight: Council Lead'}</span>
+                          <span>{isScreenSharing ? 'Active Screen / BIM Model Stream' : 'Spotlight Stage'}</span>
                         </span>
                         <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
-                          <Volume2 size={13} className="animate-pulse" /> Active Audio Stream
+                          <Volume2 size={13} className="animate-pulse" /> Live HD Audio Stream
                         </span>
                       </div>
 
@@ -533,17 +1017,31 @@ export default function MeetingRoomPage() {
                               muted
                               className="w-full h-full object-cover transform -scale-x-100"
                             />
-                            <div className="absolute bottom-3 left-3 bg-slate-950/80 px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-slate-800">
-                              You (Engr. Babatunde Sanwo)
+                            <div className="absolute bottom-3 left-3 bg-slate-950/90 px-3 py-1 rounded-lg text-xs font-bold text-white border border-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>{currentUser.name} (You)</span>
                             </div>
+                            {isHandRaised && (
+                              <div className="absolute top-3 right-3 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 shadow-lg shadow-amber-500/40 animate-bounce">
+                                <Hand size={14} /> <span>Hand Raised</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-center space-y-3">
-                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-blue-500/20">
-                              BS
+                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-emerald-500/20">
+                              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
-                            <h2 className="text-xl font-black text-white">Engr. Babatunde Sanwo</h2>
-                            <p className="text-xs text-slate-400 font-medium">Agency Head & Director General • Regulatory Directorate</p>
+                            <h2 className="text-xl font-black text-white">{currentUser.name}</h2>
+                            <p className="text-xs text-slate-400 font-medium">{currentUser.role}</p>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
+                              <CheckCircle size={13} /> Active in council database
+                            </span>
+                            {isHandRaised && (
+                              <div className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 text-slate-950 font-black text-xs rounded-full shadow-lg shadow-amber-500/30 animate-pulse">
+                                <Hand size={14} /> <span>Hand Raised to Speak</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -552,30 +1050,30 @@ export default function MeetingRoomPage() {
                         <span className="text-[11px] font-mono">Session ID: {meeting?.meeting_reference || 'MTG-1092'}</span>
                         <span className="flex items-center gap-1 text-emerald-400 font-bold">
                           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                          4 Council Members Connected
+                          {activeInRoomCount} Council Members Connected
                         </span>
                       </div>
                     </div>
 
                     {/* Bottom Thumbnail Strip */}
-                    <div className="h-28 grid grid-cols-4 gap-3">
-                      {[
-                        { name: 'Michael Thorne', role: 'Developer', initials: 'MT', active: activeSpeaker === 'thorne' },
-                        { name: 'Marcus Chen', role: 'Inspector', initials: 'MC', active: activeSpeaker === 'chen' },
-                        { name: 'David Rivera', role: 'Contractor', initials: 'DR', active: activeSpeaker === 'rivera' },
-                        { name: 'Engr. Sanwo (You)', role: 'Agency Head', initials: 'BS', active: activeSpeaker === 'sanwo' },
-                      ].map((p, idx) => (
+                    <div className="h-24 flex gap-2.5 overflow-x-auto pb-1 shrink-0">
+                      {participants.map((p, idx) => (
                         <div
-                          key={idx}
-                          className={`rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all ${
-                            p.active ? 'border-blue-500 bg-blue-950/20' : 'border-slate-800'
+                          key={p.id || idx}
+                          className={`min-w-[170px] max-w-[200px] rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all shrink-0 ${
+                            p.isLocalUser ? 'border-emerald-500/80 bg-emerald-950/20' : 'border-slate-800'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 border border-slate-700">
-                            {p.initials}
+                          <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
+                            p.isLocalUser ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-800 text-white border-slate-700'
+                          }`}>
+                            {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                           </div>
                           <div className="truncate">
-                            <p className="text-xs font-bold text-white truncate">{p.name}</p>
+                            <p className="text-xs font-bold text-white truncate flex items-center gap-1">
+                              <span>{p.name}</span>
+                              {p.isLocalUser && <span className="text-[9px] text-emerald-400 font-mono">(You)</span>}
+                            </p>
                             <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
                           </div>
                         </div>
@@ -585,156 +1083,112 @@ export default function MeetingRoomPage() {
                   </div>
                 ) : (
                   
-                  /* GRID VIEW MATRIX: 4 EQUAL INTERACTIVE TILES */
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
-                    
-                    {/* Tile 1: Agency Head / Local Webcam */}
-                    <div className={`relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'sanwo' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-lg shadow">
-                          🏛️ Agency Head / Council Lead (You)
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          {isMicOn ? (
-                            <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                              <Volume2 size={12} className="animate-pulse" /> Live Mic
-                            </span>
+                  /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS */
+                  <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
+                    participants.length <= 1 
+                      ? 'grid-cols-1' 
+                      : participants.length === 2 
+                        ? 'grid-cols-1 sm:grid-cols-2' 
+                        : participants.length <= 4 
+                          ? 'grid-cols-1 sm:grid-cols-2' 
+                          : 'grid-cols-2 lg:grid-cols-3'
+                  }`}>
+                    {participants.map((p, idx) => (
+                      <div
+                        key={p.id || idx}
+                        className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
+                          p.isLocalUser
+                            ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
+                            : p.status === 'Live In Room'
+                              ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
+                              : 'bg-[#091522]/80 border border-slate-800'
+                        }`}
+                      >
+                        {/* Top Tile Badge */}
+                        <div className="flex items-center justify-between z-10">
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
+                            p.isLocalUser 
+                              ? 'bg-emerald-600 text-white' 
+                              : 'bg-slate-800 text-slate-200 border border-slate-700'
+                          }`}>
+                            {p.isLocalUser && <CheckCircle2 size={11} />}
+                            <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {p.isHandRaised && (
+                              <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                                <Hand size={11} /> Hand Raised
+                              </span>
+                            )}
+
+                            {p.isLocalUser ? (
+                              isMicOn ? (
+                                <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                  <Volume2 size={12} className="animate-pulse" /> Live Mic
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                  Muted
+                                </span>
+                              )
+                            ) : p.status === 'Live In Room' ? (
+                              <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Connected
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
+                                Dispatched
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Center Stage Media: Real Video for Local User or Dynamic Avatar for Remote Users */}
+                        <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
+                          {p.isLocalUser && isVideoOn && localStream ? (
+                            <video
+                              ref={localVideoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                            />
                           ) : (
-                            <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                              Muted
-                            </span>
+                            <div className="flex flex-col items-center text-center">
+                              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                p.isLocalUser
+                                  ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
+                                  : p.status === 'Live In Room'
+                                    ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
+                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}>
+                                {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
+                                {p.name}
+                              </h3>
+                              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
+                                {p.email || p.role}
+                              </p>
+                            </div>
                           )}
                         </div>
-                      </div>
 
-                      {/* Real WebRTC Video Feed or Avatar Tile */}
-                      <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
-                        {isVideoOn && localStream ? (
-                          <video
-                            ref={localVideoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center">
-                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-blue-500/30">
-                              BS
-                            </div>
-                            <h3 className="text-sm font-bold text-white mt-2.5">Engr. Babatunde Sanwo</h3>
-                            <p className="text-[11px] text-slate-400 font-medium">Director General, Regulatory Control</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">1080p HD Video • In-Portal Stream</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30" />
-                      </div>
-                    </div>
-
-                    {/* Tile 2: Master Developer (Michael Thorne) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'thorne' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          🏗️ Master Developer
-                        </span>
-                        {activeSpeaker === 'thorne' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
+                        {/* Bottom Tile Footer */}
+                        <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                          <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
+                            p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
+                          }`}>
+                            <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                            <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Connected
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {p.time || '10:00 AM'}
                           </span>
-                        )}
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          MT
                         </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">Michael Thorne</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Nexucon Real Estate Dev Ltd</p>
                       </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Developer Stream Online</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
-                    {/* Tile 3: Lead Inspector (Marcus Chen) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'chen' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          🔍 Field Inspector
-                        </span>
-                        {activeSpeaker === 'chen' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Zone A Assigned
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          MC
-                        </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">Marcus Chen</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Senior Structural Auditor</p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Field Telemetry Active</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
-                    {/* Tile 4: General Contractor (David Rivera) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'rivera' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          👷 Lead Contractor
-                        </span>
-                        {activeSpeaker === 'rivera' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Apex Construction
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          DR
-                        </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">David Rivera</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Project Director (Apex)</p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Site Civil Engineer</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
+                    ))}
                   </div>
                 )}
               </>
@@ -747,16 +1201,10 @@ export default function MeetingRoomPage() {
             <div className="mt-3 py-2.5 px-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 text-xs text-slate-300 shadow-lg">
               <div className="flex items-center gap-2 truncate">
                 <span className="font-bold text-blue-400 shrink-0">
-                  {activeSpeaker === 'sanwo' ? 'Engr. Babatunde Sanwo:' :
-                   activeSpeaker === 'chen' ? 'Marcus Chen (Inspector):' :
-                   activeSpeaker === 'thorne' ? 'Michael Thorne (Dev):' :
-                   'David Rivera (Apex):'}
+                  {currentUser.name} (You):
                 </span>
                 <span className="truncate italic text-slate-300">
-                  {activeSpeaker === 'sanwo' ? '"The structural GPR scan is verified on the portal. We will proceed to record the quorum signoff for the 5th floor slab."' :
-                   activeSpeaker === 'chen' ? '"All rebar ties and cover block spacing on the eastern deck meet code requirements."' :
-                   activeSpeaker === 'thorne' ? '"The MEP conduit layout drawings have been cross-checked with the revised structural model."' :
-                   '"Casting batch plant pumps are standing by for immediate placement once approval is sealed."'}
+                  "Connected to the official council session. Reviewing stage-gate signoff for Level 5 slab casting."
                 </span>
               </div>
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 hidden sm:inline">
@@ -768,18 +1216,19 @@ export default function MeetingRoomPage() {
           {/* FLOATING BOTTOM CONTROL DOCK */}
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
             
-            {/* Meeting Link Pill */}
+            {/* Meeting Link Copy Action (Generates Live Production URL) */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'In-portal meeting room link copied!', type: 'success' } }));
+                  const liveLink = getLiveMeetingUrl();
+                  navigator.clipboard.writeText(liveLink);
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Live room link copied (${liveLink})!`, type: 'success' } }));
                 }}
-                className="px-3 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Copy In-Platform Room Link"
+                className="px-3.5 py-2 rounded-2xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-600/40 text-blue-300 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-950/50"
+                title="Copy Live Production Meeting Link"
               >
-                <Copy size={13} />
-                <span className="hidden sm:inline font-mono">Copy Portal Link</span>
+                <Copy size={14} className="text-blue-400" />
+                <span className="font-mono text-[11px]">Copy Live Portal Link</span>
               </button>
             </div>
 
@@ -788,7 +1237,7 @@ export default function MeetingRoomPage() {
               
               {/* Mic Toggle */}
               <button
-                onClick={() => setIsMicOn(!isMicOn)}
+                onClick={handleToggleMic}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
                   isMicOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
@@ -802,7 +1251,7 @@ export default function MeetingRoomPage() {
 
               {/* Video Toggle */}
               <button
-                onClick={() => setIsVideoOn(!isVideoOn)}
+                onClick={handleToggleVideo}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
                   isVideoOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
@@ -828,9 +1277,9 @@ export default function MeetingRoomPage() {
                 <span className="hidden md:inline">{isScreenSharing ? 'Sharing Screen' : 'Share Screen'}</span>
               </button>
 
-              {/* Raise Hand */}
+              {/* Raise Hand Toggle */}
               <button
-                onClick={() => setIsHandRaised(!isHandRaised)}
+                onClick={handleToggleRaiseHand}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold ${
                   isHandRaised 
                     ? 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/30' 
@@ -867,7 +1316,7 @@ export default function MeetingRoomPage() {
                 title={isSidebarOpen ? 'Collapse Side Panel' : 'Expand Side Panel'}
               >
                 <MessageSquare size={18} />
-                <span className="hidden sm:inline">Collaboration Panel</span>
+                <span className="hidden sm:inline">Collaboration &amp; People</span>
               </button>
             </div>
 
@@ -875,21 +1324,34 @@ export default function MeetingRoomPage() {
 
         </main>
 
-        {/* RIGHT COLLAPSIBLE COLLABORATION DRAWER */}
+        {/* RIGHT COLLAPSIBLE COLLABORATION & INVITATION DRAWER */}
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.aside
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 380, opacity: 1 }}
+              animate={{ width: 390, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="h-full bg-[#08121E]/95 border-l border-slate-800/90 flex flex-col shadow-2xl overflow-hidden shrink-0 z-20"
             >
               {/* Drawer Tabs */}
-              <div className="p-3 bg-slate-900/90 border-b border-slate-800 flex items-center gap-1">
+              <div className="p-2.5 bg-slate-900/90 border-b border-slate-800 grid grid-cols-5 gap-1">
+                <button
+                  onClick={() => setActiveTab('invite')}
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                    activeTab === 'invite'
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+                  title="People & Invite"
+                >
+                  <Users size={13} />
+                  <span>People</span>
+                </button>
+
                 <button
                   onClick={() => setActiveTab('action_items')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'action_items'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -901,7 +1363,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('minutes')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'minutes'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -913,7 +1375,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('voting')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'voting'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -925,7 +1387,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('chat')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'chat'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -939,6 +1401,122 @@ export default function MeetingRoomPage() {
               {/* Drawer Content */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4">
                 
+                {/* TAB 0: PEOPLE & INVITATION */}
+                {activeTab === 'invite' && (
+                  <div className="space-y-4">
+                    
+                    {/* Current User Identity Card */}
+                    <div className="p-3.5 bg-gradient-to-br from-emerald-950/50 to-teal-950/40 rounded-2xl border border-emerald-500/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/30">
+                          {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-white">{currentUser.name}</span>
+                            <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded">YOU</span>
+                          </div>
+                          <p className="text-[10px] text-slate-300">{currentUser.role}</p>
+                        </div>
+                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    </div>
+
+                    {/* Quick Invite Form */}
+                    <form onSubmit={handleSendEmailInvite} className="space-y-2.5 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                          <Mail size={13} className="text-emerald-400" />
+                          <span>Invite Stakeholder via Email</span>
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
+                          Resend API
+                        </span>
+                      </div>
+
+                      <div>
+                        <input
+                          type="email"
+                          required
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="e.g. developer@nexucon.net"
+                          className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={inviteName}
+                          onChange={(e) => setInviteName(e.target.value)}
+                          placeholder="Name / Title"
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <select
+                          value={inviteRole}
+                          onChange={(e) => setInviteRole(e.target.value)}
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none"
+                        >
+                          <option value="Master Developer">Master Developer</option>
+                          <option value="Lead Structural Inspector">Lead Inspector</option>
+                          <option value="General Contractor">General Contractor</option>
+                          <option value="Consulting Structural Engineer">Consultant</option>
+                          <option value="Government Agency Director">Agency Director</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSendingInvite || !inviteEmail.trim()}
+                        className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSendingInvite ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Dispatching via Resend...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send size={13} />
+                            <span>Send Live Invite Email</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    {/* Participants & Dispatched List */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                        <span>Connected Roster ({participants.length})</span>
+                        <span className="font-mono text-emerald-400">{activeInRoomCount} Live in Room</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {participants.map((p, idx) => (
+                          <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                            p.isLocalUser ? 'bg-emerald-950/30 border-emerald-500/50' : 'bg-slate-900/70 border-slate-800'
+                          }`}>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                                <span>{p.name}</span>
+                                {p.isLocalUser && <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1 rounded">YOU</span>}
+                                {p.isHandRaised && <span className="text-[10px]">✋</span>}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">{p.email} • {p.role}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                              p.status === 'Live In Room' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* TAB 1: ACTION ITEMS */}
                 {activeTab === 'action_items' && (
                   <div className="space-y-4">
@@ -1139,6 +1717,130 @@ export default function MeetingRoomPage() {
         </AnimatePresence>
 
       </div>
+
+      {/* QUICK INVITE MODAL DIALOG */}
+      <AnimatePresence>
+        {isInviteModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#091522] border-2 border-emerald-500/40 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                    <Mail size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">Invite User to Live Meeting</h3>
+                    <p className="text-xs text-slate-400">Transmitted via Resend Cloud Email API</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsInviteModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSendEmailInvite} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Stakeholder Email Address <span className="text-emerald-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="e.g. developer@nexucon.net, inspector@gov.ng"
+                    className="w-full p-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Full Name / Title
+                    </label>
+                    <input
+                      type="text"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      placeholder="e.g. Engr. Oladipo"
+                      className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Stakeholder Role
+                    </label>
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-slate-200 focus:outline-none"
+                    >
+                      <option value="Master Developer">Master Developer</option>
+                      <option value="Lead Structural Inspector">Lead Inspector</option>
+                      <option value="General Contractor">General Contractor</option>
+                      <option value="Consulting Engineer">Consultant</option>
+                      <option value="Government Agency Director">Agency Director</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Personal Executive Note (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={inviteCustomNote}
+                    onChange={(e) => setInviteCustomNote(e.target.value)}
+                    placeholder="Please join immediately to confirm the Level 5 slab certification..."
+                    className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-[11px] font-mono text-slate-400 break-all">
+                  🔗 Link attached: <span className="text-emerald-400">{getLiveMeetingUrl()}</span>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsInviteModalOpen(false)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingInvite || !inviteEmail.trim()}
+                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSendingInvite ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Sending via Resend...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={14} />
+                        <span>Dispatch Invite Email</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

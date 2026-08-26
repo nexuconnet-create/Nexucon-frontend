@@ -384,8 +384,18 @@ export const startMeeting = async (id: string): Promise<any> => {
   return unwrapItem<any>(response);
 };
 
+export const joinMeeting = async (id: string, participantData: { name: string; role?: string; email?: string }): Promise<StakeholderMeeting> => {
+  const response = await api.post(`/stakeholders/meetings/${id}/join/`, participantData);
+  return unwrapItem<StakeholderMeeting>(response);
+};
+
+export const castMeetingVote = async (id: string, voteData: { voter_name: string; voter_role?: string; vote: 'YES' | 'NO'; resolution_title?: string }): Promise<any> => {
+  const response = await api.post(`/stakeholders/meetings/${id}/vote/`, voteData);
+  return unwrapItem<any>(response);
+};
+
 export const updateMeetingNotes = async (id: string, notes: string): Promise<StakeholderMeeting> => {
-  const response = await api.patch(`/stakeholders/meetings/${id}/`, { minutes_notes: notes });
+  const response = await api.post(`/stakeholders/meetings/${id}/notes/`, { notes });
   return unwrapItem<StakeholderMeeting>(response);
 };
 
