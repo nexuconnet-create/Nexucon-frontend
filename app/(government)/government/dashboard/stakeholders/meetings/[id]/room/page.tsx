@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
-  addMeetingActionItem, MeetingActionItem 
+  addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote 
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
 
@@ -73,7 +73,7 @@ export default function MeetingRoomPage() {
 
   // Live Connected Participants List
   const [participants, setParticipants] = useState<ConnectedParticipant[]>([
-    { id: 'user-local', name: 'Engr. Babatunde Sanwo (You)', email: 'head@regulator.gov.ng', role: 'Agency Head / Council Lead', time: '10:00 AM', status: 'Live In Room', isLocalUser: true },
+    { id: 'user-local', name: `${currentUser.name} (You)`, email: currentUser.email, role: currentUser.role, time: '10:00 AM', status: 'Live In Room', isLocalUser: true },
     { id: 'user-dev', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room' },
     { id: 'user-insp', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room' },
     { id: 'user-cont', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room' },
@@ -115,7 +115,62 @@ export default function MeetingRoomPage() {
     return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
   };
 
-  // Cross-Tab / Multi-Device Presence Synchronization via BroadcastChannel & Local Storage
+  // 1. Join Meeting on Backend Database upon Mount
+  useEffect(() => {
+    if (!meetingId) return;
+
+    joinMeeting(meetingId, {
+      name: currentUser.name,
+      role: currentUser.role,
+      email: currentUser.email
+    }).then((updatedMtg) => {
+      if (updatedMtg) {
+        setMeeting(updatedMtg);
+        if (updatedMtg.participants && updatedMtg.participants.length > 0) {
+          setParticipants(updatedMtg.participants.map((p: any, idx: number) => ({
+            id: `p-${idx}`,
+            name: p.name === currentUser.name ? `${p.name} (You)` : p.name,
+            role: p.role,
+            email: p.email || '',
+            time: p.joined_at || '10:00 AM',
+            status: (p.status === 'Live In Room' || p.status === 'Confirmed') ? 'Live In Room' : 'Dispatched',
+            isLocalUser: Boolean(p.name === currentUser.name || (currentUser.email && p.email === currentUser.email))
+          })));
+        }
+      }
+    }).catch(err => console.warn("Backend join meeting sync notice:", err));
+  }, [meetingId, currentUser]);
+
+  // 2. Real-time Backend Database Polling (Every 4 seconds for instant cross-device updates)
+  useEffect(() => {
+    if (!meetingId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const liveData = await getMeetingById(meetingId);
+        if (liveData) {
+          setMeeting(liveData);
+          if (liveData.participants && liveData.participants.length > 0) {
+            setParticipants(liveData.participants.map((p: any, idx: number) => ({
+              id: `p-${idx}`,
+              name: p.name === currentUser.name ? `${p.name} (You)` : p.name,
+              role: p.role,
+              email: p.email || '',
+              time: p.joined_at || '10:00 AM',
+              status: (p.status === 'Live In Room' || p.status === 'Confirmed') ? 'Live In Room' : 'Dispatched',
+              isLocalUser: Boolean(p.name === currentUser.name || (currentUser.email && p.email === currentUser.email))
+            })));
+          }
+        }
+      } catch (err) {
+        // silent sync
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [meetingId, currentUser]);
+
+  // Cross-Tab / Multi-Device Presence Synchronization via BroadcastChannel
   useEffect(() => {
     const channelName = `nexucon_presence_${meetingId || 'default'}`;
     let broadcast: BroadcastChannel | null = null;
@@ -142,7 +197,7 @@ export default function MeetingRoomPage() {
           if (event.data?.type === 'USER_JOINED') {
             const newUser = event.data.user;
             setParticipants(prev => {
-              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name);
+              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name || p.name.includes(newUser.name));
               if (!exists) {
                 window.dispatchEvent(new CustomEvent('show-toast', {
                   detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
@@ -459,7 +514,7 @@ export default function MeetingRoomPage() {
     setNewChatMessage('');
   };
 
-  const handleCastVote = (vote: 'YES' | 'NO') => {
+  const handleCastVote = async (vote: 'YES' | 'NO') => {
     if (vote === 'YES') {
       setVoteStatus('VOTED_YES');
       setQuorumVotes(prev => ({ ...prev, yes: prev.yes + 1 }));
@@ -472,6 +527,17 @@ export default function MeetingRoomPage() {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: 'Dissenting vote logged in official ledger', type: 'info' }
       }));
+    }
+
+    try {
+      await castMeetingVote(meetingId, {
+        voter_name: currentUser.name,
+        voter_role: currentUser.role,
+        vote,
+        resolution_title: 'Signoff for 5th Floor Slab Concrete Casting'
+      });
+    } catch (e) {
+      console.warn("Backend vote recording notice:", e);
     }
   };
 
@@ -750,13 +816,13 @@ export default function MeetingRoomPage() {
                           </div>
                         ) : (
                           <div className="text-center space-y-3">
-                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-blue-500/20">
+                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-emerald-500/20">
                               {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <h2 className="text-xl font-black text-white">{currentUser.name}</h2>
                             <p className="text-xs text-slate-400 font-medium">{currentUser.role}</p>
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
-                              <CheckCircle size={13} /> You have joined this council session
+                              <CheckCircle size={13} /> Active in council database
                             </span>
                           </div>
                         )}
@@ -838,7 +904,7 @@ export default function MeetingRoomPage() {
                               {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
                             <h3 className="text-sm font-bold text-white mt-2.5">{currentUser.name}</h3>
-                            <p className="text-[11px] text-emerald-400 font-medium">Joined &amp; Connected</p>
+                            <p className="text-[11px] text-emerald-400 font-medium">Joined in Database</p>
                           </div>
                         )}
                       </div>
