@@ -200,7 +200,9 @@ export default function MeetingRoomPage() {
   };
 
   // Google Meet Room Link
-  const meetUrl = meeting?.google_meet_url || `https://meet.google.com/nxu-${(meeting?.room_id || 'mtg').slice(0, 4)}-hub`;
+  const meetUrl = (meeting?.google_meet_url && !meeting.google_meet_url.includes('nxu-'))
+    ? meeting.google_meet_url 
+    : 'https://meet.google.com/new';
 
   return (
     <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans">
