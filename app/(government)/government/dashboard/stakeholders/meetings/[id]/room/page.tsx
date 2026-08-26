@@ -838,18 +838,18 @@ export default function MeetingRoomPage() {
                     </div>
 
                     {/* Bottom Thumbnail Strip */}
-                    <div className="h-28 grid grid-cols-4 gap-3">
-                      {participants.slice(0, 4).map((p, idx) => (
+                    <div className="h-24 flex gap-2.5 overflow-x-auto pb-1 shrink-0">
+                      {participants.map((p, idx) => (
                         <div
-                          key={idx}
-                          className={`rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all ${
+                          key={p.id || idx}
+                          className={`min-w-[170px] max-w-[200px] rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all shrink-0 ${
                             p.isLocalUser ? 'border-emerald-500/80 bg-emerald-950/20' : 'border-slate-800'
                           }`}
                         >
-                          <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
+                          <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
                             p.isLocalUser ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-800 text-white border-slate-700'
                           }`}>
-                            {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                            {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                           </div>
                           <div className="truncate">
                             <p className="text-xs font-bold text-white truncate flex items-center gap-1">
@@ -865,131 +865,106 @@ export default function MeetingRoomPage() {
                   </div>
                 ) : (
                   
-                  /* GRID VIEW MATRIX: EQUAL INTERACTIVE TILES */
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
-                    
-                    {/* Tile 1: Local User Tile (Active & Confirmed Joined) */}
-                    <div className="relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-emerald-500/10 transition-all">
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1">
-                          <CheckCircle2 size={11} />
-                          <span>{currentUser.role} (You)</span>
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          {isMicOn ? (
-                            <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                              <Volume2 size={12} className="animate-pulse" /> Live Mic
-                            </span>
+                  /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS */
+                  <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
+                    participants.length <= 1 
+                      ? 'grid-cols-1' 
+                      : participants.length === 2 
+                        ? 'grid-cols-1 sm:grid-cols-2' 
+                        : participants.length <= 4 
+                          ? 'grid-cols-1 sm:grid-cols-2' 
+                          : 'grid-cols-2 lg:grid-cols-3'
+                  }`}>
+                    {participants.map((p, idx) => (
+                      <div
+                        key={p.id || idx}
+                        className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
+                          p.isLocalUser
+                            ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
+                            : p.status === 'Live In Room'
+                              ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
+                              : 'bg-[#091522]/80 border border-slate-800'
+                        }`}
+                      >
+                        {/* Top Tile Badge */}
+                        <div className="flex items-center justify-between z-10">
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
+                            p.isLocalUser 
+                              ? 'bg-emerald-600 text-white' 
+                              : 'bg-slate-800 text-slate-200 border border-slate-700'
+                          }`}>
+                            {p.isLocalUser && <CheckCircle2 size={11} />}
+                            <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {p.isLocalUser ? (
+                              isMicOn ? (
+                                <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                  <Volume2 size={12} className="animate-pulse" /> Live Mic
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                  Muted
+                                </span>
+                              )
+                            ) : p.status === 'Live In Room' ? (
+                              <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Connected
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
+                                Dispatched
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Center Stage Media: Real Video for Local User or Dynamic Avatar for Remote Users */}
+                        <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
+                          {p.isLocalUser && isVideoOn && localStream ? (
+                            <video
+                              ref={localVideoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                            />
                           ) : (
-                            <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                              Muted
-                            </span>
+                            <div className="flex flex-col items-center text-center">
+                              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                p.isLocalUser
+                                  ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
+                                  : p.status === 'Live In Room'
+                                    ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
+                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}>
+                                {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
+                                {p.name}
+                              </h3>
+                              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
+                                {p.email || p.role}
+                              </p>
+                            </div>
                           )}
                         </div>
-                      </div>
 
-                      {/* Real WebRTC Video Feed or Avatar Tile */}
-                      <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
-                        {isVideoOn && localStream ? (
-                          <video
-                            ref={localVideoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center">
-                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-emerald-500/30">
-                              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                            </div>
-                            <h3 className="text-sm font-bold text-white mt-2.5">{currentUser.name}</h3>
-                            <p className="text-[11px] text-emerald-400 font-medium">Joined in Database</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono text-emerald-400 font-bold">● Active In Council Room</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30" />
-                      </div>
-                    </div>
-
-                    {/* Tile 2: Master Developer (Michael Thorne) */}
-                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          🏗️ Master Developer
-                        </span>
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/50">
-                          Connected
-                        </span>
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          MT
+                        {/* Bottom Tile Footer */}
+                        <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                          <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
+                            p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
+                          }`}>
+                            <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                            <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {p.time || '10:00 AM'}
+                          </span>
                         </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">Michael Thorne</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Nexucon Real Estate Dev Ltd</p>
                       </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Developer Stream Online</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
-                    {/* Tile 3: Lead Inspector (Marcus Chen) */}
-                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          🔍 Field Inspector
-                        </span>
-                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                          Zone A Assigned
-                        </span>
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          MC
-                        </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">Marcus Chen</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Senior Structural Auditor</p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Field Telemetry Active</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
-                    {/* Tile 4: General Contractor (David Rivera) */}
-                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
-                      <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                          👷 Lead Contractor
-                        </span>
-                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                          Apex Construction
-                        </span>
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center my-2">
-                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                          DR
-                        </div>
-                        <h3 className="text-sm font-bold text-white mt-2.5">David Rivera</h3>
-                        <p className="text-[11px] text-slate-400 font-medium">Project Director (Apex)</p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">Site Civil Engineer</span>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      </div>
-                    </div>
-
+                    ))}
                   </div>
                 )}
               </>
