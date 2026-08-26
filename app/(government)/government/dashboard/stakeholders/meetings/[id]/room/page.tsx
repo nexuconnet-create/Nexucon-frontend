@@ -28,6 +28,9 @@ interface ConnectedParticipant {
   time: string;
   status: 'Live In Room' | 'Dispatched';
   isLocalUser?: boolean;
+  isMicOn?: boolean;
+  isVideoOn?: boolean;
+  isHandRaised?: boolean;
 }
 
 export default function MeetingRoomPage() {
@@ -52,7 +55,6 @@ export default function MeetingRoomPage() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [activeSpeaker, setActiveSpeaker] = useState<string>('sanwo');
   
   // WebRTC Local Video / Screen Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -73,10 +75,10 @@ export default function MeetingRoomPage() {
 
   // Live Connected Participants List
   const [participants, setParticipants] = useState<ConnectedParticipant[]>([
-    { id: 'user-local', name: `${currentUser.name} (You)`, email: currentUser.email, role: currentUser.role, time: '10:00 AM', status: 'Live In Room', isLocalUser: true },
-    { id: 'user-dev', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room' },
-    { id: 'user-insp', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room' },
-    { id: 'user-cont', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room' },
+    { id: 'user-local', name: `${currentUser.name} (You)`, email: currentUser.email, role: currentUser.role, time: '10:00 AM', status: 'Live In Room', isLocalUser: true, isMicOn: true, isVideoOn: true, isHandRaised: false },
+    { id: 'user-dev', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room', isMicOn: true, isVideoOn: false, isHandRaised: false },
+    { id: 'user-insp', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room', isMicOn: false, isVideoOn: false, isHandRaised: false },
+    { id: 'user-cont', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room', isMicOn: true, isVideoOn: false, isHandRaised: false },
   ]);
 
   // Live Email Invite State
@@ -115,116 +117,7 @@ export default function MeetingRoomPage() {
     return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
   };
 
-  // 1. Join Meeting on Backend Database upon Mount
-  useEffect(() => {
-    if (!meetingId) return;
-
-    joinMeeting(meetingId, {
-      name: currentUser.name,
-      role: currentUser.role,
-      email: currentUser.email
-    }).then((updatedMtg) => {
-      if (updatedMtg) {
-        setMeeting(updatedMtg);
-        if (updatedMtg.participants && updatedMtg.participants.length > 0) {
-          setParticipants(updatedMtg.participants.map((p: any, idx: number) => ({
-            id: `p-${idx}`,
-            name: p.name === currentUser.name ? `${p.name} (You)` : p.name,
-            role: p.role,
-            email: p.email || '',
-            time: p.joined_at || '10:00 AM',
-            status: (p.status === 'Live In Room' || p.status === 'Confirmed') ? 'Live In Room' : 'Dispatched',
-            isLocalUser: Boolean(p.name === currentUser.name || (currentUser.email && p.email === currentUser.email))
-          })));
-        }
-      }
-    }).catch(err => console.warn("Backend join meeting sync notice:", err));
-  }, [meetingId, currentUser]);
-
-  // 2. Real-time Backend Database Polling (Every 4 seconds for instant cross-device updates)
-  useEffect(() => {
-    if (!meetingId) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const liveData = await getMeetingById(meetingId);
-        if (liveData) {
-          setMeeting(liveData);
-          if (liveData.participants && liveData.participants.length > 0) {
-            setParticipants(liveData.participants.map((p: any, idx: number) => ({
-              id: `p-${idx}`,
-              name: p.name === currentUser.name ? `${p.name} (You)` : p.name,
-              role: p.role,
-              email: p.email || '',
-              time: p.joined_at || '10:00 AM',
-              status: (p.status === 'Live In Room' || p.status === 'Confirmed') ? 'Live In Room' : 'Dispatched',
-              isLocalUser: Boolean(p.name === currentUser.name || (currentUser.email && p.email === currentUser.email))
-            })));
-          }
-        }
-      } catch (err) {
-        // silent sync
-      }
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [meetingId, currentUser]);
-
-  // Cross-Tab / Multi-Device Presence Synchronization via BroadcastChannel
-  useEffect(() => {
-    const channelName = `nexucon_presence_${meetingId || 'default'}`;
-    let broadcast: BroadcastChannel | null = null;
-
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        broadcast = new BroadcastChannel(channelName);
-
-        // Announce current user has joined
-        broadcast.postMessage({
-          type: 'USER_JOINED',
-          user: {
-            id: `p-${Date.now()}`,
-            name: currentUser.name,
-            email: currentUser.email,
-            role: currentUser.role,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'Live In Room'
-          }
-        });
-
-        // Listen for other users joining in other tabs/browsers
-        broadcast.onmessage = (event) => {
-          if (event.data?.type === 'USER_JOINED') {
-            const newUser = event.data.user;
-            setParticipants(prev => {
-              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name || p.name.includes(newUser.name));
-              if (!exists) {
-                window.dispatchEvent(new CustomEvent('show-toast', {
-                  detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
-                }));
-                return [...prev, { ...newUser, isLocalUser: false }];
-              } else {
-                return prev.map(p => (p.email === newUser.email || p.name === newUser.name) ? { ...p, status: 'Live In Room' } : p);
-              }
-            });
-          }
-        };
-      }
-    } catch (e) {
-      console.warn("BroadcastChannel sync notice:", e);
-    }
-
-    // Also notify local session toast
-    window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: `Connected to Meeting Session as ${currentUser.name}`, type: 'success' }
-    }));
-
-    return () => {
-      if (broadcast) broadcast.close();
-    };
-  }, [meetingId, currentUser]);
-
-  // Initialize Local Media Stream if permitted
+  // 1. Initialize Local Media Stream (Camera & Mic)
   useEffect(() => {
     let streamInstance: MediaStream | null = null;
     const initMedia = async () => {
@@ -238,7 +131,7 @@ export default function MeetingRoomPage() {
           }
         }
       } catch (err) {
-        console.warn("Local media stream initial notice (using interactive avatar tile):", err);
+        console.warn("Camera/mic permission notice:", err);
       }
     };
     initMedia();
@@ -262,28 +155,214 @@ export default function MeetingRoomPage() {
     }
   }, [isVideoOn, isMicOn, localStream]);
 
-  // Screen Share Handler
+  // 2. Multi-Tier Presence & Live Synchronization
+  useEffect(() => {
+    if (!meetingId) return;
+
+    // A. Handshake with Next.js Serverless Presence API
+    const joinServerless = async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/presence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'join',
+            participant: {
+              name: currentUser.name,
+              role: currentUser.role,
+              email: currentUser.email,
+              isMicOn,
+              isVideoOn,
+              isHandRaised
+            }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.participants) {
+            updateParticipantsFromData(data.participants);
+          }
+          if (data && data.votes) {
+            setQuorumVotes(data.votes);
+          }
+          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+            setChatMessages(data.chatMessages);
+          }
+        }
+      } catch (e) {
+        // quiet fallback
+      }
+    };
+    joinServerless();
+
+    // B. Also register on Django backend PostgreSQL database
+    joinMeeting(meetingId, {
+      name: currentUser.name,
+      role: currentUser.role,
+      email: currentUser.email
+    }).catch(() => {});
+
+    // C. Poll Presence API every 2.5 seconds for real-time synchronization across different devices
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/presence`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.participants) {
+            updateParticipantsFromData(data.participants);
+          }
+          if (data && data.votes) {
+            setQuorumVotes(data.votes);
+          }
+          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+            setChatMessages(data.chatMessages);
+          }
+        }
+      } catch (err) {
+        // silent
+      }
+    }, 2500);
+
+    // D. Cross-Tab Presence Synchronization via BroadcastChannel
+    let broadcast: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        broadcast = new BroadcastChannel(`nexucon_presence_${meetingId}`);
+        broadcast.postMessage({
+          type: 'USER_JOINED',
+          user: {
+            id: `p-${Date.now()}`,
+            name: currentUser.name,
+            email: currentUser.email,
+            role: currentUser.role,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Live In Room',
+            isHandRaised,
+            isMicOn,
+            isVideoOn
+          }
+        });
+
+        broadcast.onmessage = (event) => {
+          if (event.data?.type === 'USER_JOINED') {
+            const newUser = event.data.user;
+            setParticipants(prev => {
+              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name || p.name.includes(newUser.name));
+              if (!exists) {
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                  detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
+                }));
+                return [...prev, { ...newUser, isLocalUser: false }];
+              } else {
+                return prev.map(p => (p.email === newUser.email || p.name === newUser.name) ? { ...p, status: 'Live In Room' } : p);
+              }
+            });
+          } else if (event.data?.type === 'HAND_RAISE') {
+            const { name, isHandRaised: raised } = event.data;
+            setParticipants(prev => prev.map(p => p.name.includes(name) ? { ...p, isHandRaised: raised } : p));
+            if (raised) {
+              window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: `✋ ${name} raised their hand to speak`, type: 'info' }
+              }));
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: `Connected to Live Council Session as ${currentUser.name}`, type: 'success' }
+    }));
+
+    return () => {
+      clearInterval(pollTimer);
+      if (broadcast) broadcast.close();
+    };
+  }, [meetingId, currentUser]);
+
+  const updateParticipantsFromData = (remoteList: any[]) => {
+    setParticipants(prev => {
+      const merged: ConnectedParticipant[] = [];
+      const seen = new Set<string>();
+
+      // 1. Add current user as local user
+      const isLocal = true;
+      merged.push({
+        id: 'user-local',
+        name: `${currentUser.name} (You)`,
+        email: currentUser.email,
+        role: currentUser.role,
+        time: '10:00 AM',
+        status: 'Live In Room',
+        isLocalUser: true,
+        isMicOn,
+        isVideoOn,
+        isHandRaised
+      });
+      seen.add(currentUser.name.toLowerCase());
+      if (currentUser.email) seen.add(currentUser.email.toLowerCase());
+
+      // 2. Add remote participants
+      for (const p of remoteList) {
+        const cleanName = (p.name || '').replace('(You)', '').trim();
+        const cleanEmail = (p.email || '').trim().toLowerCase();
+        
+        if (cleanName.toLowerCase() === currentUser.name.toLowerCase() || (cleanEmail && cleanEmail === currentUser.email.toLowerCase())) {
+          continue;
+        }
+
+        if (!seen.has(cleanName.toLowerCase())) {
+          seen.add(cleanName.toLowerCase());
+          if (cleanEmail) seen.add(cleanEmail);
+
+          merged.push({
+            id: p.id || `p-${Math.random()}`,
+            name: cleanName,
+            email: p.email || '',
+            role: p.role || 'Stakeholder Representative',
+            time: p.time || p.joined_at || '10:00 AM',
+            status: p.status === 'Live In Room' ? 'Live In Room' : 'Dispatched',
+            isLocalUser: false,
+            isMicOn: p.isMicOn ?? true,
+            isVideoOn: p.isVideoOn ?? false,
+            isHandRaised: p.isHandRaised ?? false
+          });
+        }
+      }
+
+      return merged;
+    });
+  };
+
+  // Screen Share Handler (Interactive Screen / BIM Model Sharing)
   const handleToggleScreenShare = async () => {
     if (!isScreenSharing) {
       try {
         if (navigator.mediaDevices?.getDisplayMedia) {
-          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
           setScreenStream(stream);
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
           if (screenShareVideoRef.current) {
             screenShareVideoRef.current.srcObject = stream;
           }
+          window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: 'Screen sharing started (Broadcasting live in 60 FPS)', type: 'success' }
+          }));
+
           stream.getVideoTracks()[0].onended = () => {
             setIsScreenSharing(false);
             setScreenStream(null);
+            window.dispatchEvent(new CustomEvent('show-toast', {
+              detail: { message: 'Screen sharing ended', type: 'info' }
+            }));
           };
         } else {
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
         }
       } catch (err) {
-        console.warn("Screen share cancelled or not supported");
+        console.warn("Screen share cancelled or not allowed:", err);
         setIsScreenSharing(false);
       }
     } else {
@@ -292,9 +371,117 @@ export default function MeetingRoomPage() {
         setScreenStream(null);
       }
       setIsScreenSharing(false);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Screen sharing stopped', type: 'info' }
+      }));
     }
   };
 
+  // Mic Toggle Handler
+  const handleToggleMic = () => {
+    const nextState = !isMicOn;
+    setIsMicOn(nextState);
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = nextState;
+      });
+    }
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: nextState ? 'Microphone unmuted (Live audio stream)' : 'Microphone muted', type: nextState ? 'success' : 'info' }
+    }));
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'heartbeat',
+        participant: { name: currentUser.name, isMicOn: nextState }
+      })
+    }).catch(() => {});
+  };
+
+  // Camera Toggle Handler
+  const handleToggleVideo = async () => {
+    const nextState = !isVideoOn;
+    setIsVideoOn(nextState);
+
+    if (nextState) {
+      if (!localStream) {
+        try {
+          if (navigator.mediaDevices?.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isMicOn });
+            setLocalStream(stream);
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = stream;
+            }
+          }
+        } catch (e) {}
+      } else {
+        localStream.getVideoTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Camera started (Live video stream)', type: 'success' }
+      }));
+    } else {
+      if (localStream) {
+        localStream.getVideoTracks().forEach(track => {
+          track.enabled = false;
+        });
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Camera turned off (Avatar active)', type: 'info' }
+      }));
+    }
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'heartbeat',
+        participant: { name: currentUser.name, isVideoOn: nextState }
+      })
+    }).catch(() => {});
+  };
+
+  // Raise Hand Handler
+  const handleToggleRaiseHand = () => {
+    const nextState = !isHandRaised;
+    setIsHandRaised(nextState);
+
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: nextState ? '✋ Hand raised! Notified council moderator.' : 'Hand lowered.', 
+        type: nextState ? 'warning' : 'info' 
+      }
+    }));
+
+    // Broadcast across presence API
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'raise_hand',
+        participant: { name: currentUser.name, isHandRaised: nextState }
+      })
+    }).catch(() => {});
+
+    // Broadcast across local channel
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel(`nexucon_presence_${meetingId}`);
+        bc.postMessage({
+          type: 'HAND_RAISE',
+          name: currentUser.name,
+          isHandRaised: nextState
+        });
+        bc.close();
+      }
+    } catch (e) {}
+  };
+
+  // Timer
   useEffect(() => {
     const timer = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
@@ -502,16 +689,24 @@ export default function MeetingRoomPage() {
     if (!newChatMessage.trim()) return;
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setChatMessages(prev => [
-      ...prev,
-      {
-        sender: currentUser.name,
-        role: currentUser.role,
-        text: newChatMessage.trim(),
-        time
-      }
-    ]);
+    const msgObj = {
+      sender: currentUser.name,
+      role: currentUser.role,
+      text: newChatMessage.trim(),
+      time
+    };
+
+    setChatMessages(prev => [...prev, msgObj]);
     setNewChatMessage('');
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'chat',
+        message: msgObj
+      })
+    }).catch(() => {});
   };
 
   const handleCastVote = async (vote: 'YES' | 'NO') => {
@@ -529,6 +724,17 @@ export default function MeetingRoomPage() {
       }));
     }
 
+    // Broadcast across Presence API
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'vote',
+        vote: { voter_name: currentUser.name, vote }
+      })
+    }).catch(() => {});
+
+    // Save in Django DB
     try {
       await castMeetingVote(meetingId, {
         voter_name: currentUser.name,
@@ -536,9 +742,7 @@ export default function MeetingRoomPage() {
         vote,
         resolution_title: 'Signoff for 5th Floor Slab Concrete Casting'
       });
-    } catch (e) {
-      console.warn("Backend vote recording notice:", e);
-    }
+    } catch (e) {}
   };
 
   // Google Meet URL
@@ -776,10 +980,10 @@ export default function MeetingRoomPage() {
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
-                          <span>{isScreenSharing ? 'Active Screen / Revit BIM Model Stream' : 'Spotlight Stage'}</span>
+                          <span>{isScreenSharing ? 'Active Screen / BIM Model Stream' : 'Spotlight Stage'}</span>
                         </span>
                         <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
-                          <Volume2 size={13} className="animate-pulse" /> Active Audio Stream
+                          <Volume2 size={13} className="animate-pulse" /> Live HD Audio Stream
                         </span>
                       </div>
 
@@ -813,6 +1017,11 @@ export default function MeetingRoomPage() {
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                               <span>{currentUser.name} (You)</span>
                             </div>
+                            {isHandRaised && (
+                              <div className="absolute top-3 right-3 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 shadow-lg shadow-amber-500/40 animate-bounce">
+                                <Hand size={14} /> <span>Hand Raised</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-center space-y-3">
@@ -824,6 +1033,11 @@ export default function MeetingRoomPage() {
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
                               <CheckCircle size={13} /> Active in council database
                             </span>
+                            {isHandRaised && (
+                              <div className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 text-slate-950 font-black text-xs rounded-full shadow-lg shadow-amber-500/30 animate-pulse">
+                                <Hand size={14} /> <span>Hand Raised to Speak</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -898,6 +1112,12 @@ export default function MeetingRoomPage() {
                           </span>
 
                           <div className="flex items-center gap-1.5">
+                            {p.isHandRaised && (
+                              <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                                <Hand size={11} /> Hand Raised
+                              </span>
+                            )}
+
                             {p.isLocalUser ? (
                               isMicOn ? (
                                 <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
@@ -1013,7 +1233,7 @@ export default function MeetingRoomPage() {
               
               {/* Mic Toggle */}
               <button
-                onClick={() => setIsMicOn(!isMicOn)}
+                onClick={handleToggleMic}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
                   isMicOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
@@ -1027,7 +1247,7 @@ export default function MeetingRoomPage() {
 
               {/* Video Toggle */}
               <button
-                onClick={() => setIsVideoOn(!isVideoOn)}
+                onClick={handleToggleVideo}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
                   isVideoOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
@@ -1053,9 +1273,9 @@ export default function MeetingRoomPage() {
                 <span className="hidden md:inline">{isScreenSharing ? 'Sharing Screen' : 'Share Screen'}</span>
               </button>
 
-              {/* Raise Hand */}
+              {/* Raise Hand Toggle */}
               <button
-                onClick={() => setIsHandRaised(!isHandRaised)}
+                onClick={handleToggleRaiseHand}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold ${
                   isHandRaised 
                     ? 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/30' 
@@ -1277,6 +1497,7 @@ export default function MeetingRoomPage() {
                               <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
                                 <span>{p.name}</span>
                                 {p.isLocalUser && <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1 rounded">YOU</span>}
+                                {p.isHandRaised && <span className="text-[10px]">✋</span>}
                               </p>
                               <p className="text-[10px] text-slate-400 truncate">{p.email} • {p.role}</p>
                             </div>
