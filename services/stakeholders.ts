@@ -143,6 +143,10 @@ export interface StakeholderMessage {
   message_text: string;
   attachment_url?: string;
   attachment_name?: string;
+  attachment_type?: string;
+  attachment_size?: string;
+  voice_note_url?: string;
+  voice_note_duration?: number;
   is_urgent: boolean;
   translations?: MessageTranslation[];
   created_at?: string;
