@@ -73,12 +73,20 @@ export default function MeetingRoomPage() {
   // Active Sidebar Tab
   const [activeTab, setActiveTab] = useState<'invite' | 'action_items' | 'minutes' | 'voting' | 'chat'>('invite');
 
-  // Live Connected Participants List
+  // Live Connected Participants List (Only Real Attendees)
   const [participants, setParticipants] = useState<ConnectedParticipant[]>([
-    { id: 'user-local', name: `${currentUser.name} (You)`, email: currentUser.email, role: currentUser.role, time: '10:00 AM', status: 'Live In Room', isLocalUser: true, isMicOn: true, isVideoOn: true, isHandRaised: false },
-    { id: 'user-dev', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room', isMicOn: true, isVideoOn: false, isHandRaised: false },
-    { id: 'user-insp', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room', isMicOn: false, isVideoOn: false, isHandRaised: false },
-    { id: 'user-cont', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room', isMicOn: true, isVideoOn: false, isHandRaised: false },
+    { 
+      id: 'user-local', 
+      name: `${currentUser.name} (You)`, 
+      email: currentUser.email, 
+      role: currentUser.role, 
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+      status: 'Live In Room', 
+      isLocalUser: true, 
+      isMicOn: true, 
+      isVideoOn: true, 
+      isHandRaised: false 
+    }
   ]);
 
   // Live Email Invite State
@@ -93,24 +101,20 @@ export default function MeetingRoomPage() {
   const [minutesText, setMinutesText] = useState('');
   const [isSavingMinutes, setIsSavingMinutes] = useState(false);
   const [newActionTitle, setNewActionTitle] = useState('');
-  const [newActionAssignee, setNewActionAssignee] = useState('Engr. Babatunde Sanwo');
+  const [newActionAssignee, setNewActionAssignee] = useState(currentUser.name);
   const [actionItems, setActionItems] = useState<MeetingActionItem[]>([]);
   const [isAddingAction, setIsAddingAction] = useState(false);
 
-  // Chat State
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([
-    { sender: 'Engr. Babatunde Sanwo', role: 'Agency Head', text: 'Welcome to the platform council session. We are reviewing the Level 5 slab casting certification.', time: '10:02 AM' },
-    { sender: 'Marcus Chen', role: 'Inspector', text: 'Telemetry GPR scan confirms rebar spacing compliance along Grid 4.', time: '10:04 AM' },
-    { sender: 'David Rivera', role: 'Contractor', text: 'Ready to proceed with concrete pour once quorum vote is recorded.', time: '10:05 AM' }
-  ]);
+  // Chat State (Starts Clean for Real Attendee Messaging)
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([]);
   const [newChatMessage, setNewChatMessage] = useState('');
 
   // Voting State
   const [voteStatus, setVoteStatus] = useState<'IDLE' | 'VOTED_YES' | 'VOTED_NO'>('IDLE');
-  const [quorumVotes, setQuorumVotes] = useState({ yes: 3, no: 0, total: 4 });
+  const [quorumVotes, setQuorumVotes] = useState({ yes: 0, no: 0, total: 1 });
 
   // Timer
-  const [elapsedSeconds, setElapsedSeconds] = useState(248); // 4m 08s
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Standard live URL using production domain
   const getLiveMeetingUrl = () => {

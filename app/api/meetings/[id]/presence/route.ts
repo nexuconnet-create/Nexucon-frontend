@@ -24,18 +24,9 @@ function getStore(meetingId: string) {
   const cleanId = meetingId || 'default_room';
   if (!meetingPresenceStore[cleanId]) {
     meetingPresenceStore[cleanId] = {
-      participants: [
-        { id: 'p-seed-1', name: 'Engr. Babatunde Sanwo', email: 'head@regulator.gov.ng', role: 'Agency Head / Director General', time: '10:00 AM', status: 'Live In Room', lastSeen: Date.now(), isMicOn: true, isVideoOn: true },
-        { id: 'p-seed-2', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room', lastSeen: Date.now(), isMicOn: true, isVideoOn: false },
-        { id: 'p-seed-3', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room', lastSeen: Date.now(), isMicOn: false, isVideoOn: false },
-        { id: 'p-seed-4', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room', lastSeen: Date.now(), isMicOn: true, isVideoOn: false }
-      ],
-      votes: { yes: 3, no: 0, total: 4, voters: {} },
-      chatMessages: [
-        { sender: 'Engr. Babatunde Sanwo', role: 'Agency Head', text: 'Welcome to the platform council session. We are reviewing the Level 5 slab casting certification.', time: '10:02 AM' },
-        { sender: 'Marcus Chen', role: 'Inspector', text: 'Telemetry GPR scan confirms rebar spacing compliance along Grid 4.', time: '10:04 AM' },
-        { sender: 'David Rivera', role: 'Contractor', text: 'Ready to proceed with concrete pour once quorum vote is recorded.', time: '10:05 AM' }
-      ]
+      participants: [],
+      votes: { yes: 0, no: 0, total: 0, voters: {} },
+      chatMessages: []
     };
   }
   return meetingPresenceStore[cleanId];
