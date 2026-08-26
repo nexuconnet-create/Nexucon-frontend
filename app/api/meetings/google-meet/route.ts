@@ -88,40 +88,80 @@ async function getMeetingAccessToken(): Promise<string> {
   return cachedMeetingToken!;
 }
 
-// Generate structured Google Meet ID (e.g. nxu-coun-mtg / abc-defg-hij)
-function generateGoogleMeetCode(seed?: string): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  const rand = (len: number) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `${rand(3)}-${rand(4)}-${rand(3)}`;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { title, date, time_slot, meeting_reference, room_id } = body;
+    const { title, date, time_slot, meeting_reference, room_id, attendees } = body;
 
-    let accessToken = '';
+    let googleMeetUrl = '';
+    let eventId = '';
+    let conferenceId = '';
+
+    // Attempt to create genuine Google Calendar & Google Meet conference
     try {
       if (MEETING_SERVICE_ACCOUNT.private_key) {
-        accessToken = await getMeetingAccessToken();
+        const accessToken = await getMeetingAccessToken();
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        
+        // Calculate start and end ISO times
+        const now = new Date();
+        const startTime = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+        const endTime = new Date(now.getTime() + 65 * 60 * 1000).toISOString();
+
+        const calRes = await fetch(
+          "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              summary: title || `Nexucon Council: ${meeting_reference || 'Stage-Gate Session'}`,
+              description: `Official Physical Planning & Building Control Regulatory Council Session (${meeting_reference || 'MTG-1092'}).`,
+              start: { dateTime: startTime },
+              end: { dateTime: endTime },
+              conferenceData: {
+                createRequest: {
+                  requestId,
+                  conferenceSolutionKey: {
+                    type: "hangoutsMeet"
+                  }
+                }
+              }
+            })
+          }
+        );
+
+        if (calRes.ok) {
+          const calData = await calRes.json();
+          eventId = calData.id || '';
+          googleMeetUrl = calData.hangoutLink || calData.conferenceData?.entryPoints?.[0]?.uri || '';
+          conferenceId = calData.conferenceData?.conferenceId || '';
+        } else {
+          const calErr = await calRes.text();
+          console.warn("Google Calendar API conference creation notice:", calErr);
+        }
       }
-    } catch (authErr) {
-      console.warn('Google Meet token warning:', authErr);
+    } catch (gErr: any) {
+      console.warn("Google Meet conference creation fallback:", gErr.message);
     }
 
-    // Produce Google Meet Room Link
-    const meetCode = generateGoogleMeetCode(meeting_reference || room_id);
-    const googleMeetUrl = `https://meet.google.com/${meetCode}`;
+    // If Google Meet URL wasn't returned by primary calendar, provide direct Google Meet instant URL
+    if (!googleMeetUrl) {
+      googleMeetUrl = "https://meet.google.com/new";
+    }
 
     return NextResponse.json({
       success: true,
       google_meet_url: googleMeetUrl,
-      meet_code: meetCode,
+      event_id: eventId,
+      conference_id: conferenceId,
       meeting_reference: meeting_reference || `MTG-${Date.now()}`,
-      room_id: room_id || `room-${meetCode}`,
+      room_id: room_id || `room-${Date.now()}`,
       project_id: MEETING_SERVICE_ACCOUNT.project_id,
       service_account: MEETING_SERVICE_ACCOUNT.client_email,
-      provider: "Google Meet API v1 (serious-water-469715-f9)"
+      provider: "Google Calendar & Meet API (serious-water-469715-f9)"
     });
   } catch (error: any) {
     console.error("Google Meet API Route Error:", error);
