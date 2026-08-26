@@ -11,7 +11,7 @@ import {
   Radio, Copy, Globe, RefreshCw, UserCheck, ShieldAlert,
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
-  MonitorPlay, Camera
+  MonitorPlay, Camera, Cast
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
@@ -40,8 +40,8 @@ export default function MeetingRoomPage() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
-  // Mode: In-Platform Native WebRTC Stage vs Embedded Google Meet Frame
-  const [stageMode, setStageMode] = useState<'native_council' | 'embedded_google_meet'>('native_council');
+  // Mode: Native WebRTC Council Stage vs Embedded WebRTC Video Bridge vs Google Meet Launcher
+  const [stageMode, setStageMode] = useState<'native_council' | 'webrtc_bridge' | 'google_meet_portal'>('native_council');
 
   // Fullscreen & Layout Modes
   const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
@@ -88,7 +88,7 @@ export default function MeetingRoomPage() {
           }
         }
       } catch (err) {
-        console.warn("Local media stream initial notice (using avatar tile):", err);
+        console.warn("Local media stream initial notice (using interactive avatar tile):", err);
       }
     };
     initMedia();
@@ -285,6 +285,10 @@ export default function MeetingRoomPage() {
     ? meeting.google_meet_url 
     : 'https://meet.google.com/new';
 
+  // Embeddable Open WebRTC Room URL (Allows iframe embed without X-Frame-Options deny)
+  const webrtcRoomName = `NexuconCouncil-${(meeting?.meeting_reference || 'Room').replace(/[^a-zA-Z0-9]/g, '')}`;
+  const webrtcEmbedUrl = `https://meet.jit.si/${webrtcRoomName}#config.startWithAudioMuted=false&config.prejoinPageEnabled=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','closedcaptions','desktop','fullscreen','fodeviceselection','hangup','chat','recording','etherpad','sharedvideo','settings','raisehand','videoquality','filmstrip','feedback','stats','shortcuts','tileview']`;
+
   return (
     <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans">
       
@@ -326,7 +330,7 @@ export default function MeetingRoomPage() {
         {/* Right Action Controls */}
         <div className="flex items-center gap-2.5">
           
-          {/* Stage Engine Switcher: Native In-Platform WebRTC vs Embedded Google Meet */}
+          {/* Stage Engine Switcher */}
           <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden md:flex items-center">
             <button
               onClick={() => setStageMode('native_council')}
@@ -339,16 +343,29 @@ export default function MeetingRoomPage() {
               <MonitorPlay size={13} />
               <span>In-Portal Council</span>
             </button>
+
             <button
-              onClick={() => setStageMode('embedded_google_meet')}
+              onClick={() => setStageMode('webrtc_bridge')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stageMode === 'embedded_google_meet' 
+                stageMode === 'webrtc_bridge' 
+                  ? 'bg-blue-600 text-white shadow' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Cast size={13} />
+              <span>WebRTC Bridge</span>
+            </button>
+
+            <button
+              onClick={() => setStageMode('google_meet_portal')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                stageMode === 'google_meet_portal' 
                   ? 'bg-blue-600 text-white shadow' 
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <Globe size={13} />
-              <span>Google Meet Frame</span>
+              <span>Google Meet Launch</span>
             </button>
           </div>
 
@@ -376,11 +393,11 @@ export default function MeetingRoomPage() {
             href={meetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Open in new Google Meet tab"
+            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            title="Launch Google Meet App"
           >
             <ExternalLink size={14} />
-            <span className="hidden xl:inline">Popout Tab</span>
+            <span className="hidden sm:inline">Launch Meet App</span>
           </a>
 
           {/* Leave Button */}
@@ -407,35 +424,73 @@ export default function MeetingRoomPage() {
           {/* Stage Area */}
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
             
-            {/* EMBEDDED GOOGLE MEET FRAME MODE */}
-            {stageMode === 'embedded_google_meet' ? (
+            {/* MODE 1: EMBEDDED WEBRTC MULTI-PARTY VIDEO BRIDGE (No X-Frame-Options Deny) */}
+            {stageMode === 'webrtc_bridge' ? (
               <div className="flex-1 rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-950 flex flex-col relative shadow-2xl">
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Globe size={15} className="text-blue-400" />
-                    <span className="text-xs font-bold text-white">Google Meet Embedded Frame</span>
-                    <span className="text-[10px] font-mono text-slate-400">({meetUrl})</span>
+                    <Cast size={15} className="text-emerald-400" />
+                    <span className="text-xs font-bold text-white">Live WebRTC Embedded Video Conference Bridge</span>
+                    <span className="text-[10px] font-mono text-slate-400">({webrtcRoomName})</span>
                   </div>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                    Live HD WebRTC
+                  </span>
+                </div>
+                <iframe
+                  src={webrtcEmbedUrl}
+                  allow="camera; microphone; display-capture; autoplay; clipboard-write"
+                  className="flex-1 w-full h-full border-0 bg-slate-950"
+                  title="WebRTC Video Conference Bridge"
+                />
+              </div>
+            ) : stageMode === 'google_meet_portal' ? (
+              
+              /* MODE 2: GOOGLE MEET LAUNCH PORTAL CARD */
+              <div className="flex-1 rounded-3xl border-2 border-blue-500/40 bg-gradient-to-b from-[#091522] to-[#040A10] p-8 flex flex-col items-center justify-center text-center space-y-6 shadow-2xl relative">
+                <div className="w-20 h-20 rounded-3xl bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shadow-xl">
+                  <Globe size={40} />
+                </div>
+
+                <div className="max-w-lg space-y-2">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/30">
+                    OFFICIAL GOOGLE MEET INTEGRATION
+                  </span>
+                  <h2 className="text-2xl font-black text-white mt-2">
+                    Connect via Google Meet Conference
+                  </h2>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Google security policy requires opening Google Meet in an active top-level browser tab. Click the button below to join the authorized council conference instantly.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 font-mono text-xs text-blue-300 max-w-md w-full truncate">
+                  {meetUrl}
+                </div>
+
+                <div className="flex items-center gap-3">
                   <a
                     href={meetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-400 hover:underline flex items-center gap-1 font-bold"
+                    className="px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-xl shadow-blue-600/30 transition-all cursor-pointer"
                   >
-                    <span>Open External Window</span>
-                    <ExternalLink size={12} />
+                    <ExternalLink size={16} />
+                    <span>Launch Google Meet in New Window</span>
                   </a>
+
+                  <button
+                    onClick={() => setStageMode('native_council')}
+                    className="px-5 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-2xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Switch back to In-Portal Council
+                  </button>
                 </div>
-                <iframe
-                  src={meetUrl}
-                  allow="camera; microphone; display-capture; fullscreen"
-                  className="flex-1 w-full h-full border-0 bg-slate-950"
-                  title="Embedded Google Meet Session"
-                />
               </div>
+
             ) : (
 
-              /* NATIVE IN-PORTAL COUNCIL STAGE */
+              /* MODE 3: NATIVE IN-PORTAL COUNCIL STAGE */
               <>
                 {layoutMode === 'spotlight' || isScreenSharing ? (
                   <div className="flex-1 flex flex-col gap-3 overflow-hidden">
