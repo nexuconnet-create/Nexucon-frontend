@@ -11,12 +11,13 @@ import {
   Radio, Copy, Globe, RefreshCw, UserCheck, ShieldAlert,
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
-  MonitorPlay, Camera, Cast
+  MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
   addMeetingActionItem, MeetingActionItem 
 } from "@/services/stakeholders";
+import { sendEmailViaResend } from "@/services/email";
 
 export default function MeetingRoomPage() {
   const params = useParams();
@@ -49,7 +50,20 @@ export default function MeetingRoomPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Active Sidebar Tab
-  const [activeTab, setActiveTab] = useState<'action_items' | 'minutes' | 'voting' | 'chat'>('action_items');
+  const [activeTab, setActiveTab] = useState<'invite' | 'action_items' | 'minutes' | 'voting' | 'chat'>('invite');
+
+  // Live Email Invite State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState('Master Developer');
+  const [inviteCustomNote, setInviteCustomNote] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [invitedParticipants, setInvitedParticipants] = useState<Array<{ name: string; email: string; role: string; time: string; status: 'Dispatched' | 'Joined' }>>([
+    { name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Joined' },
+    { name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Joined' },
+    { name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Joined' },
+  ]);
 
   // Collaboration State
   const [minutesText, setMinutesText] = useState('');
@@ -73,6 +87,11 @@ export default function MeetingRoomPage() {
 
   // Timer
   const [elapsedSeconds, setElapsedSeconds] = useState(248); // 4m 08s
+
+  // Standard live URL using production domain
+  const getLiveMeetingUrl = () => {
+    return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
+  };
 
   // Initialize Local Media Stream if permitted
   useEffect(() => {
@@ -201,6 +220,114 @@ export default function MeetingRoomPage() {
     fetchMeetingDetails();
   }, [meetingId]);
 
+  // Handle Email Invitation Dispatch via Resend
+  const handleSendEmailInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    setIsSendingInvite(true);
+    const liveUrl = getLiveMeetingUrl();
+    const formattedSubject = `🏛️ Live Meeting Invitation: ${meeting?.title || 'Project Coordination Session'} [${meeting?.meeting_reference || 'MTG-1092'}]`;
+
+    const htmlContent = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #060D15; color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 20px; border: 1px solid #1e293b;">
+        <div style="text-align: center; margin-bottom: 28px;">
+          <div style="background-color: rgba(34, 197, 94, 0.15); display: inline-block; padding: 8px 18px; border-radius: 9999px; font-size: 11px; font-weight: 800; color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.35); text-transform: uppercase; letter-spacing: 0.05em;">
+            🔴 Live Council Deliberation Active
+          </div>
+          <h1 style="color: #ffffff; font-size: 22px; font-weight: 900; margin: 16px 0 6px 0; letter-spacing: -0.02em;">Nexucon Regulatory Directorate</h1>
+          <p style="color: #94a3b8; font-size: 13px; margin: 0;">State Ministry of Physical Planning & Urban Development</p>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 24px; border-radius: 16px; border: 1px solid #334155; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
+          <div style="font-size: 11px; font-weight: 700; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+            Statutory Council Session
+          </div>
+          <h2 style="color: #ffffff; font-size: 18px; font-weight: 800; margin: 0 0 16px 0;">${meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</h2>
+          
+          <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8; width: 140px;">Meeting Ref:</td>
+              <td style="padding: 6px 0; font-family: monospace; font-weight: 800; color: #60a5fa;">${meeting?.meeting_reference || 'MTG-1092'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Project:</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${meeting?.project_name || 'Central Metro Transit Hub'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Invited Role:</td>
+              <td style="padding: 6px 0; color: #fbbf24; font-weight: 700;">${inviteRole}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Convened By:</td>
+              <td style="padding: 6px 0; color: #ffffff; font-weight: 600;">Engr. Babatunde Sanwo (Agency Head)</td>
+            </tr>
+          </table>
+
+          ${inviteCustomNote ? `
+            <div style="margin-top: 16px; padding: 12px; background-color: rgba(0, 0, 0, 0.3); border-radius: 8px; border-left: 3px solid #3b82f6; font-size: 12px; color: #e2e8f0; font-style: italic;">
+              "${inviteCustomNote}"
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="text-align: center; margin-bottom: 28px;">
+          <a href="${liveUrl}" style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 15px 32px; border-radius: 14px; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4); letter-spacing: -0.01em;">
+            Join Live Meeting Room Now →
+          </a>
+        </div>
+
+        <div style="background-color: #090e17; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 11px; color: #94a3b8; word-break: break-all; text-align: center; border: 1px solid #1e293b; margin-bottom: 24px;">
+          Direct Link: <a href="${liveUrl}" style="color: #60a5fa; text-decoration: none;">${liveUrl}</a>
+        </div>
+
+        <p style="font-size: 11px; color: #64748b; text-align: center; line-height: 1.6; margin: 0;">
+          This official dispatch was transmitted via Resend Cloud Engine on behalf of the Executive Regulatory Council.<br/>
+          Protected under Digital Regulatory Telemetry & Building Audit Protocol.
+        </p>
+      </div>
+    `;
+
+    try {
+      const res = await sendEmailViaResend({
+        to: inviteEmail.trim(),
+        subject: formattedSubject,
+        html: htmlContent,
+        type: 'INVITE_DIRECTOR'
+      });
+
+      if (res.success) {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Live invitation dispatched via Resend to ${inviteEmail.trim()}`, type: 'success' }
+        }));
+        setInvitedParticipants(prev => [
+          {
+            name: inviteName.trim() || inviteEmail.split('@')[0],
+            email: inviteEmail.trim(),
+            role: inviteRole,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Dispatched'
+          },
+          ...prev
+        ]);
+        setInviteEmail('');
+        setInviteName('');
+        setInviteCustomNote('');
+        setIsInviteModalOpen(false);
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: res.error || 'Failed to dispatch email invite via Resend', type: 'error' }
+        }));
+      }
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Network error dispatching invite', type: 'error' }
+      }));
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
   const handleSaveMinutes = async () => {
     if (!meeting) return;
     setIsSavingMinutes(true);
@@ -321,7 +448,7 @@ export default function MeetingRoomPage() {
                 ⏱️ {formatElapsed(elapsedSeconds)}
               </span>
             </div>
-            <h1 className="text-sm font-black text-white truncate max-w-[260px] sm:max-w-md mt-0.5">
+            <h1 className="text-sm font-black text-white truncate max-w-[240px] sm:max-w-md mt-0.5">
               {meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}
             </h1>
           </div>
@@ -330,8 +457,18 @@ export default function MeetingRoomPage() {
         {/* Right Action Controls */}
         <div className="flex items-center gap-2.5">
           
+          {/* Top Quick Invite Button */}
+          <button
+            onClick={() => setIsInviteModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+            title="Send Email Invitation via Resend"
+          >
+            <UserPlus size={15} />
+            <span className="hidden sm:inline">Invite User</span>
+          </button>
+
           {/* Stage Engine Switcher */}
-          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden md:flex items-center">
+          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden lg:flex items-center">
             <button
               onClick={() => setStageMode('native_council')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -365,7 +502,7 @@ export default function MeetingRoomPage() {
               }`}
             >
               <Globe size={13} />
-              <span>Google Meet Launch</span>
+              <span>Google Meet</span>
             </button>
           </div>
 
@@ -376,7 +513,7 @@ export default function MeetingRoomPage() {
             title={layoutMode === 'grid' ? 'Switch to Spotlight View' : 'Switch to Grid View'}
           >
             <LayoutGrid size={15} />
-            <span className="hidden lg:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
+            <span className="hidden xl:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
           </button>
 
           {/* Browser Fullscreen Toggle */}
@@ -393,11 +530,11 @@ export default function MeetingRoomPage() {
             href={meetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             title="Launch Google Meet App"
           >
             <ExternalLink size={14} />
-            <span className="hidden sm:inline">Launch Meet App</span>
+            <span className="hidden sm:inline">Meet App</span>
           </a>
 
           {/* Leave Button */}
@@ -424,7 +561,7 @@ export default function MeetingRoomPage() {
           {/* Stage Area */}
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
             
-            {/* MODE 1: EMBEDDED WEBRTC MULTI-PARTY VIDEO BRIDGE (No X-Frame-Options Deny) */}
+            {/* MODE 1: EMBEDDED WEBRTC MULTI-PARTY VIDEO BRIDGE */}
             {stageMode === 'webrtc_bridge' ? (
               <div className="flex-1 rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-950 flex flex-col relative shadow-2xl">
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
@@ -552,7 +689,7 @@ export default function MeetingRoomPage() {
                         <span className="text-[11px] font-mono">Session ID: {meeting?.meeting_reference || 'MTG-1092'}</span>
                         <span className="flex items-center gap-1 text-emerald-400 font-bold">
                           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                          4 Council Members Connected
+                          {invitedParticipants.length + 1} Council Stakeholders Assigned
                         </span>
                       </div>
                     </div>
@@ -768,18 +905,19 @@ export default function MeetingRoomPage() {
           {/* FLOATING BOTTOM CONTROL DOCK */}
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
             
-            {/* Meeting Link Pill */}
+            {/* Meeting Link Copy Action (Generates Live Production URL) */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'In-portal meeting room link copied!', type: 'success' } }));
+                  const liveLink = getLiveMeetingUrl();
+                  navigator.clipboard.writeText(liveLink);
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Live room link copied (${liveLink})!`, type: 'success' } }));
                 }}
-                className="px-3 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Copy In-Platform Room Link"
+                className="px-3.5 py-2 rounded-2xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-600/40 text-blue-300 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-950/50"
+                title="Copy Live Production Meeting Link"
               >
-                <Copy size={13} />
-                <span className="hidden sm:inline font-mono">Copy Portal Link</span>
+                <Copy size={14} className="text-blue-400" />
+                <span className="font-mono text-[11px]">Copy Live Portal Link</span>
               </button>
             </div>
 
@@ -867,7 +1005,7 @@ export default function MeetingRoomPage() {
                 title={isSidebarOpen ? 'Collapse Side Panel' : 'Expand Side Panel'}
               >
                 <MessageSquare size={18} />
-                <span className="hidden sm:inline">Collaboration Panel</span>
+                <span className="hidden sm:inline">Collaboration &amp; Invite</span>
               </button>
             </div>
 
@@ -875,21 +1013,34 @@ export default function MeetingRoomPage() {
 
         </main>
 
-        {/* RIGHT COLLAPSIBLE COLLABORATION DRAWER */}
+        {/* RIGHT COLLAPSIBLE COLLABORATION & INVITATION DRAWER */}
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.aside
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 380, opacity: 1 }}
+              animate={{ width: 390, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="h-full bg-[#08121E]/95 border-l border-slate-800/90 flex flex-col shadow-2xl overflow-hidden shrink-0 z-20"
             >
               {/* Drawer Tabs */}
-              <div className="p-3 bg-slate-900/90 border-b border-slate-800 flex items-center gap-1">
+              <div className="p-2.5 bg-slate-900/90 border-b border-slate-800 grid grid-cols-5 gap-1">
+                <button
+                  onClick={() => setActiveTab('invite')}
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                    activeTab === 'invite'
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+                  title="Invite Stakeholders by Email"
+                >
+                  <UserPlus size={13} />
+                  <span>Invite</span>
+                </button>
+
                 <button
                   onClick={() => setActiveTab('action_items')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'action_items'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -901,7 +1052,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('minutes')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'minutes'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -913,7 +1064,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('voting')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'voting'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -925,7 +1076,7 @@ export default function MeetingRoomPage() {
 
                 <button
                   onClick={() => setActiveTab('chat')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                     activeTab === 'chat'
                       ? 'bg-blue-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -939,6 +1090,114 @@ export default function MeetingRoomPage() {
               {/* Drawer Content */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4">
                 
+                {/* TAB 0: EMAIL INVITATION VIA RESEND */}
+                {activeTab === 'invite' && (
+                  <div className="space-y-4">
+                    <div className="p-3.5 bg-gradient-to-br from-emerald-950/50 to-teal-950/40 rounded-2xl border border-emerald-500/30">
+                      <div className="flex items-center gap-2">
+                        <Mail size={16} className="text-emerald-400" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                          Invite Stakeholder by Email
+                        </h3>
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                        Dispatches a high-priority meeting invite via Resend with the live meeting link (<span className="text-emerald-400 font-mono">nexucon-frontend-8x3a.vercel.app</span>).
+                      </p>
+                    </div>
+
+                    {/* Quick Invite Form */}
+                    <form onSubmit={handleSendEmailInvite} className="space-y-2.5 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                          Stakeholder Email <span className="text-emerald-400">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="e.g. developer@nexucon.net"
+                          className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                            Name
+                          </label>
+                          <input
+                            type="text"
+                            value={inviteName}
+                            onChange={(e) => setInviteName(e.target.value)}
+                            placeholder="Engr. Ade"
+                            className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                            Role
+                          </label>
+                          <select
+                            value={inviteRole}
+                            onChange={(e) => setInviteRole(e.target.value)}
+                            className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none"
+                          >
+                            <option value="Master Developer">Master Developer</option>
+                            <option value="Lead Structural Inspector">Lead Inspector</option>
+                            <option value="General Contractor">General Contractor</option>
+                            <option value="Consulting Structural Engineer">Consultant</option>
+                            <option value="Government Agency Director">Agency Director</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSendingInvite || !inviteEmail.trim()}
+                        className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSendingInvite ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Dispatching Invite via Resend...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send size={13} />
+                            <span>Send Live Invite Email</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    {/* Participants & Dispatched List */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                        <span>Invited Stakeholders</span>
+                        <span className="font-mono text-emerald-400">{invitedParticipants.length} Connected</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {invitedParticipants.map((p, idx) => (
+                          <div key={idx} className="p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 flex items-center justify-between gap-2">
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-white truncate">{p.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{p.email} • {p.role}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                              p.status === 'Joined' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* TAB 1: ACTION ITEMS */}
                 {activeTab === 'action_items' && (
                   <div className="space-y-4">
@@ -1139,6 +1398,130 @@ export default function MeetingRoomPage() {
         </AnimatePresence>
 
       </div>
+
+      {/* QUICK INVITE MODAL DIALOG */}
+      <AnimatePresence>
+        {isInviteModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#091522] border-2 border-emerald-500/40 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                    <Mail size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">Invite User to Live Meeting</h3>
+                    <p className="text-xs text-slate-400">Transmitted via Resend Cloud Email API</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsInviteModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSendEmailInvite} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Stakeholder Email Address <span className="text-emerald-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="e.g. developer@nexucon.net, inspector@gov.ng"
+                    className="w-full p-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Full Name / Title
+                    </label>
+                    <input
+                      type="text"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      placeholder="e.g. Engr. Oladipo"
+                      className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Stakeholder Role
+                    </label>
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-slate-200 focus:outline-none"
+                    >
+                      <option value="Master Developer">Master Developer</option>
+                      <option value="Lead Structural Inspector">Lead Inspector</option>
+                      <option value="General Contractor">General Contractor</option>
+                      <option value="Consulting Engineer">Consultant</option>
+                      <option value="Government Agency Director">Agency Director</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                    Personal Executive Note (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={inviteCustomNote}
+                    onChange={(e) => setInviteCustomNote(e.target.value)}
+                    placeholder="Please join immediately to confirm the Level 5 slab certification..."
+                    className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-[11px] font-mono text-slate-400 break-all">
+                  🔗 Link attached: <span className="text-emerald-400">{getLiveMeetingUrl()}</span>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsInviteModalOpen(false)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingInvite || !inviteEmail.trim()}
+                    className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSendingInvite ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Sending via Resend...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={14} />
+                        <span>Dispatch Invite Email</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
