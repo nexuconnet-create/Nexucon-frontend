@@ -12,7 +12,7 @@ import {
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
   MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2,
-  CheckCircle, BadgeCheck
+  CheckCircle, BadgeCheck, VolumeX
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
@@ -31,7 +31,18 @@ interface ConnectedParticipant {
   isMicOn?: boolean;
   isVideoOn?: boolean;
   isHandRaised?: boolean;
+  stream?: MediaStream;
 }
+
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ]
+};
 
 export default function MeetingRoomPage() {
   const params = useParams();
@@ -62,6 +73,11 @@ export default function MeetingRoomPage() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
+  // WebRTC Remote Peer Connections & Streams
+  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const lastSignalTimestampRef = useRef<number>(0);
+
   // Mode: Native WebRTC Council Stage vs Embedded WebRTC Video Bridge vs Google Meet Launcher
   const [stageMode, setStageMode] = useState<'native_council' | 'webrtc_bridge' | 'google_meet_portal'>('native_council');
 
@@ -73,7 +89,7 @@ export default function MeetingRoomPage() {
   // Active Sidebar Tab
   const [activeTab, setActiveTab] = useState<'invite' | 'action_items' | 'minutes' | 'voting' | 'chat'>('invite');
 
-  // Live Connected Participants List (Only Real Attendees)
+  // Live Connected Participants List (Starts Only with Local User)
   const [participants, setParticipants] = useState<ConnectedParticipant[]>([
     { 
       id: 'user-local', 
@@ -127,7 +143,10 @@ export default function MeetingRoomPage() {
     const initMedia = async () => {
       try {
         if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
           streamInstance = stream;
           setLocalStream(stream);
           if (localVideoRef.current) {
@@ -159,7 +178,53 @@ export default function MeetingRoomPage() {
     }
   }, [isVideoOn, isMicOn, localStream]);
 
-  // 2. Multi-Tier Presence & Live Synchronization
+  // 2. WebRTC Peer Connection Helper
+  const getOrCreatePeerConnection = (peerId: string) => {
+    if (peerConnectionsRef.current[peerId]) {
+      return peerConnectionsRef.current[peerId];
+    }
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+
+    // Add local tracks to peer connection
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+      });
+    }
+
+    // Handle remote track received
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        const remoteStream = event.streams[0];
+        setRemoteStreams(prev => ({
+          ...prev,
+          [peerId]: remoteStream
+        }));
+      }
+    };
+
+    // Handle ICE Candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        fetch(`/api/meetings/${meetingId}/signal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: currentUser.name,
+            target: peerId,
+            type: 'ice-candidate',
+            data: event.candidate
+          })
+        }).catch(() => {});
+      }
+    };
+
+    peerConnectionsRef.current[peerId] = pc;
+    return pc;
+  };
+
+  // 3. WebRTC Signaling Loop & Presence Sync
   useEffect(() => {
     if (!meetingId) return;
 
@@ -193,21 +258,89 @@ export default function MeetingRoomPage() {
             setChatMessages(data.chatMessages);
           }
         }
-      } catch (e) {
-        // quiet fallback
-      }
+      } catch (e) {}
     };
     joinServerless();
 
-    // B. Also register on Django backend PostgreSQL database
+    // B. Register in Django backend
     joinMeeting(meetingId, {
       name: currentUser.name,
       role: currentUser.role,
       email: currentUser.email
     }).catch(() => {});
 
-    // C. Poll Presence API every 2.5 seconds for real-time synchronization across different devices
-    const pollTimer = setInterval(async () => {
+    // C. Poll Signaling Engine for WebRTC Peer Negotiation (Every 1.2s)
+    const signalInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/signal?since=${lastSignalTimestampRef.current}&sender=${encodeURIComponent(currentUser.name)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.messages && data.messages.length > 0) {
+            lastSignalTimestampRef.current = data.timestamp || Date.now();
+
+            for (const msg of data.messages) {
+              const peerName = msg.sender;
+              const pc = getOrCreatePeerConnection(peerName);
+
+              if (msg.type === 'offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                await fetch(`/api/meetings/${meetingId}/signal`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    sender: currentUser.name,
+                    target: peerName,
+                    type: 'answer',
+                    data: answer
+                  })
+                });
+              } else if (msg.type === 'answer') {
+                if (pc.signalingState !== 'stable') {
+                  await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+                }
+              } else if (msg.type === 'ice-candidate') {
+                if (msg.data) {
+                  try {
+                    await pc.addIceCandidate(new RTCIceCandidate(msg.data));
+                  } catch (e) {}
+                }
+              } else if (msg.type === 'join-peer') {
+                // New peer wants connection, create offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await fetch(`/api/meetings/${meetingId}/signal`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    sender: currentUser.name,
+                    target: peerName,
+                    type: 'offer',
+                    data: offer
+                  })
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {}
+    }, 1200);
+
+    // Announce to peers to initiate connection
+    fetch(`/api/meetings/${meetingId}/signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: currentUser.name,
+        type: 'join-peer',
+        data: {}
+      })
+    }).catch(() => {});
+
+    // D. Poll Presence API every 2.5 seconds
+    const presenceInterval = setInterval(async () => {
       try {
         const res = await fetch(`/api/meetings/${meetingId}/presence`);
         if (res.ok) {
@@ -222,75 +355,22 @@ export default function MeetingRoomPage() {
             setChatMessages(data.chatMessages);
           }
         }
-      } catch (err) {
-        // silent
-      }
+      } catch (err) {}
     }, 2500);
 
-    // D. Cross-Tab Presence Synchronization via BroadcastChannel
-    let broadcast: BroadcastChannel | null = null;
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        broadcast = new BroadcastChannel(`nexucon_presence_${meetingId}`);
-        broadcast.postMessage({
-          type: 'USER_JOINED',
-          user: {
-            id: `p-${Date.now()}`,
-            name: currentUser.name,
-            email: currentUser.email,
-            role: currentUser.role,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'Live In Room',
-            isHandRaised,
-            isMicOn,
-            isVideoOn
-          }
-        });
-
-        broadcast.onmessage = (event) => {
-          if (event.data?.type === 'USER_JOINED') {
-            const newUser = event.data.user;
-            setParticipants(prev => {
-              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name || p.name.includes(newUser.name));
-              if (!exists) {
-                window.dispatchEvent(new CustomEvent('show-toast', {
-                  detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
-                }));
-                return [...prev, { ...newUser, isLocalUser: false }];
-              } else {
-                return prev.map(p => (p.email === newUser.email || p.name === newUser.name) ? { ...p, status: 'Live In Room' } : p);
-              }
-            });
-          } else if (event.data?.type === 'HAND_RAISE') {
-            const { name, isHandRaised: raised } = event.data;
-            setParticipants(prev => prev.map(p => p.name.includes(name) ? { ...p, isHandRaised: raised } : p));
-            if (raised) {
-              window.dispatchEvent(new CustomEvent('show-toast', {
-                detail: { message: `✋ ${name} raised their hand to speak`, type: 'info' }
-              }));
-            }
-          }
-        };
-      }
-    } catch (e) {}
-
-    window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: `Connected to Live Council Session as ${currentUser.name}`, type: 'success' }
-    }));
-
     return () => {
-      clearInterval(pollTimer);
-      if (broadcast) broadcast.close();
+      clearInterval(signalInterval);
+      clearInterval(presenceInterval);
+      Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
     };
-  }, [meetingId, currentUser]);
+  }, [meetingId, currentUser, localStream]);
 
   const updateParticipantsFromData = (remoteList: any[]) => {
     setParticipants(prev => {
       const merged: ConnectedParticipant[] = [];
       const seen = new Set<string>();
 
-      // 1. Add current user as local user
-      const isLocal = true;
+      // 1. Add current local user
       merged.push({
         id: 'user-local',
         name: `${currentUser.name} (You)`,
@@ -320,7 +400,7 @@ export default function MeetingRoomPage() {
           if (cleanEmail) seen.add(cleanEmail);
 
           merged.push({
-            id: p.id || `p-${Math.random()}`,
+            id: p.id || `p-${cleanName}`,
             name: cleanName,
             email: p.email || '',
             role: p.role || 'Stakeholder Representative',
@@ -461,7 +541,6 @@ export default function MeetingRoomPage() {
       }
     }));
 
-    // Broadcast across presence API
     fetch(`/api/meetings/${meetingId}/presence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -470,19 +549,6 @@ export default function MeetingRoomPage() {
         participant: { name: currentUser.name, isHandRaised: nextState }
       })
     }).catch(() => {});
-
-    // Broadcast across local channel
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const bc = new BroadcastChannel(`nexucon_presence_${meetingId}`);
-        bc.postMessage({
-          type: 'HAND_RAISE',
-          name: currentUser.name,
-          isHandRaised: nextState
-        });
-        bc.close();
-      }
-    } catch (e) {}
   };
 
   // Timer
@@ -728,7 +794,6 @@ export default function MeetingRoomPage() {
       }));
     }
 
-    // Broadcast across Presence API
     fetch(`/api/meetings/${meetingId}/presence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -738,7 +803,6 @@ export default function MeetingRoomPage() {
       })
     }).catch(() => {});
 
-    // Save in Django DB
     try {
       await castMeetingVote(meetingId, {
         voter_name: currentUser.name,
@@ -754,7 +818,7 @@ export default function MeetingRoomPage() {
     ? meeting.google_meet_url 
     : 'https://meet.google.com/new';
 
-  // Embeddable Open WebRTC Room URL (Allows iframe embed without X-Frame-Options deny)
+  // Embeddable Open WebRTC Room URL (Allows instant multi-party voice/video bridge)
   const webrtcRoomName = `NexuconCouncil-${(meeting?.meeting_reference || 'Room').replace(/[^a-zA-Z0-9]/g, '')}`;
   const webrtcEmbedUrl = `https://meet.jit.si/${webrtcRoomName}#config.startWithAudioMuted=false&config.prejoinPageEnabled=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','closedcaptions','desktop','fullscreen','fodeviceselection','hangup','chat','recording','etherpad','sharedvideo','settings','raisehand','videoquality','filmstrip','feedback','stats','shortcuts','tileview']`;
 
@@ -914,11 +978,11 @@ export default function MeetingRoomPage() {
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Cast size={15} className="text-emerald-400" />
-                    <span className="text-xs font-bold text-white">Live WebRTC Embedded Video Conference Bridge</span>
+                    <span className="text-xs font-bold text-white">Live WebRTC Video & Audio Conference Bridge</span>
                     <span className="text-[10px] font-mono text-slate-400">({webrtcRoomName})</span>
                   </div>
                   <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                    Live HD WebRTC
+                    Live HD WebRTC Mesh
                   </span>
                 </div>
                 <iframe
@@ -1083,7 +1147,7 @@ export default function MeetingRoomPage() {
                   </div>
                 ) : (
                   
-                  /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS */
+                  /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS WITH LIVE MEDIA */
                   <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
                     participants.length <= 1 
                       ? 'grid-cols-1' 
@@ -1093,102 +1157,131 @@ export default function MeetingRoomPage() {
                           ? 'grid-cols-1 sm:grid-cols-2' 
                           : 'grid-cols-2 lg:grid-cols-3'
                   }`}>
-                    {participants.map((p, idx) => (
-                      <div
-                        key={p.id || idx}
-                        className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
-                          p.isLocalUser
-                            ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
-                            : p.status === 'Live In Room'
-                              ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
-                              : 'bg-[#091522]/80 border border-slate-800'
-                        }`}
-                      >
-                        {/* Top Tile Badge */}
-                        <div className="flex items-center justify-between z-10">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
-                            p.isLocalUser 
-                              ? 'bg-emerald-600 text-white' 
-                              : 'bg-slate-800 text-slate-200 border border-slate-700'
-                          }`}>
-                            {p.isLocalUser && <CheckCircle2 size={11} />}
-                            <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
-                          </span>
+                    {participants.map((p, idx) => {
+                      const remoteStream = !p.isLocalUser ? (remoteStreams[p.name] || remoteStreams[p.id]) : null;
 
-                          <div className="flex items-center gap-1.5">
-                            {p.isHandRaised && (
-                              <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
-                                <Hand size={11} /> Hand Raised
-                              </span>
-                            )}
+                      return (
+                        <div
+                          key={p.id || idx}
+                          className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
+                            p.isLocalUser
+                              ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
+                              : p.status === 'Live In Room'
+                                ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
+                                : 'bg-[#091522]/80 border border-slate-800'
+                          }`}
+                        >
+                          {/* Hidden Audio Player for Remote Audio Stream */}
+                          {!p.isLocalUser && remoteStream && (
+                            <audio
+                              autoPlay
+                              ref={(el) => {
+                                if (el && el.srcObject !== remoteStream) {
+                                  el.srcObject = remoteStream;
+                                  el.play().catch(() => {});
+                                }
+                              }}
+                            />
+                          )}
 
-                            {p.isLocalUser ? (
-                              isMicOn ? (
+                          {/* Top Tile Badge */}
+                          <div className="flex items-center justify-between z-10">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
+                              p.isLocalUser 
+                                ? 'bg-emerald-600 text-white' 
+                                : 'bg-slate-800 text-slate-200 border border-slate-700'
+                            }`}>
+                              {p.isLocalUser && <CheckCircle2 size={11} />}
+                              <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
+                              {p.isHandRaised && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                                  <Hand size={11} /> Hand Raised
+                                </span>
+                              )}
+
+                              {p.isLocalUser ? (
+                                isMicOn ? (
+                                  <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                    <Volume2 size={12} className="animate-pulse" /> Live Mic
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                    Muted
+                                  </span>
+                                )
+                              ) : p.status === 'Live In Room' ? (
                                 <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                                  <Volume2 size={12} className="animate-pulse" /> Live Mic
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Connected
                                 </span>
                               ) : (
-                                <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                                  Muted
+                                <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
+                                  Dispatched
                                 </span>
-                              )
-                            ) : p.status === 'Live In Room' ? (
-                              <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Connected
-                              </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Center Stage Media: Real Video for Local User OR Real Stream for Remote Users */}
+                          <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
+                            {p.isLocalUser && isVideoOn && localStream ? (
+                              <video
+                                ref={localVideoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                              />
+                            ) : !p.isLocalUser && remoteStream && remoteStream.getVideoTracks().length > 0 ? (
+                              <video
+                                autoPlay
+                                playsInline
+                                ref={(el) => {
+                                  if (el && el.srcObject !== remoteStream) {
+                                    el.srcObject = remoteStream;
+                                    el.play().catch(() => {});
+                                  }
+                                }}
+                                className="w-full h-full object-cover rounded-2xl"
+                              />
                             ) : (
-                              <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
-                                Dispatched
-                              </span>
+                              <div className="flex flex-col items-center text-center p-3">
+                                <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                  p.isLocalUser
+                                    ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
+                                    : p.status === 'Live In Room'
+                                      ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
+                                      : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                }`}>
+                                  {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                                <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
+                                  {p.name}
+                                </h3>
+                                <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
+                                  {p.email || p.role}
+                                </p>
+                              </div>
                             )}
                           </div>
-                        </div>
 
-                        {/* Center Stage Media: Real Video for Local User or Dynamic Avatar for Remote Users */}
-                        <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
-                          {p.isLocalUser && isVideoOn && localStream ? (
-                            <video
-                              ref={localVideoRef}
-                              autoPlay
-                              playsInline
-                              muted
-                              className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center text-center">
-                              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
-                                p.isLocalUser
-                                  ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
-                                  : p.status === 'Live In Room'
-                                    ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
-                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
-                              }`}>
-                                {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                              </div>
-                              <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
-                                {p.name}
-                              </h3>
-                              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
-                                {p.email || p.role}
-                              </p>
-                            </div>
-                          )}
+                          {/* Bottom Tile Footer */}
+                          <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                            <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
+                              p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                              <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {p.time || '10:00 AM'}
+                            </span>
+                          </div>
                         </div>
-
-                        {/* Bottom Tile Footer */}
-                        <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                          <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
-                            p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
-                          }`}>
-                            <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                            <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            {p.time || '10:00 AM'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -1216,7 +1309,7 @@ export default function MeetingRoomPage() {
           {/* FLOATING BOTTOM CONTROL DOCK */}
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
             
-            {/* Meeting Link Copy Action (Generates Live Production URL) */}
+            {/* Meeting Link Copy Action */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
