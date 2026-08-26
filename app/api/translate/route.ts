@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     try {
       const accessToken = await getAccessToken();
       const translateRes = await fetch(
-        `https://translation.googleapis.com/v3/projects/${SERVICE_ACCOUNT.project_id}/locations/global:translateText`,
+        "https://translation.googleapis.com/language/translate/v2",
         {
           method: "POST",
           headers: {
@@ -117,36 +117,27 @@ export async function POST(req: NextRequest) {
             "Content-Type": "application/json; charset=utf-8"
           },
           body: JSON.stringify({
-            contents: [text],
-            targetLanguageCode: target_language,
-            mimeType: "text/plain"
+            q: text,
+            target: target_language,
+            format: "text"
           })
         }
       );
 
       if (translateRes.ok) {
         const translateData = await translateRes.json();
-        translatedContent = translateData.translations?.[0]?.translatedText || text;
+        translatedContent = translateData.data?.translations?.[0]?.translatedText || text;
       } else {
         const errorText = await translateRes.text();
-        console.warn("Google Translate Cloud API returned status:", translateRes.status, errorText);
+        console.warn("Google Translate API v2 returned status:", translateRes.status, errorText);
       }
     } catch (apiErr: any) {
-      console.warn("Google Translate Cloud API failed, applying contextual fallback:", apiErr.message);
+      console.warn("Google Translate API failed:", apiErr.message);
     }
 
-    // Fallback if cloud request was empty or failed
+    // Direct fallback to original text if API fails
     if (!translatedContent) {
-      const normalized = text.toLowerCase();
-      if (target_language === "yo") {
-        translatedContent = `[Yorùbá] ${text} (Ẹ jọ̀wọ́, gbogbo àyẹ̀wò gbọ́dọ̀ tẹ̀lé ìlànà àṣẹ).`;
-      } else if (target_language === "ig") {
-        translatedContent = `[Igbo] ${text} (Biko hụ na nyocha niile na-agbaso ụkpụrụ iwu).`;
-      } else if (target_language === "ha") {
-        translatedContent = `[Hausa] ${text} (Don Allah a tabbatar da cewa dukkan bincike sun bi ka'idojin hukuma).`;
-      } else {
-        translatedContent = text;
-      }
+      translatedContent = text;
     }
 
     return NextResponse.json({
@@ -155,7 +146,7 @@ export async function POST(req: NextRequest) {
       language_name: languageMap[target_language] || target_language,
       message_id: message_id || `msg-${Date.now()}`,
       original_content: text,
-      provider: "Google Cloud Translation API v3",
+      provider: "Google Cloud Translation API v2",
       is_cached: false
     });
   } catch (error: any) {
