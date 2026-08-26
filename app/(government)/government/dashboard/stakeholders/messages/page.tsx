@@ -209,11 +209,45 @@ export default function StakeholderMessages() {
     { code: 'en' as const, label: 'English (Original)', flag: '🌐' },
   ];
 
+  const saveMessageToLocalCache = (msg: StakeholderMessage) => {
+    try {
+      const key = `nexucon_channel_msgs_${msg.channel_name}`;
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      const current: StakeholderMessage[] = raw ? JSON.parse(raw) : [];
+      const updated = [...current.filter((m) => m.id !== msg.id), msg];
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch (e) {}
+  };
+
   const fetchMessages = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await getMessages({ channel: activeChannel });
-      setMessages(data);
+
+      // Merge server messages with local storage cache so voice notes and attachments never disappear
+      let localCache: StakeholderMessage[] = [];
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(`nexucon_channel_msgs_${activeChannel}`) : null;
+        if (raw) localCache = JSON.parse(raw);
+      } catch (e) {}
+
+      const msgMap = new Map<string, StakeholderMessage>();
+
+      // 1. Add server messages
+      data.forEach((m) => msgMap.set(m.id, m));
+
+      // 2. Add local cached messages (ensuring no loss)
+      localCache.forEach((m) => {
+        if (!msgMap.has(m.id)) {
+          msgMap.set(m.id, m);
+        }
+      });
+
+      const merged = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      );
+
+      setMessages(merged);
     } catch (err: any) {
       console.error("Failed to load messages", err);
     } finally {
@@ -322,7 +356,7 @@ export default function StakeholderMessages() {
         setIsSending(true);
 
         const optimisticMsg: StakeholderMessage = {
-          id: `temp-${Date.now()}`,
+          id: `msg-vn-${Date.now()}`,
           channel_name: activeChannel,
           message_text: inputMessage.trim(),
           voice_note_url: audioDataUrl,
@@ -335,6 +369,7 @@ export default function StakeholderMessages() {
         };
 
         setMessages((prev) => [...prev, optimisticMsg]);
+        saveMessageToLocalCache(optimisticMsg);
         setInputMessage('');
         setIsUrgent(false);
 
@@ -351,11 +386,17 @@ export default function StakeholderMessages() {
           });
 
           if (created && created.id) {
-            setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? created : m)));
+            const finalItem = {
+              ...created,
+              voice_note_url: created.voice_note_url || audioDataUrl,
+              voice_note_duration: created.voice_note_duration || duration
+            };
+            setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m)));
+            saveMessageToLocalCache(finalItem);
           }
 
           window.dispatchEvent(new CustomEvent('show-toast', {
-            detail: { message: '🎤 Voice note dispatch transmitted', type: 'success' }
+            detail: { message: '🎤 Voice note dispatch transmitted & saved', type: 'success' }
           }));
         } catch (err) {
           console.error("Failed to send voice note", err);
@@ -381,7 +422,7 @@ export default function StakeholderMessages() {
 
     // Optimistic message placeholder
     const optimisticMsg: StakeholderMessage = {
-      id: `temp-${Date.now()}`,
+      id: `msg-att-${Date.now()}`,
       channel_name: activeChannel,
       message_text: textToSend,
       attachment_url: attachedFile?.dataUrl,
@@ -396,6 +437,8 @@ export default function StakeholderMessages() {
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
+    saveMessageToLocalCache(optimisticMsg);
+
     setInputMessage('');
     const prevAttached = attachedFile;
     const prevUrgent = isUrgent;
@@ -417,13 +460,20 @@ export default function StakeholderMessages() {
       });
 
       if (created && created.id) {
-        setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? created : m)));
+        const finalItem = {
+          ...created,
+          attachment_url: created.attachment_url || prevAttached?.dataUrl,
+          attachment_name: created.attachment_name || prevAttached?.name,
+          attachment_type: created.attachment_type || prevAttached?.type,
+          attachment_size: created.attachment_size || prevAttached?.size
+        };
+        setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m)));
+        saveMessageToLocalCache(finalItem);
       }
 
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: `Message broadcasted to #${activeChannel}`, type: 'success' }
       }));
-      fetchMessages();
     } catch (err: any) {
       console.error("Failed to send message", err);
       const errMsg = err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to broadcast message';
