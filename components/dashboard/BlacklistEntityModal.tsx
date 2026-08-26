@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { X, AlertOctagon, UserX, ShieldAlert } from 'lucide-react';
+import { X, AlertOctagon, UserX, ShieldAlert, AlertTriangle, Loader2 } from 'lucide-react';
 import { toggleBlacklist } from '@/services/stakeholders';
 
 interface BlacklistEntityModalProps {
@@ -54,106 +54,163 @@ export default function BlacklistEntityModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0F181F]/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-7 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-rose-500">
-        
-        <div className="flex items-center justify-between pb-4 border-b border-rose-100 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
-              <UserX size={20} />
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-rose-950">Regulatory Blacklist & Sanction</h3>
-              <p className="text-xs text-rose-600 font-semibold">Flag Recurring Violator</p>
-            </div>
-          </div>
-          <button 
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-[150] overflow-hidden">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-[#0F181F]/50 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Entity Type
-              </label>
-              <select
-                value={entityType}
-                onChange={(e) => setEntityType(e.target.value)}
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white font-medium"
-              >
-                <option value="Contractor">Contractor</option>
-                <option value="Developer">Developer</option>
-                <option value="Consultant">Consultant</option>
-                <option value="Professional">Professional / Engineer</option>
-              </select>
+      {/* Slide-over Sidepop Drawer */}
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+        <div className="w-screen max-w-xl bg-white shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200">
+          
+          {/* Header */}
+          <div className="p-6 bg-gradient-to-r from-red-50 via-white to-orange-50/40 border-b border-red-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-red-600 text-white flex items-center justify-center shadow-md shadow-red-600/20">
+                <AlertOctagon size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                    STATUTORY ENFORCEMENT
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">• Sanctions Registry</span>
+                </div>
+                <h2 className="text-lg font-black text-slate-900 mt-0.5">
+                  Flag / Sanction Entity
+                </h2>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Sanction Status
-              </label>
-              <select
-                value={statusVal}
-                onChange={(e) => setStatusVal(e.target.value as any)}
-                className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white font-bold text-rose-700"
-              >
-                <option value="Blacklisted">Blacklisted</option>
-                <option value="Monitoring">Monitoring (Warning)</option>
-                <option value="Suspended">Suspended</option>
-              </select>
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Entity / Organization Name
-            </label>
-            <input
-              type="text"
-              value={entityName}
-              onChange={(e) => setEntityName(e.target.value)}
-              placeholder="e.g. Apex Builders Ltd."
-              required
-              className="w-full p-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Violation Reason & Evidence
-            </label>
-            <textarea
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. 3 Stop-Work Orders issued in the last 12 months due to deep trench structural failure."
-              required
-              className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
-            />
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
             <button
-              type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/30 transition-all flex items-center gap-2"
-            >
-              <AlertOctagon size={16} /> {isSubmitting ? 'Enforcing...' : 'Apply Sanction'}
+              <X size={18} />
             </button>
           </div>
-        </form>
 
+          {/* Drawer Body (Scrollable) */}
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              <div className="p-3.5 bg-red-50/60 border border-red-200 rounded-2xl text-xs text-red-800 flex items-start gap-2.5">
+                <ShieldAlert size={16} className="text-red-600 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  Sanctioned entities are barred from permit applications and government stage-gate submissions across all jurisdictions.
+                </p>
+              </div>
+
+              {/* Entity Type */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                  Entity Category
+                </label>
+                <select
+                  value={entityType}
+                  onChange={(e) => setEntityType(e.target.value)}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="Contractor">Contractor / Construction Firm</option>
+                  <option value="Developer">Property Developer</option>
+                  <option value="Consultant">Engineering Consultant</option>
+                  <option value="Licensed Professional">Licensed Professional (COREN/ARCON)</option>
+                </select>
+              </div>
+
+              {/* Name & Ref ID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                    Entity / Person Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={entityName}
+                    onChange={(e) => setEntityName(e.target.value)}
+                    placeholder="e.g. Apex Civil Foundations Ltd"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                    Regulatory Reference ID
+                  </label>
+                  <input
+                    type="text"
+                    value={entityId}
+                    onChange={(e) => setEntityId(e.target.value)}
+                    placeholder="e.g. CONTR-9021"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                  Sanction Severity Level
+                </label>
+                <select
+                  value={statusVal}
+                  onChange={(e) => setStatusVal(e.target.value as any)}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="Blacklisted">Blacklisted (Immediate Suspension &amp; Revocation)</option>
+                  <option value="Suspended">Suspended (Temporary Freeze Pending Inquiry)</option>
+                  <option value="Monitoring">Special Monitoring (Enhanced Audit Scrutiny)</option>
+                </select>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                  Violation Reason / Tribunal Finding <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Document the exact structural defect, unapproved modification, or safety code breach..."
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500 leading-relaxed"
+                />
+              </div>
+            </div>
+
+            {/* Sticky Drawer Footer */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-600/20 flex items-center gap-2 transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Executing Sanction...</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertOctagon size={14} />
+                    <span>Enforce Sanction</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+        </div>
       </div>
     </div>
   );
