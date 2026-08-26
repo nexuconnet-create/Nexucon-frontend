@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  MessageSquare, Send, Paperclip, AlertTriangle, Users, 
+  MessageSquare, Send, AlertTriangle, 
   Hash, ShieldCheck, Clock, RefreshCw, UserCheck, Languages, 
-  ChevronDown, Check, Sparkles, Globe, Loader2 
+  ChevronDown, Check, Globe, Loader2, Lock
 } from "lucide-react";
 import { 
   StakeholderMessage, getMessages, sendMessage, 
@@ -26,11 +26,38 @@ export default function StakeholderMessages() {
   const [translatingId, setTranslatingId] = useState<string | null>(null);
 
   const channels = [
-    { name: "General Council", count: 12, icon: Hash },
-    { name: "Project Coordination", count: 8, icon: Hash },
-    { name: "Site Safety & Inspections", count: 4, icon: AlertTriangle },
-    { name: "Direct Executive Messages", count: 2, icon: UserCheck }
+    { 
+      name: "General Council", 
+      icon: Hash,
+      multilingual: false,
+      languageBadge: "English Standard",
+      description: "Official Statutory Record" 
+    },
+    { 
+      name: "Project Coordination", 
+      icon: Hash,
+      multilingual: true,
+      languageBadge: "3 Nigerian Languages",
+      description: "Yorùbá, Igbo & Hausa Supported" 
+    },
+    { 
+      name: "Site Safety & Inspections", 
+      icon: AlertTriangle,
+      multilingual: false,
+      languageBadge: "English HSE",
+      description: "Mandatory Safety Directives" 
+    },
+    { 
+      name: "Direct Executive Messages", 
+      icon: UserCheck,
+      multilingual: true,
+      languageBadge: "3 Nigerian Languages",
+      description: "Executive Multi-Language Stream" 
+    }
   ];
+
+  const currentChannelMeta = channels.find(c => c.name === activeChannel) || channels[0];
+  const isMultilingual = currentChannelMeta.multilingual;
 
   const languages = [
     { code: 'yo' as const, label: 'Yorùbá (yo)', flag: '🇳🇬' },
@@ -108,7 +135,7 @@ export default function StakeholderMessages() {
     }
   };
 
-  const handleTranslate = async (messageId: string, langCode: 'yo' | 'ig' | 'ha' | 'en') => {
+  const handleTranslate = async (messageId: string, langCode: 'yo' | 'ig' | 'ha' | 'en', originalText?: string) => {
     setOpenTranslateMenuId(null);
     if (langCode === 'en') {
       // Revert to original text
@@ -122,7 +149,7 @@ export default function StakeholderMessages() {
 
     setTranslatingId(messageId);
     try {
-      const result = await translateMessage(messageId, langCode);
+      const result = await translateMessage(messageId, langCode, originalText);
       if (result && result.translated_content) {
         setTranslatedMap(prev => ({
           ...prev,
@@ -156,7 +183,7 @@ export default function StakeholderMessages() {
             Stakeholder Messaging &amp; Nigerian Language Channels
           </h1>
           <p className="text-gray-500 mt-1 text-xs sm:text-sm">
-            Multi-agency communication stream with real-time Google Cloud Translation into Yorùbá, Igbo, and Hausa.
+            Multi-agency communication stream with statutory English governance and real-time Google Cloud Translation for Nigerian languages.
           </p>
         </div>
         
@@ -176,7 +203,7 @@ export default function StakeholderMessages() {
             <span className="block text-[10px] font-bold uppercase text-gray-400 tracking-wider mb-3 px-2">
               Communication Channels
             </span>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {channels.map((ch) => {
                 const IconComponent = ch.icon;
                 const isActive = activeChannel === ch.name;
@@ -184,16 +211,32 @@ export default function StakeholderMessages() {
                 return (
                   <button
                     key={ch.name}
-                    onClick={() => setActiveChannel(ch.name)}
-                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                    onClick={() => {
+                      setActiveChannel(ch.name);
+                      setTranslatedMap({});
+                    }}
+                    className={`w-full flex flex-col p-3 rounded-2xl text-left transition-all cursor-pointer ${
                       isActive 
                         ? 'bg-[#022C4F] text-white shadow-md shadow-[#022C4F]/20' 
-                        : 'text-gray-700 hover:bg-slate-50'
+                        : 'text-gray-700 hover:bg-slate-50 border border-transparent hover:border-slate-200'
                     }`}
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <IconComponent size={15} className={isActive ? 'text-white' : 'text-slate-400'} />
-                      <span className="truncate">{ch.name}</span>
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2 truncate">
+                        <IconComponent size={14} className={isActive ? 'text-white' : 'text-slate-400'} />
+                        <span className="text-xs font-bold truncate">{ch.name}</span>
+                      </div>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                        isActive 
+                          ? 'bg-white/20 text-white' 
+                          : ch.multilingual 
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200' 
+                            : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {ch.languageBadge}
+                      </span>
                     </div>
                   </button>
                 );
@@ -202,13 +245,15 @@ export default function StakeholderMessages() {
           </div>
 
           <div className="p-3.5 bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-2xl text-xs text-slate-600">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1.5">
               <Globe size={14} className="text-blue-700" />
-              <p className="font-black text-[#022C4F]">Multilingual Engine</p>
+              <p className="font-black text-[#022C4F]">Language Policy</p>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Google Cloud Translation with preserved terminology for <strong>BIM, GPR, GNSS, RTK, NCR, &amp; COREN</strong>.
-            </p>
+            <ul className="text-[11px] text-slate-600 space-y-1 leading-tight">
+              <li>• <strong>General Council:</strong> Strictly English</li>
+              <li>• <strong>Site Safety:</strong> Strictly English HSE</li>
+              <li>• <strong>Coordination &amp; Exec:</strong> Yorùbá • Igbo • Hausa</li>
+            </ul>
           </div>
         </div>
 
@@ -225,9 +270,15 @@ export default function StakeholderMessages() {
               <p className="text-[11px] text-gray-500 font-medium">Project: Central Metro Transit Hub</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                Encrypted &amp; Audited
-              </span>
+              {isMultilingual ? (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 flex items-center gap-1.5">
+                  <Languages size={12} /> Yorùbá • Igbo • Hausa • English
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1">
+                  <Lock size={10} /> Strictly English Statutory Standard
+                </span>
+              )}
             </div>
           </div>
 
@@ -273,61 +324,67 @@ export default function StakeholderMessages() {
                         <Clock size={10} /> {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
                       </span>
 
-                      {/* Translate Menu Button */}
-                      <div className="relative">
-                        <button
-                          type="button"
-                          disabled={isTranslating}
-                          onClick={() => setOpenTranslateMenuId(isMenuOpen ? null : msg.id)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
-                        >
-                          {isTranslating ? (
-                            <Loader2 size={11} className="animate-spin text-blue-600" />
-                          ) : (
-                            <Languages size={11} className="text-blue-600" />
-                          )}
-                          <span>{isTranslating ? 'Translating...' : activeTranslation ? activeTranslation.language_name : 'Translate'}</span>
-                          <ChevronDown size={10} />
-                        </button>
+                      {/* Multilingual Channel Translation Button */}
+                      {isMultilingual ? (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            disabled={isTranslating}
+                            onClick={() => setOpenTranslateMenuId(isMenuOpen ? null : msg.id)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                          >
+                            {isTranslating ? (
+                              <Loader2 size={11} className="animate-spin text-blue-600" />
+                            ) : (
+                              <Languages size={11} className="text-blue-600" />
+                            )}
+                            <span>{isTranslating ? 'Translating...' : activeTranslation ? activeTranslation.language_name : 'Translate'}</span>
+                            <ChevronDown size={10} />
+                          </button>
 
-                        {/* Dropdown */}
-                        <AnimatePresence>
-                          {isMenuOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.95, y: 5 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95, y: 5 }}
-                              className="absolute right-0 top-7 z-30 w-44 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 space-y-1"
-                            >
-                              <div className="px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                                Translate Message
-                              </div>
-                              {languages.map((lang) => {
-                                const isCurrent = activeTranslation 
-                                  ? activeTranslation.target_language === lang.code 
-                                  : lang.code === 'en';
-                                return (
-                                  <button
-                                    key={lang.code}
-                                    onClick={() => handleTranslate(msg.id, lang.code)}
-                                    className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                                      isCurrent 
-                                        ? 'bg-blue-50 text-blue-700' 
-                                        : 'text-slate-700 hover:bg-slate-50'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-1.5">
-                                      <span>{lang.flag}</span>
-                                      <span>{lang.label}</span>
-                                    </span>
-                                    {isCurrent && <Check size={12} />}
-                                  </button>
-                                );
-                              })}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                          {/* Dropdown */}
+                          <AnimatePresence>
+                            {isMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 5 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: 5 }}
+                                className="absolute right-0 top-7 z-30 w-44 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 space-y-1"
+                              >
+                                <div className="px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                                  Nigerian Languages
+                                </div>
+                                {languages.map((lang) => {
+                                  const isCurrent = activeTranslation 
+                                    ? activeTranslation.target_language === lang.code 
+                                    : lang.code === 'en';
+                                  return (
+                                    <button
+                                      key={lang.code}
+                                      onClick={() => handleTranslate(msg.id, lang.code, msg.message_text)}
+                                      className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                                        isCurrent 
+                                          ? 'bg-blue-50 text-blue-700' 
+                                          : 'text-slate-700 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <span className="flex items-center gap-1.5">
+                                        <span>{lang.flag}</span>
+                                        <span>{lang.label}</span>
+                                      </span>
+                                      {isCurrent && <Check size={12} />}
+                                    </button>
+                                  );
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1">
+                          <Lock size={9} /> English Only
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -341,7 +398,7 @@ export default function StakeholderMessages() {
                     <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
                       <span>Original: &ldquo;{activeTranslation.original_content}&rdquo;</span>
                       <button
-                        onClick={() => handleTranslate(msg.id, 'en')}
+                        onClick={() => handleTranslate(msg.id, 'en', msg.message_text)}
                         className="text-blue-600 font-bold hover:underline cursor-pointer"
                       >
                         Show Original
