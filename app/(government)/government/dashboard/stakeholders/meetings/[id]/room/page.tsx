@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Video, Phone, PhoneOff, Mic, MicOff, VideoOff, Share2, 
@@ -11,7 +11,8 @@ import {
   Radio, Copy, Globe, RefreshCw, UserCheck, ShieldAlert,
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
-  MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2
+  MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2,
+  CheckCircle, BadgeCheck
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
@@ -19,13 +20,31 @@ import {
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
 
+interface ConnectedParticipant {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  time: string;
+  status: 'Live In Room' | 'Dispatched';
+  isLocalUser?: boolean;
+}
+
 export default function MeetingRoomPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const meetingId = (params?.id as string) || '';
 
   const [meeting, setMeeting] = useState<StakeholderMeeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Local User Identity in this Meeting Session
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string; email: string }>({
+    name: searchParams?.get('guest_name') || 'Engr. Babatunde Sanwo',
+    role: searchParams?.get('role') || 'Agency Head / Director General',
+    email: searchParams?.get('email') || 'head@regulator.gov.ng'
+  });
 
   // Audio/Video Local Stream & Controls
   const [isMicOn, setIsMicOn] = useState(true);
@@ -33,7 +52,7 @@ export default function MeetingRoomPage() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [activeSpeaker, setActiveSpeaker] = useState<'sanwo' | 'thorne' | 'chen' | 'rivera'>('sanwo');
+  const [activeSpeaker, setActiveSpeaker] = useState<string>('sanwo');
   
   // WebRTC Local Video / Screen Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -52,6 +71,14 @@ export default function MeetingRoomPage() {
   // Active Sidebar Tab
   const [activeTab, setActiveTab] = useState<'invite' | 'action_items' | 'minutes' | 'voting' | 'chat'>('invite');
 
+  // Live Connected Participants List
+  const [participants, setParticipants] = useState<ConnectedParticipant[]>([
+    { id: 'user-local', name: 'Engr. Babatunde Sanwo (You)', email: 'head@regulator.gov.ng', role: 'Agency Head / Council Lead', time: '10:00 AM', status: 'Live In Room', isLocalUser: true },
+    { id: 'user-dev', name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Live In Room' },
+    { id: 'user-insp', name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Live In Room' },
+    { id: 'user-cont', name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Live In Room' },
+  ]);
+
   // Live Email Invite State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -59,11 +86,6 @@ export default function MeetingRoomPage() {
   const [inviteRole, setInviteRole] = useState('Master Developer');
   const [inviteCustomNote, setInviteCustomNote] = useState('');
   const [isSendingInvite, setIsSendingInvite] = useState(false);
-  const [invitedParticipants, setInvitedParticipants] = useState<Array<{ name: string; email: string; role: string; time: string; status: 'Dispatched' | 'Joined' }>>([
-    { name: 'Michael Thorne', email: 'm.thorne@nexucon.net', role: 'Master Developer', time: '10:00 AM', status: 'Joined' },
-    { name: 'Marcus Chen', email: 'm.chen@inspections.gov.ng', role: 'Field Auditor', time: '10:01 AM', status: 'Joined' },
-    { name: 'David Rivera', email: 'd.rivera@apexconstruct.com', role: 'Lead Contractor', time: '10:02 AM', status: 'Joined' },
-  ]);
 
   // Collaboration State
   const [minutesText, setMinutesText] = useState('');
@@ -92,6 +114,60 @@ export default function MeetingRoomPage() {
   const getLiveMeetingUrl = () => {
     return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
   };
+
+  // Cross-Tab / Multi-Device Presence Synchronization via BroadcastChannel & Local Storage
+  useEffect(() => {
+    const channelName = `nexucon_presence_${meetingId || 'default'}`;
+    let broadcast: BroadcastChannel | null = null;
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        broadcast = new BroadcastChannel(channelName);
+
+        // Announce current user has joined
+        broadcast.postMessage({
+          type: 'USER_JOINED',
+          user: {
+            id: `p-${Date.now()}`,
+            name: currentUser.name,
+            email: currentUser.email,
+            role: currentUser.role,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Live In Room'
+          }
+        });
+
+        // Listen for other users joining in other tabs/browsers
+        broadcast.onmessage = (event) => {
+          if (event.data?.type === 'USER_JOINED') {
+            const newUser = event.data.user;
+            setParticipants(prev => {
+              const exists = prev.some(p => p.email === newUser.email || p.name === newUser.name);
+              if (!exists) {
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                  detail: { message: `🔔 ${newUser.name} (${newUser.role}) joined the meeting!`, type: 'info' }
+                }));
+                return [...prev, { ...newUser, isLocalUser: false }];
+              } else {
+                return prev.map(p => (p.email === newUser.email || p.name === newUser.name) ? { ...p, status: 'Live In Room' } : p);
+              }
+            });
+          }
+        };
+      }
+    } catch (e) {
+      console.warn("BroadcastChannel sync notice:", e);
+    }
+
+    // Also notify local session toast
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: `Connected to Meeting Session as ${currentUser.name}`, type: 'success' }
+    }));
+
+    return () => {
+      if (broadcast) broadcast.close();
+    };
+  }, [meetingId, currentUser]);
 
   // Initialize Local Media Stream if permitted
   useEffect(() => {
@@ -171,15 +247,6 @@ export default function MeetingRoomPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Speaker switching simulation for connected council realism
-  useEffect(() => {
-    const speakerInterval = setInterval(() => {
-      const speakers: Array<'sanwo' | 'thorne' | 'chen' | 'rivera'> = ['sanwo', 'chen', 'thorne', 'rivera'];
-      setActiveSpeaker(speakers[Math.floor(Math.random() * speakers.length)]);
-    }, 12000);
-    return () => clearInterval(speakerInterval);
-  }, []);
-
   const formatElapsed = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
@@ -226,7 +293,7 @@ export default function MeetingRoomPage() {
     if (!inviteEmail.trim()) return;
 
     setIsSendingInvite(true);
-    const liveUrl = getLiveMeetingUrl();
+    const liveUrl = `${getLiveMeetingUrl()}?guest_name=${encodeURIComponent(inviteName.trim() || 'Guest Stakeholder')}&role=${encodeURIComponent(inviteRole)}&email=${encodeURIComponent(inviteEmail.trim())}`;
     const formattedSubject = `🏛️ Live Meeting Invitation: ${meeting?.title || 'Project Coordination Session'} [${meeting?.meeting_reference || 'MTG-1092'}]`;
 
     const htmlContent = `
@@ -300,16 +367,17 @@ export default function MeetingRoomPage() {
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Live invitation dispatched via Resend to ${inviteEmail.trim()}`, type: 'success' }
         }));
-        setInvitedParticipants(prev => [
-          {
-            name: inviteName.trim() || inviteEmail.split('@')[0],
-            email: inviteEmail.trim(),
-            role: inviteRole,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'Dispatched'
-          },
-          ...prev
-        ]);
+        
+        const newInvited: ConnectedParticipant = {
+          id: `p-${Date.now()}`,
+          name: inviteName.trim() || inviteEmail.split('@')[0],
+          email: inviteEmail.trim(),
+          role: inviteRole,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'Dispatched'
+        };
+
+        setParticipants(prev => [...prev, newInvited]);
         setInviteEmail('');
         setInviteName('');
         setInviteCustomNote('');
@@ -382,8 +450,8 @@ export default function MeetingRoomPage() {
     setChatMessages(prev => [
       ...prev,
       {
-        sender: 'Engr. Babatunde Sanwo',
-        role: 'Agency Head',
+        sender: currentUser.name,
+        role: currentUser.role,
         text: newChatMessage.trim(),
         time
       }
@@ -416,13 +484,15 @@ export default function MeetingRoomPage() {
   const webrtcRoomName = `NexuconCouncil-${(meeting?.meeting_reference || 'Room').replace(/[^a-zA-Z0-9]/g, '')}`;
   const webrtcEmbedUrl = `https://meet.jit.si/${webrtcRoomName}#config.startWithAudioMuted=false&config.prejoinPageEnabled=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','closedcaptions','desktop','fullscreen','fodeviceselection','hangup','chat','recording','etherpad','sharedvideo','settings','raisehand','videoquality','filmstrip','feedback','stats','shortcuts','tileview']`;
 
+  const activeInRoomCount = participants.filter(p => p.status === 'Live In Room').length;
+
   return (
     <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans">
       
       {/* Top Header Bar (Full-Bleed Glassmorphism) */}
       <header className="h-16 px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0">
         
-        {/* Left: Meeting Info & Live Indicator */}
+        {/* Left: Meeting Info & Live Connected Indicator */}
         <div className="flex items-center gap-3.5">
           <button
             onClick={() => router.push('/government/dashboard/stakeholders/meetings')}
@@ -440,16 +510,19 @@ export default function MeetingRoomPage() {
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
                 {meeting?.meeting_reference || 'MTG-1092'}
               </span>
-              <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                LIVE IN-PLATFORM
+                <span>LIVE ({activeInRoomCount} IN ROOM)</span>
               </span>
               <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
                 ⏱️ {formatElapsed(elapsedSeconds)}
               </span>
             </div>
-            <h1 className="text-sm font-black text-white truncate max-w-[240px] sm:max-w-md mt-0.5">
-              {meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}
+            <h1 className="text-sm font-black text-white truncate max-w-[240px] sm:max-w-md mt-0.5 flex items-center gap-2">
+              <span>{meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</span>
+              <span className="text-[11px] font-normal text-slate-400 hidden md:inline">
+                • Connected as <span className="text-emerald-400 font-bold">{currentUser.name}</span>
+              </span>
             </h1>
           </div>
         </div>
@@ -637,7 +710,7 @@ export default function MeetingRoomPage() {
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
-                          <span>{isScreenSharing ? 'Active Screen / Revit BIM Model Stream' : 'Spotlight: Council Lead'}</span>
+                          <span>{isScreenSharing ? 'Active Screen / Revit BIM Model Stream' : 'Spotlight Stage'}</span>
                         </span>
                         <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
                           <Volume2 size={13} className="animate-pulse" /> Active Audio Stream
@@ -670,17 +743,21 @@ export default function MeetingRoomPage() {
                               muted
                               className="w-full h-full object-cover transform -scale-x-100"
                             />
-                            <div className="absolute bottom-3 left-3 bg-slate-950/80 px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-slate-800">
-                              You (Engr. Babatunde Sanwo)
+                            <div className="absolute bottom-3 left-3 bg-slate-950/90 px-3 py-1 rounded-lg text-xs font-bold text-white border border-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>{currentUser.name} (You)</span>
                             </div>
                           </div>
                         ) : (
                           <div className="text-center space-y-3">
                             <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-blue-500/20">
-                              BS
+                              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
-                            <h2 className="text-xl font-black text-white">Engr. Babatunde Sanwo</h2>
-                            <p className="text-xs text-slate-400 font-medium">Agency Head & Director General • Regulatory Directorate</p>
+                            <h2 className="text-xl font-black text-white">{currentUser.name}</h2>
+                            <p className="text-xs text-slate-400 font-medium">{currentUser.role}</p>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
+                              <CheckCircle size={13} /> You have joined this council session
+                            </span>
                           </div>
                         )}
                       </div>
@@ -689,30 +766,30 @@ export default function MeetingRoomPage() {
                         <span className="text-[11px] font-mono">Session ID: {meeting?.meeting_reference || 'MTG-1092'}</span>
                         <span className="flex items-center gap-1 text-emerald-400 font-bold">
                           <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                          {invitedParticipants.length + 1} Council Stakeholders Assigned
+                          {activeInRoomCount} Council Members Connected
                         </span>
                       </div>
                     </div>
 
                     {/* Bottom Thumbnail Strip */}
                     <div className="h-28 grid grid-cols-4 gap-3">
-                      {[
-                        { name: 'Michael Thorne', role: 'Developer', initials: 'MT', active: activeSpeaker === 'thorne' },
-                        { name: 'Marcus Chen', role: 'Inspector', initials: 'MC', active: activeSpeaker === 'chen' },
-                        { name: 'David Rivera', role: 'Contractor', initials: 'DR', active: activeSpeaker === 'rivera' },
-                        { name: 'Engr. Sanwo (You)', role: 'Agency Head', initials: 'BS', active: activeSpeaker === 'sanwo' },
-                      ].map((p, idx) => (
+                      {participants.slice(0, 4).map((p, idx) => (
                         <div
                           key={idx}
                           className={`rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all ${
-                            p.active ? 'border-blue-500 bg-blue-950/20' : 'border-slate-800'
+                            p.isLocalUser ? 'border-emerald-500/80 bg-emerald-950/20' : 'border-slate-800'
                           }`}
                         >
-                          <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 border border-slate-700">
-                            {p.initials}
+                          <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
+                            p.isLocalUser ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-800 text-white border-slate-700'
+                          }`}>
+                            {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                           </div>
                           <div className="truncate">
-                            <p className="text-xs font-bold text-white truncate">{p.name}</p>
+                            <p className="text-xs font-bold text-white truncate flex items-center gap-1">
+                              <span>{p.name}</span>
+                              {p.isLocalUser && <span className="text-[9px] text-emerald-400 font-mono">(You)</span>}
+                            </p>
                             <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
                           </div>
                         </div>
@@ -722,16 +799,15 @@ export default function MeetingRoomPage() {
                   </div>
                 ) : (
                   
-                  /* GRID VIEW MATRIX: 4 EQUAL INTERACTIVE TILES */
+                  /* GRID VIEW MATRIX: EQUAL INTERACTIVE TILES */
                   <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
                     
-                    {/* Tile 1: Agency Head / Local Webcam */}
-                    <div className={`relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'sanwo' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
+                    {/* Tile 1: Local User Tile (Active & Confirmed Joined) */}
+                    <div className="relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-emerald-500/10 transition-all">
                       <div className="flex items-center justify-between z-10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-lg shadow">
-                          🏛️ Agency Head / Council Lead (You)
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1">
+                          <CheckCircle2 size={11} />
+                          <span>{currentUser.role} (You)</span>
                         </span>
                         <div className="flex items-center gap-1.5">
                           {isMicOn ? (
@@ -758,38 +834,30 @@ export default function MeetingRoomPage() {
                           />
                         ) : (
                           <div className="flex flex-col items-center">
-                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-blue-500/30">
-                              BS
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-emerald-500/30">
+                              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                             </div>
-                            <h3 className="text-sm font-bold text-white mt-2.5">Engr. Babatunde Sanwo</h3>
-                            <p className="text-[11px] text-slate-400 font-medium">Director General, Regulatory Control</p>
+                            <h3 className="text-sm font-bold text-white mt-2.5">{currentUser.name}</h3>
+                            <p className="text-[11px] text-emerald-400 font-medium">Joined &amp; Connected</p>
                           </div>
                         )}
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                        <span className="text-[10px] font-mono">1080p HD Video • In-Portal Stream</span>
+                        <span className="text-[10px] font-mono text-emerald-400 font-bold">● Active In Council Room</span>
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30" />
                       </div>
                     </div>
 
                     {/* Tile 2: Master Developer (Michael Thorne) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'thorne' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
+                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
                       <div className="flex items-center justify-between z-10">
                         <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
                           🏗️ Master Developer
                         </span>
-                        {activeSpeaker === 'thorne' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Connected
-                          </span>
-                        )}
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/50">
+                          Connected
+                        </span>
                       </div>
 
                       <div className="flex-1 flex flex-col items-center justify-center my-2">
@@ -807,22 +875,14 @@ export default function MeetingRoomPage() {
                     </div>
 
                     {/* Tile 3: Lead Inspector (Marcus Chen) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'chen' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
+                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
                       <div className="flex items-center justify-between z-10">
                         <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
                           🔍 Field Inspector
                         </span>
-                        {activeSpeaker === 'chen' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Zone A Assigned
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                          Zone A Assigned
+                        </span>
                       </div>
 
                       <div className="flex-1 flex flex-col items-center justify-center my-2">
@@ -840,22 +900,14 @@ export default function MeetingRoomPage() {
                     </div>
 
                     {/* Tile 4: General Contractor (David Rivera) */}
-                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                      activeSpeaker === 'rivera' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                    }`}>
+                    <div className="relative rounded-3xl bg-[#091522] border-2 border-slate-800 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all">
                       <div className="flex items-center justify-between z-10">
                         <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
                           👷 Lead Contractor
                         </span>
-                        {activeSpeaker === 'rivera' ? (
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                            <Volume2 size={12} className="animate-pulse" /> Speaking
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                            Apex Construction
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                          Apex Construction
+                        </span>
                       </div>
 
                       <div className="flex-1 flex flex-col items-center justify-center my-2">
@@ -884,16 +936,10 @@ export default function MeetingRoomPage() {
             <div className="mt-3 py-2.5 px-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 text-xs text-slate-300 shadow-lg">
               <div className="flex items-center gap-2 truncate">
                 <span className="font-bold text-blue-400 shrink-0">
-                  {activeSpeaker === 'sanwo' ? 'Engr. Babatunde Sanwo:' :
-                   activeSpeaker === 'chen' ? 'Marcus Chen (Inspector):' :
-                   activeSpeaker === 'thorne' ? 'Michael Thorne (Dev):' :
-                   'David Rivera (Apex):'}
+                  {currentUser.name} (You):
                 </span>
                 <span className="truncate italic text-slate-300">
-                  {activeSpeaker === 'sanwo' ? '"The structural GPR scan is verified on the portal. We will proceed to record the quorum signoff for the 5th floor slab."' :
-                   activeSpeaker === 'chen' ? '"All rebar ties and cover block spacing on the eastern deck meet code requirements."' :
-                   activeSpeaker === 'thorne' ? '"The MEP conduit layout drawings have been cross-checked with the revised structural model."' :
-                   '"Casting batch plant pumps are standing by for immediate placement once approval is sealed."'}
+                  "Connected to the official council session. Reviewing stage-gate signoff for Level 5 slab casting."
                 </span>
               </div>
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 hidden sm:inline">
@@ -1005,7 +1051,7 @@ export default function MeetingRoomPage() {
                 title={isSidebarOpen ? 'Collapse Side Panel' : 'Expand Side Panel'}
               >
                 <MessageSquare size={18} />
-                <span className="hidden sm:inline">Collaboration &amp; Invite</span>
+                <span className="hidden sm:inline">Collaboration &amp; People</span>
               </button>
             </div>
 
@@ -1032,10 +1078,10 @@ export default function MeetingRoomPage() {
                       ? 'bg-emerald-600 text-white shadow'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
-                  title="Invite Stakeholders by Email"
+                  title="People & Invite"
                 >
-                  <UserPlus size={13} />
-                  <span>Invite</span>
+                  <Users size={13} />
+                  <span>People</span>
                 </button>
 
                 <button
@@ -1090,27 +1136,40 @@ export default function MeetingRoomPage() {
               {/* Drawer Content */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4">
                 
-                {/* TAB 0: EMAIL INVITATION VIA RESEND */}
+                {/* TAB 0: PEOPLE & INVITATION */}
                 {activeTab === 'invite' && (
                   <div className="space-y-4">
-                    <div className="p-3.5 bg-gradient-to-br from-emerald-950/50 to-teal-950/40 rounded-2xl border border-emerald-500/30">
-                      <div className="flex items-center gap-2">
-                        <Mail size={16} className="text-emerald-400" />
-                        <h3 className="text-xs font-black uppercase tracking-wider text-white">
-                          Invite Stakeholder by Email
-                        </h3>
+                    
+                    {/* Current User Identity Card */}
+                    <div className="p-3.5 bg-gradient-to-br from-emerald-950/50 to-teal-950/40 rounded-2xl border border-emerald-500/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/30">
+                          {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-white">{currentUser.name}</span>
+                            <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded">YOU</span>
+                          </div>
+                          <p className="text-[10px] text-slate-300">{currentUser.role}</p>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
-                        Dispatches a high-priority meeting invite via Resend with the live meeting link (<span className="text-emerald-400 font-mono">nexucon-frontend-8x3a.vercel.app</span>).
-                      </p>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     </div>
 
                     {/* Quick Invite Form */}
                     <form onSubmit={handleSendEmailInvite} className="space-y-2.5 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                          <Mail size={13} className="text-emerald-400" />
+                          <span>Invite Stakeholder via Email</span>
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
+                          Resend API
+                        </span>
+                      </div>
+
                       <div>
-                        <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
-                          Stakeholder Email <span className="text-emerald-400">*</span>
-                        </label>
                         <input
                           type="email"
                           required
@@ -1122,35 +1181,24 @@ export default function MeetingRoomPage() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
-                            Name
-                          </label>
-                          <input
-                            type="text"
-                            value={inviteName}
-                            onChange={(e) => setInviteName(e.target.value)}
-                            placeholder="Engr. Ade"
-                            className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
-                            Role
-                          </label>
-                          <select
-                            value={inviteRole}
-                            onChange={(e) => setInviteRole(e.target.value)}
-                            className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none"
-                          >
-                            <option value="Master Developer">Master Developer</option>
-                            <option value="Lead Structural Inspector">Lead Inspector</option>
-                            <option value="General Contractor">General Contractor</option>
-                            <option value="Consulting Structural Engineer">Consultant</option>
-                            <option value="Government Agency Director">Agency Director</option>
-                          </select>
-                        </div>
+                        <input
+                          type="text"
+                          value={inviteName}
+                          onChange={(e) => setInviteName(e.target.value)}
+                          placeholder="Name / Title"
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <select
+                          value={inviteRole}
+                          onChange={(e) => setInviteRole(e.target.value)}
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none"
+                        >
+                          <option value="Master Developer">Master Developer</option>
+                          <option value="Lead Structural Inspector">Lead Inspector</option>
+                          <option value="General Contractor">General Contractor</option>
+                          <option value="Consulting Structural Engineer">Consultant</option>
+                          <option value="Government Agency Director">Agency Director</option>
+                        </select>
                       </div>
 
                       <button
@@ -1161,7 +1209,7 @@ export default function MeetingRoomPage() {
                         {isSendingInvite ? (
                           <>
                             <Loader2 size={14} className="animate-spin" />
-                            <span>Dispatching Invite via Resend...</span>
+                            <span>Dispatching via Resend...</span>
                           </>
                         ) : (
                           <>
@@ -1175,19 +1223,24 @@ export default function MeetingRoomPage() {
                     {/* Participants & Dispatched List */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
-                        <span>Invited Stakeholders</span>
-                        <span className="font-mono text-emerald-400">{invitedParticipants.length} Connected</span>
+                        <span>Connected Roster ({participants.length})</span>
+                        <span className="font-mono text-emerald-400">{activeInRoomCount} Live in Room</span>
                       </div>
 
                       <div className="space-y-2">
-                        {invitedParticipants.map((p, idx) => (
-                          <div key={idx} className="p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 flex items-center justify-between gap-2">
+                        {participants.map((p, idx) => (
+                          <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                            p.isLocalUser ? 'bg-emerald-950/30 border-emerald-500/50' : 'bg-slate-900/70 border-slate-800'
+                          }`}>
                             <div className="truncate">
-                              <p className="text-xs font-bold text-white truncate">{p.name}</p>
+                              <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                                <span>{p.name}</span>
+                                {p.isLocalUser && <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1 rounded">YOU</span>}
+                              </p>
                               <p className="text-[10px] text-slate-400 truncate">{p.email} • {p.role}</p>
                             </div>
                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
-                              p.status === 'Joined' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              p.status === 'Live In Room' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                             }`}>
                               {p.status}
                             </span>
