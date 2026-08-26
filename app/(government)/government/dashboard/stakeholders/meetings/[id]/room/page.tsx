@@ -10,7 +10,8 @@ import {
   ListTodo, Plus, Check, FileText, Send, Vote, Volume2, 
   Radio, Copy, Globe, RefreshCw, UserCheck, ShieldAlert,
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
-  Subtitles, ChevronRight, ChevronLeft, Hand, Smile
+  Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
+  MonitorPlay, Camera
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
@@ -25,13 +26,22 @@ export default function MeetingRoomPage() {
   const [meeting, setMeeting] = useState<StakeholderMeeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Audio/Video Controls
+  // Audio/Video Local Stream & Controls
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
   const [activeSpeaker, setActiveSpeaker] = useState<'sanwo' | 'thorne' | 'chen' | 'rivera'>('sanwo');
+  
+  // WebRTC Local Video / Screen Refs
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const screenShareVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // Mode: In-Platform Native WebRTC Stage vs Embedded Google Meet Frame
+  const [stageMode, setStageMode] = useState<'native_council' | 'embedded_google_meet'>('native_council');
 
   // Fullscreen & Layout Modes
   const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
@@ -51,7 +61,7 @@ export default function MeetingRoomPage() {
 
   // Chat State
   const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([
-    { sender: 'Engr. Babatunde Sanwo', role: 'Agency Head', text: 'Welcome everyone. We are reviewing the Level 5 slab casting certification.', time: '10:02 AM' },
+    { sender: 'Engr. Babatunde Sanwo', role: 'Agency Head', text: 'Welcome to the platform council session. We are reviewing the Level 5 slab casting certification.', time: '10:02 AM' },
     { sender: 'Marcus Chen', role: 'Inspector', text: 'Telemetry GPR scan confirms rebar spacing compliance along Grid 4.', time: '10:04 AM' },
     { sender: 'David Rivera', role: 'Contractor', text: 'Ready to proceed with concrete pour once quorum vote is recorded.', time: '10:05 AM' }
   ]);
@@ -64,6 +74,77 @@ export default function MeetingRoomPage() {
   // Timer
   const [elapsedSeconds, setElapsedSeconds] = useState(248); // 4m 08s
 
+  // Initialize Local Media Stream if permitted
+  useEffect(() => {
+    let streamInstance: MediaStream | null = null;
+    const initMedia = async () => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          streamInstance = stream;
+          setLocalStream(stream);
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+        }
+      } catch (err) {
+        console.warn("Local media stream initial notice (using avatar tile):", err);
+      }
+    };
+    initMedia();
+
+    return () => {
+      if (streamInstance) {
+        streamInstance.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
+  // Update track enable/disable on state toggle
+  useEffect(() => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = isVideoOn;
+      });
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = isMicOn;
+      });
+    }
+  }, [isVideoOn, isMicOn, localStream]);
+
+  // Screen Share Handler
+  const handleToggleScreenShare = async () => {
+    if (!isScreenSharing) {
+      try {
+        if (navigator.mediaDevices?.getDisplayMedia) {
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          setScreenStream(stream);
+          setIsScreenSharing(true);
+          setLayoutMode('spotlight');
+          if (screenShareVideoRef.current) {
+            screenShareVideoRef.current.srcObject = stream;
+          }
+          stream.getVideoTracks()[0].onended = () => {
+            setIsScreenSharing(false);
+            setScreenStream(null);
+          };
+        } else {
+          setIsScreenSharing(true);
+          setLayoutMode('spotlight');
+        }
+      } catch (err) {
+        console.warn("Screen share cancelled or not supported");
+        setIsScreenSharing(false);
+      }
+    } else {
+      if (screenStream) {
+        screenStream.getTracks().forEach(t => t.stop());
+        setScreenStream(null);
+      }
+      setIsScreenSharing(false);
+    }
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setElapsedSeconds(prev => prev + 1);
@@ -71,7 +152,7 @@ export default function MeetingRoomPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Speaker switching simulation for dynamic realism
+  // Speaker switching simulation for connected council realism
   useEffect(() => {
     const speakerInterval = setInterval(() => {
       const speakers: Array<'sanwo' | 'thorne' | 'chen' | 'rivera'> = ['sanwo', 'chen', 'thorne', 'rivera'];
@@ -199,7 +280,7 @@ export default function MeetingRoomPage() {
     }
   };
 
-  // Google Meet Room Link
+  // Google Meet URL
   const meetUrl = (meeting?.google_meet_url && !meeting.google_meet_url.includes('nxu-'))
     ? meeting.google_meet_url 
     : 'https://meet.google.com/new';
@@ -210,7 +291,7 @@ export default function MeetingRoomPage() {
       {/* Top Header Bar (Full-Bleed Glassmorphism) */}
       <header className="h-16 px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0">
         
-        {/* Left: Meeting Info */}
+        {/* Left: Meeting Info & Live Indicator */}
         <div className="flex items-center gap-3.5">
           <button
             onClick={() => router.push('/government/dashboard/stakeholders/meetings')}
@@ -230,13 +311,13 @@ export default function MeetingRoomPage() {
               </span>
               <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                LIVE COUNCIL
+                LIVE IN-PLATFORM
               </span>
               <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
                 ⏱️ {formatElapsed(elapsedSeconds)}
               </span>
             </div>
-            <h1 className="text-sm font-black text-white truncate max-w-[280px] sm:max-w-md mt-0.5">
+            <h1 className="text-sm font-black text-white truncate max-w-[260px] sm:max-w-md mt-0.5">
               {meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}
             </h1>
           </div>
@@ -245,6 +326,32 @@ export default function MeetingRoomPage() {
         {/* Right Action Controls */}
         <div className="flex items-center gap-2.5">
           
+          {/* Stage Engine Switcher: Native In-Platform WebRTC vs Embedded Google Meet */}
+          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden md:flex items-center">
+            <button
+              onClick={() => setStageMode('native_council')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                stageMode === 'native_council' 
+                  ? 'bg-blue-600 text-white shadow' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MonitorPlay size={13} />
+              <span>In-Portal Council</span>
+            </button>
+            <button
+              onClick={() => setStageMode('embedded_google_meet')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                stageMode === 'embedded_google_meet' 
+                  ? 'bg-blue-600 text-white shadow' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Globe size={13} />
+              <span>Google Meet Frame</span>
+            </button>
+          </div>
+
           {/* Layout Mode Toggle */}
           <button
             onClick={() => setLayoutMode(layoutMode === 'grid' ? 'spotlight' : 'grid')}
@@ -252,7 +359,7 @@ export default function MeetingRoomPage() {
             title={layoutMode === 'grid' ? 'Switch to Spotlight View' : 'Switch to Grid View'}
           >
             <LayoutGrid size={15} />
-            <span className="hidden md:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
+            <span className="hidden lg:inline">{layoutMode === 'grid' ? 'Grid' : 'Spotlight'}</span>
           </button>
 
           {/* Browser Fullscreen Toggle */}
@@ -264,15 +371,16 @@ export default function MeetingRoomPage() {
             {isNativeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
 
-          {/* Direct Google Meet Launch */}
+          {/* Direct Google Meet Popout Link */}
           <a
             href={meetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Open in new Google Meet tab"
           >
             <ExternalLink size={14} />
-            <span className="hidden lg:inline">Google Meet App</span>
+            <span className="hidden xl:inline">Popout Tab</span>
           </a>
 
           {/* Leave Button */}
@@ -299,212 +407,282 @@ export default function MeetingRoomPage() {
           {/* Stage Area */}
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
             
-            {/* SPOTLIGHT / SCREEN SHARING VIEW */}
-            {layoutMode === 'spotlight' || isScreenSharing ? (
-              <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-                
-                {/* Main Spotlight Window */}
-                <div className="flex-1 bg-gradient-to-b from-[#0B1726] to-[#04080F] rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl">
-                  <div className="flex items-center justify-between z-10">
-                    <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
-                      <Share2 size={14} />
-                      <span>{isScreenSharing ? 'Active BIM Model Screen Stream (3D Structural)' : 'Primary Speaker Stage'}</span>
-                    </span>
-                    <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
-                      <Volume2 size={13} className="animate-pulse" /> Active Audio
-                    </span>
+            {/* EMBEDDED GOOGLE MEET FRAME MODE */}
+            {stageMode === 'embedded_google_meet' ? (
+              <div className="flex-1 rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-950 flex flex-col relative shadow-2xl">
+                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe size={15} className="text-blue-400" />
+                    <span className="text-xs font-bold text-white">Google Meet Embedded Frame</span>
+                    <span className="text-[10px] font-mono text-slate-400">({meetUrl})</span>
                   </div>
-
-                  {/* Spotlight Center Visualizer / BIM Simulation */}
-                  <div className="flex-1 flex flex-col items-center justify-center my-4">
-                    {isScreenSharing ? (
-                      <div className="text-center space-y-3">
-                        <div className="w-24 h-24 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 animate-pulse">
-                          <Layers size={48} />
-                        </div>
-                        <h2 className="text-lg font-black text-white">Revit BIM Model - Level 5 Post-Tensioned Slab Mesh</h2>
-                        <p className="text-xs text-slate-400 font-mono">Live Screen Sharing • 60 FPS • 1080p Crystal Clear</p>
-                      </div>
-                    ) : (
-                      <div className="text-center space-y-3">
-                        <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-blue-500/20">
-                          BS
-                        </div>
-                        <h2 className="text-xl font-black text-white">Engr. Babatunde Sanwo</h2>
-                        <p className="text-xs text-slate-400 font-medium">Agency Head & Director General • Regulatory Directorate</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-3 border-t border-slate-800/80">
-                    <span className="text-[11px] font-mono">Conference ID: {meeting?.meeting_reference || 'MTG-1092'}</span>
-                    <span className="flex items-center gap-1 text-emerald-400 font-bold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      4 Council Members Connected
-                    </span>
-                  </div>
+                  <a
+                    href={meetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-400 hover:underline flex items-center gap-1 font-bold"
+                  >
+                    <span>Open External Window</span>
+                    <ExternalLink size={12} />
+                  </a>
                 </div>
-
-                {/* Bottom Thumbnail Strip */}
-                <div className="h-28 grid grid-cols-4 gap-3">
-                  {[
-                    { name: 'Michael Thorne', role: 'Developer', initials: 'MT', active: activeSpeaker === 'thorne' },
-                    { name: 'Marcus Chen', role: 'Inspector', initials: 'MC', active: activeSpeaker === 'chen' },
-                    { name: 'David Rivera', role: 'Contractor', initials: 'DR', active: activeSpeaker === 'rivera' },
-                    { name: 'Engr. Sanwo', role: 'Agency Head', initials: 'BS', active: activeSpeaker === 'sanwo' },
-                  ].map((p, idx) => (
-                    <div
-                      key={idx}
-                      className={`rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all ${
-                        p.active ? 'border-blue-500 bg-blue-950/20' : 'border-slate-800'
-                      }`}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 border border-slate-700">
-                        {p.initials}
-                      </div>
-                      <div className="truncate">
-                        <p className="text-xs font-bold text-white truncate">{p.name}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
+                <iframe
+                  src={meetUrl}
+                  allow="camera; microphone; display-capture; fullscreen"
+                  className="flex-1 w-full h-full border-0 bg-slate-950"
+                  title="Embedded Google Meet Session"
+                />
               </div>
             ) : (
-              
-              /* GRID VIEW MATRIX: 4 EQUAL CARDS (Google Meet Style) */
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
-                
-                {/* Tile 1: Agency Head (Sanwo) */}
-                <div className={`relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 p-5 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                  activeSpeaker === 'sanwo' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-lg shadow">
-                      🏛️ Agency Head / Council Lead
-                    </span>
-                    {activeSpeaker === 'sanwo' && (
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                        <Volume2 size={12} className="animate-pulse" /> Speaking
-                      </span>
-                    )}
-                  </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center my-3">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-blue-500/30">
-                      BS
+              /* NATIVE IN-PORTAL COUNCIL STAGE */
+              <>
+                {layoutMode === 'spotlight' || isScreenSharing ? (
+                  <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+                    
+                    {/* Main Spotlight Window */}
+                    <div className="flex-1 bg-gradient-to-b from-[#0B1726] to-[#04080F] rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl">
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
+                          <Share2 size={14} />
+                          <span>{isScreenSharing ? 'Active Screen / Revit BIM Model Stream' : 'Spotlight: Council Lead'}</span>
+                        </span>
+                        <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
+                          <Volume2 size={13} className="animate-pulse" /> Active Audio Stream
+                        </span>
+                      </div>
+
+                      {/* Center Stage Video / BIM Visualization */}
+                      <div className="flex-1 flex flex-col items-center justify-center my-3 relative overflow-hidden">
+                        {isScreenSharing && screenStream ? (
+                          <video
+                            ref={screenShareVideoRef}
+                            autoPlay
+                            playsInline
+                            className="w-full h-full object-contain rounded-2xl"
+                          />
+                        ) : isScreenSharing ? (
+                          <div className="text-center space-y-3">
+                            <div className="w-24 h-24 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 animate-pulse">
+                              <Layers size={48} />
+                            </div>
+                            <h2 className="text-lg font-black text-white">Revit BIM Model - Level 5 Post-Tensioned Slab Mesh</h2>
+                            <p className="text-xs text-slate-400 font-mono">Live Screen Sharing • 60 FPS • 1080p Crystal Clear</p>
+                          </div>
+                        ) : isVideoOn && localStream ? (
+                          <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
+                            <video
+                              ref={localVideoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className="w-full h-full object-cover transform -scale-x-100"
+                            />
+                            <div className="absolute bottom-3 left-3 bg-slate-950/80 px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-slate-800">
+                              You (Engr. Babatunde Sanwo)
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center space-y-3">
+                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-blue-500/20">
+                              BS
+                            </div>
+                            <h2 className="text-xl font-black text-white">Engr. Babatunde Sanwo</h2>
+                            <p className="text-xs text-slate-400 font-medium">Agency Head & Director General • Regulatory Directorate</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-3 border-t border-slate-800/80">
+                        <span className="text-[11px] font-mono">Session ID: {meeting?.meeting_reference || 'MTG-1092'}</span>
+                        <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                          4 Council Members Connected
+                        </span>
+                      </div>
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-white mt-3">Engr. Babatunde Sanwo</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Director General, Regulatory Control</p>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                    <span className="text-[10px] font-mono">1080p HD • 48kHz Audio</span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30" />
-                  </div>
-                </div>
-
-                {/* Tile 2: Master Developer (Michael Thorne) */}
-                <div className={`relative rounded-3xl bg-[#091522] border-2 p-5 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                  activeSpeaker === 'thorne' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                      🏗️ Master Developer
-                    </span>
-                    {activeSpeaker === 'thorne' ? (
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                        <Volume2 size={12} className="animate-pulse" /> Speaking
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                        Connected
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex-1 flex flex-col items-center justify-center my-3">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                      MT
+                    {/* Bottom Thumbnail Strip */}
+                    <div className="h-28 grid grid-cols-4 gap-3">
+                      {[
+                        { name: 'Michael Thorne', role: 'Developer', initials: 'MT', active: activeSpeaker === 'thorne' },
+                        { name: 'Marcus Chen', role: 'Inspector', initials: 'MC', active: activeSpeaker === 'chen' },
+                        { name: 'David Rivera', role: 'Contractor', initials: 'DR', active: activeSpeaker === 'rivera' },
+                        { name: 'Engr. Sanwo (You)', role: 'Agency Head', initials: 'BS', active: activeSpeaker === 'sanwo' },
+                      ].map((p, idx) => (
+                        <div
+                          key={idx}
+                          className={`rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all ${
+                            p.active ? 'border-blue-500 bg-blue-950/20' : 'border-slate-800'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 border border-slate-700">
+                            {p.initials}
+                          </div>
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-white truncate">{p.name}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-white mt-3">Michael Thorne</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Nexucon Real Estate Dev Ltd</p>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                    <span className="text-[10px] font-mono">Developer Feed Online</span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                   </div>
-                </div>
+                ) : (
+                  
+                  /* GRID VIEW MATRIX: 4 EQUAL INTERACTIVE TILES */
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 overflow-hidden">
+                    
+                    {/* Tile 1: Agency Head / Local Webcam */}
+                    <div className={`relative rounded-3xl bg-gradient-to-b from-[#091522] to-[#040A10] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
+                      activeSpeaker === 'sanwo' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-lg shadow">
+                          🏛️ Agency Head / Council Lead (You)
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {isMicOn ? (
+                            <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                              <Volume2 size={12} className="animate-pulse" /> Live Mic
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                              Muted
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                {/* Tile 3: Lead Inspector (Marcus Chen) */}
-                <div className={`relative rounded-3xl bg-[#091522] border-2 p-5 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                  activeSpeaker === 'chen' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                      🔍 Field Inspector
-                    </span>
-                    {activeSpeaker === 'chen' ? (
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                        <Volume2 size={12} className="animate-pulse" /> Speaking
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                        Zone A Assigned
-                      </span>
-                    )}
-                  </div>
+                      {/* Real WebRTC Video Feed or Avatar Tile */}
+                      <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl">
+                        {isVideoOn && localStream ? (
+                          <video
+                            ref={localVideoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-2xl sm:text-3xl flex items-center justify-center shadow-2xl ring-4 ring-blue-500/30">
+                              BS
+                            </div>
+                            <h3 className="text-sm font-bold text-white mt-2.5">Engr. Babatunde Sanwo</h3>
+                            <p className="text-[11px] text-slate-400 font-medium">Director General, Regulatory Control</p>
+                          </div>
+                        )}
+                      </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center my-3">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                      MC
+                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                        <span className="text-[10px] font-mono">1080p HD Video • In-Portal Stream</span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30" />
+                      </div>
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-white mt-3">Marcus Chen</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Senior Structural Auditor</p>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                    <span className="text-[10px] font-mono">Field Telemetry Active</span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  </div>
-                </div>
+                    {/* Tile 2: Master Developer (Michael Thorne) */}
+                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
+                      activeSpeaker === 'thorne' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                          🏗️ Master Developer
+                        </span>
+                        {activeSpeaker === 'thorne' ? (
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                            <Volume2 size={12} className="animate-pulse" /> Speaking
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                            Connected
+                          </span>
+                        )}
+                      </div>
 
-                {/* Tile 4: General Contractor (David Rivera) */}
-                <div className={`relative rounded-3xl bg-[#091522] border-2 p-5 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
-                  activeSpeaker === 'rivera' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
-                      👷 Lead Contractor
-                    </span>
-                    {activeSpeaker === 'rivera' ? (
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                        <Volume2 size={12} className="animate-pulse" /> Speaking
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
-                        Apex Construction
-                      </span>
-                    )}
-                  </div>
+                      <div className="flex-1 flex flex-col items-center justify-center my-2">
+                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
+                          MT
+                        </div>
+                        <h3 className="text-sm font-bold text-white mt-2.5">Michael Thorne</h3>
+                        <p className="text-[11px] text-slate-400 font-medium">Nexucon Real Estate Dev Ltd</p>
+                      </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center my-3">
-                    <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
-                      DR
+                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                        <span className="text-[10px] font-mono">Developer Stream Online</span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      </div>
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-white mt-3">David Rivera</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Project Director (Apex)</p>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                    <span className="text-[10px] font-mono">Site Civil Engineer</span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  </div>
-                </div>
+                    {/* Tile 3: Lead Inspector (Marcus Chen) */}
+                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
+                      activeSpeaker === 'chen' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                          🔍 Field Inspector
+                        </span>
+                        {activeSpeaker === 'chen' ? (
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                            <Volume2 size={12} className="animate-pulse" /> Speaking
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                            Zone A Assigned
+                          </span>
+                        )}
+                      </div>
 
-              </div>
+                      <div className="flex-1 flex flex-col items-center justify-center my-2">
+                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
+                          MC
+                        </div>
+                        <h3 className="text-sm font-bold text-white mt-2.5">Marcus Chen</h3>
+                        <p className="text-[11px] text-slate-400 font-medium">Senior Structural Auditor</p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                        <span className="text-[10px] font-mono">Field Telemetry Active</span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      </div>
+                    </div>
+
+                    {/* Tile 4: General Contractor (David Rivera) */}
+                    <div className={`relative rounded-3xl bg-[#091522] border-2 p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
+                      activeSpeaker === 'rivera' ? 'border-blue-500 shadow-blue-500/10' : 'border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between z-10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-200 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                          👷 Lead Contractor
+                        </span>
+                        {activeSpeaker === 'rivera' ? (
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                            <Volume2 size={12} className="animate-pulse" /> Speaking
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                            Apex Construction
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 flex flex-col items-center justify-center my-2">
+                        <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-slate-800 text-slate-200 font-bold text-xl sm:text-2xl flex items-center justify-center border border-slate-700">
+                          DR
+                        </div>
+                        <h3 className="text-sm font-bold text-white mt-2.5">David Rivera</h3>
+                        <p className="text-[11px] text-slate-400 font-medium">Project Director (Apex)</p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                        <span className="text-[10px] font-mono">Site Civil Engineer</span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </>
             )}
 
           </div>
@@ -520,14 +698,14 @@ export default function MeetingRoomPage() {
                    'David Rivera (Apex):'}
                 </span>
                 <span className="truncate italic text-slate-300">
-                  {activeSpeaker === 'sanwo' ? '"The structural GPR scan is verified. We will proceed to record the quorum signoff for the 5th floor slab."' :
+                  {activeSpeaker === 'sanwo' ? '"The structural GPR scan is verified on the portal. We will proceed to record the quorum signoff for the 5th floor slab."' :
                    activeSpeaker === 'chen' ? '"All rebar ties and cover block spacing on the eastern deck meet code requirements."' :
                    activeSpeaker === 'thorne' ? '"The MEP conduit layout drawings have been cross-checked with the revised structural model."' :
                    '"Casting batch plant pumps are standing by for immediate placement once approval is sealed."'}
                 </span>
               </div>
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 hidden sm:inline">
-                Live Subtitles
+                Live In-App Subtitles
               </span>
             </div>
           )}
@@ -539,14 +717,14 @@ export default function MeetingRoomPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(meetUrl);
-                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Google Meet link copied to clipboard!', type: 'success' } }));
+                  navigator.clipboard.writeText(window.location.href);
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'In-portal meeting room link copied!', type: 'success' } }));
                 }}
                 className="px-3 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Copy Google Meet Link"
+                title="Copy In-Platform Room Link"
               >
                 <Copy size={13} />
-                <span className="hidden sm:inline font-mono">{meetUrl.replace('https://', '')}</span>
+                <span className="hidden sm:inline font-mono">Copy Portal Link</span>
               </button>
             </div>
 
@@ -583,16 +761,16 @@ export default function MeetingRoomPage() {
 
               {/* Screen Share Toggle */}
               <button
-                onClick={() => setIsScreenSharing(!isScreenSharing)}
+                onClick={handleToggleScreenShare}
                 className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
                   isScreenSharing 
                     ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-blue-600/30' 
                     : 'bg-slate-800 hover:bg-slate-700 text-white'
                 }`}
-                title={isScreenSharing ? 'Stop Screen Sharing' : 'Share BIM Screen'}
+                title={isScreenSharing ? 'Stop Screen Sharing' : 'Share BIM / Screen'}
               >
                 <Share2 size={18} />
-                <span className="hidden md:inline">{isScreenSharing ? 'Sharing BIM' : 'Share BIM'}</span>
+                <span className="hidden md:inline">{isScreenSharing ? 'Sharing Screen' : 'Share Screen'}</span>
               </button>
 
               {/* Raise Hand */}
