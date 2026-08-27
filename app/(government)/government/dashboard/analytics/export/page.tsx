@@ -5,7 +5,8 @@ import { motion } from "framer-motion";
 import { 
   FileText, Download, Calendar, CheckCircle2, Circle, 
   FileType2, Search, LayoutTemplate, RefreshCw, ExternalLink, 
-  ShieldCheck, Eye, Printer, Sparkles 
+  ShieldCheck, Eye, Printer, Sparkles, AlertTriangle, 
+  Building2, Activity, DollarSign, Users, Award, ShieldAlert, BookOpen
 } from "lucide-react";
 import { 
   GeneratedReport, getGeneratedReports, 
@@ -17,17 +18,134 @@ import {
   generatePDFReport, 
   generateCSVReport, 
   ReportConfig, 
+  ReportType,
+  COMPREHENSIVE_NIS_LIBRARY,
   GeneratedDocumentResult 
 } from "@/utils/documentGenerator";
 import ReportPreviewModal from "@/components/dashboard/ReportPreviewModal";
 
+interface ReportTypeOption {
+  id: ReportType;
+  title: string;
+  category: string;
+  description: string;
+  defaultTitle: string;
+  icon: any;
+  modules: string[];
+  color: string;
+  badge: string;
+}
+
+const REPORT_TYPES: ReportTypeOption[] = [
+  {
+    id: 'general',
+    title: 'General Statutory Executive Report',
+    category: 'Leadership Summary',
+    description: 'High-level executive digest with cross-agency KPIs, portfolio risk ratings, and non-technical ministerial sign-offs.',
+    defaultTitle: 'Executive Ministerial Statutory Intelligence & Audit Summary',
+    icon: Building2,
+    modules: ['Project Performance', 'Compliance & Regulatory', 'Structural Risk Assessment', 'Financial Overview'],
+    color: 'border-blue-200 bg-blue-50/50 text-blue-900',
+    badge: '1. Leadership Summary'
+  },
+  {
+    id: 'inspection',
+    title: 'Field Inspection & Quality Audit Report',
+    category: 'Field Operations',
+    description: 'Defect category breakdowns, pass/fail ratios, material non-conformance records (NCRs), and inspection logs.',
+    defaultTitle: 'Field Inspection Quality, Defect Severity & Non-Conformance Audit',
+    icon: CheckCircle2,
+    modules: ['Inspection Analytics', 'Structural Risk Assessment'],
+    color: 'border-emerald-200 bg-emerald-50/50 text-emerald-900',
+    badge: '2. Inspection Quality'
+  },
+  {
+    id: 'agency',
+    title: 'Agency Operational Performance & SLAs Report',
+    category: 'Operations',
+    description: 'Departmental review turnaround times, permit processing velocity, and agency workload distribution.',
+    defaultTitle: 'Statutory Agency Operational SLA & Workload Throughput Audit',
+    icon: Users,
+    modules: ['Agency Performance SLAs', 'Project Performance'],
+    color: 'border-indigo-200 bg-indigo-50/50 text-indigo-900',
+    badge: '3. Agency SLAs'
+  },
+  {
+    id: 'project',
+    title: 'Project Portfolio Performance & Delivery Matrix',
+    category: 'Portfolio Management',
+    description: 'Multi-LGA project register, schedule status, milestone completion rates, and structural safety index.',
+    defaultTitle: 'Comprehensive Project Portfolio Performance & Schedule Delivery Matrix',
+    icon: LayoutTemplate,
+    modules: ['Project Performance', 'Construction Progress & EVM'],
+    color: 'border-cyan-200 bg-cyan-50/50 text-cyan-900',
+    badge: '4. Project Matrix'
+  },
+  {
+    id: 'compliance',
+    title: 'Compliance & Regulatory Enforcement Assessment',
+    category: 'Regulatory',
+    description: 'Fitness certificates, stop-work order registers, statutory violations, and legal compliance gates.',
+    defaultTitle: 'Statutory Compliance & Regulatory Enforcement Assessment Report',
+    icon: ShieldCheck,
+    modules: ['Compliance & Regulatory', 'Inspection Analytics'],
+    color: 'border-purple-200 bg-purple-50/50 text-purple-900',
+    badge: '5. Regulatory & NCRs'
+  },
+  {
+    id: 'risk',
+    title: 'Structural Risk & Hotspot Assessment Report',
+    category: 'Safety & Risk',
+    description: 'Critical hotspot structures, deterministic collapse risk scores (0-100), and engineering mitigation protocols.',
+    defaultTitle: 'Statutory Structural Risk Index & Critical Hotspots Audit',
+    icon: ShieldAlert,
+    modules: ['Structural Risk Assessment', 'Inspection Analytics'],
+    color: 'border-rose-200 bg-rose-50/50 text-rose-900',
+    badge: '6. Structural Risk'
+  },
+  {
+    id: 'progress',
+    title: 'Construction Progress & Milestone Verification Report',
+    category: 'Engineering',
+    description: '3-Way verification (Contractor Reported vs Planned Baseline vs Government Verified) and schedule variance logs.',
+    defaultTitle: 'Construction Milestone Verification & Earned Progress Audit',
+    icon: Activity,
+    modules: ['Construction Progress & EVM', 'Project Performance'],
+    color: 'border-amber-200 bg-amber-50/50 text-amber-900',
+    badge: '7. Progress Verification'
+  },
+  {
+    id: 'evm_financial',
+    title: 'EVM & Financial Capital Expenditure Overview',
+    category: 'Financial',
+    description: 'Earned Value (EV), Planned Value (PV), Actual Cost (AC), budget allocations by trade, and fee revenue collections.',
+    defaultTitle: 'Earned Value Management (EVM) & Capital Expenditure Financial Audit',
+    icon: DollarSign,
+    modules: ['Financial Overview', 'Construction Progress & EVM', 'Project Performance'],
+    color: 'border-teal-200 bg-teal-50/50 text-teal-900',
+    badge: '8. EVM & Financial'
+  },
+  {
+    id: 'inspector_analytics',
+    title: 'Field Inspector Analytics & Performance Roster',
+    category: 'Backend Telemetry',
+    description: 'Deep backend analysis of data shared by field inspectors on the ground, SLA rates, and defect catch velocity.',
+    defaultTitle: 'Field Inspector Analytics & Performance Roster (Field Submissions Analysis)',
+    icon: Award,
+    modules: ['Inspection Analytics', 'Agency Performance SLAs'],
+    color: 'border-orange-200 bg-orange-50/50 text-orange-900',
+    badge: '9. Inspector Analytics'
+  }
+];
+
 export default function ExportReports() {
   const [reports, setReports] = useState<GeneratedReport[]>([]);
+  const [selectedReportType, setSelectedReportType] = useState<ReportType>('general');
   const [selectedModules, setSelectedModules] = useState<string[]>([
-    'Project Performance', 'Compliance & Regulatory', 'Structural Risk Assessment'
+    'Project Performance', 'Compliance & Regulatory', 'Structural Risk Assessment', 'Financial Overview'
   ]);
   const [format, setFormat] = useState<'PDF' | 'CSV' | 'XLSX' | 'JSON'>('PDF');
-  const [reportTitle, setReportTitle] = useState('Comprehensive Statutory Executive Audit Report');
+  const [reportTitle, setReportTitle] = useState('Executive Ministerial Statutory Intelligence & Audit Summary');
   const [startDate, setStartDate] = useState('2026-07-01');
   const [endDate, setEndDate] = useState('2026-09-30');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +165,7 @@ export default function ExportReports() {
     "Agency Performance SLAs",
     "Structural Risk Assessment",
     "Inspector Performance",
-    "Annual Building Safety Report"
+    "Industry Sector Benchmarks"
   ];
 
   const fetchReports = useCallback(async () => {
@@ -66,6 +184,12 @@ export default function ExportReports() {
     fetchReports();
   }, [fetchReports]);
 
+  const selectReportType = (rt: ReportTypeOption) => {
+    setSelectedReportType(rt.id);
+    setReportTitle(rt.defaultTitle);
+    setSelectedModules(rt.modules);
+  };
+
   const toggleModule = (moduleName: string) => {
     if (selectedModules.includes(moduleName)) {
       setSelectedModules(selectedModules.filter(m => m !== moduleName));
@@ -81,15 +205,16 @@ export default function ExportReports() {
     }
 
     setIsSubmitting(true);
-    const reportRef = `REP-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const reportRef = `REP-${selectedReportType.toUpperCase().slice(0, 4)}-${Math.floor(100 + Math.random() * 900)}`;
     const config: ReportConfig = {
       title: reportTitle || `Statutory Government Intelligence Report (${format})`,
       reportReference: reportRef,
       format,
+      reportType: selectedReportType,
       modules: selectedModules,
       startDate,
       endDate,
-      generatedBy: "Director General / Agency Head"
+      generatedBy: "Director General / Agency Lead Inspector"
     };
 
     try {
@@ -132,15 +257,16 @@ export default function ExportReports() {
     }
 
     setIsSubmitting(true);
-    const reportRef = `REP-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const reportRef = `REP-${selectedReportType.toUpperCase().slice(0, 4)}-${Math.floor(100 + Math.random() * 900)}`;
     const config: ReportConfig = {
       title: reportTitle || `Statutory Government Intelligence Report (${format})`,
       reportReference: reportRef,
       format,
+      reportType: selectedReportType,
       modules: selectedModules,
       startDate,
       endDate,
-      generatedBy: "Director General / Agency Head"
+      generatedBy: "Director General / Agency Lead Inspector"
     };
 
     try {
@@ -167,7 +293,7 @@ export default function ExportReports() {
       modules: rep.modules_included || selectedModules,
       startDate: rep.period_start || startDate,
       endDate: rep.period_end || endDate,
-      generatedBy: rep.generated_by_name || "Agency Officer"
+      generatedBy: rep.generated_by_name || "Agency Lead Officer"
     };
 
     try {
@@ -187,10 +313,10 @@ export default function ExportReports() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F] flex items-center gap-3">
             <Download className="text-blue-500" />
-            Statutory Analytics Export &amp; Custom Report Generator
+            Statutory Analytics Export &amp; Document Generator
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">
-            Build and export custom statutory intelligence reports in PDF, CSV, Excel, or JSON formats with digital verification stamps.
+            Generate and export custom statutory intelligence reports across 9 specialized report architectures with multi-material Nigerian Industrial Standards (NIS) compliance.
           </p>
         </div>
 
@@ -203,54 +329,129 @@ export default function ExportReports() {
         </button>
       </div>
 
-      {/* Document Generator Configuration Card */}
+      {/* Comprehensive Nigerian Industrial Standards Compliance Banner */}
+      <div className="bg-gradient-to-r from-emerald-900 to-[#022C4F] rounded-3xl p-5 sm:p-6 mb-8 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+            <BookOpen size={24} className="text-emerald-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
+                Full Statutory Framework
+              </span>
+              <span className="text-xs font-semibold text-slate-200">
+                Comprehensive Nigerian Industrial Standards (NIS) Library Included
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed max-w-3xl">
+              All 9 report architectures automatically embed citations and testing compliance matrices for <strong>NIS 87 Sandcrete Blocks</strong>, <strong>NIS 11 Portland Cement</strong>, <strong>NIS 117 Steel Rebar</strong>, <strong>NIS 156 Concrete Aggregates</strong>, <strong>NIS 74 Electrical Cables</strong>, <strong>NIS 384 Sanitary Plumbing</strong>, and the <strong>National Building Code of Nigeria (NBC 2006/2020)</strong>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 1: Select From the 9 Distinct Report Architectures */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-7 mb-8 space-y-6">
         <div>
-          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-            Custom Report Title
-          </label>
-          <input 
-            type="text"
-            value={reportTitle}
-            onChange={(e) => setReportTitle(e.target.value)}
-            placeholder="e.g. Q3 Comprehensive Safety & Compliance Report"
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <LayoutTemplate size={18} className="text-blue-600" />
+              <span>Step 1: Select Report Architecture (9 Available Formats)</span>
+            </h2>
+            <span className="text-xs font-bold text-slate-500">
+              Current: <strong className="text-blue-600">{REPORT_TYPES.find(r => r.id === selectedReportType)?.title}</strong>
+            </span>
+          </div>
 
-        <div>
-          <h2 className="text-base font-black text-slate-900 flex items-center gap-2 mb-3">
-            <LayoutTemplate size={18} className="text-blue-600" />
-            <span>Select Analytics Modules to Include in Document</span>
-          </h2>
-
-          {/* Module Selection Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {availableModules.map((moduleName, i) => {
-              const isSelected = selectedModules.includes(moduleName);
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {REPORT_TYPES.map((rt) => {
+              const isSelected = selectedReportType === rt.id;
+              const IconComp = rt.icon;
               return (
-                <div 
-                  key={i}
-                  onClick={() => toggleModule(moduleName)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                <div
+                  key={rt.id}
+                  onClick={() => selectReportType(rt)}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                     isSelected 
-                      ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-sm' 
-                      : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:border-slate-300'
+                      ? 'border-[#022C4F] bg-blue-50/60 shadow-md ring-2 ring-blue-500/20' 
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
                   }`}
                 >
-                  <span className="text-xs">{moduleName}</span>
-                  {isSelected ? (
-                    <CheckCircle2 size={16} className="text-blue-600" />
-                  ) : (
-                    <Circle size={16} className="text-slate-300" />
-                  )}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${rt.color}`}>
+                        {rt.badge}
+                      </span>
+                      {isSelected ? (
+                        <CheckCircle2 size={18} className="text-[#022C4F]" />
+                      ) : (
+                        <Circle size={18} className="text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <IconComp size={16} className={isSelected ? "text-[#022C4F]" : "text-slate-600"} />
+                      <h3 className="text-xs font-black text-slate-900">{rt.title}</h3>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                      {rt.description}
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-400">
+                    Category: <span className="text-slate-700">{rt.category}</span>
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Filter & Format Controls */}
+        {/* Step 2: Custom Title & Module Refinements */}
+        <div className="pt-4 border-t border-slate-100 space-y-4">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Custom Report Title
+            </label>
+            <input 
+              type="text"
+              value={reportTitle}
+              onChange={(e) => setReportTitle(e.target.value)}
+              placeholder="e.g. Q3 Comprehensive Safety & Compliance Report"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-700 mb-2">
+              Active Analytics Data Modules in this Document:
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {availableModules.map((moduleName, i) => {
+                const isSelected = selectedModules.includes(moduleName);
+                return (
+                  <div 
+                    key={i}
+                    onClick={() => toggleModule(moduleName)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                      isSelected 
+                        ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-bold shadow-sm' 
+                        : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-xs">{moduleName}</span>
+                    {isSelected ? (
+                      <CheckCircle2 size={15} className="text-blue-600" />
+                    ) : (
+                      <Circle size={15} className="text-slate-300" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: Date Period & Format Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -299,10 +500,11 @@ export default function ExportReports() {
           </div>
         </div>
 
+        {/* Generate Actions */}
         <div className="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <Sparkles size={15} className="text-blue-500" />
-            <span>Includes cryptographic verification hash &amp; government executive seal</span>
+            <span>Includes cryptographic verification hash &amp; multi-material statutory seals</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -321,7 +523,7 @@ export default function ExportReports() {
               className="px-6 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-md shadow-slate-900/10 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Download size={14} />
-              <span>{isSubmitting ? 'Generating Document...' : `Generate & Export ${format}`}</span>
+              <span>{isSubmitting ? 'Compiling Document...' : `Generate & Download ${format}`}</span>
             </button>
           </div>
         </div>
