@@ -10,7 +10,7 @@ import {
   APIKeyCredential, IntegrationStats, getApiKeys, 
   getIntegrationStats, rotateApiKey, revokeApiKey 
 } from "@/services/integrations";
-import GenerateApiKeyModal from "@/components/dashboard/GenerateApiKeyModal";
+import GenerateApiKeyDrawer from "@/components/dashboard/GenerateApiKeyDrawer";
 
 export default function ApiConnections() {
   const [credentials, setCredentials] = useState<APIKeyCredential[]>([]);
@@ -269,7 +269,7 @@ export default function ApiConnections() {
         </div>
       </motion.div>
 
-      <GenerateApiKeyModal
+      <GenerateApiKeyDrawer
         isOpen={isGenerateOpen}
         onClose={() => setIsGenerateOpen(false)}
         onSuccess={fetchApiData}
