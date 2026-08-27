@@ -10,7 +10,7 @@ import {
   GovernmentAPIIntegration, getGovernmentApis, testGovernmentApi, 
   verifyGovernmentEntity, EntityVerificationResult 
 } from "@/services/integrations";
-import ManageGovernmentKeyModal from "@/components/dashboard/ManageGovernmentKeyModal";
+import ManageGovernmentKeyDrawer from "@/components/dashboard/ManageGovernmentKeyDrawer";
 
 export default function GovernmentIntegrations() {
   const [integrations, setIntegrations] = useState<GovernmentAPIIntegration[]>([]);
@@ -258,7 +258,7 @@ export default function GovernmentIntegrations() {
         )}
       </motion.div>
 
-      <ManageGovernmentKeyModal
+      <ManageGovernmentKeyDrawer
         isOpen={isManageKeyOpen}
         onClose={() => setIsManageKeyOpen(false)}
         govApi={selectedApi}

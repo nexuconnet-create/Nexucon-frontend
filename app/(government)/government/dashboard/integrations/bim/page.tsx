@@ -10,7 +10,7 @@ import {
   BIMIntegration, getBimIntegrations, syncBimPlatform, 
   disconnectBimPlatform, getBimHealth, HealthCheckResult 
 } from "@/services/integrations";
-import ConfigureBimModal from "@/components/dashboard/ConfigureBimModal";
+import ConfigureBimDrawer from "@/components/dashboard/ConfigureBimDrawer";
 
 export default function BimIntegrations() {
   const [platforms, setPlatforms] = useState<BIMIntegration[]>([]);
@@ -219,7 +219,7 @@ export default function BimIntegrations() {
         )}
       </div>
 
-      <ConfigureBimModal
+      <ConfigureBimDrawer
         isOpen={isConfigureOpen}
         onClose={() => setIsConfigureOpen(false)}
         bimPlatform={selectedBim}

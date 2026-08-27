@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Activity, CheckCircle2, AlertTriangle, RefreshCw, Satellite, 
+import {
+  Activity, CheckCircle2, AlertTriangle, RefreshCw, Satellite,
   MapPin, Search, Plus, Radio, ShieldCheck, Gauge, Layers, Download, X
 } from "lucide-react";
-import { 
-  TersusDevice, IntegrationLog, getTersusDevices, forceSyncTersusDevice, 
-  getIntegrationLogs, getTersusHealth, HealthCheckResult 
+import {
+  TersusDevice, IntegrationLog, getTersusDevices, forceSyncTersusDevice,
+  getIntegrationLogs, getTersusHealth, HealthCheckResult
 } from "@/services/integrations";
-import ConnectDeviceModal from "@/components/dashboard/ConnectDeviceModal";
+import ConnectDeviceDrawer from "@/components/dashboard/ConnectDeviceDrawer";
 
 export default function TersusIntegration() {
   const [devices, setDevices] = useState<TersusDevice[]>([]);
@@ -51,13 +51,13 @@ export default function TersusIntegration() {
     try {
       if (device) {
         await forceSyncTersusDevice(device.id);
-        window.dispatchEvent(new CustomEvent('show-toast', { 
-          detail: { message: `Point cloud sync triggered for ${device.name}!`, type: 'success' } 
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Point cloud sync triggered for ${device.name}!`, type: 'success' }
         }));
       } else if (devices.length > 0) {
         await forceSyncTersusDevice(devices[0].id);
-        window.dispatchEvent(new CustomEvent('show-toast', { 
-          detail: { message: `GNSS telemetry sync forced across all connected RTK receivers!`, type: 'success' } 
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `GNSS telemetry sync forced across all connected RTK receivers!`, type: 'success' }
         }));
       }
       fetchTersusData();
@@ -73,8 +73,8 @@ export default function TersusIntegration() {
     try {
       const res = await getTersusHealth(device.id);
       setHealthResults(prev => ({ ...prev, [device.id]: res }));
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `${device.name} responded in ${res.response_time_ms}ms (Status: ${res.status})`, type: 'success' } 
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `${device.name} responded in ${res.response_time_ms}ms (Status: ${res.status})`, type: 'success' }
       }));
     } catch (err) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Health check failed', type: 'error' } }));
@@ -93,9 +93,9 @@ export default function TersusIntegration() {
           </h1>
           <p className="text-gray-500 mt-1">Manage RTK receivers, view high-precision positioning telemetry, control points, and point cloud streams.</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => handleForceSync()}
             disabled={isSyncing}
             className="flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm text-sm font-bold disabled:opacity-50"
@@ -103,7 +103,7 @@ export default function TersusIntegration() {
             <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
             {isSyncing ? 'Syncing...' : 'Force Sync All'}
           </button>
-          <button 
+          <button
             onClick={() => setIsConnectOpen(true)}
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold"
           >
@@ -128,11 +128,11 @@ export default function TersusIntegration() {
               </h2>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search devices..." 
+                  placeholder="Search devices..."
                   className="pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -145,14 +145,13 @@ export default function TersusIntegration() {
                   const isSelected = selectedDevice?.id === device.id;
 
                   return (
-                    <div 
-                      key={device.id || idx} 
+                    <div
+                      key={device.id || idx}
                       onClick={() => setSelectedDevice(device)}
-                      className={`border rounded-2xl p-4 transition-all cursor-pointer ${
-                        isSelected 
-                          ? 'border-blue-500 bg-blue-50/20 shadow-sm ring-2 ring-blue-500/20' 
+                      className={`border rounded-2xl p-4 transition-all cursor-pointer ${isSelected
+                          ? 'border-blue-500 bg-blue-50/20 shadow-sm ring-2 ring-blue-500/20'
                           : 'border-gray-200 hover:border-blue-300 bg-gray-50/40'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
@@ -161,11 +160,10 @@ export default function TersusIntegration() {
                           </div>
                           <span className="text-xs text-gray-500 font-mono mt-0.5 block">{device.device_id}</span>
                         </div>
-                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 border ${
-                          device.status === 'Active' 
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 border ${device.status === 'Active'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-red-50 text-red-700 border-red-200'
-                        }`}>
+                          }`}>
                           {device.status === 'Active' ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
                           {device.status}
                         </span>
@@ -185,14 +183,14 @@ export default function TersusIntegration() {
                           <span className="font-semibold text-emerald-700">H: ±{device.horizontal_accuracy || '0.008 m'} • V: ±{device.vertical_accuracy || '0.015 m'}</span>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center justify-between mt-3 text-xs pt-1">
                         <div className="flex items-center gap-2 text-gray-600 font-bold">
                           <Activity size={14} className="text-emerald-500" />
                           Battery: {device.battery_level}
                         </div>
                         <div className="flex items-center gap-2">
-                          <button 
+                          <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleHealthCheck(device); }}
                             disabled={testingHealthId === device.id}
@@ -201,7 +199,7 @@ export default function TersusIntegration() {
                             <Radio size={12} className={testingHealthId === device.id ? "animate-pulse text-blue-500" : "text-gray-400"} />
                             {testingHealthId === device.id ? 'Ping...' : (health ? `${health.response_time_ms}ms` : 'Ping')}
                           </button>
-                          <button 
+                          <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleForceSync(device); }}
                             className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-bold text-[11px] transition-colors"
@@ -242,10 +240,10 @@ export default function TersusIntegration() {
                 {selectedDevice?.rtk_fix_status || 'FIXED_RTK'}
               </span>
             </div>
-            
+
             <div className="bg-slate-900 w-full min-h-[260px] flex flex-col items-center justify-center relative overflow-hidden text-white p-6">
               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #38BDF8 1px, transparent 0)', backgroundSize: '20px 20px' }}></div>
-              
+
               <div className="relative z-10 text-center max-w-md">
                 <Satellite size={44} className="text-blue-400 mx-auto mb-3 animate-pulse" />
                 <p className="font-black text-base text-blue-100">{selectedDevice?.name || 'Tersus RTK Telemetry Engine'}</p>
@@ -286,9 +284,8 @@ export default function TersusIntegration() {
                     <p className="text-[11px] text-gray-500 line-clamp-2 mt-1 leading-relaxed">{log.details}</p>
                   )}
                   <div className="flex items-center justify-between mt-2 pt-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                      log.status === 'Success' ? 'text-emerald-600' : 'text-amber-600'
-                    }`}>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${log.status === 'Success' ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>
                       {log.status}
                     </span>
                     <span className="text-[11px] text-gray-500 font-semibold">{log.payload_size} • {log.duration_ms || 142}ms</span>
@@ -306,7 +303,7 @@ export default function TersusIntegration() {
         </div>
       </div>
 
-      <ConnectDeviceModal
+      <ConnectDeviceDrawer
         isOpen={isConnectOpen}
         onClose={() => setIsConnectOpen(false)}
         onSuccess={fetchTersusData}

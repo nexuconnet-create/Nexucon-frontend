@@ -10,7 +10,7 @@ import {
   DocumentSystemIntegration, getDocumentSystems, syncDocumentSystem, 
   getDocumentHealth, HealthCheckResult 
 } from "@/services/integrations";
-import ConnectDmsModal from "@/components/dashboard/ConnectDmsModal";
+import ConnectDmsDrawer from "@/components/dashboard/ConnectDmsDrawer";
 
 export default function DocumentIntegrations() {
   const [systems, setSystems] = useState<DocumentSystemIntegration[]>([]);
@@ -80,7 +80,7 @@ export default function DocumentIntegrations() {
             <FolderSync className="text-emerald-500" />
             Document Systems & Storage
           </h1>
-          <p className="text-gray-500 mt-1">Manage Cloudflare R2 object storage, Microsoft SharePoint, Google Drive, and enterprise document repositories.</p>
+          <p className="text-gray-500 mt-1">Manage Cloudflare R2 primary object storage, Cloudinary media CDN, and connected document repositories.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -208,7 +208,7 @@ export default function DocumentIntegrations() {
         </div>
       </div>
 
-      <ConnectDmsModal
+      <ConnectDmsDrawer
         isOpen={isConnectOpen}
         onClose={() => setIsConnectOpen(false)}
         onSuccess={fetchDocumentSystems}
