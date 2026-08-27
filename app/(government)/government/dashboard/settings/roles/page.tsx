@@ -18,9 +18,10 @@ export default function RolesPermissions() {
     setIsLoading(true);
     try {
       const data = await getRolesMatrix();
-      setMatrixData(data);
+      setMatrixData(data || { roles: [], permission_modules: [] });
     } catch (err) {
       console.error("Failed to load roles matrix", err);
+      setMatrixData({ roles: [], permission_modules: [] });
     } finally {
       setIsLoading(false);
     }
@@ -31,15 +32,19 @@ export default function RolesPermissions() {
   }, [fetchMatrix]);
 
   const rolesList = (matrixData?.roles || []).filter(r => 
-    !search.trim() || r.toLowerCase().includes(search.toLowerCase())
+    !search.trim() || (r && r.toLowerCase().includes(search.toLowerCase()))
   );
 
   const activeRoleName = rolesList[selectedRoleIdx] || rolesList[0] || "City Planner";
 
   const handleToggle = (mIdx: number, pIdx: number) => {
-    if (!matrixData) return;
+    if (!matrixData?.permission_modules) return;
     
     const updatedModules = [...matrixData.permission_modules];
+    if (!updatedModules[mIdx]?.permissions?.[pIdx]) return;
+    if (!updatedModules[mIdx].permissions[pIdx].roles) {
+      updatedModules[mIdx].permissions[pIdx].roles = {};
+    }
     const currentVal = updatedModules[mIdx].permissions[pIdx].roles[activeRoleName] ?? false;
     updatedModules[mIdx].permissions[pIdx].roles[activeRoleName] = !currentVal;
 
@@ -50,19 +55,19 @@ export default function RolesPermissions() {
   };
 
   const handleSave = async () => {
-    if (!matrixData) return;
+    if (!matrixData?.permission_modules) return;
     setIsSaving(true);
     try {
       const updates: { role_name: string; module: string; permission_name: string; is_granted: boolean }[] = [];
 
-      matrixData.permission_modules.forEach(m => {
+      (matrixData.permission_modules || []).forEach(m => {
         const moduleName = m.name || m.module || "General";
-        m.permissions.forEach(p => {
+        (m.permissions || []).forEach(p => {
           updates.push({
             role_name: activeRoleName,
             module: moduleName,
             permission_name: p.name,
-            is_granted: p.roles[activeRoleName] ?? false
+            is_granted: p.roles?.[activeRoleName] ?? false
           });
         });
       });

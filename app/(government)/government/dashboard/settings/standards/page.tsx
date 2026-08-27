@@ -18,19 +18,23 @@ export default function ComplianceStandards() {
     setIsLoading(true);
     try {
       const [stData, docData] = await Promise.all([
-        getComplianceStandards(),
-        getStatutoryDocuments()
+        getComplianceStandards().catch(() => []),
+        getStatutoryDocuments().catch(() => [])
       ]);
-      setStandards(stData);
-      setStatutes(docData);
+      const validStandards = Array.isArray(stData) ? stData : [];
+      const validStatutes = Array.isArray(docData) ? docData : [];
+      setStandards(validStandards);
+      setStatutes(validStatutes);
 
       const threshMap: Record<string, number> = {};
-      stData.forEach(s => {
-        threshMap[s.key] = s.num_value;
+      validStandards.forEach(s => {
+        if (s && s.key) threshMap[s.key] = s.num_value;
       });
       setThresholds(threshMap);
     } catch (err) {
       console.error("Failed to load compliance standards", err);
+      setStandards([]);
+      setStatutes([]);
     } finally {
       setIsLoading(false);
     }

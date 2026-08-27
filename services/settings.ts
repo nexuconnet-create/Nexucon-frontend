@@ -25,13 +25,13 @@ export interface AgencyProfile {
 }
 
 export async function getAgencyProfile(): Promise<AgencyProfile> {
-  const res = await api.get('/settings/profile/');
-  return res.data;
+  const res: any = await api.get('/settings/profile/');
+  return res?.data || res || {};
 }
 
 export async function updateAgencyProfile(data: Partial<AgencyProfile>): Promise<AgencyProfile> {
-  const res = await api.post('/settings/profile/', data);
-  return res.data;
+  const res: any = await api.post('/settings/profile/', data);
+  return res?.data || res || {};
 }
 
 // ----------------------------------------------------
@@ -61,18 +61,18 @@ export interface ReportTemplate {
 }
 
 export async function getReportTemplates(): Promise<ReportTemplate[]> {
-  const res = await api.get('/settings/report-templates/');
-  return res.data;
+  const res: any = await api.get('/settings/report-templates/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function getActiveReportTemplate(): Promise<ReportTemplate> {
-  const res = await api.get('/settings/report-templates/active/');
-  return res.data;
+  const res: any = await api.get('/settings/report-templates/active/');
+  return res?.data || res || {};
 }
 
 export async function setActiveReportTemplate(templateId: string): Promise<ReportTemplate> {
-  const res = await api.post(`/settings/report-templates/${templateId}/set-default/`);
-  return res.data;
+  const res: any = await api.post(`/settings/report-templates/${templateId}/set-default/`);
+  return res?.data || res || {};
 }
 
 // ----------------------------------------------------
@@ -92,8 +92,8 @@ export interface StaffUser {
 }
 
 export async function getStaffUsers(params?: { search?: string; department?: string; role?: string }): Promise<StaffUser[]> {
-  const res = await api.get('/settings/users/', { params });
-  return res.data;
+  const res: any = await api.get('/settings/users/', { params });
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function inviteStaffUser(data: {
@@ -102,13 +102,13 @@ export async function inviteStaffUser(data: {
   role: string;
   department: string;
 }): Promise<any> {
-  const res = await api.post('/settings/users/', data);
-  return res.data;
+  const res: any = await api.post('/settings/users/', data);
+  return res?.data || res;
 }
 
 export async function toggleStaffUserStatus(userId: string): Promise<any> {
-  const res = await api.post(`/settings/users/${userId}/toggle-status/`);
-  return res.data;
+  const res: any = await api.post(`/settings/users/${userId}/toggle-status/`);
+  return res?.data || res;
 }
 
 // ----------------------------------------------------
@@ -148,18 +148,18 @@ export interface RolesMatrixResponse {
 }
 
 export async function getCustomRoles(): Promise<CustomRole[]> {
-  const res = await api.get('/settings/roles/');
-  return res.data;
+  const res: any = await api.get('/settings/roles/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createCustomRole(data: { name: string; description?: string }): Promise<CustomRole> {
-  const res = await api.post('/settings/roles/', data);
-  return res.data;
+  const res: any = await api.post('/settings/roles/', data);
+  return res?.data || res;
 }
 
 export async function getRolesMatrix(): Promise<RolesMatrixResponse> {
-  const res = await api.get('/settings/roles/matrix/');
-  return res.data;
+  const res: any = await api.get('/settings/roles/matrix/');
+  return res?.data || res || { roles: [], permission_modules: [] };
 }
 
 export async function updateRolesMatrix(updates: {
@@ -168,8 +168,8 @@ export async function updateRolesMatrix(updates: {
   permission_name: string;
   is_granted: boolean;
 }[]): Promise<any> {
-  const res = await api.post('/settings/roles/matrix/', { updates });
-  return res.data;
+  const res: any = await api.post('/settings/roles/matrix/', { updates });
+  return res?.data || res;
 }
 
 // ----------------------------------------------------
@@ -194,8 +194,8 @@ export interface ApprovalWorkflow {
 }
 
 export async function getApprovalWorkflows(): Promise<ApprovalWorkflow[]> {
-  const res = await api.get('/settings/workflows/');
-  return res.data;
+  const res: any = await api.get('/settings/workflows/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createApprovalWorkflow(data: {
@@ -203,8 +203,8 @@ export async function createApprovalWorkflow(data: {
   description?: string;
   steps: { title: string; role: string; icon?: string }[];
 }): Promise<ApprovalWorkflow> {
-  const res = await api.post('/settings/workflows/', data);
-  return res.data;
+  const res: any = await api.post('/settings/workflows/', data);
+  return res?.data || res;
 }
 
 // ----------------------------------------------------
@@ -229,8 +229,8 @@ export interface InspectionTemplate {
 }
 
 export async function getInspectionTemplates(): Promise<InspectionTemplate[]> {
-  const res = await api.get('/settings/templates/');
-  return res.data;
+  const res: any = await api.get('/settings/templates/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createInspectionTemplate(data: {
@@ -238,8 +238,8 @@ export async function createInspectionTemplate(data: {
   department: string;
   items: { title: string; field_type: string; is_required: boolean }[];
 }): Promise<InspectionTemplate> {
-  const res = await api.post('/settings/templates/', data);
-  return res.data;
+  const res: any = await api.post('/settings/templates/', data);
+  return res?.data || res;
 }
 
 export async function deleteInspectionTemplate(templateId: string): Promise<void> {
@@ -251,8 +251,8 @@ export async function addChecklistItem(templateId: string, item: {
   field_type: string;
   is_required: boolean;
 }): Promise<ChecklistItem> {
-  const res = await api.post(`/settings/templates/${templateId}/items/`, item);
-  return res.data;
+  const res: any = await api.post(`/settings/templates/${templateId}/items/`, item);
+  return res?.data || res;
 }
 
 // ----------------------------------------------------
@@ -278,18 +278,18 @@ export interface StatutoryDocument {
 }
 
 export async function getComplianceStandards(): Promise<ComplianceStandard[]> {
-  const res = await api.get('/settings/standards/');
-  return res.data;
+  const res: any = await api.get('/settings/standards/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function updateComplianceStandards(thresholds: Record<string, number>): Promise<ComplianceStandard[]> {
-  const res = await api.post('/settings/standards/update-thresholds/', { thresholds });
-  return res.data;
+  const res: any = await api.post('/settings/standards/update-thresholds/', { thresholds });
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function getStatutoryDocuments(): Promise<StatutoryDocument[]> {
-  const res = await api.get('/settings/statutes/');
-  return res.data;
+  const res: any = await api.get('/settings/statutes/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createStatutoryDocument(data: {
@@ -298,8 +298,8 @@ export async function createStatutoryDocument(data: {
   connected_features: string[];
   document_url?: string;
 }): Promise<StatutoryDocument> {
-  const res = await api.post('/settings/statutes/', data);
-  return res.data;
+  const res: any = await api.post('/settings/statutes/', data);
+  return res?.data || res;
 }
 
 // ----------------------------------------------------
@@ -331,8 +331,8 @@ export interface NotificationRoutingRule {
 }
 
 export async function getNotificationPreferences(): Promise<NotificationPreferenceGroup[]> {
-  const res = await api.get('/settings/notifications/');
-  return res.data;
+  const res: any = await api.get('/settings/notifications/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function updateNotificationPreference(data: {
@@ -341,13 +341,13 @@ export async function updateNotificationPreference(data: {
   channel: 'in_app' | 'email' | 'sms';
   enabled: boolean;
 }): Promise<any> {
-  const res = await api.post('/settings/notifications/update-preference/', data);
-  return res.data;
+  const res: any = await api.post('/settings/notifications/update-preference/', data);
+  return res?.data || res;
 }
 
 export async function getNotificationRoutingRules(): Promise<NotificationRoutingRule[]> {
-  const res = await api.get('/settings/routing-rules/');
-  return res.data;
+  const res: any = await api.get('/settings/routing-rules/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createNotificationRoutingRule(data: {
@@ -356,8 +356,8 @@ export async function createNotificationRoutingRule(data: {
   sla_timeline: string;
   escalation_target: string;
 }): Promise<NotificationRoutingRule> {
-  const res = await api.post('/settings/routing-rules/', data);
-  return res.data;
+  const res: any = await api.post('/settings/routing-rules/', data);
+  return res?.data || res;
 }
 
 export async function deleteNotificationRoutingRule(id: string): Promise<void> {
@@ -378,8 +378,8 @@ export interface WebhookSubscription {
 }
 
 export async function getWebhookSubscriptions(): Promise<WebhookSubscription[]> {
-  const res = await api.get('/settings/webhooks/');
-  return res.data;
+  const res: any = await api.get('/settings/webhooks/');
+  return Array.isArray(res) ? res : (res?.results || res?.data || []);
 }
 
 export async function createWebhookSubscription(data: {
@@ -387,8 +387,8 @@ export async function createWebhookSubscription(data: {
   target_url: string;
   events: string[];
 }): Promise<WebhookSubscription> {
-  const res = await api.post('/settings/webhooks/', data);
-  return res.data;
+  const res: any = await api.post('/settings/webhooks/', data);
+  return res?.data || res;
 }
 
 export async function deleteWebhookSubscription(id: string): Promise<void> {

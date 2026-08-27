@@ -33,9 +33,10 @@ export default function TemplatesPage() {
     setIsLoading(true);
     try {
       const data = await getInspectionTemplates();
-      setTemplates(data);
+      setTemplates(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load inspection templates", err);
+      setTemplates([]);
     } finally {
       setIsLoading(false);
     }
@@ -45,9 +46,10 @@ export default function TemplatesPage() {
     setIsLoading(true);
     try {
       const data = await getReportTemplates();
-      setReportTemplates(data);
+      setReportTemplates(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load report templates", err);
+      setReportTemplates([]);
     } finally {
       setIsLoading(false);
     }

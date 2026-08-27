@@ -15,9 +15,10 @@ export default function ApprovalWorkflows() {
     setIsLoading(true);
     try {
       const data = await getApprovalWorkflows();
-      setWorkflows(data);
+      setWorkflows(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to load workflows", err);
+      setWorkflows([]);
     } finally {
       setIsLoading(false);
     }

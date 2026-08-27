@@ -21,13 +21,15 @@ export default function NotificationPreferencesPage() {
     setIsLoading(true);
     try {
       const [catData, ruleData] = await Promise.all([
-        getNotificationPreferences(),
-        getNotificationRoutingRules()
+        getNotificationPreferences().catch(() => []),
+        getNotificationRoutingRules().catch(() => [])
       ]);
-      setCategories(catData);
-      setRoutingRules(ruleData);
+      setCategories(Array.isArray(catData) ? catData : []);
+      setRoutingRules(Array.isArray(ruleData) ? ruleData : []);
     } catch (err) {
       console.error("Failed to load notification preferences", err);
+      setCategories([]);
+      setRoutingRules([]);
     } finally {
       setIsLoading(false);
     }
@@ -38,6 +40,7 @@ export default function NotificationPreferencesPage() {
   }, [fetchNotificationData]);
 
   const handleToggle = (cIdx: number, sIdx: number, channel: 'in_app' | 'email' | 'sms') => {
+    if (!categories[cIdx]?.items?.[sIdx]) return;
     const updated = [...categories];
     const item = updated[cIdx].items[sIdx];
     if (item.is_locked && (channel === 'in_app' || channel === 'email')) return;
@@ -49,8 +52,8 @@ export default function NotificationPreferencesPage() {
   const handleSavePreferences = async () => {
     setIsSaving(true);
     try {
-      for (const cat of categories) {
-        for (const s of cat.items) {
+      for (const cat of (categories || [])) {
+        for (const s of (cat?.items || [])) {
           await Promise.all([
             updateNotificationPreference({ category: cat.category, event_label: s.event_label, channel: 'in_app', enabled: s.in_app }),
             updateNotificationPreference({ category: cat.category, event_label: s.event_label, channel: 'email', enabled: s.email }),
