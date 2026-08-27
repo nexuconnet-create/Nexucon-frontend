@@ -8,6 +8,7 @@ import {
   CheckCircle2, XCircle, Clock, ShieldAlert 
 } from "lucide-react";
 import { ComplianceAnalyticsData, getComplianceAnalytics, createGeneratedReport } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 import Link from "next/link";
 
 export default function ComplianceReportsAnalytics() {
@@ -32,17 +33,23 @@ export default function ComplianceReportsAnalytics() {
 
   const handleExportComplianceReport = async () => {
     try {
-      const rep = await createGeneratedReport({
+      const ref = `REP-COMP-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Compiling Compliance & Enforcement Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
         title: "Statutory Compliance & Regulatory Enforcement Report",
+        reportReference: ref,
         format: "PDF",
-        modules_included: ["Compliance & Regulatory", "Inspection Analytics"]
+        modules: ["Compliance & Regulatory", "Inspection Analytics"],
+        generatedBy: "Director of Compliance & Quality Assurance"
       });
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+        detail: { message: `Compliance Report "${ref}" downloaded successfully!`, type: 'success' } 
       }));
-      if (rep.file_url) window.open(rep.file_url, '_blank');
     } catch (err) {
       console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export compliance report", type: 'error' } }));
     }
   };
 

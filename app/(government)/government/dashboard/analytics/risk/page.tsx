@@ -8,6 +8,7 @@ import {
   ShieldCheck, ExternalLink, HelpCircle, Layers 
 } from "lucide-react";
 import { StructuralRiskData, HotspotStructure, getStructuralRisk, mitigateRiskAlert, createGeneratedReport } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 import RiskMitigationModal from "@/components/dashboard/RiskMitigationModal";
 import Link from "next/link";
 
@@ -47,17 +48,23 @@ export default function StructuralRiskIndex() {
 
   const handleExportRiskReport = async () => {
     try {
-      const rep = await createGeneratedReport({
+      const ref = `REP-RISK-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Generating Structural Risk Audit Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
         title: "Statutory Structural Risk Index & Critical Hotspots Audit",
+        reportReference: ref,
         format: "PDF",
-        modules_included: ["Structural Risk Assessment", "Inspection Analytics"]
+        modules: ["Structural Risk Assessment", "Inspection Analytics"],
+        generatedBy: "Lead Structural Audit Specialist"
       });
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+        detail: { message: `Risk Audit Report "${ref}" downloaded successfully!`, type: 'success' } 
       }));
-      if (rep.file_url) window.open(rep.file_url, '_blank');
     } catch (err) {
       console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export risk report", type: 'error' } }));
     }
   };
 

@@ -96,25 +96,29 @@ export default function ExportReports() {
       // 1. Generate & trigger file download directly in browser
       const docResult = await generateAndDownloadDocument(config);
 
-      // 2. Persist in backend archive
-      await createGeneratedReport({
-        title: config.title,
-        report_reference: reportRef,
-        format,
-        modules_included: selectedModules,
-        period_start: startDate,
-        period_end: endDate,
-        file_size: docResult.fileSize
-      });
+      // 2. Persist in backend archive (safe non-blocking)
+      try {
+        await createGeneratedReport({
+          title: config.title,
+          report_reference: reportRef,
+          format,
+          modules_included: selectedModules,
+          period_start: startDate,
+          period_end: endDate,
+          file_size: docResult.fileSize
+        });
+      } catch (backendErr) {
+        console.warn("Could not archive report on backend:", backendErr);
+      }
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${reportRef}" generated and downloaded successfully!`, type: 'success' } 
+        detail: { message: `Report "${reportRef}" (${format}) generated and downloaded!`, type: 'success' } 
       }));
 
       fetchReports();
     } catch (err: any) {
       console.error("Failed to generate report", err);
-      const msg = err.response?.data?.message || 'Failed to generate report';
+      const msg = err?.message || 'Failed to generate report';
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);

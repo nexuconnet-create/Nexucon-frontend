@@ -4,9 +4,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   Building, Clock, Users, Activity, TrendingDown, 
-  CheckCircle2, MoreHorizontal, RefreshCw, ShieldCheck 
+  CheckCircle2, MoreHorizontal, RefreshCw, ShieldCheck, Download 
 } from "lucide-react";
 import { AgencyAnalyticsData, getAgencyPerformance } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function AgencyPerformance() {
   const [data, setData] = useState<AgencyAnalyticsData | null>(null);
@@ -28,6 +29,28 @@ export default function AgencyPerformance() {
     fetchAgencyData();
   }, [fetchAgencyData]);
 
+  const handleExportAgency = async () => {
+    try {
+      const ref = `REP-SLA-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Generating Agency SLA & Operational Review Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
+        title: "Statutory Agency Operational SLA & Workload Throughput Audit",
+        reportReference: ref,
+        format: "PDF",
+        modules: ["Agency Performance SLAs", "Project Performance"],
+        generatedBy: "Permanent Secretary / Executive Director"
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Agency SLA Report "${ref}" downloaded successfully!`, type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export agency report", type: 'error' } }));
+    }
+  };
+
   return (
     <div className="w-full min-h-screen pb-12">
       {/* Header */}
@@ -42,13 +65,23 @@ export default function AgencyPerformance() {
           </p>
         </div>
 
-        <button 
-          onClick={fetchAgencyData}
-          className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors self-start md:self-auto cursor-pointer"
-          title="Refresh"
-        >
-          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <button 
+            onClick={fetchAgencyData}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={handleExportAgency}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+          >
+            <Download size={14} />
+            <span>Export Agency Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Top Metric Cards */}
