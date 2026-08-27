@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Save, Plus, ArrowRight, GitMerge, FileText, CheckCircle2, User, HardHat, Search, AlertTriangle, ShieldCheck, RefreshCw } from "lucide-react";
-import { ApprovalWorkflow, getWorkflows } from "@/services/settings";
-import CreateWorkflowModal from "@/components/dashboard/CreateWorkflowModal";
+import { ApprovalWorkflow, getApprovalWorkflows } from "@/services/settings";
+import CreateWorkflowDrawer from "@/components/dashboard/CreateWorkflowDrawer";
 
 export default function ApprovalWorkflows() {
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([]);
@@ -14,7 +14,7 @@ export default function ApprovalWorkflows() {
   const fetchWorkflows = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getWorkflows();
+      const data = await getApprovalWorkflows();
       setWorkflows(data);
     } catch (err) {
       console.error("Failed to load workflows", err);
@@ -148,7 +148,7 @@ export default function ApprovalWorkflows() {
         )}
       </div>
 
-      <CreateWorkflowModal
+      <CreateWorkflowDrawer
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onSuccess={fetchWorkflows}

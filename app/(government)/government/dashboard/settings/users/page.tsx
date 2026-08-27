@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Users, Search, Filter, UserPlus, MoreVertical, ShieldCheck, Mail, RefreshCw, Power } from "lucide-react";
 import { StaffUser, getStaffUsers, toggleStaffUserStatus } from "@/services/settings";
-import InviteUserModal from "@/components/dashboard/InviteUserModal";
+import InviteUserDrawer from "@/components/dashboard/InviteUserDrawer";
 
 export default function UserManagement() {
   const [users, setUsers] = useState<StaffUser[]>([]);
@@ -211,7 +211,7 @@ export default function UserManagement() {
         </div>
       </motion.div>
 
-      <InviteUserModal
+      <InviteUserDrawer
         isOpen={isInviteOpen}
         onClose={() => setIsInviteOpen(false)}
         onSuccess={fetchUsers}

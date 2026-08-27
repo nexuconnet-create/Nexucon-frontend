@@ -3,11 +3,15 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Bell, Save, Smartphone, Mail, Globe, AlertTriangle, Network, Clock, Trash2, Plus, RefreshCw } from "lucide-react";
-import { NotificationCategoryGroup, NotificationRoutingRule, getNotificationPreferences, updateNotificationPreference, getRoutingRules, deleteRoutingRule } from "@/services/settings";
-import AddRoutingRuleModal from "@/components/dashboard/AddRoutingRuleModal";
+import { 
+  NotificationPreferenceGroup, NotificationRoutingRule, 
+  getNotificationPreferences, updateNotificationPreference, 
+  getNotificationRoutingRules, deleteNotificationRoutingRule 
+} from "@/services/settings";
+import AddRoutingRuleDrawer from "@/components/dashboard/AddRoutingRuleDrawer";
 
-export default function NotificationPreferences() {
-  const [categories, setCategories] = useState<NotificationCategoryGroup[]>([]);
+export default function NotificationPreferencesPage() {
+  const [categories, setCategories] = useState<NotificationPreferenceGroup[]>([]);
   const [routingRules, setRoutingRules] = useState<NotificationRoutingRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -18,7 +22,7 @@ export default function NotificationPreferences() {
     try {
       const [catData, ruleData] = await Promise.all([
         getNotificationPreferences(),
-        getRoutingRules()
+        getNotificationRoutingRules()
       ]);
       setCategories(catData);
       setRoutingRules(ruleData);
@@ -35,8 +39,8 @@ export default function NotificationPreferences() {
 
   const handleToggle = (cIdx: number, sIdx: number, channel: 'in_app' | 'email' | 'sms') => {
     const updated = [...categories];
-    const item = updated[cIdx].settings[sIdx];
-    if (item.locked && (channel === 'in_app' || channel === 'email')) return;
+    const item = updated[cIdx].items[sIdx];
+    if (item.is_locked && (channel === 'in_app' || channel === 'email')) return;
 
     item[channel] = !item[channel];
     setCategories(updated);
@@ -46,11 +50,11 @@ export default function NotificationPreferences() {
     setIsSaving(true);
     try {
       for (const cat of categories) {
-        for (const s of cat.settings) {
+        for (const s of cat.items) {
           await Promise.all([
-            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'in_app', enabled: s.in_app }),
-            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'email', enabled: s.email }),
-            updateNotificationPreference({ category: cat.title, event_label: s.label, channel: 'sms', enabled: s.sms }),
+            updateNotificationPreference({ category: cat.category, event_label: s.event_label, channel: 'in_app', enabled: s.in_app }),
+            updateNotificationPreference({ category: cat.category, event_label: s.event_label, channel: 'email', enabled: s.email }),
+            updateNotificationPreference({ category: cat.category, event_label: s.event_label, channel: 'sms', enabled: s.sms }),
           ]);
         }
       }
@@ -67,7 +71,7 @@ export default function NotificationPreferences() {
 
   const handleDeleteRule = async (ruleId: string) => {
     try {
-      await deleteRoutingRule(ruleId);
+      await deleteNotificationRoutingRule(ruleId);
       window.dispatchEvent(new CustomEvent('show-toast', { 
         detail: { message: "Routing rule deleted.", type: "info" } 
       }));
@@ -85,7 +89,7 @@ export default function NotificationPreferences() {
             <Bell className="text-amber-500" />
             Notification Preferences
           </h1>
-          <p className="text-gray-500 mt-1">Configure how and when the system sends automated alerts.</p>
+          <p className="text-gray-500 mt-1">Configure automated event dispatch channels and critical escalation SLA routing.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -99,7 +103,7 @@ export default function NotificationPreferences() {
           <button 
             onClick={handleSavePreferences}
             disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 text-sm font-bold disabled:opacity-50 cursor-pointer"
           >
             <Save size={16} />
             {isSaving ? 'Saving...' : 'Save Preferences'}
@@ -119,13 +123,13 @@ export default function NotificationPreferences() {
             <div>
               <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
                 <Network className="text-blue-500" />
-                Notification Routing & SLAs
+                Notification Routing &amp; Escalation SLAs
               </h2>
-              <p className="text-xs text-gray-500 mt-1">Define who receives critical notifications and escalation timelines.</p>
+              <p className="text-xs text-gray-500 mt-1">Define who receives high-severity safety alerts and automated escalation chains.</p>
             </div>
             <button 
               onClick={() => setIsAddRuleOpen(true)}
-              className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3.5 py-2 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors"
+              className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3.5 py-2 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
             >
               <Plus size={14} /> Add Routing Rule
             </button>
@@ -159,59 +163,55 @@ export default function NotificationPreferences() {
                     {rule.escalation_target}
                     <button 
                       onClick={() => handleDeleteRule(rule.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                      className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                       title="Delete Rule"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
               ))}
 
               {routingRules.length === 0 && !isLoading && (
-                <div className="p-8 text-center text-xs text-gray-400">
-                  No routing rules defined.
+                <div className="p-8 text-center text-gray-400 text-xs">
+                  No custom routing rules defined. Click &ldquo;Add Routing Rule&rdquo; to configure.
                 </div>
               )}
             </div>
           </div>
         </motion.div>
 
-        {/* Multi-channel toggles */}
+        {/* Global Multi-Channel Preferences */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
           className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
         >
-          {/* Header Row for Toggles */}
-          <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-gray-50/50 border-b border-gray-100">
-             <div className="col-span-6"></div>
-             <div className="col-span-2 text-center text-xs font-bold uppercase tracking-wider text-gray-500 flex flex-col items-center gap-1">
-                <Globe size={16} /> In-App
-             </div>
-             <div className="col-span-2 text-center text-xs font-bold uppercase tracking-wider text-gray-500 flex flex-col items-center gap-1">
-                <Mail size={16} /> Email
-             </div>
-             <div className="col-span-2 text-center text-xs font-bold uppercase tracking-wider text-gray-500 flex flex-col items-center gap-1">
-                <Smartphone size={16} /> SMS Text
-             </div>
+          {/* Header Row */}
+          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">Event Dispatch Channels</h2>
+            <div className="hidden md:grid grid-cols-3 gap-8 text-center text-xs font-bold text-gray-500 uppercase tracking-wider pr-4">
+              <span className="flex items-center gap-1 justify-center"><Globe size={14} /> In-App</span>
+              <span className="flex items-center gap-1 justify-center"><Mail size={14} /> Email</span>
+              <span className="flex items-center gap-1 justify-center"><Smartphone size={14} /> SMS</span>
+            </div>
           </div>
 
           {categories.map((cat, idx) => (
              <div key={idx} className="border-b border-gray-100 last:border-0">
                 <div className="p-6 bg-gray-50/30">
                    <div className="flex items-center gap-3 mb-1">
-                      <h2 className="text-base font-bold text-gray-900">{cat.title}</h2>
+                      <h2 className="text-base font-bold text-gray-900">{cat.category}</h2>
                    </div>
-                   <p className="text-xs text-gray-500">{cat.description}</p>
                 </div>
 
                 <div className="p-6 space-y-6">
-                   {cat.settings.map((setting, sIdx) => (
+                   {cat.items.map((setting, sIdx) => (
                       <div key={sIdx} className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                          <div className="md:col-span-6">
-                            <p className="text-sm font-bold text-gray-700">{setting.label}</p>
-                            {setting.locked && <p className="text-[10px] uppercase font-bold text-red-500 mt-0.5">System Required (Cannot Disable)</p>}
+                            <p className="text-sm font-bold text-gray-700">{setting.event_label}</p>
+                            {setting.is_locked && <p className="text-[10px] uppercase font-bold text-red-500 mt-0.5">System Required (Cannot Disable)</p>}
                          </div>
                          
                          {/* In-App Toggle */}
@@ -220,7 +220,7 @@ export default function NotificationPreferences() {
                               onClick={() => handleToggle(idx, sIdx, 'in_app')}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                setting.in_app ? 'bg-blue-600' : 'bg-gray-200'
-                            } ${setting.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            } ${setting.is_locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                                   setting.in_app ? 'translate-x-6' : 'translate-x-1'
                                }`} />
@@ -234,7 +234,7 @@ export default function NotificationPreferences() {
                               onClick={() => handleToggle(idx, sIdx, 'email')}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                                setting.email ? 'bg-blue-600' : 'bg-gray-200'
-                            } ${setting.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            } ${setting.is_locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                                   setting.email ? 'translate-x-6' : 'translate-x-1'
                                }`} />
@@ -263,7 +263,7 @@ export default function NotificationPreferences() {
         </motion.div>
       </div>
 
-      <AddRoutingRuleModal
+      <AddRoutingRuleDrawer
         isOpen={isAddRuleOpen}
         onClose={() => setIsAddRuleOpen(false)}
         onSuccess={fetchNotificationData}
