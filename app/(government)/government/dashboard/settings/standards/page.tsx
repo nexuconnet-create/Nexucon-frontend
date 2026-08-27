@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, Save, Volume2, HardHat, Clock, ShieldAlert, BookOpen, ExternalLink, ArrowRight, RefreshCw, Plus } from "lucide-react";
 import { ComplianceStandard, StatutoryDocument, getComplianceStandards, updateComplianceStandards, getStatutoryDocuments } from "@/services/settings";
-import AddStatutoryDocModal from "@/components/dashboard/AddStatutoryDocModal";
+import AddComplianceStandardDrawer from "@/components/dashboard/AddComplianceStandardDrawer";
 
 export default function ComplianceStandards() {
   const [standards, setStandards] = useState<ComplianceStandard[]>([]);
@@ -268,7 +268,7 @@ export default function ComplianceStandards() {
         </motion.div>
       </div>
 
-      <AddStatutoryDocModal
+      <AddComplianceStandardDrawer
         isOpen={isAddDocOpen}
         onClose={() => setIsAddDocOpen(false)}
         onSuccess={fetchStandardsData}
