@@ -167,6 +167,7 @@ export default function MeetingRoomPage() {
   }, []);
 
   // Update track enable/disable on state toggle
+  // Update track enable/disable on state toggle and sync with active peer connections
   useEffect(() => {
     if (localStream) {
       localStream.getVideoTracks().forEach(track => {
@@ -174,6 +175,21 @@ export default function MeetingRoomPage() {
       });
       localStream.getAudioTracks().forEach(track => {
         track.enabled = isMicOn;
+      });
+
+      // Synchronize local tracks to all active peer connections
+      Object.values(peerConnectionsRef.current).forEach(pc => {
+        localStream.getTracks().forEach(track => {
+          const senders = pc.getSenders();
+          const sender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (sender) {
+            sender.replaceTrack(track).catch(() => {});
+          } else {
+            try {
+              pc.addTrack(track, localStream);
+            } catch (e) {}
+          }
+        });
       });
     }
   }, [isVideoOn, isMicOn, localStream]);
@@ -186,22 +202,39 @@ export default function MeetingRoomPage() {
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
 
+    // Add bidirectional transceivers for audio and video
+    try {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (e) {}
+
     // Add local tracks to peer connection
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        pc.addTrack(track, localStream);
+        try {
+          pc.addTrack(track, localStream);
+        } catch (e) {}
       });
     }
 
-    // Handle remote track received
+    // Handle remote track received (ensure stream is created/augmented for audio and video)
     pc.ontrack = (event) => {
+      let stream: MediaStream;
       if (event.streams && event.streams[0]) {
-        const remoteStream = event.streams[0];
-        setRemoteStreams(prev => ({
-          ...prev,
-          [peerId]: remoteStream
-        }));
+        stream = event.streams[0];
+      } else {
+        stream = new MediaStream([event.track]);
       }
+      setRemoteStreams(prev => {
+        const existing = prev[peerId];
+        if (existing) {
+          if (!existing.getTracks().some(t => t.id === event.track.id)) {
+            existing.addTrack(event.track);
+          }
+          return { ...prev, [peerId]: existing };
+        }
+        return { ...prev, [peerId]: stream };
+      });
     };
 
     // Handle ICE Candidates
@@ -824,8 +857,39 @@ export default function MeetingRoomPage() {
 
   const activeInRoomCount = participants.filter(p => p.status === 'Live In Room').length;
 
+  const handleGlobalInteraction = () => {
+    if (typeof window !== 'undefined' && ((window as any).AudioContext || (window as any).webkitAudioContext)) {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans">
+    <div 
+      onClick={handleGlobalInteraction}
+      className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col justify-between overflow-hidden select-none font-sans"
+    >
+      {/* Continuous Global Dedicated Remote Audio Bridge - Plays all incoming participant audio streams */}
+      <div className="sr-only" aria-hidden="true">
+        {Object.entries(remoteStreams).map(([peerId, stream]) => (
+          <audio
+            key={`audio-playback-${peerId}`}
+            autoPlay
+            playsInline
+            ref={(el) => {
+              if (el && el.srcObject !== stream) {
+                el.srcObject = stream;
+                el.play().catch(err => {
+                  console.warn(`Autoplay audio for peer ${peerId}:`, err);
+                });
+              }
+            }}
+          />
+        ))}
+      </div>
       
       {/* Top Header Bar (Full-Bleed Glassmorphism) */}
       <header className="h-16 px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0">
