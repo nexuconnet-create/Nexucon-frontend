@@ -19,17 +19,21 @@ export default function IntegrationSettingsPage() {
     setIsLoading(true);
     try {
       const [govData, keysData, hooksData, dmsData] = await Promise.all([
-        getGovernmentApis(),
-        getApiKeys(),
-        getWebhookSubscriptions(),
-        getDocumentSystems()
+        getGovernmentApis().catch(() => []),
+        getApiKeys().catch(() => []),
+        getWebhookSubscriptions().catch(() => []),
+        getDocumentSystems().catch(() => [])
       ]);
-      setGovApis(govData);
-      setApiKeys(keysData);
-      setWebhooks(hooksData);
-      setDocSystems(dmsData);
+      setGovApis(Array.isArray(govData) ? govData : []);
+      setApiKeys(Array.isArray(keysData) ? keysData : []);
+      setWebhooks(Array.isArray(hooksData) ? hooksData : []);
+      setDocSystems(Array.isArray(dmsData) ? dmsData : []);
     } catch (err) {
       console.error("Failed to load integration settings", err);
+      setGovApis([]);
+      setApiKeys([]);
+      setWebhooks([]);
+      setDocSystems([]);
     } finally {
       setIsLoading(false);
     }

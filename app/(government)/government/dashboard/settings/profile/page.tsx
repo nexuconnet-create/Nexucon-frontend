@@ -30,8 +30,8 @@ export default function AgencyProfilePage() {
     setIsLoading(true);
     try {
       const data = await getAgencyProfile();
-      if (data) {
-        setProfile(data);
+      if (data && typeof data === 'object') {
+        setProfile(prev => ({ ...prev, ...data }));
       }
     } catch (err) {
       console.error("Failed to load agency profile", err);
