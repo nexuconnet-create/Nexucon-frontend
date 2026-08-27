@@ -7,6 +7,7 @@ import {
   MapPin, Users, Target, Download, RefreshCw, Lock, ShieldAlert, Award 
 } from "lucide-react";
 import { IndustryAnalyticsData, getIndustryAnalytics, createGeneratedReport } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function IndustryPerformancePage() {
   const [data, setData] = useState<IndustryAnalyticsData | null>(null);
@@ -36,17 +37,23 @@ export default function IndustryPerformancePage() {
 
   const handleExportIndustryReport = async () => {
     try {
-      const rep = await createGeneratedReport({
-        title: "Industry Performance & Sector Benchmark Report",
+      const ref = `REP-IND-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Generating Industry Benchmark Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
+        title: "Statewide Construction Industry Benchmarking & Safety Index",
+        reportReference: ref,
         format: "PDF",
-        modules_included: ["Project Performance", "Compliance & Regulatory"]
+        modules: ["Project Performance", "Compliance & Regulatory", "Agency Performance SLAs"],
+        generatedBy: "Director General / Regulatory Planning Head"
       });
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+        detail: { message: `Industry Report "${ref}" downloaded successfully!`, type: 'success' } 
       }));
-      if (rep.file_url) window.open(rep.file_url, '_blank');
     } catch (err) {
       console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export industry report", type: 'error' } }));
     }
   };
 

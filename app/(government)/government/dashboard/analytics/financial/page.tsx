@@ -4,9 +4,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   DollarSign, TrendingDown, TrendingUp, Wallet, 
-  Receipt, CreditCard, RefreshCw, Lock, ShieldCheck 
+  Receipt, CreditCard, RefreshCw, Lock, ShieldCheck, Download 
 } from "lucide-react";
 import { FinancialAnalyticsData, getFinancialAnalytics } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function FinancialOverview() {
   const [financials, setFinancials] = useState<FinancialAnalyticsData | null>(null);
@@ -33,6 +34,28 @@ export default function FinancialOverview() {
   useEffect(() => {
     fetchFinancials();
   }, [fetchFinancials]);
+
+  const handleExportFinancial = async () => {
+    try {
+      const ref = `REP-FIN-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Generating Financial & Capex Audit Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
+        title: "Statutory Capital Expenditure & Revenue Collection Report",
+        reportReference: ref,
+        format: "PDF",
+        modules: ["Financial Overview", "Project Performance"],
+        generatedBy: "Director of Financial Planning & Regulatory Revenue"
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Financial Report "${ref}" downloaded successfully!`, type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export financial report", type: 'error' } }));
+    }
+  };
 
   if (isForbidden) {
     return (
@@ -68,13 +91,23 @@ export default function FinancialOverview() {
           </p>
         </div>
 
-        <button 
-          onClick={fetchFinancials}
-          className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors self-start md:self-auto cursor-pointer"
-          title="Refresh"
-        >
-          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <button 
+            onClick={fetchFinancials}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={handleExportFinancial}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+          >
+            <Download size={14} />
+            <span>Export Financial Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Top Metric Cards */}

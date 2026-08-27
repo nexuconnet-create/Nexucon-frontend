@@ -5,9 +5,10 @@ import { motion } from "framer-motion";
 import { 
   PieChart, Calendar, TrendingDown, ClipboardCheck, 
   AlertOctagon, Activity, ChevronRight, RefreshCw, 
-  CheckCircle2, XCircle, Award, User, Clock 
+  CheckCircle2, XCircle, Award, User, Clock, Download 
 } from "lucide-react";
 import { InspectionAnalyticsData, getInspectionAnalytics } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function InspectionAnalytics() {
   const [data, setData] = useState<InspectionAnalyticsData | null>(null);
@@ -29,6 +30,28 @@ export default function InspectionAnalytics() {
   useEffect(() => {
     fetchInspections();
   }, [fetchInspections]);
+
+  const handleExportInspections = async () => {
+    try {
+      const ref = `REP-INSP-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Generating Field Inspection & Defect Audit Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
+        title: "Statutory Field Inspection Quality & Defect Classification Report",
+        reportReference: ref,
+        format: "PDF",
+        modules: ["Inspection Analytics", "Structural Risk Assessment"],
+        generatedBy: "Chief Field Operations & Inspection Officer"
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Inspection Audit Report "${ref}" downloaded successfully!`, type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export inspection report", type: 'error' } }));
+    }
+  };
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -60,6 +83,14 @@ export default function InspectionAnalytics() {
             title="Refresh"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={handleExportInspections}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+          >
+            <Download size={14} />
+            <span>Export Inspection Report</span>
           </button>
         </div>
       </div>

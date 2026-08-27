@@ -5,9 +5,10 @@ import { motion } from "framer-motion";
 import { 
   Activity, CalendarDays, CheckCircle2, Circle, ArrowRight, 
   Flag, Calendar, Target, MoveRight, RefreshCw, ShieldCheck, 
-  AlertTriangle, Clock, Layers 
+  AlertTriangle, Clock, Layers, Download 
 } from "lucide-react";
 import { ProgressAnalyticsData, getProgressAnalytics } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function ConstructionProgress() {
   const [data, setData] = useState<ProgressAnalyticsData | null>(null);
@@ -29,6 +30,28 @@ export default function ConstructionProgress() {
     fetchProgress();
   }, [fetchProgress]);
 
+  const handleExportProgress = async () => {
+    try {
+      const ref = `REP-EVM-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Compiling Construction Progress & EVM Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
+        title: "Construction Milestone Verification & Earned Value Report",
+        reportReference: ref,
+        format: "PDF",
+        modules: ["Construction Progress & EVM", "Project Performance"],
+        generatedBy: "Chief Project Verification Engineer"
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Progress Report "${ref}" downloaded successfully!`, type: 'success' } 
+      }));
+    } catch (err) {
+      console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export progress report", type: 'error' } }));
+    }
+  };
+
   return (
     <div className="w-full min-h-screen pb-12">
       {/* Header */}
@@ -43,13 +66,23 @@ export default function ConstructionProgress() {
           </p>
         </div>
 
-        <button 
-          onClick={fetchProgress}
-          className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors self-start md:self-auto cursor-pointer"
-          title="Refresh"
-        >
-          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <button 
+            onClick={fetchProgress}
+            className="p-2.5 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+          </button>
+
+          <button 
+            onClick={handleExportProgress}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+          >
+            <Download size={14} />
+            <span>Export Progress Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Progress Verification Comparison Cards */}

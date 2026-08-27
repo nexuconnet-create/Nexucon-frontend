@@ -8,6 +8,7 @@ import {
   AlertTriangle, ArrowUpRight, CheckCircle2, Eye, Filter 
 } from "lucide-react";
 import { ProjectPerformanceData, getProjectPerformance, createGeneratedReport } from "@/services/analytics";
+import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 import Link from "next/link";
 
 export default function ProjectPerformance() {
@@ -25,7 +26,7 @@ export default function ProjectPerformance() {
       const res = await getProjectPerformance(params);
       setData(res);
     } catch (err) {
-      console.error("Failed to load performance analytics", err);
+      console.error("Failed to load project performance", err);
     } finally {
       setIsLoading(false);
     }
@@ -37,17 +38,23 @@ export default function ProjectPerformance() {
 
   const handleExportDashboard = async () => {
     try {
-      const rep = await createGeneratedReport({
+      const ref = `REP-PERF-${Math.floor(100 + Math.random() * 900)}`;
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: `Compiling Executive Performance & EVM Report...`, type: 'info' } 
+      }));
+      await generateAndDownloadDocument({
         title: "Executive Project Performance & EVM Summary",
+        reportReference: ref,
         format: "PDF",
-        modules_included: ["Project Performance", "Financial Overview"]
+        modules: ["Project Performance", "Construction Progress & EVM", "Financial Overview"],
+        generatedBy: "Director General / Executive Board"
       });
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${rep.report_reference}" generated! Downloading...`, type: 'success' } 
+        detail: { message: `Performance Report "${ref}" downloaded successfully!`, type: 'success' } 
       }));
-      if (rep.file_url) window.open(rep.file_url, '_blank');
     } catch (err) {
       console.error(err);
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Failed to export performance report", type: 'error' } }));
     }
   };
 
