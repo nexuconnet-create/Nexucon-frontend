@@ -431,6 +431,12 @@ export const sendMessage = async (data: Partial<StakeholderMessage>): Promise<St
       channel_name: data.channel_name || 'General Council',
       project_name: data.project_name || 'Central Metro Transit Hub',
       message_text: data.message_text || '',
+      attachment_url: data.attachment_url,
+      attachment_name: data.attachment_name,
+      attachment_type: data.attachment_type,
+      attachment_size: data.attachment_size,
+      voice_note_url: data.voice_note_url,
+      voice_note_duration: data.voice_note_duration,
       is_urgent: Boolean(data.is_urgent),
       created_at: new Date().toISOString()
     };
