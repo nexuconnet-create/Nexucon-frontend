@@ -306,17 +306,23 @@ export async function createStatutoryDocument(data: {
 // 8. NOTIFICATION PREFERENCES & ROUTING RULES
 // ----------------------------------------------------
 export interface NotificationPreferenceCategoryItem {
-  id: string;
-  event_label: string;
+  id?: string;
+  event_label?: string;
+  label?: string;
   in_app: boolean;
   email: boolean;
   sms: boolean;
-  is_locked: boolean;
+  is_locked?: boolean;
+  locked?: boolean;
 }
 
 export interface NotificationPreferenceGroup {
-  category: string;
-  items: NotificationPreferenceCategoryItem[];
+  category?: string;
+  title?: string;
+  description?: string;
+  color?: string;
+  items?: NotificationPreferenceCategoryItem[];
+  settings?: NotificationPreferenceCategoryItem[];
 }
 
 export type NotificationCategoryGroup = NotificationPreferenceGroup;
