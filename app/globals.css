@@ -33,48 +33,92 @@ html, body {
   background-color: var(--brand-white);
   color: var(--brand-dark);
   font-family: var(--font-sans);
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
-/* Custom interactive utility classes */
-.btn-premium {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1.5rem;
-  font-weight: 600;
-  border-radius: 0.75rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+/* ==========================================================================
+   Universal Scrollbar UI Removal (No Visible Scrollbars Across the App)
+   Keeps full scrolling functionality while eliminating visible browser scrollbars
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
-.btn-premium:active {
-  transform: scale(0.96);
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+div::-webkit-scrollbar,
+aside::-webkit-scrollbar,
+nav::-webkit-scrollbar,
+main::-webkit-scrollbar,
+section::-webkit-scrollbar,
+form::-webkit-scrollbar,
+ul::-webkit-scrollbar,
+ol::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+  background: transparent !important;
 }
 
-.card-premium {
-  background-color: var(--brand-white);
-  border: 1px solid rgba(15, 24, 31, 0.08);
-  border-radius: 1rem;
-  padding: 1.5rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  display: none !important;
+  background: transparent !important;
 }
 
-.card-premium:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(15, 24, 31, 0.05), 0 8px 10px -6px rgba(15, 24, 31, 0.05);
+/* Utility classes support */
+.scrollbar-hide,
+.hide-scrollbar,
+.no-scrollbar,
+.custom-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
-.glass-premium {
-  background-color: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(15, 24, 31, 0.1);
+.scrollbar-hide::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+  background: transparent !important;
+}
+
+/* Tailwind v4 Utility Definitions */
+@utility scrollbar-hide {
+  &::-webkit-scrollbar {
+    display: none !important;
+    width: 0px !important;
+    height: 0px !important;
+  }
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 @utility hide-scrollbar {
   &::-webkit-scrollbar {
-    display: none;
+    display: none !important;
+    width: 0px !important;
+    height: 0px !important;
   }
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none !important;
+    width: 0px !important;
+    height: 0px !important;
+  }
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
