@@ -6,7 +6,7 @@ import {
   Clock, MapPin, Building2, User, Calendar, ArrowUpRight, 
   ExternalLink, Layers, Activity, Compass, AlertCircle, 
   Check, FileText, ChevronRight, Share2, Sparkles, Plus, AlertOctagon, Gavel,
-  Radio, Cloud, Target, Gauge, CheckCircle2
+  Radio, Cloud, Target, Gauge, CheckCircle2, Map, LocateFixed
 } from 'lucide-react';
 import { 
   DailySiteUpdate, FieldObservation, SiteIssue, 
@@ -40,10 +40,42 @@ export default function MonitoringDetailSideDrawer({
   const [telemetryMode, setTelemetryMode] = useState<'distance' | 'coordinates' | 'lidar' | 'sensors'>('distance');
   const [liveDistanceMeters, setLiveDistanceMeters] = useState(14.852);
   const [isMeasuringDistance, setIsMeasuringDistance] = useState(false);
+  const [geoCoordinates, setGeoCoordinates] = useState({
+    lat: 6.42814,
+    lng: 3.42197,
+    accuracy: 1.2,
+    source: 'CORS_BASE_DEFAULT',
+    address: 'Plot 14B, Victoria Island, Lagos'
+  });
+  const [isLocating, setIsLocating] = useState(false);
 
   if (!isOpen || !item || !item.data) return null;
 
   const { type, data } = item;
+
+  const requestLocationFromDeviceOrGoogleMaps = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeoCoordinates({
+          lat: Number(pos.coords.latitude.toFixed(6)),
+          lng: Number(pos.coords.longitude.toFixed(6)),
+          accuracy: Number((pos.coords.accuracy || 1.5).toFixed(1)),
+          source: 'GPS_HARDWARE',
+          address: `Lagos Cadastral Lock (${pos.coords.latitude.toFixed(4)}°, ${pos.coords.longitude.toFixed(4)}°)`
+        });
+        setIsLocating(false);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `📍 GPS Lock: ${pos.coords.latitude.toFixed(5)}°, ${pos.coords.longitude.toFixed(5)}°`, type: 'success' }
+        }));
+      },
+      () => {
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleOpenProject = (projectId?: string) => {
     if (projectId) {
@@ -282,14 +314,41 @@ export default function MonitoringDetailSideDrawer({
                     )}
 
                     {telemetryMode === 'coordinates' && (
-                      <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 text-xs font-mono grid grid-cols-2 gap-2">
-                        <div className="bg-white/5 p-2 rounded-lg">
-                          <span className="text-[10px] text-slate-400 block">Coordinates</span>
-                          <span className="text-blue-300 font-bold">6.42814°N, 3.42197°E</span>
+                      <div className="bg-black/30 p-3.5 rounded-xl border border-blue-500/20 space-y-2 text-xs font-mono">
+                        <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                          <span className="text-[10px] text-blue-300 font-bold uppercase flex items-center gap-1">
+                            <Map size={12} className="text-blue-400" /> Google Maps &amp; Geolocation
+                          </span>
+                          <button
+                            type="button"
+                            onClick={requestLocationFromDeviceOrGoogleMaps}
+                            disabled={isLocating}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer bg-white/10 px-2 py-0.5 rounded hover:bg-white/15 transition-colors"
+                          >
+                            <LocateFixed size={10} className={isLocating ? "animate-spin" : ""} />
+                            {isLocating ? 'Locating...' : 'Refresh GPS Lock'}
+                          </button>
                         </div>
-                        <div className="bg-white/5 p-2 rounded-lg">
-                          <span className="text-[10px] text-slate-400 block">RTK Fix Quality</span>
-                          <span className="text-emerald-400 font-bold">FIXED (32 Sats)</span>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div className="bg-white/5 p-2 rounded-lg">
+                            <span className="text-[10px] text-slate-400 block">Coordinates</span>
+                            <span className="text-blue-300 font-bold">{geoCoordinates.lat}°N, {geoCoordinates.lng}°E</span>
+                          </div>
+                          <div className="bg-white/5 p-2 rounded-lg">
+                            <span className="text-[10px] text-slate-400 block">Lock Accuracy</span>
+                            <span className="text-emerald-400 font-bold">±{geoCoordinates.accuracy}m (Fix)</span>
+                          </div>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg flex items-center justify-between text-[10px]">
+                          <span className="text-slate-300 truncate">{geoCoordinates.address}</span>
+                          <a
+                            href={`https://www.google.com/maps?q=${geoCoordinates.lat},${geoCoordinates.lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold shrink-0 ml-2"
+                          >
+                            Google Maps <ExternalLink size={10} />
+                          </a>
                         </div>
                       </div>
                     )}
