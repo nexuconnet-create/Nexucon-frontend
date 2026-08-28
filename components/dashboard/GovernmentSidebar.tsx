@@ -355,7 +355,7 @@ export default function GovernmentSidebar({
       {(!isCollapsed || isMobile) && <div className="w-full h-px bg-white/20 mb-4 shrink-0"></div>}
 
       {/* Navigation Links */}
-      <div className={`flex-1 overflow-y-auto pb-6 flex flex-col gap-1 scrollbar-hide ${
+      <div className={`flex-1 overflow-y-auto pb-6 flex flex-col gap-1 scrollbar-hide hide-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
         isMobile
           ? "px-4"
           : isCollapsed
