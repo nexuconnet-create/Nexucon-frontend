@@ -7,7 +7,8 @@ import {
   ShieldCheck, AlertTriangle, CheckCircle, Trash2, SwitchCamera, 
   Sparkles, Eye, Check, Cloud, Radio, Compass, Sliders, 
   ArrowRightLeft, Target, EyeOff, Layers, Gauge, Cpu, CheckCircle2,
-  Navigation, Map, ExternalLink, LocateFixed
+  Navigation, Map, ExternalLink, LocateFixed, Calendar, User, 
+  ShieldAlert, BadgeCheck, CheckCheck
 } from 'lucide-react';
 import { 
   createDailySiteUpdate, getDailySiteUpdates, DailySiteUpdate, 
@@ -15,6 +16,7 @@ import {
 } from '@/services/monitoring';
 import { getProjects, Project } from '@/services/projects';
 import { CustomSelect } from '@/components/CustomSelect';
+import LogMissedSiteVisitModal from './LogMissedSiteVisitModal';
 
 interface CreateDailyUpdateDrawerProps {
   isOpen: boolean;
@@ -33,6 +35,14 @@ export interface GeoLocationTelemetry {
   address?: string;
 }
 
+const INSPECTOR_ROSTER = [
+  { name: 'Engr. Abdulwahab Onike', badge: 'LASG-INSP-STR-042', role: 'Lead Structural Inspector' },
+  { name: 'Insp. Sunkanmi Olowonishaye', badge: 'LASG-INSP-CIV-108', role: 'Civil & Cadastral Officer' },
+  { name: 'Engr. Tunde Balogun', badge: 'LASG-INSP-MEP-019', role: 'MEP & Environmental Inspector' },
+  { name: 'Arch. Folashade Adeleke', badge: 'LASG-INSP-ARC-055', role: 'Architectural Compliance Lead' },
+  { name: 'Engr. Chukwuma Obi', badge: 'LASG-INSP-GEO-027', role: 'Geotechnical Specialist' },
+];
+
 export default function CreateDailyUpdateDrawer({
   isOpen,
   onClose,
@@ -40,11 +50,22 @@ export default function CreateDailyUpdateDrawer({
 }: CreateDailyUpdateDrawerProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedInspector, setSelectedInspector] = useState(INSPECTOR_ROSTER[0].name);
+  const [inspectorBadge, setInspectorBadge] = useState(INSPECTOR_ROSTER[0].badge);
+  const [originType, setOriginType] = useState<'FIELD_INSPECTOR' | 'PROXY_OFFICE_SUPERVISOR'>('FIELD_INSPECTOR');
+  const [isLogMissedVisitOpen, setIsLogMissedVisitOpen] = useState(false);
   const [updateType, setUpdateType] = useState('DAILY_PHOTO');
   const [progressPercentage, setProgressPercentage] = useState(50);
   const [workSummary, setWorkSummary] = useState('');
   const [weatherCondition, setWeatherCondition] = useState('Clear / Sunny');
   const [workforceCount, setWorkforceCount] = useState(30);
+
+  const handleInspectorChange = (name: string) => {
+    setSelectedInspector(name);
+    const found = INSPECTOR_ROSTER.find(i => i.name === name);
+    if (found) setInspectorBadge(found.badge);
+  };
 
   // Active uploaded / selected photos for current update
   const [photos, setPhotos] = useState<string[]>([]);
@@ -416,6 +437,18 @@ export default function CreateDailyUpdateDrawer({
       const update = await createDailySiteUpdate({
         project: selectedProjectId,
         update_type: updateType,
+        inspection_date: inspectionDate,
+        inspector_name: selectedInspector,
+        inspector_badge: inspectorBadge,
+        origin_type: originType,
+        field_verification_stamp: {
+          inspector_name: selectedInspector,
+          inspector_badge: inspectorBadge,
+          certified_at: new Date().toISOString(),
+          origin: originType,
+          gps_lock: isTelemetryActive,
+          coordinates: geoCoordinates
+        },
         progress_percentage: Number(progressPercentage),
         work_summary: workSummary.trim(),
         weather_condition: weatherCondition,
@@ -437,7 +470,7 @@ export default function CreateDailyUpdateDrawer({
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Daily site update published successfully with Cloudflare R2 backup', type: 'success' } 
+        detail: { message: 'Daily site update published successfully with field inspector certification', type: 'success' } 
       }));
       stopCamera();
       onClose();
@@ -450,67 +483,56 @@ export default function CreateDailyUpdateDrawer({
     }
   };
 
+  const selectedProjObj = projects.find(p => p.id === selectedProjectId);
+
   if (!isOpen) return null;
 
   return (
     <>
-      <div 
-        className="fixed inset-0 bg-[#0F181F]/50 backdrop-blur-sm z-[100] animate-in fade-in duration-300"
-        onClick={() => {
-          stopCamera();
-          onClose();
-        }}
-      />
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[660px] bg-white p-4 sm:p-7 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
+      <div className="fixed inset-0 bg-[#0F181F]/40 backdrop-blur-sm z-[70] transition-opacity animate-in fade-in duration-300" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-[75] w-full max-w-2xl bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out animate-in slide-in-from-right">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-5 border-b border-slate-100 shrink-0">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Cloudflare Storage Badge */}
-              <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
-                <Cloud size={12} className="text-blue-600" /> Cloudflare R2 Storage
-              </span>
-
-              {/* Live Feed Telemetry Toggle Button with Location Hook */}
-              <button
-                type="button"
-                onClick={toggleTelemetry}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider transition-all border cursor-pointer ${
-                  isTelemetryActive 
-                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/30 ring-2 ring-emerald-400/20' 
-                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900'
-                }`}
-                title="Click to toggle Live Feed Telemetry & Location Stream"
-              >
-                <Radio size={12} className={isTelemetryActive ? "animate-pulse text-white" : "text-slate-400"} />
-                <span>{isTelemetryActive ? 'Telemetry: ON' : 'Telemetry: OFF'}</span>
-              </button>
+        {/* Drawer Header */}
+        <div className="p-6 bg-gradient-to-r from-[#022C4F] to-[#044070] text-white flex items-center justify-between shrink-0 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20">
+              <Camera size={20} className="text-white" />
             </div>
-
-            <h2 className="text-xl font-black text-[#022C4F] flex items-center gap-2 mt-2">
-              <Camera className="text-blue-600" size={22} /> Daily Site &amp; Photo Update
-            </h2>
+            <div>
+              <h2 className="text-base font-black uppercase tracking-wider flex items-center gap-2">
+                Publish Daily Site Update
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Field Inspector Origin
+                </span>
+              </h2>
+              <p className="text-xs text-white/70">Asynchronous Progress Log, Live Camera Telemetry &amp; GPS Verification</p>
+            </div>
           </div>
-
-          <button 
+          <button
             onClick={() => {
               stopCamera();
               onClose();
             }}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto py-5 space-y-5 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto py-5 space-y-5 px-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           
-          {/* Construction Project Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Target Construction Project
-            </label>
+          {/* Construction Project Selector with Search */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Target Construction Project <span className="text-red-500">*</span>
+              </label>
+              {selectedProjObj && (
+                <span className="text-[11px] font-bold text-blue-600">
+                  {selectedProjObj.lga || 'Lagos Central'} • {selectedProjObj.status || 'Active'}
+                </span>
+              )}
+            </div>
             <CustomSelect
               value={selectedProjectId}
               onChange={(val) => setSelectedProjectId(val)}
@@ -518,9 +540,101 @@ export default function CreateDailyUpdateDrawer({
                 value: p.id,
                 label: `${p.name} (${p.reference_number || p.id.slice(0,8)}) - ${p.status || 'Active'}`
               }))}
-              placeholder="Select project..."
+              placeholder="Search and select project..."
               searchable={true}
             />
+          </div>
+
+          {/* CALENDAR DATE & FIELD INSPECTOR INTEGRATION CARD */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#022C4F] text-white flex items-center justify-center shadow-sm">
+                  <BadgeCheck size={16} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-[#022C4F] uppercase tracking-wider">
+                    Field Inspector Attribution &amp; Calendar Schedule
+                  </h3>
+                  <p className="text-[10px] text-slate-500">Updates must originate directly from assigned field inspectors</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800">
+                {originType === 'FIELD_INSPECTOR' ? 'Verified Field Visit' : 'Office Proxy'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Calendar Date Picker */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Calendar size={13} className="text-blue-600" /> Inspection Calendar Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={inspectionDate}
+                  onChange={(e) => setInspectionDate(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              {/* Field Inspector Selection */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <User size={13} className="text-blue-600" /> Assigned Field Inspector <span className="text-red-500">*</span>
+                </label>
+                <CustomSelect
+                  value={selectedInspector}
+                  onChange={handleInspectorChange}
+                  options={INSPECTOR_ROSTER.map(i => ({
+                    value: i.name,
+                    label: `${i.name} (${i.badge})`
+                  }))}
+                  placeholder="Select inspector..."
+                />
+              </div>
+            </div>
+
+            {/* Origin Attribution Type Switcher */}
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <span className="text-[11px] text-slate-500 font-medium">Reporting Channel:</span>
+              <div className="flex gap-1.5 p-1 bg-slate-200/60 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setOriginType('FIELD_INSPECTOR')}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                    originType === 'FIELD_INSPECTOR' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Direct Field Inspector
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOriginType('PROXY_OFFICE_SUPERVISOR')}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                    originType === 'PROXY_OFFICE_SUPERVISOR' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Office Proxy Entry
+                </button>
+              </div>
+            </div>
+
+            {/* Non-Visitation Quick Action Banner */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                <span className="text-[11px] font-bold">Inspector unable to visit site or paused operations today?</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLogMissedVisitOpen(true)}
+                className="text-[10px] font-extrabold text-amber-900 bg-amber-200/80 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                Document Missed Visit &rarr;
+              </button>
+            </div>
           </div>
 
           {/* TELEMETRY SECTION & GOOGLE MAPS / LOCATION API SWITCHER */}
@@ -1185,6 +1299,17 @@ export default function CreateDailyUpdateDrawer({
           </div>
         </div>
       )}
+
+      {/* Missed Site Visit Justification Modal */}
+      <LogMissedSiteVisitModal
+        isOpen={isLogMissedVisitOpen}
+        onClose={() => setIsLogMissedVisitOpen(false)}
+        defaultProjectId={selectedProjectId}
+        onSuccess={() => {
+          setIsLogMissedVisitOpen(false);
+          onClose();
+        }}
+      />
     </>
   );
 }
