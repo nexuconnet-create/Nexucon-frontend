@@ -63,6 +63,17 @@ export default function ScheduleMeetingModal({
     }
 
     try {
+      const emailList = inviteEmails.split(',').map(e => e.trim()).filter(e => e.includes('@'));
+      const realParticipants = [
+        { name: 'Meeting Host', role: 'Agency Head / Director General', status: 'Confirmed' },
+        ...emailList.map(email => ({
+          name: email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          email: email,
+          role: 'Invited Stakeholder',
+          status: 'Invited'
+        }))
+      ];
+
       const createdMeeting = await scheduleMeeting({
         title: title.trim(),
         agenda: agenda.trim() || 'Official technical review and inter-agency coordination session.',
@@ -71,19 +82,13 @@ export default function ScheduleMeetingModal({
         time_slot: timeSlot.trim(),
         meeting_type: meetingType,
         google_meet_url: googleMeetUrl || (meetingType === 'Video Call' ? 'https://meet.google.com/new' : undefined),
-        initiator_name: 'Engr. Babatunde Sanwo',
+        initiator_name: 'Meeting Host',
         initiator_role: 'Agency Head / Director General',
         bypass_agency_head_check: true,
-        participants: [
-          { name: 'Engr. Babatunde Sanwo', role: 'Agency Head / Director General', status: 'Confirmed' },
-          { name: 'Michael Thorne', role: 'Master Developer (Nexucon)', status: 'Confirmed' },
-          { name: 'Marcus Chen', role: 'Lead Structural Inspector', status: 'Invited' },
-          { name: 'David Rivera', role: 'General Contractor (Apex)', status: 'Invited' }
-        ]
+        participants: realParticipants
       });
 
       // Dispatch Resend Email Notifications to all entered stakeholders with live link
-      const emailList = inviteEmails.split(',').map(e => e.trim()).filter(e => e.includes('@'));
       if (emailList.length > 0) {
         const meetingRefId = createdMeeting?.id || 'room';
         const liveMeetingUrl = `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingRefId}/room`;

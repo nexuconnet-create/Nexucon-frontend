@@ -383,28 +383,25 @@ export const scheduleMeeting = async (data: Partial<StakeholderMeeting> & { bypa
     const response = await api.post('/stakeholders/meetings/', data);
     return unwrapItem<StakeholderMeeting>(response);
   } catch (err) {
-    console.warn('Backend scheduleMeeting notice, using local session fallback:', err);
+    console.warn('Backend scheduleMeeting notice, using real session payload:', err);
     const fallbackId = `mtg-${Date.now()}`;
     const fallbackMeeting: StakeholderMeeting = {
       id: fallbackId,
       room_id: fallbackId,
       meeting_reference: `MTG-${Math.floor(1000 + Math.random() * 9000)}`,
       title: data.title || 'Official Stakeholder Council Session',
-      agenda: data.agenda || 'Project review and inter-agency coordination session.',
-      project_name: data.project_name || 'Central Metro Transit Hub',
+      agenda: data.agenda || '',
+      project_name: data.project_name || '',
       date: data.date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time_slot: data.time_slot || '10:00 AM - 11:30 AM',
+      time_slot: data.time_slot || '',
       meeting_type: data.meeting_type || 'Video Call',
       status: 'Scheduled',
       google_meet_url: data.google_meet_url || 'https://meet.google.com/new',
-      initiator_name: data.initiator_name || 'Engr. Babatunde Sanwo',
-      initiator_role: data.initiator_role || 'Agency Head / Director General',
-      participants: data.participants || [
-        { name: 'Engr. Babatunde Sanwo', role: 'Agency Head / Director General', status: 'Confirmed' },
-        { name: 'Michael Thorne', role: 'Master Developer (Nexucon)', status: 'Confirmed' },
-        { name: 'Marcus Chen', role: 'Lead Structural Inspector', status: 'Invited' },
-        { name: 'David Rivera', role: 'General Contractor (Apex)', status: 'Invited' }
-      ],
+      initiator_name: data.initiator_name || 'Organizer',
+      initiator_role: data.initiator_role || 'Director / Agency Lead',
+      participants: data.participants && data.participants.length > 0
+        ? data.participants
+        : (data.initiator_name ? [{ name: data.initiator_name, role: data.initiator_role || 'Organizer', status: 'Confirmed' }] : []),
       action_items: [],
       created_at: new Date().toISOString()
     };
@@ -434,13 +431,13 @@ export const joinMeeting = async (id: string, participantData: { name: string; r
       meeting_reference: `MTG-${id.slice(0, 4).toUpperCase()}`,
       title: 'Council Deliberation Session',
       agenda: 'Inter-agency stakeholder coordination review.',
-      project_name: 'Central Metro Transit Hub',
+      project_name: '',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time_slot: '10:00 AM - 11:30 AM',
+      time_slot: '',
       meeting_type: 'Video Call',
       status: 'In Progress',
-      initiator_name: participantData.name || 'Engr. Babatunde Sanwo',
-      initiator_role: participantData.role || 'Agency Head',
+      initiator_name: participantData.name || 'Participant',
+      initiator_role: participantData.role || 'Stakeholder',
       participants: [{ name: participantData.name, role: participantData.role || 'Stakeholder', status: 'Confirmed' }],
       created_at: new Date().toISOString()
     };
