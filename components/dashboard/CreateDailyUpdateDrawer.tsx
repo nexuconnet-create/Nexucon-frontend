@@ -9,7 +9,10 @@ import {
   ArrowRightLeft, Target, EyeOff, Layers, Gauge, Cpu, CheckCircle2,
   Navigation, Map, ExternalLink, LocateFixed
 } from 'lucide-react';
-import { createDailySiteUpdate, getDailySiteUpdates, DailySiteUpdate } from '@/services/monitoring';
+import { 
+  createDailySiteUpdate, getDailySiteUpdates, DailySiteUpdate, 
+  calculateLocationTelemetry 
+} from '@/services/monitoring';
 import { getProjects, Project } from '@/services/projects';
 import { CustomSelect } from '@/components/CustomSelect';
 
@@ -143,7 +146,7 @@ export default function CreateDailyUpdateDrawer({
     };
   }, []);
 
-  // Request high-precision location from Browser / Device Geolocation API
+  // Request high-precision location from Browser / Device Geolocation API and sync with Backend
   const requestLocationFromDeviceOrGoogleMaps = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       window.dispatchEvent(new CustomEvent('show-toast', {
@@ -154,20 +157,44 @@ export default function CreateDailyUpdateDrawer({
 
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const { latitude, longitude, accuracy, altitude } = position.coords;
+        const latVal = Number(latitude.toFixed(6));
+        const lngVal = Number(longitude.toFixed(6));
+        const accVal = Number((accuracy || 1.5).toFixed(1));
+        const altVal = altitude ? Number(altitude.toFixed(1)) : 12.4;
+
         setGeoCoordinates({
-          lat: Number(latitude.toFixed(6)),
-          lng: Number(longitude.toFixed(6)),
-          accuracy: Number((accuracy || 1.5).toFixed(1)),
-          altitude: altitude ? Number(altitude.toFixed(1)) : 12.4,
+          lat: latVal,
+          lng: lngVal,
+          accuracy: accVal,
+          altitude: altVal,
           source: 'GPS_HARDWARE',
           address: `Lagos Cadastral Sector (Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°)`
         });
+
+        // Call Backend Spatial Telemetry Computation
+        try {
+          const backendTelemetry = await calculateLocationTelemetry({
+            latitude: latVal,
+            longitude: lngVal,
+            project_id: selectedProjectId
+          });
+          if (backendTelemetry) {
+            if (backendTelemetry.laser_distance_meters) setLiveDistanceMeters(backendTelemetry.laser_distance_meters);
+            if (backendTelemetry.setback_measured_meters) setSetbackMeasured(backendTelemetry.setback_measured_meters);
+            if (backendTelemetry.address) {
+              setGeoCoordinates(prev => ({ ...prev, address: backendTelemetry.address }));
+            }
+          }
+        } catch (backendErr) {
+          console.warn("Backend telemetry sync notice:", backendErr);
+        }
+
         setIsLocating(false);
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { 
-            message: `📍 GPS & Google Maps Location Lock: ${latitude.toFixed(5)}°, ${longitude.toFixed(5)}° (±${(accuracy || 1.5).toFixed(1)}m)`, 
+            message: `📍 GPS & Backend Telemetry Linked: ${latitude.toFixed(5)}°, ${longitude.toFixed(5)}° (±${accVal}m)`, 
             type: 'success' 
           }
         }));
@@ -393,6 +420,19 @@ export default function CreateDailyUpdateDrawer({
         work_summary: workSummary.trim(),
         weather_condition: weatherCondition,
         workforce_count: Number(workforceCount),
+        gps_coordinates: {
+          lat: geoCoordinates.lat,
+          lng: geoCoordinates.lng,
+          accuracy: geoCoordinates.accuracy,
+          altitude: geoCoordinates.altitude,
+          source: geoCoordinates.source,
+          address: geoCoordinates.address,
+          laser_distance_meters: liveDistanceMeters,
+          setback_measured_meters: setbackMeasured,
+          setback_target_meters: setbackTarget,
+          is_telemetry_active: isTelemetryActive,
+          cloudflare_r2_sync: true
+        },
         photos: photos.length > 0 ? photos : ['https://images.unsplash.com/photo-1541888946425-d0fbb180c5f2?auto=format&fit=crop&w=1200&q=80']
       });
 

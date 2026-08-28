@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, Camera, Eye, AlertTriangle, ShieldCheck, CheckCircle, 
   Clock, MapPin, Building2, User, Calendar, ArrowUpRight, 
@@ -48,6 +48,24 @@ export default function MonitoringDetailSideDrawer({
     address: 'Plot 14B, Victoria Island, Lagos'
   });
   const [isLocating, setIsLocating] = useState(false);
+
+  useEffect(() => {
+    if (!item || !item.data) return;
+    const gps = item.data.gps_coordinates;
+    if (gps && (gps.lat || gps.latitude)) {
+      const lat = Number(gps.lat || gps.latitude);
+      const lng = Number(gps.lng || gps.longitude);
+      setGeoCoordinates({
+        lat,
+        lng,
+        accuracy: Number(gps.accuracy || 1.2),
+        source: gps.source || 'GPS_HARDWARE',
+        address: gps.address || `Lagos Cadastral Lock (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`
+      });
+      if (gps.laser_distance_meters) setLiveDistanceMeters(Number(gps.laser_distance_meters));
+      if (gps.is_telemetry_active) setIsTelemetryActive(true);
+    }
+  }, [item]);
 
   if (!isOpen || !item || !item.data) return null;
 

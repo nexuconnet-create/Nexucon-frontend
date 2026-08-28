@@ -564,6 +564,45 @@ export const getSiteVerificationAuditTrail = async (id: string): Promise<Milesto
   return Array.isArray(res) ? res : (res?.data || []);
 };
 
+export interface LocationTelemetryResponse {
+  latitude: number;
+  longitude: number;
+  accuracy_meters: number;
+  altitude_meters: number;
+  distance_to_centroid_meters: number;
+  laser_distance_meters: number;
+  setback_measured_meters: number;
+  setback_target_meters: number;
+  setback_status: 'PASS' | 'FAIL';
+  google_maps_url: string;
+  source: string;
+  address: string;
+  cors_station_ref: string;
+  rtk_fix_status: string;
+  satellites_tracked: number;
+  cloudflare_r2_sync: boolean;
+  timestamp: string;
+}
+
+export const calculateLocationTelemetry = async (payload: {
+  latitude: number;
+  longitude: number;
+  project_id?: string;
+}): Promise<LocationTelemetryResponse> => {
+  const res: any = await api.post('/monitoring/daily-updates/calculate-location/', payload);
+  return res.data || res;
+};
+
+export const getDailyUpdateTelemetry = async (id: string): Promise<LocationTelemetryResponse> => {
+  const res: any = await api.get(`/monitoring/daily-updates/${id}/telemetry/`);
+  return res.data || res;
+};
+
+export const syncDailyUpdateTelemetry = async (id: string, payload: any): Promise<LocationTelemetryResponse> => {
+  const res: any = await api.post(`/monitoring/daily-updates/${id}/telemetry/`, payload);
+  return res.data || res;
+};
+
 // Statistics Overview
 export const getMonitoringStats = async (): Promise<MonitoringStats> => {
   try {
