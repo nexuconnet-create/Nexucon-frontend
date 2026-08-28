@@ -101,18 +101,18 @@ export default function MilestoneDetailDrawer({
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-[680px] bg-white shadow-2xl flex flex-col z-[111] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
         
         {/* Header Bar */}
-        <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${
+        <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-white shadow-md shrink-0 ${
               milestone.status === 'VERIFIED' ? 'bg-emerald-600 shadow-emerald-600/30' :
               milestone.status === 'DELAYED' ? 'bg-rose-600 shadow-rose-600/30' :
               milestone.status === 'BLOCKED' ? 'bg-red-700 shadow-red-700/30' : 'bg-blue-600 shadow-blue-600/30'
             }`}>
-              {milestone.status === 'VERIFIED' ? <ShieldCheck size={24} /> :
-               milestone.status === 'DELAYED' ? <AlertTriangle size={24} /> :
-               milestone.status === 'BLOCKED' ? <AlertOctagon size={24} /> : <CheckCircle size={24} />}
+              {milestone.status === 'VERIFIED' ? <ShieldCheck size={20} className="sm:w-6 sm:h-6" /> :
+               milestone.status === 'DELAYED' ? <AlertTriangle size={20} className="sm:w-6 sm:h-6" /> :
+               milestone.status === 'BLOCKED' ? <AlertOctagon size={20} className="sm:w-6 sm:h-6" /> : <CheckCircle size={20} className="sm:w-6 sm:h-6" />}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-200 text-slate-800 font-mono">
                   {milestone.milestone_code}
@@ -126,7 +126,7 @@ export default function MilestoneDetailDrawer({
                   </span>
                 )}
               </div>
-              <h2 className="text-lg font-black text-[#022C4F] mt-1 line-clamp-1">
+              <h2 className="text-base sm:text-lg font-black text-[#022C4F] mt-1 truncate">
                 {milestone.name}
               </h2>
             </div>
@@ -134,18 +134,18 @@ export default function MilestoneDetailDrawer({
 
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Project Header Banner */}
-        <div className="px-6 py-3.5 bg-gradient-to-r from-[#022C4F] to-[#0A4D80] text-white flex items-center justify-between text-xs shrink-0">
+        <div className="px-4 sm:px-6 py-3 bg-gradient-to-r from-[#022C4F] to-[#0A4D80] text-white flex items-center justify-between text-xs shrink-0">
           <div className="flex items-center gap-2 truncate">
             <Building2 size={14} className="text-blue-300 shrink-0" />
             <span className="font-bold truncate">{milestone.project_name}</span>
-            <span className="text-blue-200 font-medium">({milestone.project_reference || 'Lagos State'})</span>
+            <span className="text-blue-200 font-medium hidden sm:inline">({milestone.project_reference || 'Lagos State'})</span>
           </div>
           <button
             type="button"
@@ -157,7 +157,7 @@ export default function MilestoneDetailDrawer({
         </div>
 
         {/* Tabs Navigation */}
-        <div className="flex items-center gap-2 px-6 pt-3 border-b border-slate-100 bg-slate-50/50 overflow-x-auto shrink-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="flex items-center gap-2 px-4 sm:px-6 pt-3 border-b border-slate-100 bg-slate-50/50 overflow-x-auto shrink-0 scrollbar-hide">
           {[
             { id: 'overview', label: 'Overview & Dates' },
             { id: 'gates', label: 'Verification Gates', badge: gatesList.length },

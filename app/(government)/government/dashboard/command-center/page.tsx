@@ -205,38 +205,38 @@ export default function GovernmentCommandCenter() {
 
 
   return (
-    <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="h-full flex flex-col pt-1 sm:pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0">
       {/* Top Bar */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div className="max-w-3xl">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-lg">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
               <Building2 size={20} />
             </div>
-            <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
               Government Command Center
             </h1>
           </div>
-          <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
             Monitor government-supervised construction projects, regulatory activities, inspections, compliance, approvals, and field operations from a centralized oversight dashboard.
           </p>
         </div>
         <TopRightControls />
       </div>
 
-      {/* Role Toggle for Usability Concern 1 */}
-      <div className="flex items-center gap-2 mb-6 p-1 bg-slate-200/50 rounded-xl w-fit border border-slate-200/50">
-        <button onClick={() => setUserRole('Agency Head')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Agency Head' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Agency Head</button>
-        <button onClick={() => setUserRole('Director')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Director' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Director</button>
-        <button onClick={() => setUserRole('Inspector')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${userRole === 'Inspector' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Inspector</button>
+      {/* Role Toggle */}
+      <div className="flex items-center gap-1.5 sm:gap-2 mb-6 p-1 bg-slate-200/50 rounded-xl w-full sm:w-fit overflow-x-auto border border-slate-200/50 scrollbar-hide">
+        <button onClick={() => setUserRole('Agency Head')} className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap min-h-[38px] cursor-pointer ${userRole === 'Agency Head' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Agency Head</button>
+        <button onClick={() => setUserRole('Director')} className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap min-h-[38px] cursor-pointer ${userRole === 'Director' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Director</button>
+        <button onClick={() => setUserRole('Inspector')} className={`flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all whitespace-nowrap min-h-[38px] cursor-pointer ${userRole === 'Inspector' ? 'bg-white text-[#022C4F] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Inspector</button>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-8 pb-8">
+      <div className="flex flex-col xl:flex-row gap-6 sm:gap-8 pb-8 min-w-0">
         {/* Main Column */}
-        <div className="flex-1 flex flex-col gap-8">
+        <div className="flex-1 flex flex-col gap-6 sm:gap-8 min-w-0">
 
           {/* Overview Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {[
               { title: "Active Projects", value: isLoading ? "-" : (activeProjectsCount || "0"), icon: Building2, color: "blue" },
               { title: "Under Review", value: isLoading ? "-" : (underReviewCount || "0"), icon: FileSearch, color: "amber" },
@@ -247,11 +247,11 @@ export default function GovernmentCommandCenter() {
             ].map((stat, idx) => (
               <div key={idx} className={`bg-white rounded-2xl border border-slate-100 p-4 flex flex-col shadow-sm hover:shadow-md transition-all group border-l-4 border-l-${stat.color}-500`}>
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{stat.title}</span>
+                  <span className="text-[11px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">{stat.title}</span>
                 </div>
                 <div className="flex items-end justify-between mt-auto">
-                  <span className={`text-3xl font-bold text-${stat.color}-600 group-hover:scale-110 transition-transform origin-left`}>{stat.value}</span>
-                  <div className={`p-2 rounded-lg bg-${stat.color}-50 text-${stat.color}-500`}>
+                  <span className={`text-2xl sm:text-3xl font-bold text-${stat.color}-600 group-hover:scale-105 transition-transform origin-left`}>{stat.value}</span>
+                  <div className={`p-2 rounded-lg bg-${stat.color}-50 text-${stat.color}-500 shrink-0`}>
                     <stat.icon size={18} />
                   </div>
                 </div>
@@ -552,7 +552,7 @@ export default function GovernmentCommandCenter() {
                 <span className="text-xs font-semibold text-orange-700 mt-1">Coordination Issues</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 mt-auto">
               <button onClick={() => router.push('/government/dashboard/bim/models')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">Open BIM Models</button>
               <button onClick={() => router.push('/government/dashboard/bim/review')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">Review Design</button>
               <button onClick={() => router.push('/government/dashboard/bim/clashes')} className="py-2.5 border border-[#022C4F]/20 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-[#022C4F] hover:text-white transition-colors cursor-pointer">View Model Issues</button>

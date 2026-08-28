@@ -201,17 +201,17 @@ export default function ProjectsDynamicPage() {
       />
 
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-6">
         <div className="max-w-3xl">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-lg">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
               <Building2 size={20} />
             </div>
-            <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
               Project Oversight
             </h1>
           </div>
-          <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
             {content.subtitle}
           </p>
         </div>
@@ -219,15 +219,15 @@ export default function ProjectsDynamicPage() {
       </div>
 
       {/* Tabs & Action */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide max-w-full">
           {TABS.map((tab) => {
             const isActive = currentStatus === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => router.push(`/government/dashboard/projects/${tab.id}`)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${isActive
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all shrink-0 cursor-pointer ${isActive
                   ? 'bg-[#022C4F] text-white shadow-md'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                   }`}
@@ -239,37 +239,36 @@ export default function ProjectsDynamicPage() {
           })}
         </div>
 
-      </div>
-
-      <div className="flex items-center justify-end shrink-0">
-        <button
-          onClick={() => router.push('/government/dashboard/projects/new')}
-          className="flex items-center gap-2 mb-10 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-        >
-          <Plus size={16} /> Register Project
-        </button>
+        <div className="flex items-center justify-end shrink-0">
+          <button
+            onClick={() => router.push('/government/dashboard/projects/new')}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+          >
+            <Plus size={16} /> Register Project
+          </button>
+        </div>
       </div>
 
       {/* Dynamic Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8 min-w-0">
 
         {/* Overview Stats */}
-        <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {content.overview.map((stat: any, idx: number) => (
-            <div key={idx} className={`bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all group border-b-4 border-b-${stat.color}-500 flex flex-col justify-between`}>
+            <div key={idx} className={`bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all group border-b-4 border-b-${stat.color}-500 flex flex-col justify-between`}>
               <div className="flex items-center justify-between mb-4">
-                <div className={`w-10 h-10 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center`}>
-                  <stat.icon size={20} />
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center shrink-0`}>
+                  <stat.icon size={18} />
                 </div>
                 <span className={`text-2xl font-bold text-[#022C4F]`}>{stat.value}</span>
               </div>
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider line-clamp-1">{stat.label}</span>
+              <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider line-clamp-1">{stat.label}</span>
             </div>
           ))}
         </div>
 
         {/* Action Panel */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col">
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm flex flex-col">
           <h3 className="text-sm font-bold text-[#022C4F] mb-4 flex items-center gap-2">
             <ClipboardList size={18} /> Quick Actions
           </h3>
@@ -301,10 +300,10 @@ export default function ProjectsDynamicPage() {
                     setIsQuickActionDrawerOpen(true);
                   }
                 }}
-                className="w-full py-2.5 px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group cursor-pointer"
+                className="w-full py-2.5 px-3.5 sm:px-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-semibold text-[#022C4F] hover:bg-blue-50 hover:border-blue-100 hover:text-blue-700 transition-colors text-left flex items-center justify-between group cursor-pointer"
               >
-                {action}
-                <ArrowUpRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="truncate mr-2">{action}</span>
+                <ArrowUpRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </button>
             ))}
           </div>
@@ -313,28 +312,28 @@ export default function ProjectsDynamicPage() {
       </div>
 
       {/* Projects List/Grid Section */}
-      <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+      <div className="flex-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden min-w-0">
         {/* Toolbar */}
-        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
-          <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
+        <div className="p-3.5 sm:p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-slate-50/50">
+          <h2 className="text-base sm:text-lg font-bold text-[#022C4F] flex items-center gap-2">
             <Building2 size={18} /> {content.title}
           </h2>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full sm:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F]/20 transition-all"
+                className="w-full sm:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F]/20 transition-all"
               />
             </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors">
+            <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors shrink-0">
               <Filter size={18} />
             </button>
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1">
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shrink-0">
               <button
                 onClick={() => setViewMode('list')}
                 className={`p-1.5 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-[#022C4F]' : 'text-slate-400 hover:text-slate-600'}`}
@@ -352,17 +351,17 @@ export default function ProjectsDynamicPage() {
         </div>
 
         {/* Content Area */}
-        <div className="p-6 flex-1 overflow-y-auto">
+        <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
           {currentStatus === 'blacklist' ? (
             <div className="flex flex-col gap-3">
               {MOCK_OFFENDERS.map((offender) => (
-                <div key={offender.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-red-100 hover:border-red-300 hover:shadow-md transition-all group bg-red-50/30">
-                  <div className="flex items-center gap-4 w-full sm:w-1/3 mb-4 sm:mb-0">
+                <div key={offender.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-red-100 hover:border-red-300 hover:shadow-md transition-all group bg-red-50/30 gap-3 sm:gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-1/3">
                     <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
                       <offender.icon size={20} />
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors">{offender.name}</h4>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors truncate">{offender.name}</h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{offender.id}</span>
                         <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{offender.type}</span>
@@ -370,14 +369,14 @@ export default function ProjectsDynamicPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1 w-full sm:w-1/3 mb-4 sm:mb-0">
+                  <div className="flex flex-col gap-1 w-full sm:w-1/3">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason for Flag</span>
                     <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
-                      <AlertTriangle size={12} /> {offender.reason}
+                      <AlertTriangle size={12} className="shrink-0" /> {offender.reason}
                     </span>
                   </div>
 
-                  <div className="flex items-center sm:justify-end gap-6 w-full sm:w-1/3">
+                  <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-1/3">
                     <div className="flex flex-col items-start sm:items-end">
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1
                         ${offender.status === 'Blacklisted' ? 'bg-red-600 text-white shadow-sm' : ''}
@@ -388,7 +387,7 @@ export default function ProjectsDynamicPage() {
                       </span>
                       <span className="text-[10px] font-medium text-slate-500">Since {offender.date}</span>
                     </div>
-                    <button className="p-2 text-slate-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors ml-auto sm:ml-0">
+                    <button className="p-2 text-slate-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors">
                       <MoreVertical size={18} />
                     </button>
                   </div>
@@ -401,31 +400,31 @@ export default function ProjectsDynamicPage() {
                 <div 
                   key={project.id} 
                   onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
-                  className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white cursor-pointer"
+                  className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-md transition-all group bg-white cursor-pointer gap-3 sm:gap-4"
                 >
-                  <div className="flex items-center gap-4 w-1/3">
+                  <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                       <Building2 size={20} />
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{project.name}</h4>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors truncate">{project.name}</h4>
                       <p className="text-xs text-slate-500">{project.id}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-1/4">
-                    <User size={14} className="text-slate-400" />
-                    <span className="text-xs font-medium text-slate-600 line-clamp-1">{project.developer}</span>
+                  <div className="flex items-center gap-2 w-full md:w-1/4">
+                    <User size={14} className="text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium text-slate-600 truncate">{project.developer}</span>
                   </div>
 
-                  <div className="flex items-center gap-2 w-1/4">
-                    <MapPin size={14} className="text-slate-400" />
-                    <span className="text-xs font-medium text-slate-600 line-clamp-1">{project.location}</span>
+                  <div className="flex items-center gap-2 w-full md:w-1/4">
+                    <MapPin size={14} className="text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium text-slate-600 truncate">{project.location}</span>
                   </div>
 
-                  <div className="flex items-center gap-6 w-1/4 justify-end">
-                    <div className="flex flex-col items-end mr-2 text-right">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Compliance</span>
+                  <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-1/4 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                    <div className="flex flex-col items-start md:items-end mr-2 text-left md:text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Compliance</span>
                       <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100' : project.complianceScore >= 50 ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100' : 'text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100'}`}>
                         {project.complianceScore}%
                       </span>
@@ -440,7 +439,7 @@ export default function ProjectsDynamicPage() {
                         {project.status}
                       </span>
                       {project.status === 'Active' && (
-                        <div className="flex items-center gap-2 w-24">
+                        <div className="flex items-center gap-2 w-20 sm:w-24">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
                           </div>
@@ -453,7 +452,7 @@ export default function ProjectsDynamicPage() {
                         e.stopPropagation();
                         router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`);
                       }}
-                      className="p-2 text-slate-400 hover:text-[#022C4F] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="p-2 text-slate-400 hover:text-[#022C4F] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
                     >
                       <MoreVertical size={18} />
                     </button>
@@ -462,70 +461,74 @@ export default function ProjectsDynamicPage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {displayedProjects.map((project) => (
                 <div 
                   key={project.id} 
                   onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
-                  className="p-5 rounded-2xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-lg transition-all group bg-white flex flex-col cursor-pointer"
+                  className="p-5 rounded-2xl border border-slate-100 hover:border-[#022C4F]/20 hover:shadow-lg transition-all group bg-white flex flex-col justify-between cursor-pointer"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                      <Building2 size={20} />
-                    </div>
-                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
+                  <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                        <Building2 size={20} />
+                      </div>
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
                         ${project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : ''}
                         ${project.status === 'Flagged' ? 'bg-red-100 text-red-700' : ''}
                         ${project.status === 'Pending' ? 'bg-amber-100 text-amber-700' : ''}
                         ${project.status === 'Completed' ? 'bg-indigo-100 text-indigo-700' : ''}
                       `}>
-                      {project.status}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1">{project.name}</h4>
-                  <p className="text-xs text-slate-500 mb-4">{project.id}</p>
-
-                  <div className="flex flex-col gap-2 mt-auto mb-4">
-                    <div className="flex items-center gap-2">
-                      <User size={12} className="text-slate-400" />
-                      <span className="text-[11px] font-medium text-slate-600 line-clamp-1">{project.developer}</span>
+                        {project.status}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={12} className="text-slate-400" />
-                      <span className="text-[11px] font-medium text-slate-600 line-clamp-1">{project.location}</span>
-                    </div>
-                  </div>
+                    <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors mb-1 line-clamp-1">{project.name}</h4>
+                    <p className="text-xs text-slate-500 mb-4">{project.id}</p>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">Compliance</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full ${project.complianceScore >= 80 ? 'bg-emerald-500' : project.complianceScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                        <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-700' : project.complianceScore >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{project.complianceScore}%</span>
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="flex items-center gap-2">
+                        <User size={12} className="text-slate-400 shrink-0" />
+                        <span className="text-[11px] font-medium text-slate-600 truncate">{project.developer}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin size={12} className="text-slate-400 shrink-0" />
+                        <span className="text-[11px] font-medium text-slate-600 truncate">{project.location}</span>
                       </div>
                     </div>
-                    {project.status === 'Active' ? (
-                      <div className="flex flex-col w-24">
-                        <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
+                  </div>
+
+                  <div>
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">Compliance</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${project.complianceScore >= 80 ? 'bg-emerald-500' : project.complianceScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                          <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-700' : project.complianceScore >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{project.complianceScore}%</span>
                         </div>
                       </div>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-500">{project.type}</span>
-                    )}
-                  </div>
+                      {project.status === 'Active' ? (
+                        <div className="flex flex-col w-24 items-end">
+                          <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-500">{project.type}</span>
+                      )}
+                    </div>
 
-                  <div className="mt-4 flex items-center justify-end">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`);
-                      }}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                    >
-                      View Project <ArrowUpRight size={12} />
-                    </button>
+                    <div className="mt-4 flex items-center justify-end">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`);
+                        }}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        View Project <ArrowUpRight size={12} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

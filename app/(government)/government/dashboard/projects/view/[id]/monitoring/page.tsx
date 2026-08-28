@@ -14,22 +14,22 @@ import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal'
 // --- MOCK COMPONENTS FOR TABS --- //
 
 const OverviewTab = ({ project }: { project: Project }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <div className="lg:col-span-2 space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0">
+    <div className="lg:col-span-2 space-y-6 min-w-0">
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
         <h3 className="text-sm font-bold text-[#022C4F] mb-4">Project Overview</h3>
-        <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
           <div>
             <p className="text-xs text-slate-500 mb-1">Project Name</p>
-            <p className="text-sm font-medium text-slate-800">{project.name}</p>
+            <p className="text-sm font-medium text-slate-800 break-words">{project.name}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Developer</p>
-            <p className="text-sm font-medium text-slate-800">{project.developer_name || 'N/A'}</p>
+            <p className="text-sm font-medium text-slate-800 break-words">{project.developer_name || 'N/A'}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Site Address</p>
-            <p className="text-sm font-medium text-slate-800">{project.site_address || project.location || 'N/A'}</p>
+            <p className="text-sm font-medium text-slate-800 break-words">{project.site_address || project.location || 'N/A'}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">LGA</p>
@@ -38,9 +38,9 @@ const OverviewTab = ({ project }: { project: Project }) => (
         </div>
       </div>
       
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
         <h3 className="text-sm font-bold text-[#022C4F] mb-4">Technical Details</h3>
-        <div className="grid grid-cols-3 gap-y-6 gap-x-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
           <div>
             <p className="text-xs text-slate-500 mb-1">Primary Use</p>
             <p className="text-sm font-medium text-slate-800">{project.primary_use || 'Commercial'}</p>
@@ -442,26 +442,26 @@ export default function ProjectMonitoringPage() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto bg-slate-50 relative pb-20">
+    <div className="flex-1 overflow-auto bg-slate-50 relative pb-20 min-w-0">
       {/* Dynamic Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-        <div className="px-8 pt-6 pb-0 max-w-7xl mx-auto">
+        <div className="px-4 sm:px-8 pt-4 sm:pt-6 pb-0 max-w-7xl mx-auto">
           <button 
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-[#022C4F] transition-colors mb-4"
+            className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-[#022C4F] transition-colors mb-3 sm:mb-4 cursor-pointer"
           >
             <ArrowLeft size={14} /> Back to Projects
           </button>
           
-          <div className="flex justify-between items-start mb-6">
-            <div className="flex gap-5 items-start">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 text-blue-600 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
-                <Building2 size={28} className="drop-shadow-sm" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+            <div className="flex gap-3 sm:gap-5 items-start">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 text-blue-600 rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+                <Building2 size={24} className="drop-shadow-sm sm:w-7 sm:h-7" />
               </div>
-              <div>
-                <div className="flex items-center gap-3 mb-1.5">
-                  <h1 className="text-2xl font-black text-[#022C4F]">{project.name}</h1>
-                  <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl font-black text-[#022C4F] break-words">{project.name}</h1>
+                  <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0
                     ${project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : ''}
                     ${project.status === 'Flagged' ? 'bg-red-100 text-red-700' : ''}
                     ${project.status === 'Pending' ? 'bg-amber-100 text-amber-700' : ''}
@@ -470,29 +470,29 @@ export default function ProjectMonitoringPage() {
                     {project.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
+                <div className="flex items-center gap-3 sm:gap-4 text-xs text-slate-500 font-medium flex-wrap">
                   <span className="flex items-center gap-1.5"><MapPin size={14}/> {project.lga || 'Unknown Location'}</span>
                   <span className="flex items-center gap-1.5"><Calendar size={14}/> Reg: {project.reference_number}</span>
                 </div>
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
-              <button className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all shadow-sm">
+            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+              <button className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all shadow-sm text-center cursor-pointer">
                 Generate Report
               </button>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-8 border-t border-slate-100 pt-1 relative">
+          <div className="flex items-center gap-4 sm:gap-8 border-t border-slate-100 pt-1 relative overflow-x-auto whitespace-nowrap scrollbar-hide">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 text-sm font-bold flex items-center gap-2 relative transition-colors ${
+                  className={`py-3 sm:py-4 text-xs sm:text-sm font-bold flex items-center gap-2 relative transition-colors shrink-0 cursor-pointer ${
                     isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -509,7 +509,7 @@ export default function ProjectMonitoringPage() {
       </div>
 
       {/* Tab Content Area */}
-      <div className="p-8 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto min-w-0">
         {activeTab === 'overview' && <OverviewTab project={project} />}
         {activeTab === 'documents' && (
           <DocumentsTab 

@@ -330,21 +330,21 @@ export default function EscalateToDirectorateModal({
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col z-[111] animate-in slide-in-from-right-8 duration-300 border-l border-slate-200">
         
         {/* Header Bar aligned with #022C4F Brand Aesthetic */}
-        <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-[#022C4F] via-[#03467B] to-[#0A66C2] text-white flex items-center justify-between shrink-0 shadow-md">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-blue-200 shrink-0 shadow-inner">
-              <Gavel size={24} className="text-amber-300" />
+        <div className="p-4 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-[#022C4F] via-[#03467B] to-[#0A66C2] text-white flex items-center justify-between shrink-0 shadow-md">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-blue-200 shrink-0 shadow-inner">
+              <Gavel size={22} className="text-amber-300 sm:w-6 sm:h-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
-                  <Landmark size={10} /> Statutory Directorate Escalation
+                  <Landmark size={10} /> Statutory Escalation
                 </span>
-                <span className="text-xs text-blue-100 font-semibold">
+                <span className="text-xs text-blue-100 font-semibold hidden sm:inline">
                   Executive Tribunal
                 </span>
               </div>
-              <h2 className="text-xl font-black tracking-tight text-white mt-1">
+              <h2 className="text-base sm:text-xl font-black tracking-tight text-white mt-1 truncate">
                 Escalate Issue to Directorate
               </h2>
             </div>
@@ -352,14 +352,14 @@ export default function EscalateToDirectorateModal({
 
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Scrollable Sidepop Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 scrollbar-hide">
           
           {/* Target Defect Overview Card */}
           {issue ? (

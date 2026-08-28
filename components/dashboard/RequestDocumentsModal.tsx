@@ -103,8 +103,8 @@ export default function RequestDocumentsModal({
   const currentRef = application?.application_reference || projects.find(p => p.id === selectedProjectId)?.id || 'REG-DOC-REQ';
 
   return (
-    <div className="fixed inset-0 bg-[#0F181F]/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl p-7 max-w-xl w-full shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-[#0F181F]/60 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-4 sm:p-7 max-w-xl w-full shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5 shrink-0">

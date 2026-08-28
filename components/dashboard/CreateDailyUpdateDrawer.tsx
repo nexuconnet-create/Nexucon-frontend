@@ -461,7 +461,7 @@ export default function CreateDailyUpdateDrawer({
           onClose();
         }}
       />
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[660px] bg-white p-7 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[660px] bg-white p-4 sm:p-7 shadow-2xl flex flex-col z-[101] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-5 border-b border-slate-100 shrink-0">

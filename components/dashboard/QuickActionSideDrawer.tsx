@@ -110,17 +110,17 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 bg-white border-b border-gray-100 shrink-0">
-          <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between p-4 sm:p-6 bg-white border-b border-gray-100 shrink-0">
+          <div className="flex flex-col gap-1 min-w-0">
             <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Quick Action</span>
-            <h2 className="text-xl font-extrabold text-[#022C4F]">
+            <h2 className="text-lg sm:text-xl font-extrabold text-[#022C4F] truncate">
               {actionTitle || "Select Project"}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{getActionSubtitle()}</p>
           </div>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-colors cursor-pointer"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-colors cursor-pointer shrink-0 ml-2"
           >
             <X size={20} />
           </button>
@@ -128,7 +128,7 @@ export default function QuickActionSideDrawer({ isOpen, onClose, actionTitle }: 
 
         {/* Global Shortcut Banner */}
         {globalShortcut && (
-          <div className="px-6 pt-4 shrink-0">
+          <div className="px-4 sm:px-6 pt-4 shrink-0">
             <button
               onClick={() => {
                 onClose();

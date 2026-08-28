@@ -169,13 +169,13 @@ export default function ScheduleMeetingModal({
       />
 
       {/* Slide-over Sidepop Drawer */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
         <div className="w-screen max-w-xl bg-white shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-200">
           
           {/* Header */}
-          <div className="p-6 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 border-b border-slate-100 flex items-center justify-between">
+          <div className="p-4 sm:p-6 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-[#022C4F] text-white flex items-center justify-center shadow-md shadow-[#022C4F]/20">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-[#022C4F] text-white flex items-center justify-center shadow-md shadow-[#022C4F]/20 shrink-0">
                 <Calendar size={20} />
               </div>
               <div>
@@ -183,9 +183,9 @@ export default function ScheduleMeetingModal({
                   <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                     STATUTORY DIRECTIVE
                   </span>
-                  <span className="text-xs text-slate-400 font-medium">• Resend Email Dispatched</span>
+                  <span className="text-xs text-slate-400 font-medium hidden sm:inline">• Resend Email Dispatched</span>
                 </div>
-                <h2 className="text-lg font-black text-[#022C4F] mt-0.5">
+                <h2 className="text-base sm:text-lg font-black text-[#022C4F] mt-0.5">
                   Schedule Council Meeting
                 </h2>
               </div>
@@ -193,7 +193,7 @@ export default function ScheduleMeetingModal({
 
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
             >
               <X size={18} />
             </button>
@@ -201,7 +201,7 @@ export default function ScheduleMeetingModal({
 
           {/* Drawer Body (Scrollable) */}
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
               
               {/* Agency Head Callout */}
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50/60 rounded-2xl border border-amber-200/80 flex items-start gap-3">
