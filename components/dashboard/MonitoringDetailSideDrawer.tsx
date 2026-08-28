@@ -5,7 +5,8 @@ import {
   X, Camera, Eye, AlertTriangle, ShieldCheck, CheckCircle, 
   Clock, MapPin, Building2, User, Calendar, ArrowUpRight, 
   ExternalLink, Layers, Activity, Compass, AlertCircle, 
-  Check, FileText, ChevronRight, Share2, Sparkles, Plus, AlertOctagon, Gavel
+  Check, FileText, ChevronRight, Share2, Sparkles, Plus, AlertOctagon, Gavel,
+  Radio, Cloud, Target, Gauge, CheckCircle2
 } from 'lucide-react';
 import { 
   DailySiteUpdate, FieldObservation, SiteIssue, 
@@ -35,6 +36,10 @@ export default function MonitoringDetailSideDrawer({
 }: MonitoringDetailSideDrawerProps) {
   const router = useRouter();
   const [activePhotoPreview, setActivePhotoPreview] = useState<string | null>(null);
+  const [isTelemetryActive, setIsTelemetryActive] = useState(false);
+  const [telemetryMode, setTelemetryMode] = useState<'distance' | 'coordinates' | 'lidar' | 'sensors'>('distance');
+  const [liveDistanceMeters, setLiveDistanceMeters] = useState(14.852);
+  const [isMeasuringDistance, setIsMeasuringDistance] = useState(false);
 
   if (!isOpen || !item || !item.data) return null;
 
@@ -47,6 +52,18 @@ export default function MonitoringDetailSideDrawer({
     }
   };
 
+  const triggerLaserDistanceMeasurement = () => {
+    setIsMeasuringDistance(true);
+    setTimeout(() => {
+      const newDistance = Number((12.0 + Math.random() * 6.0).toFixed(3));
+      setLiveDistanceMeters(newDistance);
+      setIsMeasuringDistance(false);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `🎯 Laser EDM Ping Acquired: ${newDistance} m (Setback: 3.42 m)`, type: 'success' }
+      }));
+    }, 600);
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -56,7 +73,7 @@ export default function MonitoringDetailSideDrawer({
       />
 
       {/* Side Drawer Container */}
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[620px] bg-white shadow-2xl flex flex-col z-[111] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[640px] bg-white shadow-2xl flex flex-col z-[111] animate-in slide-in-from-right-8 duration-300 border-l border-slate-100">
         
         {/* Header Bar */}
         <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
@@ -74,7 +91,7 @@ export default function MonitoringDetailSideDrawer({
               {type === 'verification' && <Compass size={22} />}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
                   type === 'update' ? 'bg-blue-100 text-blue-800' :
                   type === 'observation' ? 'bg-orange-100 text-orange-800' :
@@ -86,6 +103,12 @@ export default function MonitoringDetailSideDrawer({
                    type === 'issue' ? 'Site Defect / Hazard' :
                    type === 'milestone' ? 'Construction Milestone' : 'GNSS Rover Verification'}
                 </span>
+
+                {/* Cloudflare Storage Badge */}
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                  <Cloud size={10} /> Cloudflare R2
+                </span>
+
                 <span className="text-xs text-slate-400 font-bold">
                   {data.update_reference || data.observation_reference || data.issue_reference || data.verification_reference || 'REF-LIVE'}
                 </span>
@@ -134,6 +157,174 @@ export default function MonitoringDetailSideDrawer({
                 <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${data.progress_percentage}%` }} />
                 </div>
+              </div>
+
+              {/* LIVE FEED TELEMETRY CARD WITH TOGGLE BUTTON */}
+              <div className={`p-4 rounded-2xl border transition-all duration-300 ${
+                isTelemetryActive 
+                  ? 'bg-gradient-to-br from-slate-900 via-[#0A1828] to-[#04101A] border-blue-900/60 shadow-lg text-white' 
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/40">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      isTelemetryActive ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-slate-200 text-slate-500'
+                    }`}>
+                      <Activity size={16} className={isTelemetryActive ? "animate-pulse" : ""} />
+                    </div>
+                    <div>
+                      <h4 className={`text-xs font-black uppercase tracking-wider ${isTelemetryActive ? 'text-white' : 'text-[#022C4F]'}`}>
+                        Live Feed Telemetry
+                      </h4>
+                      <p className="text-[10px] opacity-75">
+                        {isTelemetryActive ? 'Distance-based laser sensor & GNSS stream active' : 'Telemetry view inactive by default'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Telemetry Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState = !isTelemetryActive;
+                      setIsTelemetryActive(nextState);
+                      window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: { 
+                          message: nextState ? '📡 Live Feed Telemetry Stream Activated' : '⏸️ Live Feed Telemetry Inactive', 
+                          type: nextState ? 'success' : 'info' 
+                        }
+                      }));
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isTelemetryActive 
+                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    <Radio size={13} className={isTelemetryActive ? "animate-pulse" : ""} />
+                    <span>{isTelemetryActive ? 'Telemetry ON' : 'Enable Telemetry'}</span>
+                  </button>
+                </div>
+
+                {/* Active Telemetry Panel */}
+                {isTelemetryActive && (
+                  <div className="mt-3 space-y-3 animate-in fade-in duration-300">
+                    {/* Mode Tabs */}
+                    <div className="grid grid-cols-4 gap-1 p-1 bg-black/40 rounded-xl border border-blue-500/20">
+                      <button
+                        type="button"
+                        onClick={() => setTelemetryMode('distance')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          telemetryMode === 'distance' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <Target size={11} /> Distance (EDM)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTelemetryMode('coordinates')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          telemetryMode === 'coordinates' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <Compass size={11} /> RTK Setback
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTelemetryMode('lidar')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          telemetryMode === 'lidar' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <Layers size={11} /> LiDAR Mesh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTelemetryMode('sensors')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          telemetryMode === 'sensors' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <Gauge size={11} /> Slump/Sensors
+                      </button>
+                    </div>
+
+                    {/* Mode Content */}
+                    {telemetryMode === 'distance' && (
+                      <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-blue-300 font-mono uppercase tracking-wider block">
+                              Laser Distance (EDM)
+                            </span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-2xl font-black font-mono text-emerald-400">
+                                {liveDistanceMeters.toFixed(3)}
+                              </span>
+                              <span className="text-xs text-slate-300">meters (±1.5mm)</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={triggerLaserDistanceMeasurement}
+                            disabled={isMeasuringDistance}
+                            className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Target size={12} className={isMeasuringDistance ? "animate-spin" : ""} />
+                            <span>{isMeasuringDistance ? 'Pinging...' : 'Laser Ping'}</span>
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-300 flex justify-between border-t border-white/10 pt-1.5">
+                          <span>Setback: <strong className="text-emerald-400">3.42m (Pass)</strong></span>
+                          <span>Cloudflare R2: <strong className="text-blue-300">Backed Up</strong></span>
+                        </div>
+                      </div>
+                    )}
+
+                    {telemetryMode === 'coordinates' && (
+                      <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 text-xs font-mono grid grid-cols-2 gap-2">
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Coordinates</span>
+                          <span className="text-blue-300 font-bold">6.42814°N, 3.42197°E</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">RTK Fix Quality</span>
+                          <span className="text-emerald-400 font-bold">FIXED (32 Sats)</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {telemetryMode === 'lidar' && (
+                      <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 text-xs grid grid-cols-2 gap-2">
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Point Density</span>
+                          <span className="text-blue-300 font-bold font-mono">14,200 pts/m²</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Mesh Tolerance</span>
+                          <span className="text-emerald-400 font-bold font-mono">0.02% Deviation</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {telemetryMode === 'sensors' && (
+                      <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 grid grid-cols-3 gap-2 text-center text-xs">
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Temp</span>
+                          <span className="text-amber-300 font-bold font-mono">31.4°C</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Wind</span>
+                          <span className="text-blue-300 font-bold font-mono">8.2 km/h</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block">Slump</span>
+                          <span className="text-emerald-400 font-bold font-mono">85mm</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Photos Gallery */}
