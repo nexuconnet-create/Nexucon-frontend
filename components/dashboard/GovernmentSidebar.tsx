@@ -42,11 +42,14 @@ import {
   Calendar,
   MessageSquare,
   Milestone,
+  X,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
 type SidebarItem = {
@@ -277,7 +280,12 @@ const sidebarLinks: SidebarItem[] = [
   },
 ];
 
-export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: GovernmentSidebarProps) {
+export default function GovernmentSidebar({ 
+  isCollapsed = false, 
+  onToggleCollapse,
+  isMobile = false,
+  onCloseMobile
+}: GovernmentSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, hasPermission, logout } = useAuth();
@@ -294,43 +302,66 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
     }
   }, [pathname]);
 
-  return (
-    <aside
-      className={`fixed top-4 bottom-4 left-4 z-40 bg-[#022C4F] rounded-[30px] text-white flex flex-col hidden lg:flex transition-all duration-300 ${isCollapsed ? "w-[100px]" : "w-[300px]"
-        }`}
-    >
-      {/* Top Area - Logo and Collapse Toggle */}
-      <div className={`flex items-center ${isCollapsed ? "justify-center pt-8 pb-12" : "justify-between px-8 pt-8 pb-12"}`}>
+  const navContent = (
+    <>
+      {/* Top Area - Logo and Toggle / Close */}
+      <div className={`flex items-center shrink-0 ${
+        isMobile
+          ? "justify-between px-6 pt-6 pb-4"
+          : isCollapsed
+          ? "justify-center pt-8 pb-12"
+          : "justify-between px-8 pt-8 pb-12"
+      }`}>
         <div
-          className={`flex items-center overflow-hidden transition-all duration-300 ${isCollapsed ? "w-12 h-12 cursor-pointer" : "w-auto"}`}
-          onClick={isCollapsed ? onToggleCollapse : undefined}
-          title={isCollapsed ? "Expand Sidebar" : undefined}
+          className={`flex items-center overflow-hidden transition-all duration-300 ${
+            !isMobile && isCollapsed ? "w-12 h-12 cursor-pointer" : "w-auto"
+          }`}
+          onClick={!isMobile && isCollapsed ? onToggleCollapse : undefined}
+          title={!isMobile && isCollapsed ? "Expand Sidebar" : undefined}
         >
           <Image
-            src={isCollapsed
+            src={!isMobile && isCollapsed
               ? "https://res.cloudinary.com/depeqzb6z/image/upload/v1774500774/gaskia_logo-04_112538_1_1_ye9l2c.png"
               : "https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"}
             alt="Nexucon Logo"
-            width={isCollapsed ? 48 : 160}
+            width={!isMobile && isCollapsed ? 48 : 150}
             height={48}
             priority
-            className={`transition-all duration-300 brightness-0 invert ${isCollapsed ? "h-12 w-12 object-contain" : "h-12 w-auto object-contain"}`}
+            className={`transition-all duration-300 brightness-0 invert ${
+              !isMobile && isCollapsed ? "h-12 w-12 object-contain" : "h-9 w-auto object-contain"
+            }`}
           />
         </div>
-        {!isCollapsed && (
+
+        {isMobile ? (
+          <button
+            onClick={onCloseMobile}
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+            aria-label="Close Navigation Menu"
+          >
+            <X size={18} />
+          </button>
+        ) : !isCollapsed && (
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 rounded-full bg-white text-[#022C4F] hover:scale-110 transition-transform shrink-0 shadow-lg"
+            className="p-1.5 rounded-full bg-white text-[#022C4F] hover:scale-110 transition-transform shrink-0 shadow-lg cursor-pointer"
+            aria-label="Collapse Sidebar"
           >
             <ChevronLeft size={16} strokeWidth={3} />
           </button>
         )}
       </div>
 
-      {!isCollapsed && <div className="w-full h-px bg-white/20 mb-6"></div>}
+      {(!isCollapsed || isMobile) && <div className="w-full h-px bg-white/20 mb-4 shrink-0"></div>}
 
       {/* Navigation Links */}
-      <div className={`flex-1 overflow-y-auto pb-8 flex flex-col gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${isCollapsed ? "px-0 items-center" : "px-6"}`}>
+      <div className={`flex-1 overflow-y-auto pb-6 flex flex-col gap-1 scrollbar-hide ${
+        isMobile
+          ? "px-4"
+          : isCollapsed
+          ? "px-0 items-center"
+          : "px-6"
+      }`}>
         {sidebarLinks.filter(link => {
           if (!link.requiredPermission) return true;
           if (hasPermission(link.requiredPermission)) return true;
@@ -349,7 +380,7 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
           }
           if (user?.permissions?.includes('admin') || user?.permissions?.includes('*')) return true;
           return false;
-        }).map((link, idx) => {
+        }).map((link) => {
           const isParent = !!(link.subItems && link.subItems.length > 0);
           const targetHref = link.href || (isParent ? link.subItems![0].href : "#");
 
@@ -358,7 +389,6 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
 
           const isItemActive = isActive || isSubActive;
           const Icon = link.icon;
-
           const isOpen = openSections.includes(link.name);
 
           const toggleSection = (e: React.MouseEvent) => {
@@ -375,40 +405,54 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
             <div key={link.name} className="flex flex-col mb-1 w-full">
               {/* Main Item */}
               <Link
-                href={targetHref}
+                href={isParent && isMobile ? "#" : targetHref}
                 onClick={(e) => {
                   if (link.name === "Notifications") {
                     e.preventDefault();
                     window.dispatchEvent(new Event('open-notifications'));
+                    if (isMobile) onCloseMobile?.();
+                    return;
+                  }
+                  if (isParent && isMobile) {
+                    toggleSection(e);
+                    return;
+                  }
+                  if (!isParent && isMobile) {
+                    onCloseMobile?.();
                   }
                 }}
-                className={`flex items-center justify-between rounded-xl transition-all duration-300 group ${isCollapsed ? "justify-center p-3 w-12 h-12 mx-auto" : "px-4 py-3 w-full"
-                  } ${isItemActive
-                    ? "text-white font-semibold"
-                    : "text-white/70 hover:text-white"
-                  }`}
-                title={isCollapsed ? link.name : undefined}
+                className={`flex items-center justify-between rounded-xl transition-all duration-200 group ${
+                  !isMobile && isCollapsed ? "justify-center p-3 w-12 h-12 mx-auto" : "px-3.5 py-2.5 sm:px-4 sm:py-3 w-full min-h-[44px]"
+                } ${isItemActive
+                  ? "bg-white/15 text-white font-bold shadow-sm"
+                  : "text-white/70 hover:text-white hover:bg-white/5"
+                }`}
+                title={!isMobile && isCollapsed ? link.name : undefined}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
                   <Icon
-                    size={isCollapsed ? 24 : 18}
-                    className={`shrink-0 transition-transform duration-300 ${isItemActive ? "text-white" : "text-white/70 group-hover:text-white"}`}
-                    strokeWidth={isItemActive ? 2 : 1.5}
+                    size={!isMobile && isCollapsed ? 24 : 18}
+                    className={`shrink-0 transition-transform duration-200 ${isItemActive ? "text-white scale-105" : "text-white/70 group-hover:text-white"}`}
+                    strokeWidth={isItemActive ? 2.5 : 1.5}
                   />
-                  {!isCollapsed && (
-                    <span className="tracking-wide text-[13px]">{link.name}</span>
+                  {(isMobile || !isCollapsed) && (
+                    <span className="tracking-wide text-xs sm:text-[13px] truncate">{link.name}</span>
                   )}
                 </div>
-                {isParent && !isCollapsed && (
-                  <button onClick={toggleSection} className="p-1 rounded hover:bg-white/10 transition-colors ml-2">
-                    <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
+                {isParent && (isMobile || !isCollapsed) && (
+                  <button 
+                    onClick={toggleSection} 
+                    className="p-1 rounded hover:bg-white/10 transition-colors ml-2 shrink-0 cursor-pointer"
+                    aria-label={`Toggle ${link.name} section`}
+                  >
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
                   </button>
                 )}
               </Link>
 
               {/* Sub Items */}
-              {isParent && !isCollapsed && isOpen && (
-                <div className="flex flex-col ml-8 mt-1 gap-1">
+              {isParent && (isMobile || !isCollapsed) && isOpen && (
+                <div className="flex flex-col ml-6 pl-2 border-l border-white/10 mt-1 gap-1">
                   {link.subItems?.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubItemActive = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
@@ -416,17 +460,21 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
                       <Link
                         key={sub.name}
                         href={sub.href}
-                        className={`flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all duration-300 group ${isSubItemActive
-                          ? "text-white font-semibold"
-                          : "text-white/60 hover:text-white"
-                          }`}
+                        onClick={() => {
+                          if (isMobile) onCloseMobile?.();
+                        }}
+                        className={`flex items-center gap-3 px-3.5 py-2 rounded-lg transition-all duration-200 group min-h-[38px] text-xs ${
+                          isSubItemActive
+                            ? "bg-white/10 text-white font-bold"
+                            : "text-white/60 hover:text-white hover:bg-white/5"
+                        }`}
                       >
                         <SubIcon
-                          size={16}
-                          className={`shrink-0 transition-transform duration-300 ${isSubItemActive ? "text-white" : "text-white/60 group-hover:text-white"}`}
-                          strokeWidth={isSubItemActive ? 2 : 1.5}
+                          size={15}
+                          className={`shrink-0 transition-transform duration-200 ${isSubItemActive ? "text-blue-400" : "text-white/50 group-hover:text-white"}`}
+                          strokeWidth={isSubItemActive ? 2.5 : 1.5}
                         />
-                        <span className="tracking-wide text-[13px]">{sub.name}</span>
+                        <span className="tracking-wide truncate">{sub.name}</span>
                       </Link>
                     );
                   })}
@@ -438,27 +486,60 @@ export default function GovernmentSidebar({ isCollapsed, onToggleCollapse }: Gov
       </div>
 
       {/* Bottom Area - User Profile & Logout */}
-      <div className={`p-6 border-t border-white/10 flex ${isCollapsed ? "flex-col items-center justify-center gap-8" : "items-center justify-between"}`}>
-        <div className="flex items-center gap-4 overflow-hidden">
-          <div className="w-12 h-12 shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center text-lg shadow-inner uppercase">
+      <div className={`border-t border-white/10 flex shrink-0 ${
+        isMobile
+          ? "p-4 bg-black/10 items-center justify-between"
+          : isCollapsed
+          ? "p-6 flex-col items-center justify-center gap-8"
+          : "p-6 items-center justify-between"
+      }`}>
+        <div className="flex items-center gap-3 overflow-hidden min-w-0">
+          <div className={`shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center shadow-inner uppercase ${
+            isMobile ? "w-10 h-10 text-sm" : "w-12 h-12 text-base"
+          }`}>
             {user?.first_name?.[0] || 'G'}{user?.last_name?.[0] || 'U'}
           </div>
-          {!isCollapsed && (
-            <div className="flex flex-col whitespace-nowrap">
-              <span className="font-bold text-sm truncate max-w-[150px]">{user ? `${user.first_name} ${user.last_name}` : 'Government User'}</span>
-              <span className="text-xs text-white/60 truncate max-w-[150px]">{user?.role_name || 'Agency Head'}</span>
+          {(isMobile || !isCollapsed) && (
+            <div className="flex flex-col whitespace-nowrap min-w-0">
+              <span className="font-bold text-xs sm:text-sm truncate max-w-[140px]">
+                {user ? `${user.first_name} ${user.last_name}` : 'Government User'}
+              </span>
+              <span className="text-[10px] sm:text-xs text-white/60 truncate max-w-[140px]">
+                {user?.role_name || 'Agency Head'}
+              </span>
             </div>
           )}
         </div>
         <button
-          onClick={logout}
-          className="shrink-0 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all"
+          onClick={(e) => {
+            e.preventDefault();
+            if (isMobile) onCloseMobile?.();
+            logout();
+          }}
+          className="shrink-0 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
           title="Log Out"
         >
-          <LogOut size={22} />
+          <LogOut size={20} />
         </button>
       </div>
+    </>
+  );
 
+  if (isMobile) {
+    return (
+      <div className="w-full h-full bg-[#022C4F] text-white flex flex-col overflow-hidden">
+        {navContent}
+      </div>
+    );
+  }
+
+  return (
+    <aside
+      className={`fixed top-4 bottom-4 left-4 z-40 bg-[#022C4F] rounded-[30px] text-white flex flex-col hidden lg:flex transition-all duration-300 ${
+        isCollapsed ? "w-[100px]" : "w-[300px]"
+      }`}
+    >
+      {navContent}
     </aside>
   );
 }

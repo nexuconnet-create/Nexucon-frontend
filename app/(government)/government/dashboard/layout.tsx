@@ -8,98 +8,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Home,
-  FileText,
-  Scan,
-  Settings,
-  LogOut,
-  X,
   Menu,
-  Search,
   Bell,
   HelpCircle,
-  Layers,
-  type LucideIcon,
+  X,
 } from "lucide-react";
-
-type SidebarItem = {
-  name: string;
-  icon: LucideIcon;
-  href?: string;
-  subItems?: SidebarItem[];
-};
-
-const sidebarLinks: SidebarItem[] = [
-  {
-    name: "DASHBOARD",
-    icon: Home,
-    subItems: [
-      { name: "LIVE SITE VIEW", href: "/government/dashboard/live-site-view", icon: Home },
-      { name: "COMPLIANCE DASHBOARD", href: "/government/dashboard/project/overview", icon: Home },
-      { name: "CENTRALIZED ISSUES", href: "/government/dashboard/issues", icon: FileText },
-      { name: "ACTIVE PROJECTS", href: "/government/dashboard/project/schedule", icon: Home },
-    ],
-  },
-  {
-    name: "REGULATORY",
-    icon: FileText,
-    subItems: [
-      { name: "APPROVALS", href: "/government/dashboard/regulatory/approvals", icon: FileText },
-      { name: "PERMIT DECISIONS", href: "/government/dashboard/approvals/decisions", icon: FileText },
-      { name: "COMPLIANCE ISSUES", href: "/government/dashboard/regulatory/issues", icon: FileText },
-      { name: "ESCALATION MATRIX", href: "/government/dashboard/regulatory/escalation", icon: FileText },
-      { name: "STOP-WORK ORDERS", href: "/government/dashboard/inspections/stop-work", icon: FileText },
-      { name: "GOVERNMENT APIs", href: "/government/dashboard/integrations/government", icon: FileText },
-    ],
-  },
-  {
-    name: "RISK & AUDIT",
-    icon: FileText,
-    subItems: [
-      { name: "STRUCTURAL RISK INDEX", href: "/government/dashboard/analytics/risk", icon: FileText },
-      { name: "AUDIT RECORDS", href: "/government/dashboard/audit/records", icon: FileText },
-      { name: "BLACKLIST", href: "/government/dashboard/stakeholders/blacklist", icon: FileText },
-      { name: "EXPIRED DOCS", href: "/government/dashboard/applications/expired", icon: FileText },
-    ],
-  },
-  {
-    name: "DIGITAL EYE",
-    icon: Scan,
-    subItems: [
-      { name: "SCAN PLANNING", href: "/government/dashboard/digital-eye/scan-planning", icon: Scan },
-      { name: "PROCESSING PIPELINE", href: "/government/dashboard/digital-eye/processing-pipeline", icon: Scan },
-      { name: "3DGS & LIDAR VIEWER", href: "/government/dashboard/tersus/viewer", icon: Scan },
-      { name: "QC DASHBOARD", href: "/government/dashboard/tersus/qc-dashboard", icon: Scan },
-    ],
-  },
-  {
-    name: "BIM",
-    icon: Layers,
-    subItems: [
-      { name: "CLASH DETECTION", href: "/government/dashboard/bim/clashes", icon: Layers },
-      { name: "PROGRESS VALIDATION", href: "/government/dashboard/bim/progress-validation", icon: Layers },
-      { name: "DEVIATION ANALYSIS", href: "/government/dashboard/tersus/bim-comparison", icon: Layers },
-    ],
-  },
-  {
-    name: "DOCUMENTS",
-    icon: FileText,
-    subItems: [
-      { name: "APPROVED PLANS", href: "/government/dashboard/documents/drawings", icon: FileText },
-      { name: "INSPECTION REPORTS", href: "/government/dashboard/documents/reports", icon: FileText },
-      { name: "REGULATORY ARCHIVE", href: "/government/dashboard/documents/all", icon: FileText },
-    ],
-  },
-  {
-    name: "SETTINGS",
-    icon: Settings,
-    subItems: [
-      { name: "AGENCY PROFILE", href: "/government/dashboard/settings/profile", icon: Settings },
-      { name: "NOTIFICATION PREFERENCES", href: "/government/dashboard/settings/notifications", icon: Settings },
-      { name: "SECURITY", href: "/government/dashboard/settings/security", icon: Settings },
-    ],
-  },
-];
 
 export default function GovernmentLayout({
   children,
@@ -128,118 +41,20 @@ export default function GovernmentLayout({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="fixed inset-0 bg-[#0F181F]/40 backdrop-blur-sm z-[60] lg:hidden"
+              className="fixed inset-0 bg-[#0F181F]/50 backdrop-blur-sm z-[60] lg:hidden"
             />
             
             <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="fixed inset-y-0 left-0 w-[85%] max-w-sm bg-[#022C4F] text-white shadow-2xl z-[70] flex flex-col lg:hidden"
+              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+              className="fixed inset-y-0 left-0 w-[85%] max-w-sm bg-[#022C4F] text-white shadow-2xl z-[70] flex flex-col lg:hidden overflow-hidden"
             >
-              <div className="h-20 sm:h-24 flex items-center justify-between px-6 border-b border-white/10 shrink-0">
-                <Image
-                  src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
-                  alt="Nexucon Logo"
-                  width={150}
-                  height={44}
-                  className="h-8 sm:h-9 w-auto object-contain brightness-0 invert"
-                />
-                <button 
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0"
-                  aria-label="Close Navigation Menu"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1.5 scrollbar-hide">
-                <p className="px-3 text-[11px] font-extrabold text-white/50 uppercase tracking-widest mb-1">
-                  Menu
-                </p>
-                {sidebarLinks.map((link) => {
-                  const isActive = link.href ? (pathname === link.href || pathname.startsWith(`${link.href}/`)) : false;
-                  const Icon = link.icon;
-                  const isParent = !!link.subItems;
-
-                  return (
-                    <div key={link.name} className="flex flex-col">
-                      {link.href ? (
-                        <Link
-                          href={link.href}
-                          onClick={(e) => {
-                            if (link.name === "Notifications") {
-                              e.preventDefault();
-                              window.dispatchEvent(new Event('open-notifications'));
-                            }
-                            setIsMobileMenuOpen(false);
-                          }}
-                          className={`flex items-center gap-3.5 px-3.5 py-3 rounded-xl transition-all duration-200 min-h-[44px] ${isActive
-                            ? "bg-white/15 text-white font-bold shadow-sm"
-                            : "text-white/70 hover:text-white hover:bg-white/5"
-                            }`}
-                        >
-                          <Icon size={18} className={`shrink-0 ${isActive ? "text-white scale-105" : "text-white/70"}`} strokeWidth={isActive ? 2.5 : 2} />
-                          <span className="tracking-wide text-xs sm:text-sm">{link.name}</span>
-                        </Link>
-                      ) : (
-                        <div
-                          className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-white/80 font-bold text-xs uppercase tracking-wider"
-                        >
-                          <Icon size={18} className="shrink-0 text-white/60" strokeWidth={2} />
-                          <span>{link.name}</span>
-                        </div>
-                      )}
-                      
-                      {isParent && (
-                        <div className="flex flex-col ml-6 pl-2 border-l border-white/10 mt-1 gap-1">
-                          {link.subItems?.map((sub) => {
-                            if (!sub.href) return null;
-                            const SubIcon = sub.icon;
-                            const isSubItemActive = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
-                            return (
-                              <Link
-                                key={sub.name}
-                                href={sub.href}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all min-h-[38px] text-xs ${
-                                  isSubItemActive
-                                    ? "bg-white/10 text-white font-bold"
-                                    : "text-white/60 hover:text-white hover:bg-white/5"
-                                }`}
-                              >
-                                <SubIcon
-                                  size={15}
-                                  className={`shrink-0 ${isSubItemActive ? "text-blue-400" : "text-white/50"}`}
-                                  strokeWidth={isSubItemActive ? 2.5 : 1.5}
-                                />
-                                <span className="tracking-wide">{sub.name}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="p-4 border-t border-white/10 flex items-center justify-between bg-black/10 shrink-0">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="w-10 h-10 shrink-0 rounded-full bg-white text-[#022C4F] font-black flex items-center justify-center text-sm shadow-inner">
-                    PR
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="font-bold text-xs truncate">Public Regulator</span>
-                    <span className="text-[10px] text-white/60 truncate">Directorate</span>
-                  </div>
-                </div>
-                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Logged out successfully', type: 'success' } })); }} className="shrink-0 p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all" title="Log Out">
-                  <LogOut size={20} />
-                </button>
-              </div>
+              <GovernmentSidebar 
+                isMobile={true} 
+                onCloseMobile={() => setIsMobileMenuOpen(false)} 
+              />
             </motion.div>
           </>
         )}
