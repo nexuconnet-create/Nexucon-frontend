@@ -112,7 +112,7 @@ export default function GovernmentLayout({
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[#DFDFDF] flex text-[#0F181F] p-4">
+    <div className="min-h-screen bg-[#DFDFDF] flex text-[#0F181F] p-0 sm:p-2 lg:p-4">
       {/* Desktop Sidebar */}
       <GovernmentSidebar 
         isCollapsed={isSidebarCollapsed} 
@@ -136,26 +136,27 @@ export default function GovernmentLayout({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="fixed inset-y-0 left-0 w-[80%] max-w-sm bg-[#022C4F] text-white shadow-2xl z-[70] flex flex-col lg:hidden"
+              className="fixed inset-y-0 left-0 w-[85%] max-w-sm bg-[#022C4F] text-white shadow-2xl z-[70] flex flex-col lg:hidden"
             >
-              <div className="h-28 flex items-center justify-between px-6 border-b border-white/10">
+              <div className="h-20 sm:h-24 flex items-center justify-between px-6 border-b border-white/10 shrink-0">
                 <Image
                   src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
                   alt="Nexucon Logo"
-                  width={160}
-                  height={48}
-                  className="h-10 w-auto object-contain brightness-0 invert"
+                  width={150}
+                  height={44}
+                  className="h-8 sm:h-9 w-auto object-contain brightness-0 invert"
                 />
                 <button 
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-full bg-white text-[#022C4F] hover:scale-110 transition-transform shrink-0 shadow-lg"
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0"
+                  aria-label="Close Navigation Menu"
                 >
-                  <X size={16} strokeWidth={3} />
+                  <X size={18} />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2 scrollbar-hide">
-                <p className="px-4 text-xs font-bold text-white/50 uppercase tracking-widest mb-2">
+              <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1.5 scrollbar-hide">
+                <p className="px-3 text-[11px] font-extrabold text-white/50 uppercase tracking-widest mb-1">
                   Menu
                 </p>
                 {sidebarLinks.map((link) => {
@@ -175,25 +176,25 @@ export default function GovernmentLayout({
                             }
                             setIsMobileMenuOpen(false);
                           }}
-                          className={`flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group ${isActive
-                            ? "bg-white/10 text-white font-semibold"
+                          className={`flex items-center gap-3.5 px-3.5 py-3 rounded-xl transition-all duration-200 min-h-[44px] ${isActive
+                            ? "bg-white/15 text-white font-bold shadow-sm"
                             : "text-white/70 hover:text-white hover:bg-white/5"
                             }`}
                         >
-                          <Icon size={20} className={`shrink-0 transition-transform duration-300 ${isActive ? "text-white scale-110" : "text-white/70 group-hover:text-white"}`} strokeWidth={isActive ? 2.5 : 2} />
-                          <span className="tracking-wide text-sm whitespace-nowrap">{link.name}</span>
+                          <Icon size={18} className={`shrink-0 ${isActive ? "text-white scale-105" : "text-white/70"}`} strokeWidth={isActive ? 2.5 : 2} />
+                          <span className="tracking-wide text-xs sm:text-sm">{link.name}</span>
                         </Link>
                       ) : (
                         <div
-                          className="flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group text-white/70"
+                          className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-white/80 font-bold text-xs uppercase tracking-wider"
                         >
-                          <Icon size={20} className="shrink-0 transition-transform duration-300 text-white/70" strokeWidth={1.5} />
-                          <span className="tracking-wide text-sm whitespace-nowrap">{link.name}</span>
+                          <Icon size={18} className="shrink-0 text-white/60" strokeWidth={2} />
+                          <span>{link.name}</span>
                         </div>
                       )}
                       
                       {isParent && (
-                        <div className="flex flex-col ml-8 mt-1 gap-1">
+                        <div className="flex flex-col ml-6 pl-2 border-l border-white/10 mt-1 gap-1">
                           {link.subItems?.map((sub) => {
                             if (!sub.href) return null;
                             const SubIcon = sub.icon;
@@ -203,18 +204,18 @@ export default function GovernmentLayout({
                                 key={sub.name}
                                 href={sub.href}
                                 onClick={() => setIsMobileMenuOpen(false)}
-                                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group ${
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all min-h-[38px] text-xs ${
                                   isSubItemActive
-                                    ? "text-white font-semibold"
-                                    : "text-white/60 hover:text-white"
+                                    ? "bg-white/10 text-white font-bold"
+                                    : "text-white/60 hover:text-white hover:bg-white/5"
                                 }`}
                               >
                                 <SubIcon
-                                  size={16}
-                                  className={`shrink-0 transition-transform duration-300 ${isSubItemActive ? "text-white" : "text-white/60 group-hover:text-white"}`}
+                                  size={15}
+                                  className={`shrink-0 ${isSubItemActive ? "text-blue-400" : "text-white/50"}`}
                                   strokeWidth={isSubItemActive ? 2.5 : 1.5}
                                 />
-                                <span className="tracking-wide text-xs">{sub.name}</span>
+                                <span className="tracking-wide">{sub.name}</span>
                               </Link>
                             );
                           })}
@@ -225,18 +226,18 @@ export default function GovernmentLayout({
                 })}
               </div>
 
-              <div className="p-6 border-t border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-4 overflow-hidden">
-                  <div className="w-12 h-12 shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center text-lg shadow-inner">
+              <div className="p-4 border-t border-white/10 flex items-center justify-between bg-black/10 shrink-0">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="w-10 h-10 shrink-0 rounded-full bg-white text-[#022C4F] font-black flex items-center justify-center text-sm shadow-inner">
                     PR
                   </div>
-                  <div className="flex flex-col whitespace-nowrap">
-                    <span className="font-bold text-sm">Jane Doe</span>
-                    <span className="text-[10px] text-white/60 uppercase tracking-wider">Government Agency</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold text-xs truncate">Public Regulator</span>
+                    <span className="text-[10px] text-white/60 truncate">Directorate</span>
                   </div>
                 </div>
                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Logged out successfully', type: 'success' } })); }} className="shrink-0 p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all" title="Log Out">
-                  <LogOut size={22} />
+                  <LogOut size={20} />
                 </button>
               </div>
             </motion.div>
@@ -246,50 +247,41 @@ export default function GovernmentLayout({
 
       {/* Main Content */}
       <div 
-        className={`flex-1 flex flex-col min-w-0 bg-[#FAFAFA] lg:rounded-[30px] shadow-sm transition-all duration-300 h-screen lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
+        className={`flex-1 flex flex-col min-w-0 bg-[#FAFAFA] lg:rounded-[30px] shadow-sm transition-all duration-300 min-h-screen lg:min-h-0 lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
           isSidebarCollapsed ? "lg:ml-[116px]" : "lg:ml-[316px]"
         }`}
       >
         {/* Mobile Header */}
-        <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-4 bg-white/90 backdrop-blur-md border-b border-gray-100">
-          <Image
-            src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
-            alt="Nexucon Logo"
-            width={140}
-            height={40}
-            className="h-7 w-auto object-contain"
-          />
-          <div className="flex items-center gap-3">
-            <div className="relative hidden sm:flex items-center">
-              <input 
-                type="text" 
-                placeholder="Search..."
-                className="w-48 h-8 pl-8 pr-3 rounded-full border border-[#022C4F] text-[11px] focus:outline-none focus:ring-1 focus:ring-[#022C4F] shadow-sm transition-all bg-white"
-              />
-              <div className="absolute left-2.5 text-gray-400">
-                <Search size={12} />
-              </div>
-            </div>
+        <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-3.5 sm:px-6 py-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
+          <Link href="/government/dashboard/command-center" className="flex items-center">
+            <Image
+              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
+              alt="Nexucon Logo"
+              width={120}
+              height={32}
+              className="h-7 w-auto object-contain"
+            />
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-3">
             <button 
               onClick={() => window.dispatchEvent(new Event('open-notifications'))}
-              className="relative w-8 h-8 rounded-full border border-[#022C4F] flex items-center justify-center text-[#022C4F] hover:bg-gray-50 transition-colors shrink-0"
+              className="relative w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center text-[#022C4F] hover:bg-gray-50 transition-colors shrink-0"
+              aria-label="Open Notifications"
             >
-              <Bell size={14} />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#022C4F] rounded-full"></span>
+              <Bell size={16} />
+              <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
             </button>
-            <div className="w-8 h-8 rounded-full bg-[#022C4F] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-              PR
-            </div>
             <button 
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-1.5 text-[#022C4F] bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              className="w-9 h-9 flex items-center justify-center text-[#022C4F] bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors shrink-0 cursor-pointer"
+              aria-label="Open Navigation Menu"
             >
               <Menu size={20} />
             </button>
           </div>
         </div>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-10 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-10 max-w-[1600px] w-full mx-auto min-w-0">
           {children}
         </main>
       </div>

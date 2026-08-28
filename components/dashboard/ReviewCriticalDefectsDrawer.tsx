@@ -114,36 +114,36 @@ export default function ReviewCriticalDefectsDrawer({
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-3xl bg-white shadow-2xl flex flex-col z-[111] animate-in slide-in-from-right-8 duration-300 border-l border-slate-200">
         
         {/* Header Bar */}
-        <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-rose-900 via-rose-950 to-[#022C4F] text-white flex items-center justify-between shrink-0 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-400/30 flex items-center justify-center text-rose-300 shrink-0 shadow-inner">
-              <AlertOctagon size={24} className="animate-pulse" />
+        <div className="p-4 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-rose-900 via-rose-950 to-[#022C4F] text-white flex items-center justify-between shrink-0 shadow-sm">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-rose-500/20 border border-rose-400/30 flex items-center justify-center text-rose-300 shrink-0 shadow-inner">
+              <AlertOctagon size={22} className="animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/30 text-rose-200 border border-rose-400/40">
-                  Government Safety & Compliance Audit
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/30 text-rose-200 border border-rose-400/40">
+                  Compliance Audit
                 </span>
-                <span className="text-xs text-slate-300 font-semibold">
+                <span className="text-xs text-slate-300 font-semibold hidden sm:inline">
                   {stats.totalCritical} Critical • {stats.totalEscalated} Escalated
                 </span>
               </div>
-              <h2 className="text-xl font-black tracking-tight text-white mt-1">
-                Review Critical Defects & Safety Hazards
+              <h2 className="text-base sm:text-xl font-black tracking-tight text-white mt-1 truncate">
+                Review Critical Defects & Safety
               </h2>
             </div>
           </div>
 
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Top Stats Overview */}
-        <div className="grid grid-cols-4 gap-3 p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 p-3 sm:p-4 bg-slate-50 border-b border-slate-200 shrink-0">
           <div 
             onClick={() => setSelectedFilter('CRITICAL')}
             className={`p-3 rounded-2xl border cursor-pointer transition-all ${

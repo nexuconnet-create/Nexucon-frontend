@@ -361,19 +361,19 @@ export default function MonitoringDynamicPage() {
   };
 
   return (
-    <div className="h-full flex flex-col pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-16">
+    <div className="h-full flex flex-col pt-1 sm:pt-2 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-16 min-w-0">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-6">
         <div className="max-w-3xl">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-lg">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
               <MonitorPlay size={20} />
             </div>
-            <h1 className="text-[32px] font-bold text-[#022C4F] leading-tight">
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
               Site Monitoring Workspace
             </h1>
           </div>
-          <p className="text-gray-600 text-sm leading-relaxed ml-[52px]">
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
             {content.subtitle}
           </p>
         </div>
@@ -381,15 +381,15 @@ export default function MonitoringDynamicPage() {
       </div>
 
       {/* Tabs & Action */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide max-w-full">
           {TABS.map((tab) => {
             const isActive = currentStatus === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => router.push(`/government/dashboard/monitoring/${tab.id}`)}
-                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                   isActive 
                     ? 'bg-[#022C4F] text-white shadow-md' 
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
@@ -402,7 +402,7 @@ export default function MonitoringDynamicPage() {
           })}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap sm:flex-nowrap">
           {currentStatus === 'milestones' && (
             <button
               onClick={() => {
@@ -414,7 +414,7 @@ export default function MonitoringDynamicPage() {
                   setIsCreateMilestoneModalOpen(true);
                 }
               }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer text-center"
             >
               <ShieldCheck size={16} /> 
               Verify Milestone
@@ -429,7 +429,7 @@ export default function MonitoringDynamicPage() {
               else if (currentStatus === 'verification') setIsVerificationDrawerOpen(true);
               else setIsUpdateDrawerOpen(true);
             }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer text-center"
           >
             <Plus size={16} /> 
             {currentStatus === 'milestones' ? 'Schedule Milestone' :
@@ -441,11 +441,11 @@ export default function MonitoringDynamicPage() {
       </div>
 
       {/* Dynamic Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8 min-w-0">
         {/* Overview Stats */}
-        <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {content.overview.map((stat, idx) => (
-            <div key={idx} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div key={idx} className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                   <stat.icon size={20} />
@@ -624,28 +624,28 @@ export default function MonitoringDynamicPage() {
                       <div 
                         key={update.id} 
                         onClick={() => setSelectedDetailItem({ type: 'update', data: update })}
-                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 group cursor-pointer"
                       >
-                        <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                        <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/3 min-w-0">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                             {update.update_type === 'DRONE_SURVEY' ? <MapPin size={20} /> : <Camera size={20} />}
                           </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors">{update.project_name}</h4>
-                            <p className="text-xs text-slate-400 font-semibold">{update.site_weather} • {update.active_workers_count} Workers</p>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors truncate">{update.project_name}</h4>
+                            <p className="text-xs text-slate-400 font-semibold truncate">{update.site_weather} • {update.active_workers_count} Workers</p>
                           </div>
                         </div>
 
-                        <div className="w-1/4">
+                        <div className="w-full md:w-1/4">
                           <p className="text-xs text-slate-600 font-medium line-clamp-1">{update.work_summary || 'Daily progress logged'}</p>
                         </div>
 
-                        <div className="flex items-center gap-2 w-1/5 text-xs text-slate-500">
-                          <Calendar size={13} className="text-slate-400" />
+                        <div className="flex items-center gap-2 w-full md:w-1/5 text-xs text-slate-500">
+                          <Calendar size={13} className="text-slate-400 shrink-0" />
                           <span>{new Date(update.created_at).toLocaleDateString()}</span>
                         </div>
 
-                        <div className="flex items-center gap-3 justify-end">
+                        <div className="flex items-center gap-3 justify-start md:justify-end w-full md:w-auto">
                           <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-700">
                             {update.update_type.replace('_', ' ')}
                           </span>
@@ -659,9 +659,9 @@ export default function MonitoringDynamicPage() {
               {/* Tab 2: Site Progress */}
               {currentStatus === 'progress' && (
                 <div className="space-y-4">
-                  <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-2xl flex items-center justify-between">
+                  <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Activity className="text-blue-600" size={20} />
+                      <Activity className="text-blue-600 shrink-0" size={20} />
                       <div>
                         <h4 className="text-xs font-bold text-[#022C4F]">Programme Progress vs Statutory Milestones</h4>
                         <p className="text-[11px] text-slate-500">Track real-time stage completion across active high-rise and residential developments.</p>
@@ -669,7 +669,7 @@ export default function MonitoringDynamicPage() {
                     </div>
                     <button
                       onClick={() => setIsUpdateDrawerOpen(true)}
-                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm"
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shrink-0 cursor-pointer text-center"
                     >
                       Update Site Progress
                     </button>
@@ -683,17 +683,17 @@ export default function MonitoringDynamicPage() {
                           setSelectedMilestone(m);
                           setIsMilestoneDetailDrawerOpen(true);
                         }}
-                        className="p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-all space-y-3 cursor-pointer group"
+                        className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-all space-y-3 cursor-pointer group"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
+                          <div className="min-w-0">
                             <span className="text-[10px] font-black uppercase text-blue-700 font-mono">
                               {m.milestone_code || `MS-${(m.id || '').substring(0, 4).toUpperCase() || '01'}`}
                             </span>
-                            <h4 className="text-sm font-black text-[#022C4F] group-hover:text-blue-600 transition-colors">{m.name}</h4>
-                            <p className="text-xs text-slate-500 font-semibold">{m.project_name}</p>
+                            <h4 className="text-sm font-black text-[#022C4F] group-hover:text-blue-600 transition-colors truncate">{m.name}</h4>
+                            <p className="text-xs text-slate-500 font-semibold truncate">{m.project_name}</p>
                           </div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${getMilestoneStatusBadge(m.status || 'PLANNED')}`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border shrink-0 ${getMilestoneStatusBadge(m.status || 'PLANNED')}`}>
                             {(m.status || 'PLANNED').replace('_', ' ')}
                           </span>
                         </div>
@@ -742,19 +742,19 @@ export default function MonitoringDynamicPage() {
                       <div 
                         key={obs.id} 
                         onClick={() => setSelectedDetailItem({ type: 'observation', data: obs })}
-                        className="p-4 rounded-2xl border border-slate-100 hover:border-orange-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-orange-200 hover:shadow-md transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 group cursor-pointer"
                       >
-                        <div className="flex items-center gap-4 w-1/3">
-                          <div className="w-11 h-11 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                        <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/3 min-w-0">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
                             <Eye size={20} />
                           </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-orange-600 transition-colors">{obs.title}</h4>
-                            <p className="text-xs text-slate-400 font-semibold">{obs.observation_reference} • {obs.project_name}</p>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-orange-600 transition-colors truncate">{obs.title}</h4>
+                            <p className="text-xs text-slate-400 font-semibold truncate">{obs.observation_reference} • {obs.project_name}</p>
                           </div>
                         </div>
 
-                        <div className="w-1/4">
+                        <div className="w-full md:w-1/4">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                             obs.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-700' :
                             obs.severity === 'HIGH' ? 'bg-orange-100 text-orange-700' :
@@ -764,12 +764,12 @@ export default function MonitoringDynamicPage() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 w-1/5 text-xs text-slate-500">
-                          <Clock size={13} className="text-slate-400" />
+                        <div className="flex items-center gap-2 w-full md:w-1/5 text-xs text-slate-500">
+                          <Clock size={13} className="text-slate-400 shrink-0" />
                           <span>{new Date(obs.created_at).toLocaleDateString()}</span>
                         </div>
 
-                        <div className="flex items-center gap-3 justify-end">
+                        <div className="flex items-center gap-3 justify-start md:justify-end w-full md:w-auto">
                           <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-700">
                             {obs.status}
                           </span>
@@ -793,28 +793,28 @@ export default function MonitoringDynamicPage() {
                       <div 
                         key={iss.id} 
                         onClick={() => setSelectedDetailItem({ type: 'issue', data: iss })}
-                        className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex items-center justify-between group cursor-pointer"
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-red-200 hover:shadow-md transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 group cursor-pointer"
                       >
-                        <div className="flex items-center gap-4 w-1/3">
-                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                        <div className="flex items-center gap-3 sm:gap-4 w-full md:w-1/3 min-w-0">
+                          <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
                             iss.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-700' : 'bg-red-50 text-red-600'
                           }`}>
                             <AlertTriangle size={20} />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-red-600 transition-colors">{iss.title}</h4>
+                              <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-red-600 transition-colors truncate">{iss.title}</h4>
                               {iss.is_escalated && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5">
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5 shrink-0">
                                   <Gavel size={9} /> Escalated
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-400 font-semibold">{iss.issue_reference} • {iss.project_name}</p>
+                            <p className="text-xs text-slate-400 font-semibold truncate">{iss.issue_reference} • {iss.project_name}</p>
                           </div>
                         </div>
 
-                        <div className="w-1/5">
+                        <div className="w-full md:w-1/5">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                             iss.severity === 'CRITICAL' ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30' : 
                             iss.severity === 'HIGH' ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'
@@ -823,12 +823,12 @@ export default function MonitoringDynamicPage() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 w-1/5 text-xs text-slate-500">
+                        <div className="flex items-center gap-2 w-full md:w-1/5 text-xs text-slate-500">
                           <User size={13} className="text-slate-400 shrink-0" />
                           <span className="truncate">{iss.assigned_to_name || 'Site Engineer'}</span>
                         </div>
 
-                        <div className="flex items-center gap-2 justify-end">
+                        <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto">
                           <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
                             iss.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                           }`}>
@@ -1164,15 +1164,15 @@ export default function MonitoringDynamicPage() {
               {currentStatus === 'verification' && (
                 <>
                   {/* Verification Filter & Layout Toolbar */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 mb-5">
-                    <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200/80 mb-5">
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                       {/* Method Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-500">Method:</span>
+                      <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                        <span className="text-xs font-bold text-slate-500 shrink-0">Method:</span>
                         <select
                           value={selectedVerificationMethodFilter}
                           onChange={(e) => setSelectedVerificationMethodFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                          className="w-full sm:w-auto px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                         >
                           {VERIFICATION_METHOD_FILTERS.map(f => (
                             <option key={f.id} value={f.id}>{f.label}</option>
@@ -1181,12 +1181,12 @@ export default function MonitoringDynamicPage() {
                       </div>
 
                       {/* Status Filter */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-500">Status:</span>
+                      <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                        <span className="text-xs font-bold text-slate-500 shrink-0">Status:</span>
                         <select
                           value={selectedVerificationStatusFilter}
                           onChange={(e) => setSelectedVerificationStatusFilter(e.target.value)}
-                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                          className="w-full sm:w-auto px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                         >
                           {VERIFICATION_STATUS_FILTERS.map(f => (
                             <option key={f.id} value={f.id}>{f.label}</option>
@@ -1196,41 +1196,41 @@ export default function MonitoringDynamicPage() {
                     </div>
 
                     {/* Layout Switcher & Action Button */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-bold">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                      <div className="flex p-1 bg-white border border-slate-200 rounded-xl shadow-sm text-xs font-bold overflow-x-auto">
                         <button
                           type="button"
                           onClick={() => setVerificationLayout('table')}
-                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                          className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
                             verificationLayout === 'table' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <List size={13} /> Table Matrix
+                          <List size={13} /> Table
                         </button>
                         <button
                           type="button"
                           onClick={() => setVerificationLayout('cards')}
-                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                          className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
                             verificationLayout === 'cards' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <LayoutGrid size={13} /> Spatial Cards
+                          <LayoutGrid size={13} /> Cards
                         </button>
                         <button
                           type="button"
                           onClick={() => setVerificationLayout('map')}
-                          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                          className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
                             verificationLayout === 'map' ? 'bg-[#022C4F] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          <Compass size={13} /> Boundary & RTK
+                          <Compass size={13} /> Map
                         </button>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => setIsRecordVerificationModalOpen(true)}
-                        className="px-4 py-2 bg-[#022C4F] hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                        className="px-4 py-2 bg-[#022C4F] hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                       >
                         <Plus size={14} /> Record Verification
                       </button>
@@ -1257,7 +1257,7 @@ export default function MonitoringDynamicPage() {
                       {/* LAYOUT 1: Cadastral Table Matrix */}
                       {verificationLayout === 'table' && (
                         <div className="overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-                          <table className="w-full text-left text-xs border-collapse">
+                          <table className="w-full min-w-[760px] text-left text-xs border-collapse">
                             <thead>
                               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                                 <th className="py-3.5 px-4">Verification Ref & Method</th>
