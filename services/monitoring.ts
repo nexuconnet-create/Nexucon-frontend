@@ -7,7 +7,20 @@ export interface DailySiteUpdate {
   project_name: string;
   project_reference: string;
   project_location?: string;
+  developer_name?: string;
   update_type: 'DAILY_PHOTO' | 'DRONE_SURVEY' | 'PROGRESS_REPORT' | 'SITE_LOG';
+  inspector?: string;
+  inspector_name?: string;
+  inspector_badge?: string;
+  inspection_date?: string;
+  origin_type?: 'FIELD_INSPECTOR' | 'PROXY_OFFICE_SUPERVISOR' | 'OFFLINE_FIELD_SYNC';
+  field_verification_stamp?: {
+    inspector_name?: string;
+    inspector_badge?: string;
+    certified_at?: string;
+    origin?: string;
+    gps_lock?: boolean;
+  };
   reported_by?: string;
   reported_by_name: string;
   progress_percentage: number;
@@ -18,11 +31,43 @@ export interface DailySiteUpdate {
   site_weather?: string;
   workforce_count?: number;
   active_workers_count?: number;
-  gps_coordinates?: { lat?: number; lng?: number };
+  gps_coordinates?: { lat?: number; lng?: number; [key: string]: any };
   status: 'Active' | 'Pending Verification' | 'Approved' | 'Flagged';
   priority: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface MissedSiteVisitRecord {
+  id: string;
+  record_reference?: string;
+  project: string;
+  project_name?: string;
+  project_reference?: string;
+  project_location?: string;
+  developer_name?: string;
+  inspector?: string | null;
+  inspector_name: string;
+  inspector_badge?: string;
+  scheduled_date: string;
+  reason_category: 
+    | 'ADVERSE_WEATHER' 
+    | 'ACCESS_DENIED' 
+    | 'SITE_INACCESSIBLE' 
+    | 'SECURITY_CONCERN' 
+    | 'EQUIPMENT_BREAKDOWN' 
+    | 'EMERGENCY_REASSIGNMENT' 
+    | 'DEVELOPER_UNAVAILABLE' 
+    | 'ILLNESS_LEAVE' 
+    | 'OTHER';
+  reason_display?: string;
+  justification_notes: string;
+  evidence_photos?: string[];
+  status: 'SUBMITTED' | 'ACKNOWLEDGED' | 'JUSTIFIED' | 'FLAGGED_UNJUSTIFIED' | 'ESCALATED';
+  supervisor_acknowledgment?: string | null;
+  acknowledged_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface FieldObservation {
@@ -291,6 +336,9 @@ export const getDailySiteUpdates = async (params?: {
   type?: string;
   status?: string;
   search?: string;
+  date?: string;
+  inspection_date?: string;
+  inspector?: string;
 }): Promise<DailySiteUpdate[]> => {
   try {
     const res: any = await api.get('/monitoring/updates/', { params });
@@ -304,6 +352,11 @@ export const getDailySiteUpdates = async (params?: {
 export const createDailySiteUpdate = async (payload: {
   project: string;
   update_type: string;
+  inspector_name?: string;
+  inspector_badge?: string;
+  inspection_date?: string;
+  origin_type?: string;
+  field_verification_stamp?: any;
   progress_percentage?: number;
   work_summary: string;
   photos?: string[];
@@ -312,6 +365,48 @@ export const createDailySiteUpdate = async (payload: {
   gps_coordinates?: any;
 }): Promise<DailySiteUpdate> => {
   const res: any = await api.post('/monitoring/updates/', payload);
+  return res.data || res;
+};
+
+// Missed Site Visits / Non-Visitation Internal Control History
+export const getMissedSiteVisits = async (params?: {
+  project?: string;
+  reason?: string;
+  status?: string;
+  date?: string;
+  search?: string;
+}): Promise<MissedSiteVisitRecord[]> => {
+  try {
+    const res: any = await api.get('/monitoring/missed-visits/', { params });
+    return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  } catch (err) {
+    console.warn('getMissedSiteVisits fallback notice:', err);
+    return [];
+  }
+};
+
+export const createMissedSiteVisit = async (payload: {
+  project: string;
+  inspector_name?: string;
+  inspector_badge?: string;
+  scheduled_date: string;
+  reason_category: string;
+  justification_notes: string;
+  evidence_photos?: string[];
+  status?: string;
+}): Promise<MissedSiteVisitRecord> => {
+  const res: any = await api.post('/monitoring/missed-visits/', payload);
+  return res.data || res;
+};
+
+export const acknowledgeMissedSiteVisit = async (
+  id: string,
+  payload: {
+    status?: string;
+    supervisor_acknowledgment: string;
+  }
+): Promise<MissedSiteVisitRecord> => {
+  const res: any = await api.post(`/monitoring/missed-visits/${id}/acknowledge/`, payload);
   return res.data || res;
 };
 

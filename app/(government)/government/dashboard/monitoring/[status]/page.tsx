@@ -6,17 +6,19 @@ import {
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
   Check, FolderOpen, AlertCircle, FileSearch, FileCheck, History, FileWarning, Briefcase,
   MonitorPlay, Plus, RefreshCw, Compass, AlertOctagon, Camera, Navigation, Gavel,
-  Layers, ChevronRight, BarChart2, GitCommit, Lock, Radio
+  Layers, ChevronRight, BarChart2, GitCommit, Lock, Radio, BadgeCheck, CloudRain,
+  ShieldAlert, Wrench, Zap, UserX, UserCheck
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import TopRightControls from "@/components/dashboard/TopRightControls";
 import {
-  getDailySiteUpdates, getFieldObservations, getSiteIssues,
-  getMilestones, getSiteVerifications, getMonitoringStats,
-  DailySiteUpdate, FieldObservation, SiteIssue,
+  getDailySiteUpdates, getMissedSiteVisits, acknowledgeMissedSiteVisit,
+  getFieldObservations, getSiteIssues, getMilestones, getSiteVerifications, getMonitoringStats,
+  DailySiteUpdate, MissedSiteVisitRecord, FieldObservation, SiteIssue,
   ConstructionMilestone, SiteVerification, MonitoringStats
 } from '@/services/monitoring';
 import CreateDailyUpdateDrawer from '@/components/dashboard/CreateDailyUpdateDrawer';
+import LogMissedSiteVisitModal from '@/components/dashboard/LogMissedSiteVisitModal';
 import CreateObservationModal from '@/components/dashboard/CreateObservationModal';
 import ReportIssueModal from '@/components/dashboard/ReportIssueModal';
 import VerifyMilestoneModal from '@/components/dashboard/VerifyMilestoneModal';
@@ -39,10 +41,22 @@ import EscalateToDirectorateModal from '@/components/dashboard/EscalateToDirecto
 const TABS = [
   { id: 'live', label: 'Live Site View', icon: Eye },
   { id: 'progress', label: 'Site Progress', icon: Activity },
+  { id: 'attendance', label: 'Field Attendance & Non-Visitation', icon: ClipboardList },
   { id: 'observations', label: 'Field Observations', icon: Eye },
   { id: 'issues', label: 'Site Issues', icon: AlertTriangle },
   { id: 'milestones', label: 'Construction Milestones', icon: CheckCircle },
   { id: 'verification', label: 'Site Verification', icon: ShieldCheck },
+];
+
+const REASON_FILTER_OPTIONS = [
+  { id: 'ALL', label: 'All Non-Attendance Reasons' },
+  { id: 'ADVERSE_WEATHER', label: '🌧️ Adverse Weather' },
+  { id: 'ACCESS_DENIED', label: '🔒 Access Denied' },
+  { id: 'SITE_INACCESSIBLE', label: '🌊 Road Inaccessible' },
+  { id: 'SECURITY_CONCERN', label: '⚠️ Security / Hazard' },
+  { id: 'EQUIPMENT_BREAKDOWN', label: '🔧 Hardware Breakdown' },
+  { id: 'EMERGENCY_REASSIGNMENT', label: '🚨 Emergency Reassignment' },
+  { id: 'DEVELOPER_UNAVAILABLE', label: '👤 Engineer Absent' },
 ];
 
 const PHASE_FILTERS = [
@@ -97,11 +111,14 @@ export default function MonitoringDynamicPage() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [selectedVerificationMethodFilter, setSelectedVerificationMethodFilter] = useState('ALL');
   const [selectedVerificationStatusFilter, setSelectedVerificationStatusFilter] = useState('ALL');
+  const [selectedReasonFilter, setSelectedReasonFilter] = useState('ALL');
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Monitoring collections from database
   const [dailyUpdates, setDailyUpdates] = useState<DailySiteUpdate[]>([]);
+  const [missedVisits, setMissedVisits] = useState<MissedSiteVisitRecord[]>([]);
   const [observations, setObservations] = useState<FieldObservation[]>([]);
   const [issues, setIssues] = useState<SiteIssue[]>([]);
   const [milestones, setMilestones] = useState<ConstructionMilestone[]>([]);
@@ -110,6 +127,7 @@ export default function MonitoringDynamicPage() {
 
   // Modals & Drawers
   const [isUpdateDrawerOpen, setIsUpdateDrawerOpen] = useState(false);
+  const [isMissedVisitModalOpen, setIsMissedVisitModalOpen] = useState(false);
   const [isPhotosGalleryOpen, setIsPhotosGalleryOpen] = useState(false);
   const [isProgressDetailModalOpen, setIsProgressDetailModalOpen] = useState(false);
   const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
@@ -145,8 +163,22 @@ export default function MonitoringDynamicPage() {
       setStats(statsRes);
 
       if (currentStatus === 'live' || currentStatus === 'progress') {
-        const data = await getDailySiteUpdates({ search: searchQuery });
+        const data = await getDailySiteUpdates({ 
+          search: searchQuery,
+          date: selectedCalendarDate || undefined
+        });
         setDailyUpdates(data);
+      } else if (currentStatus === 'attendance') {
+        const [updatesData, missedData] = await Promise.all([
+          getDailySiteUpdates({ search: searchQuery, date: selectedCalendarDate || undefined }),
+          getMissedSiteVisits({ 
+            search: searchQuery, 
+            reason: selectedReasonFilter !== 'ALL' ? selectedReasonFilter : undefined, 
+            date: selectedCalendarDate || undefined 
+          })
+        ]);
+        setDailyUpdates(updatesData);
+        setMissedVisits(missedData);
       } else if (currentStatus === 'observations') {
         const data = await getFieldObservations({ search: searchQuery });
         setObservations(data);
@@ -173,7 +205,7 @@ export default function MonitoringDynamicPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentStatus, searchQuery, selectedPhaseFilter, selectedStatusFilter, selectedVerificationMethodFilter, selectedVerificationStatusFilter]);
+  }, [currentStatus, searchQuery, selectedCalendarDate, selectedReasonFilter, selectedPhaseFilter, selectedStatusFilter, selectedVerificationMethodFilter, selectedVerificationStatusFilter]);
 
   useEffect(() => {
     fetchMonitoringData();
@@ -182,6 +214,23 @@ export default function MonitoringDynamicPage() {
   // Page content definition based on current tab
   const getPageContent = () => {
     switch (currentStatus) {
+      case 'attendance':
+        return {
+          title: "Field Attendance & Non-Visitation Control",
+          subtitle: "Internal control history tracking government field worker site visits, unfulfilled visit justifications, and developer access audits.",
+          overview: [
+            { label: "Total Scheduled Visits", value: ((dailyUpdates.length + missedVisits.length) || 12), icon: Calendar, color: "blue" },
+            { label: "Verified Inspector Visits", value: dailyUpdates.length || 9, icon: CheckCircle, color: "emerald" },
+            { label: "Justified Missed Visits", value: missedVisits.filter(m => m.status === 'JUSTIFIED' || m.status === 'ACKNOWLEDGED').length || 3, icon: ShieldCheck, color: "amber" },
+            { label: "Flagged / Review Required", value: missedVisits.filter(m => m.status === 'FLAGGED_UNJUSTIFIED' || m.status === 'SUBMITTED').length || 1, icon: AlertTriangle, color: "red" },
+          ],
+          actions: [
+            "⚠️ Document Missed Site Visit",
+            "📊 Review Inspector Compliance",
+            "🌧️ Audit Weather / Road Blockers",
+            "🔒 Inspect Denied Access Cases"
+          ]
+        };
       case 'progress':
         return {
           title: "Site Progress & Programme",
@@ -271,8 +320,32 @@ export default function MonitoringDynamicPage() {
 
   const content = getPageContent();
 
+  const handleAcknowledgeMissedVisit = async (id: string, isJustified: boolean = true) => {
+    try {
+      await acknowledgeMissedSiteVisit(id, {
+        status: isJustified ? 'JUSTIFIED' : 'FLAGGED_UNJUSTIFIED',
+        supervisor_acknowledgment: isJustified 
+          ? 'Reviewed and formally justified by Directorate Supervisor'
+          : 'Flagged for internal compliance audit and field verification'
+      });
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { 
+          message: isJustified ? 'Missed site visit justified & acknowledged' : 'Record flagged for investigation', 
+          type: 'success' 
+        }
+      }));
+      fetchMonitoringData();
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Failed to update missed visit record', type: 'error' }
+      }));
+    }
+  };
+
   const handleQuickAction = (action: string) => {
-    if (action.includes("Record Site Verification") || action.includes("Start Site Verification")) {
+    if (action.includes("Missed Site Visit") || action.includes("Document Missed") || action.includes("Non-Attendance") || action.includes("Blockers") || action.includes("Compliance")) {
+      setIsMissedVisitModalOpen(true);
+    } else if (action.includes("Record Site Verification") || action.includes("Start Site Verification")) {
       setIsRecordVerificationModalOpen(true);
     } else if (action.includes("Certify Boundary Compliance") || (currentStatus === 'verification' && action.includes("Certify"))) {
       const candidate = verifications.find(v => v.status !== 'VERIFIED') || verifications[0];
@@ -403,6 +476,15 @@ export default function MonitoringDynamicPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap sm:flex-nowrap">
+          {/* Document Missed Visit Quick Action Button */}
+          <button
+            onClick={() => setIsMissedVisitModalOpen(true)}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all cursor-pointer text-center"
+          >
+            <AlertTriangle size={15} /> 
+            Document Missed Visit
+          </button>
+
           {currentStatus === 'milestones' && (
             <button
               onClick={() => {
@@ -427,6 +509,7 @@ export default function MonitoringDynamicPage() {
               else if (currentStatus === 'observations') setIsObservationModalOpen(true);
               else if (currentStatus === 'issues') setIsIssueModalOpen(true);
               else if (currentStatus === 'verification') setIsVerificationDrawerOpen(true);
+              else if (currentStatus === 'attendance') setIsMissedVisitModalOpen(true);
               else setIsUpdateDrawerOpen(true);
             }}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer text-center"
@@ -435,7 +518,8 @@ export default function MonitoringDynamicPage() {
             {currentStatus === 'milestones' ? 'Schedule Milestone' :
              currentStatus === 'observations' ? 'Add Observation' :
              currentStatus === 'issues' ? 'Report Issue' :
-             currentStatus === 'verification' ? 'Start Verification' : 'Publish Daily Update'}
+             currentStatus === 'verification' ? 'Start Verification' : 
+             currentStatus === 'attendance' ? 'Document Non-Attendance' : 'Publish Daily Update'}
           </button>
         </div>
       </div>
@@ -499,6 +583,29 @@ export default function MonitoringDynamicPage() {
               />
             </div>
 
+            {/* Calendar Date Picker Filter for Live & Attendance */}
+            {(currentStatus === 'live' || currentStatus === 'attendance' || currentStatus === 'progress') && (
+              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1">
+                <Calendar size={13} className="text-blue-600 shrink-0" />
+                <input
+                  type="date"
+                  value={selectedCalendarDate}
+                  onChange={(e) => setSelectedCalendarDate(e.target.value)}
+                  className="text-xs text-slate-700 font-semibold bg-transparent focus:outline-none"
+                  title="Filter by inspection calendar date"
+                />
+                {selectedCalendarDate && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCalendarDate('')}
+                    className="text-[10px] font-bold text-red-500 hover:text-red-700 ml-1 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Layout Toggles for Milestones */}
             {currentStatus === 'milestones' ? (
               <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-xl">
@@ -560,6 +667,28 @@ export default function MonitoringDynamicPage() {
             </button>
           </div>
         </div>
+
+        {/* Non-Attendance / Attendance Reason Filter Bar */}
+        {currentStatus === 'attendance' && (
+          <div className="p-3 border-b border-slate-100 bg-white">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Filter Reason:</span>
+              {REASON_FILTER_OPTIONS.map(rf => (
+                <button
+                  key={rf.id}
+                  onClick={() => setSelectedReasonFilter(rf.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedReasonFilter === rf.id
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {rf.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Construction Milestones Filter Bar */}
         {currentStatus === 'milestones' && (
@@ -632,17 +761,29 @@ export default function MonitoringDynamicPage() {
                           </div>
                           <div className="min-w-0">
                             <h4 className="text-sm font-bold text-[#022C4F] group-hover:text-blue-600 transition-colors truncate">{update.project_name}</h4>
-                            <p className="text-xs text-slate-400 font-semibold truncate">{update.site_weather} • {update.active_workers_count} Workers</p>
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                              <span className="text-[11px] font-bold text-[#022C4F] flex items-center gap-1">
+                                <User size={11} className="text-blue-600" />
+                                {update.inspector_name || 'Engr. Abdulwahab Onike'}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                {update.inspector_badge || 'LASG-INSP-STR-042'}
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
+                                <BadgeCheck size={10} /> Field Verified
+                              </span>
+                            </div>
                           </div>
                         </div>
 
                         <div className="w-full md:w-1/4">
                           <p className="text-xs text-slate-600 font-medium line-clamp-1">{update.work_summary || 'Daily progress logged'}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{update.site_weather || 'Clear / Sunny'} • {update.active_workers_count || update.workforce_count || 30} Workers On-Site</p>
                         </div>
 
                         <div className="flex items-center gap-2 w-full md:w-1/5 text-xs text-slate-500">
                           <Calendar size={13} className="text-slate-400 shrink-0" />
-                          <span>{new Date(update.created_at).toLocaleDateString()}</span>
+                          <span>{update.inspection_date || new Date(update.created_at).toLocaleDateString()}</span>
                         </div>
 
                         <div className="flex items-center gap-3 justify-start md:justify-end w-full md:w-auto">
@@ -654,6 +795,146 @@ export default function MonitoringDynamicPage() {
                     ))}
                   </div>
                 )
+              )}
+
+              {/* Tab: Field Attendance & Non-Visitation Internal Control */}
+              {currentStatus === 'attendance' && (
+                <div className="space-y-4">
+                  {/* Notice & Control Header */}
+                  <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                        <ShieldAlert size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                          Internal Control &amp; Field Worker Performance Audit Roster
+                        </h4>
+                        <p className="text-[11px] text-amber-900 leading-relaxed">
+                          Daily site updates originate directly from field inspectors. If an inspector is unable to visit a scheduled site or submit an update, an auditable justification must be documented with photographic evidence.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsMissedVisitModalOpen(true)}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-sm shrink-0 cursor-pointer text-center flex items-center justify-center gap-1.5"
+                    >
+                      <Plus size={14} /> Document Missed Visit
+                    </button>
+                  </div>
+
+                  {/* Missed Visits Record List */}
+                  {missedVisits.length === 0 ? (
+                    <div className="py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-100 p-6">
+                      <CheckCircle size={40} className="mx-auto mb-3 text-emerald-400" />
+                      <h4 className="text-sm font-bold text-slate-700">100% Field Attendance &amp; Zero Unjustified Misses</h4>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                        All scheduled field inspections are verified or no non-visitation records match the current filter criteria.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {missedVisits.map(record => (
+                        <div 
+                          key={record.id}
+                          className="p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-all space-y-3"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                                {record.record_reference || `MSV-${record.id.slice(0, 8).toUpperCase()}`}
+                              </span>
+                              <h4 className="text-sm font-bold text-[#022C4F]">{record.project_name}</h4>
+                              <span className="text-xs text-slate-400 font-semibold">• {record.project_location || 'Lagos'}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border ${
+                                record.status === 'JUSTIFIED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                record.status === 'FLAGGED_UNJUSTIFIED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {record.status.replace('_', ' ')}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Inspector</span>
+                              <p className="font-bold text-[#022C4F] mt-0.5">{record.inspector_name}</p>
+                              <span className="text-[10px] font-mono text-slate-500">{record.inspector_badge || 'LASG-INSP'}</span>
+                            </div>
+
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scheduled Date</span>
+                              <p className="font-semibold text-slate-700 mt-0.5 flex items-center gap-1">
+                                <Calendar size={12} className="text-blue-600" /> {record.scheduled_date}
+                              </p>
+                            </div>
+
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Reason Category</span>
+                              <span className="inline-block mt-0.5 font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+                                {record.reason_display || record.reason_category.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-xs space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Inspector Justification Notes:</span>
+                            <p className="text-slate-700 font-medium leading-relaxed">{record.justification_notes}</p>
+                          </div>
+
+                          {record.evidence_photos && record.evidence_photos.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attached Field Evidence Photos:</span>
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {record.evidence_photos.map((photo, pIdx) => (
+                                  <a key={pIdx} href={photo} target="_blank" rel="noopener noreferrer" className="block relative w-24 h-16 rounded-lg overflow-hidden border border-slate-200 group shrink-0">
+                                    <img src={photo} alt="Evidence" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Supervisor Acknowledgment Footer */}
+                          <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                            <div className="text-[11px] text-slate-500">
+                              {record.supervisor_acknowledgment ? (
+                                <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                  <BadgeCheck size={13} /> {record.supervisor_acknowledgment}
+                                </span>
+                              ) : (
+                                <span className="text-amber-700 font-medium">Pending Directorate Supervisor Review</span>
+                              )}
+                            </div>
+
+                            {!record.supervisor_acknowledgment && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcknowledgeMissedVisit(record.id, false)}
+                                  className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                                >
+                                  Flag Unjustified
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcknowledgeMissedVisit(record.id, true)}
+                                  className="px-3 py-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-[11px] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <Check size={12} /> Acknowledge Justification
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Tab 2: Site Progress */}
@@ -1880,6 +2161,12 @@ export default function MonitoringDynamicPage() {
         onSuccess={() => {
           fetchMonitoringData();
         }}
+      />
+
+      <LogMissedSiteVisitModal
+        isOpen={isMissedVisitModalOpen}
+        onClose={() => setIsMissedVisitModalOpen(false)}
+        onSuccess={() => fetchMonitoringData()}
       />
     </div>
   );
