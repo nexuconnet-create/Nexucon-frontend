@@ -45,6 +45,7 @@ import {
   X,
   Radio,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
@@ -57,13 +58,13 @@ interface GovernmentSidebarProps {
 type SidebarItem = {
   sectionHeader?: string;
   name: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   href?: string;
   requiredPermission?: string;
   subItems?: {
     name: string;
     href: string;
-    icon: React.ElementType;
+    icon: LucideIcon;
     requiredPermission?: string;
   }[];
 };

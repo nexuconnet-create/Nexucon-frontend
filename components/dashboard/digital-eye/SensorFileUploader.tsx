@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { UploadCloud, CheckCircle, XCircle, Loader2, File as FileIcon } from 'lucide-react';
+import api from '@/lib/api';
 
 interface SensorFileUploaderProps {
   sensorType: string;
@@ -24,75 +25,76 @@ export default function SensorFileUploader({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
       setStatus('idle');
+      uploadFile(selectedFile);
     }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      const selectedFile = e.dataTransfer.files[0];
+      setFile(selectedFile);
       setStatus('idle');
+      uploadFile(selectedFile);
     }
   };
 
-  const uploadFile = async () => {
-    if (!file || !presignedUrl) return;
+  const uploadFile = async (fileToUpload: File) => {
+    if (!fileToUpload || !presignedUrl) return;
 
     setIsUploading(true);
     setStatus('uploading');
     setUploadProgress(0);
 
     try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', presignedUrl, true);
-      
-      let contentType = file.type;
-      if (!contentType) {
-          contentType = 'application/octet-stream';
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+
+      // The presignedUrl passed is actually the backend endpoint for uploading (e.g., /api/v1/scans/{id}/upload/{sensor}/)
+      // Because we use `api`, it handles the JWT token automatically.
+      let uploadUrl = presignedUrl;
+      // Strip base URL if api already has it configured
+      if (uploadUrl.includes('/api/v1')) {
+        uploadUrl = uploadUrl.substring(uploadUrl.indexOf('/api/v1') + 7);
       }
-      xhr.setRequestHeader('Content-Type', contentType);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percentComplete = (e.loaded / e.total) * 100;
-          setUploadProgress(Math.round(percentComplete));
+      await api.post(uploadUrl, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentComplete = (progressEvent.loaded / progressEvent.total) * 100;
+            setUploadProgress(Math.round(percentComplete));
+          }
         }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setStatus('success');
-          onUploadSuccess(sensorType);
-        } else {
-          setStatus('error');
-          onUploadError(sensorType, `Upload failed with status ${xhr.status}`);
-        }
-        setIsUploading(false);
-      };
-
-      xhr.onerror = () => {
-        setStatus('error');
-        onUploadError(sensorType, 'Network error occurred during upload.');
-        setIsUploading(false);
-      };
-
-      xhr.send(file);
+      });
+      
+      setStatus('success');
+      onUploadSuccess(sensorType);
     } catch (err: any) {
       console.error(err);
       setStatus('error');
       onUploadError(sensorType, err.message || 'Upload failed.');
+    } finally {
       setIsUploading(false);
     }
   };
+
+  let exts = "";
+  if (sensorType === 'lidar') exts = "(.las, .laz, .pcd, .ply)";
+  else if (sensorType === 'rgb' || sensorType === 'thermal') exts = "(Images)";
+  else if (sensorType === 'gps') exts = "(.csv, .txt, .json, .log)";
+  else if (sensorType === 'gaussian_splat') exts = "(.ply, .splat)";
+  else if (sensorType === 'bim') exts = "(.ifc, .rvt, .dwg)";
 
   return (
     <div className="border border-gray-200 rounded-xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-800 capitalize flex items-center gap-2">
           <FileIcon className="w-5 h-5 text-gray-500" />
-          {sensorType} Sensor Data
+          {sensorType.replace('_', ' ')} <span className="text-gray-400 normal-case font-normal text-sm">{exts}</span>
         </h3>
         {status === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
         {status === 'error' && <XCircle className="w-5 h-5 text-red-500" />}
@@ -107,7 +109,7 @@ export default function SensorFileUploader({
         >
           <UploadCloud className="w-8 h-8 text-gray-400 mx-auto mb-2" />
           <p className="text-sm text-gray-600 font-medium">Click to browse or drag and drop</p>
-          <p className="text-xs text-gray-400 mt-1">Supports RAW, LAS, E57, etc.</p>
+          <p className="text-xs text-gray-400 mt-1">Supports {exts.replace('(', '').replace(')', '')}</p>
           <input
             type="file"
             className="hidden"
@@ -153,7 +155,7 @@ export default function SensorFileUploader({
                   Change
                 </button>
                 <button
-                  onClick={uploadFile}
+                  onClick={() => uploadFile(file!)}
                   className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded transition-colors"
                 >
                   Upload

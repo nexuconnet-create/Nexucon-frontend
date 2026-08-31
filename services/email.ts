@@ -18,8 +18,8 @@ export const sendEmailViaResend = async (payload: EmailDispatchPayload): Promise
     });
 
     const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Email dispatch failed' };
+    if (!res.ok || data.success === false) {
+      return { success: false, error: data.error || data.message || 'Email dispatch failed' };
     }
     return { success: true, id: data.id };
   } catch (err: any) {

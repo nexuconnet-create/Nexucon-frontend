@@ -72,11 +72,35 @@ export default function MeetingRoomPage() {
   const screenShareVideoRef = useRef<HTMLVideoElement | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  // Mirror of localStream for callbacks that must not re-run when media
+  // resolves (the signaling effect must never tear down live peer
+  // connections just because the camera finished starting up).
+  const localStreamRef = useRef<MediaStream | null>(null);
+  // 'pending' until getUserMedia settles (ready or denied). Negotiation must
+  // not start before this: a peer connection created before local tracks
+  // exist negotiates recvonly, and tracks attached afterwards never reach
+  // the other side without a renegotiation round-trip.
+  const [mediaStatus, setMediaStatus] = useState<'pending' | 'ready' | 'denied'>('pending');
 
   // WebRTC Remote Peer Connections & Streams
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const lastSignalTimestampRef = useRef<number>(0);
+
+  // Unique per-tab peer identity for WebRTC signaling. Display names are NOT
+  // unique (two participants may share a name, and every tab defaults to the
+  // same agency head), which previously made same-name peers invisible to the
+  // signaling engine — no offer/answer/ICE was ever exchanged between them.
+  const peerIdRef = useRef<string>(
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `p-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+
+  // ICE candidates can arrive before the remote description is set (signaling
+  // is polled, so ordering is not guaranteed). Buffer them per peer and flush
+  // once setRemoteDescription completes.
+  const pendingCandidatesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
 
   // Mode: Native WebRTC Council Stage vs Embedded WebRTC Video Bridge vs Google Meet Launcher
   const [stageMode, setStageMode] = useState<'native_council' | 'webrtc_bridge' | 'google_meet_portal'>('native_council');
@@ -148,18 +172,22 @@ export default function MeetingRoomPage() {
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
           });
           streamInstance = stream;
+          localStreamRef.current = stream;
           setLocalStream(stream);
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
           }
         }
+        setMediaStatus('ready');
       } catch (err) {
         console.warn("Camera/mic permission notice:", err);
+        setMediaStatus('denied');
       }
     };
     initMedia();
 
     return () => {
+      localStreamRef.current = null;
       if (streamInstance) {
         streamInstance.getTracks().forEach(t => t.stop());
       }
@@ -177,22 +205,44 @@ export default function MeetingRoomPage() {
         track.enabled = isMicOn;
       });
 
+      // While screen sharing, the screen track replaces the camera track on
+      // every peer sender so remote participants see the shared screen live.
+      const screenTrack = isScreenSharing && screenStream ? screenStream.getVideoTracks()[0] : null;
+
       // Synchronize local tracks to all active peer connections
-      Object.values(peerConnectionsRef.current).forEach(pc => {
+      Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
+        // Ensure local tracks are attached (covers peers connected before
+        // getUserMedia resolved).
+        let attachedNow = false;
         localStream.getTracks().forEach(track => {
-          const senders = pc.getSenders();
-          const sender = senders.find(s => s.track && s.track.kind === track.kind);
-          if (sender) {
-            sender.replaceTrack(track).catch(() => {});
-          } else {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === track.kind);
+          if (!sender) {
             try {
               pc.addTrack(track, localStream);
+              attachedNow = true;
             } catch (e) {}
+          }
+        });
+
+        // Attaching a track to an already-negotiated connection changes the
+        // transceiver direction — that only takes effect after a fresh offer.
+        if (attachedNow && pc.signalingState === 'stable' && (pc.localDescription || pc.remoteDescription)) {
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => postSignal(otherId, 'offer', pc.localDescription))
+            .catch(() => {});
+        }
+
+        pc.getSenders().forEach(sender => {
+          if (!sender.track || sender.track.kind !== 'video') return;
+          const target = screenTrack || localStream.getVideoTracks()[0];
+          if (target && sender.track !== target) {
+            sender.replaceTrack(target).catch(() => {});
           }
         });
       });
     }
-  }, [isVideoOn, isMicOn, localStream]);
+  }, [isVideoOn, isMicOn, localStream, isScreenSharing, screenStream]);
 
   // 2. WebRTC Peer Connection Helper
   const getOrCreatePeerConnection = (peerId: string) => {
@@ -202,19 +252,24 @@ export default function MeetingRoomPage() {
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
 
-    // Add bidirectional transceivers for audio and video
-    try {
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
-      pc.addTransceiver('video', { direction: 'sendrecv' });
-    } catch (e) {}
-
-    // Add local tracks to peer connection
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
+    // Attach local tracks with addTrack ONLY. Pre-creating transceivers with
+    // addTransceiver and then calling addTrack makes Chrome refuse to
+    // associate those transceivers with a remote offer's m-sections, so the
+    // generated answer is recvonly and the remote peer never receives our
+    // audio/video (verified empirically). When there is no local media yet,
+    // recvonly transceivers still let us receive the other side.
+    const stream = localStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach(track => {
         try {
-          pc.addTrack(track, localStream);
+          pc.addTrack(track, stream);
         } catch (e) {}
       });
+    } else {
+      try {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+      } catch (e) {}
     }
 
     // Handle remote track received (ensure stream is created/augmented for audio and video)
@@ -244,7 +299,7 @@ export default function MeetingRoomPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender: currentUser.name,
+            sender: peerIdRef.current,
             target: peerId,
             type: 'ice-candidate',
             data: event.candidate
@@ -257,9 +312,62 @@ export default function MeetingRoomPage() {
     return pc;
   };
 
+  // Post a signaling message to the meeting's signaling engine.
+  const postSignal = (target: string, type: string, data: any) => {
+    return fetch(`/api/meetings/${meetingId}/signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: peerIdRef.current,
+        target,
+        type,
+        data
+      })
+    }).catch(() => {});
+  };
+
+  // Flush buffered ICE candidates once the remote description is available.
+  const flushPendingCandidates = async (peerId: string) => {
+    const pending = pendingCandidatesRef.current[peerId];
+    if (!pending || pending.length === 0) return;
+    delete pendingCandidatesRef.current[peerId];
+    const pc = peerConnectionsRef.current[peerId];
+    if (!pc) return;
+    for (const cand of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {}
+    }
+  };
+
+  // Deterministic connection initiator: the peer with the HIGHER id sends the
+  // offer. Both sides see each other via presence, so exactly one offer is
+  // created per pair — no glare/rollback needed.
+  const maybeConnectToPeers = (remoteList: any[]) => {
+    for (const p of remoteList || []) {
+      const rp = p.peerId;
+      if (!rp || rp === peerIdRef.current) continue;
+      // Only connect to peers that are actually live in the room — stale
+      // presence entries (departed tabs) must not produce dead connections.
+      if (p.status && p.status !== 'Live In Room') continue;
+      const existing = peerConnectionsRef.current[rp];
+      if (existing && (existing.localDescription || existing.remoteDescription)) continue;
+      if (peerIdRef.current > rp) {
+        const pc = getOrCreatePeerConnection(rp);
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .then(() => postSignal(rp, 'offer', pc.localDescription))
+          .catch(() => {});
+      }
+    }
+  };
+
   // 3. WebRTC Signaling Loop & Presence Sync
   useEffect(() => {
     if (!meetingId) return;
+    // Wait for getUserMedia to settle so every peer connection is created
+    // with our tracks already attached (see mediaStatus comment above).
+    if (mediaStatus === 'pending') return;
 
     // A. Handshake with Next.js Serverless Presence API
     const joinServerless = async () => {
@@ -270,6 +378,7 @@ export default function MeetingRoomPage() {
           body: JSON.stringify({
             action: 'join',
             participant: {
+              peerId: peerIdRef.current,
               name: currentUser.name,
               role: currentUser.role,
               email: currentUser.email,
@@ -283,6 +392,9 @@ export default function MeetingRoomPage() {
           const data = await res.json();
           if (data && data.participants) {
             updateParticipantsFromData(data.participants);
+            // Connect to peers already in the room (deterministic initiator).
+            maybeConnectToPeers(data.participants);
+            trackLivePeers(data.participants);
           }
           if (data && data.votes) {
             setQuorumVotes(data.votes);
@@ -305,55 +417,63 @@ export default function MeetingRoomPage() {
     // C. Poll Signaling Engine for WebRTC Peer Negotiation (Every 1.2s)
     const signalInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/meetings/${meetingId}/signal?since=${lastSignalTimestampRef.current}&sender=${encodeURIComponent(currentUser.name)}`);
+        const res = await fetch(`/api/meetings/${meetingId}/signal?since=${lastSignalTimestampRef.current}&sender=${encodeURIComponent(peerIdRef.current)}`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.messages && data.messages.length > 0) {
             lastSignalTimestampRef.current = data.timestamp || Date.now();
 
             for (const msg of data.messages) {
-              const peerName = msg.sender;
-              const pc = getOrCreatePeerConnection(peerName);
+              const peerId = msg.sender;
+              const pc = getOrCreatePeerConnection(peerId);
 
               if (msg.type === 'offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-
-                await fetch(`/api/meetings/${meetingId}/signal`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    sender: currentUser.name,
-                    target: peerName,
-                    type: 'answer',
-                    data: answer
-                  })
-                });
-              } else if (msg.type === 'answer') {
-                if (pc.signalingState !== 'stable') {
+                let pc = getOrCreatePeerConnection(peerId);
+                // Glare guard: if we already have a pending local offer, only
+                // the designated initiator (higher peer id) keeps theirs.
+                if (pc.signalingState === 'have-local-offer' && peerIdRef.current > peerId) {
+                  continue;
+                }
+                if (pc.signalingState === 'stable' && pc.remoteDescription) {
+                  // Already connected, yet this peer is offering again — it
+                  // restarted (reload/reconnect). Renegotiate on a fresh
+                  // connection instead of ignoring the offer.
+                  try { pc.close(); } catch (e) {}
+                  delete peerConnectionsRef.current[peerId];
+                  pendingCandidatesRef.current[peerId] = [];
+                  pc = getOrCreatePeerConnection(peerId);
+                }
+                if (!pc.remoteDescription || pc.signalingState !== 'stable') {
                   await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+                  await flushPendingCandidates(peerId);
+                  const answer = await pc.createAnswer();
+                  await pc.setLocalDescription(answer);
+                  await postSignal(peerId, 'answer', answer);
+                }
+              } else if (msg.type === 'answer') {
+                // Only applicable to a pc that actually made an offer.
+                if (pc.localDescription && pc.signalingState !== 'stable') {
+                  await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+                  await flushPendingCandidates(peerId);
                 }
               } else if (msg.type === 'ice-candidate') {
                 if (msg.data) {
-                  try {
-                    await pc.addIceCandidate(new RTCIceCandidate(msg.data));
-                  } catch (e) {}
+                  if (pc.remoteDescription) {
+                    try {
+                      await pc.addIceCandidate(new RTCIceCandidate(msg.data));
+                    } catch (e) {}
+                  } else {
+                    // Remote description not set yet — buffer until it is.
+                    pendingCandidatesRef.current[peerId] = [
+                      ...(pendingCandidatesRef.current[peerId] || []),
+                      msg.data
+                    ];
+                  }
                 }
               } else if (msg.type === 'join-peer') {
-                // New peer wants connection, create offer
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                await fetch(`/api/meetings/${meetingId}/signal`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    sender: currentUser.name,
-                    target: peerName,
-                    type: 'offer',
-                    data: offer
-                  })
-                });
+                // New peer announced itself; connect per the deterministic
+                // initiator rule (higher peer id sends the offer).
+                maybeConnectToPeers([{ peerId: msg.sender }]);
               }
             }
           }
@@ -366,11 +486,47 @@ export default function MeetingRoomPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sender: currentUser.name,
+        sender: peerIdRef.current,
         type: 'join-peer',
         data: {}
       })
     }).catch(() => {});
+
+    // Leave immediately on page unload (sendBeacon survives the teardown).
+    const leaveOnUnload = () => {
+      try {
+        navigator.sendBeacon?.(
+          `/api/meetings/${meetingId}/presence`,
+          new Blob([JSON.stringify({
+            action: 'leave',
+            participant: { peerId: peerIdRef.current, name: currentUser.name }
+          })], { type: 'application/json' })
+        );
+      } catch (e) {}
+    };
+    window.addEventListener('pagehide', leaveOnUnload);
+
+    // Track which remote peer ids are still present; close connections to
+    // peers that left the meeting.
+    const livePeerIds = new Set<string>([peerIdRef.current]);
+    const trackLivePeers = (remoteList: any[]) => {
+      livePeerIds.clear();
+      livePeerIds.add(peerIdRef.current);
+      for (const p of remoteList || []) {
+        if (p.peerId) livePeerIds.add(p.peerId);
+      }
+      for (const [otherId, pc] of Object.entries(peerConnectionsRef.current)) {
+        if (!livePeerIds.has(otherId)) {
+          try { pc.close(); } catch (e) {}
+          delete peerConnectionsRef.current[otherId];
+          setRemoteStreams(prev => {
+            const next = { ...prev };
+            delete next[otherId];
+            return next;
+          });
+        }
+      }
+    };
 
     // D. Poll Presence API every 2.5 seconds
     const presenceInterval = setInterval(async () => {
@@ -380,6 +536,8 @@ export default function MeetingRoomPage() {
           const data = await res.json();
           if (data && data.participants) {
             updateParticipantsFromData(data.participants);
+            maybeConnectToPeers(data.participants);
+            trackLivePeers(data.participants);
           }
           if (data && data.votes) {
             setQuorumVotes(data.votes);
@@ -394,9 +552,19 @@ export default function MeetingRoomPage() {
     return () => {
       clearInterval(signalInterval);
       clearInterval(presenceInterval);
+      window.removeEventListener('pagehide', leaveOnUnload);
+      // Tell the room we left so peers tear down our connection promptly.
+      leaveOnUnload();
       Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
+      // Clear the map too — otherwise a later effect run would resurrect
+      // closed connections.
+      peerConnectionsRef.current = {};
+      pendingCandidatesRef.current = {};
     };
-  }, [meetingId, currentUser, localStream]);
+    // Note: localStream is intentionally NOT a dependency — the effect must
+    // not tear down live peer connections when the camera finishes starting
+    // (track attachment goes through localStreamRef / the toggle-sync effect).
+  }, [meetingId, currentUser, mediaStatus]);
 
   const updateParticipantsFromData = (remoteList: any[]) => {
     setParticipants(prev => {
@@ -416,24 +584,35 @@ export default function MeetingRoomPage() {
         isVideoOn,
         isHandRaised
       });
-      seen.add(currentUser.name.toLowerCase());
-      if (currentUser.email) seen.add(currentUser.email.toLowerCase());
+      seen.add(peerIdRef.current);
 
-      // 2. Add remote participants
+      // 2. Add remote participants (dedupe by peerId first — display names
+      // are not unique, and every unauthenticated tab shares the default
+      // agency-head identity).
       for (const p of remoteList) {
         const cleanName = (p.name || '').replace('(You)', '').trim();
         const cleanEmail = (p.email || '').trim().toLowerCase();
-        
-        if (cleanName.toLowerCase() === currentUser.name.toLowerCase() || (cleanEmail && cleanEmail === currentUser.email.toLowerCase())) {
+        const pPeerId = p.peerId || p.id;
+
+        // Self is matched by peerId only — display names and emails are NOT
+        // unique, so matching them would hide a remote participant who
+        // happens to share the default agency-head identity.
+        if (pPeerId && pPeerId === peerIdRef.current) {
+          continue;
+        }
+        if (!pPeerId && (cleanName.toLowerCase() === currentUser.name.toLowerCase() || (cleanEmail && cleanEmail === currentUser.email.toLowerCase()))) {
           continue;
         }
 
-        if (!seen.has(cleanName.toLowerCase())) {
-          seen.add(cleanName.toLowerCase());
+        const dedupeKey = pPeerId || cleanName.toLowerCase();
+        if (!seen.has(dedupeKey)) {
+          seen.add(dedupeKey);
           if (cleanEmail) seen.add(cleanEmail);
 
           merged.push({
-            id: p.id || `p-${cleanName}`,
+            // Use the signaling peerId as the participant id so the video
+            // grid can look up this peer's remote MediaStream directly.
+            id: pPeerId || `p-${cleanName}`,
             name: cleanName,
             email: p.email || '',
             role: p.role || 'Stakeholder Representative',
@@ -447,8 +626,29 @@ export default function MeetingRoomPage() {
         }
       }
 
+      // Preserve locally-added invitees ("Dispatched" via email) that the
+      // presence engine does not know about yet.
+      for (const prevP of prev) {
+        if (prevP.isLocalUser) continue;
+        if (prevP.status === 'Dispatched' && !merged.some(m => m.email && prevP.email && m.email.toLowerCase() === prevP.email.toLowerCase())) {
+          merged.push(prevP);
+        }
+      }
+
       return merged;
     });
+  };
+
+  // Attach the local stream whenever the <video> element mounts. The element
+  // is conditionally rendered (camera on/off, layout switches), so a one-time
+  // srcObject assignment in the getUserMedia effect runs before the element
+  // exists and the self-view stays black.
+  const attachLocalVideo = (el: HTMLVideoElement | null) => {
+    localVideoRef.current = el;
+    if (el && localStream && el.srcObject !== localStream) {
+      el.srcObject = localStream;
+      el.play().catch(() => {});
+    }
   };
 
   // Screen Share Handler (Interactive Screen / BIM Model Sharing)
@@ -512,7 +712,7 @@ export default function MeetingRoomPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'heartbeat',
-        participant: { name: currentUser.name, isMicOn: nextState }
+        participant: { peerId: peerIdRef.current, name: currentUser.name, isMicOn: nextState }
       })
     }).catch(() => {});
   };
@@ -527,6 +727,7 @@ export default function MeetingRoomPage() {
         try {
           if (navigator.mediaDevices?.getUserMedia) {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isMicOn });
+            localStreamRef.current = stream;
             setLocalStream(stream);
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = stream;
@@ -557,7 +758,7 @@ export default function MeetingRoomPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'heartbeat',
-        participant: { name: currentUser.name, isVideoOn: nextState }
+        participant: { peerId: peerIdRef.current, name: currentUser.name, isVideoOn: nextState }
       })
     }).catch(() => {});
   };
@@ -579,7 +780,7 @@ export default function MeetingRoomPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'raise_hand',
-        participant: { name: currentUser.name, isHandRaised: nextState }
+        participant: { peerId: peerIdRef.current, name: currentUser.name, isHandRaised: nextState }
       })
     }).catch(() => {});
   };
@@ -1139,7 +1340,7 @@ export default function MeetingRoomPage() {
                         ) : isVideoOn && localStream ? (
                           <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
                             <video
-                              ref={localVideoRef}
+                              ref={attachLocalVideo}
                               autoPlay
                               playsInline
                               muted
@@ -1222,7 +1423,9 @@ export default function MeetingRoomPage() {
                           : 'grid-cols-2 lg:grid-cols-3'
                   }`}>
                     {participants.map((p, idx) => {
-                      const remoteStream = !p.isLocalUser ? (remoteStreams[p.name] || remoteStreams[p.id]) : null;
+                      // Remote streams are keyed by the signaling peerId,
+                      // which is also the participant id from presence.
+                      const remoteStream = !p.isLocalUser ? remoteStreams[p.id] : null;
 
                       return (
                         <div
@@ -1235,18 +1438,9 @@ export default function MeetingRoomPage() {
                                 : 'bg-[#091522]/80 border border-slate-800'
                           }`}
                         >
-                          {/* Hidden Audio Player for Remote Audio Stream */}
-                          {!p.isLocalUser && remoteStream && (
-                            <audio
-                              autoPlay
-                              ref={(el) => {
-                                if (el && el.srcObject !== remoteStream) {
-                                  el.srcObject = remoteStream;
-                                  el.play().catch(() => {});
-                                }
-                              }}
-                            />
-                          )}
+                          {/* Remote audio is played by the global sr-only audio
+                              bridge at the top of the page; a second per-tile
+                              audio element would double the sound. */}
 
                           {/* Top Tile Badge */}
                           <div className="flex items-center justify-between z-10">
@@ -1277,9 +1471,15 @@ export default function MeetingRoomPage() {
                                   </span>
                                 )
                               ) : p.status === 'Live In Room' ? (
-                                <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Connected
-                                </span>
+                                p.isMicOn === false ? (
+                                  <span className="flex items-center gap-1 text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                    <MicOff size={12} /> Muted
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Connected
+                                  </span>
+                                )
                               ) : (
                                 <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
                                   Dispatched
@@ -1292,13 +1492,13 @@ export default function MeetingRoomPage() {
                           <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
                             {p.isLocalUser && isVideoOn && localStream ? (
                               <video
-                                ref={localVideoRef}
+                                ref={attachLocalVideo}
                                 autoPlay
                                 playsInline
                                 muted
                                 className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
                               />
-                            ) : !p.isLocalUser && remoteStream && remoteStream.getVideoTracks().length > 0 ? (
+                            ) : !p.isLocalUser && remoteStream && p.isVideoOn !== false && remoteStream.getVideoTracks().length > 0 ? (
                               <video
                                 autoPlay
                                 playsInline
