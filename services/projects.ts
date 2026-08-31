@@ -88,7 +88,7 @@ export interface Project {
 
 export const getProjects = async (): Promise<Project[]> => {
   try {
-    const response = await api.get('/projects/projects/');
+    const response = await api.get('/projects/');
     return response as unknown as Project[]; // Data unwrapped by interceptor
   } catch (error) {
     console.log("Failed to fetch projects:", error);
@@ -97,12 +97,12 @@ export const getProjects = async (): Promise<Project[]> => {
 };
 
 export const getProjectById = async (id: string): Promise<Project> => {
-  const response = await api.get(`/projects/projects/${id}/`);
+  const response = await api.get(`/projects/${id}/`);
   return response as unknown as Project;
 };
 
 export const createProject = async (data: Partial<Project>): Promise<Project> => {
-  const response = await api.post('/projects/projects/', data);
+  const response = await api.post('/projects/', data);
   return response as unknown as Project;
 };
 
@@ -112,7 +112,7 @@ export const uploadProjectDocument = async (projectId: string, file: File, docum
   formData.append('document_type', documentType);
   formData.append('name', file.name);
 
-  const response = await api.post(`/projects/projects/${projectId}/upload-document/`, formData, {
+  const response = await api.post(`/projects/${projectId}/upload-document/`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },

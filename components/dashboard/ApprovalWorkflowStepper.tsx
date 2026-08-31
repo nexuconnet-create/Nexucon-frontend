@@ -1,12 +1,12 @@
 import React from 'react';
-import { Check, Clock, CircleDot, User, UserCheck, ShieldCheck, Users, Briefcase, FileCheck2 } from 'lucide-react';
+import { Check, Clock, CircleDot, User, UserCheck, ShieldCheck, Users, Briefcase, FileCheck2, type LucideIcon } from 'lucide-react';
 
 interface WorkflowStep {
   id: number;
   role: string;
   action: string;
   status: 'completed' | 'active' | 'pending';
-  icon: React.ElementType;
+  icon: LucideIcon;
   isOptional?: boolean;
 }
 

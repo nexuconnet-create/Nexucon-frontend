@@ -12,6 +12,18 @@ interface SignalMessage {
 
 const meetingSignalStore: Record<string, SignalMessage[]> = {};
 
+// Signaling messages only make sense while both peers are still negotiating.
+// Older messages (from peers that reloaded or left) would otherwise be
+// replayed to fresh clients, creating dead peer connections.
+const SIGNAL_TTL_MS = 30 * 1000;
+
+function pruneStore(meetingId: string) {
+  const messages = meetingSignalStore[meetingId];
+  if (!messages || messages.length === 0) return;
+  const cutoff = Date.now() - SIGNAL_TTL_MS;
+  meetingSignalStore[meetingId] = messages.filter(m => m.timestamp > cutoff);
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
@@ -22,6 +34,7 @@ export async function GET(
   const since = parseInt(url.searchParams.get('since') || '0', 10);
   const sender = url.searchParams.get('sender') || '';
 
+  pruneStore(meetingId);
   const messages = meetingSignalStore[meetingId] || [];
   
   // Filter messages newer than `since` and not sent by current sender
@@ -65,6 +78,7 @@ export async function POST(
     };
 
     meetingSignalStore[meetingId].push(newMsg);
+    pruneStore(meetingId);
 
     // Keep only last 100 signal messages to prevent memory growth
     if (meetingSignalStore[meetingId].length > 100) {

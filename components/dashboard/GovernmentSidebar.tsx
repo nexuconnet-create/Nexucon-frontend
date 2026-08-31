@@ -43,6 +43,7 @@ import {
   MessageSquare,
   Milestone,
   X,
+  type LucideIcon,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
@@ -54,13 +55,13 @@ interface GovernmentSidebarProps {
 
 type SidebarItem = {
   name: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   href?: string;
   requiredPermission?: string;
   subItems?: {
     name: string;
     href: string;
-    icon: React.ElementType;
+    icon: LucideIcon;
     requiredPermission?: string;
   }[];
 };

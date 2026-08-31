@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, AlertTriangle, ThermometerSun, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
+import api from '@/lib/api';
 
 interface ScanReportSummaryProps {
   sessionId: string;
@@ -29,18 +30,16 @@ export default function ScanReportSummary({ sessionId, reportData, apiUrl }: Sca
     setLoadingExtras(true);
     try {
       const [defectsRes, anomaliesRes] = await Promise.all([
-        fetch(`${apiUrl}/api/v1/scans/${sessionId}/defects/`).catch(() => null),
-        fetch(`${apiUrl}/api/v1/scans/${sessionId}/thermal-anomalies/`).catch(() => null),
+        api.get(`/scans/${sessionId}/defects/`).catch(() => null),
+        api.get(`/scans/${sessionId}/thermal-anomalies/`).catch(() => null),
       ]);
 
-      if (defectsRes && defectsRes.ok) {
-        const data = await defectsRes.json();
-        setDefects(data.results || data || []);
+      if (defectsRes && defectsRes.data) {
+        setDefects(defectsRes.data.results || defectsRes.data || []);
       }
       
-      if (anomaliesRes && anomaliesRes.ok) {
-        const data = await anomaliesRes.json();
-        setAnomalies(data.results || data || []);
+      if (anomaliesRes && anomaliesRes.data) {
+        setAnomalies(anomaliesRes.data.results || anomaliesRes.data || []);
       }
     } catch (e) {
       console.error("Failed to load extra report data", e);
@@ -49,9 +48,30 @@ export default function ScanReportSummary({ sessionId, reportData, apiUrl }: Sca
     }
   };
 
-  const handleDownloadPDF = () => {
-    // Assuming /report/pdf/ triggers a file download or returns a URL
-    window.open(`${apiUrl}/api/v1/scans/${sessionId}/report/pdf/`, '_blank');
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPDF = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    setDownloading(true);
+    try {
+      const response = await api.get(`/scans/${sessionId}/report/pdf/`, {
+        responseType: 'blob' // Important to get the binary file with JWT token!
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `QA_QC_Report_${sessionId.substring(0,8)}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to download report", error);
+      alert("Failed to download PDF report. The session may not have a generated report yet.");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (!reportData) return null;
@@ -65,10 +85,11 @@ export default function ScanReportSummary({ sessionId, reportData, apiUrl }: Sca
         </h2>
         <button
           onClick={handleDownloadPDF}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          disabled={downloading}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          <Download className="w-4 h-4" />
-          Download PDF
+          {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {downloading ? 'Downloading...' : 'Download PDF'}
         </button>
       </div>
 
@@ -102,25 +123,33 @@ export default function ScanReportSummary({ sessionId, reportData, apiUrl }: Sca
           </h3>
           <ul className="space-y-2">
             {reportData.recommendations && reportData.recommendations.length > 0 ? (
-              reportData.recommendations.map((rec, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                  <span className="text-blue-500 font-bold">{idx + 1}.</span>
-                  {rec}
-                </li>
-              ))
+              reportData.recommendations.map((rec: any, idx: number) => {
+                // The backend returns recommendations as objects
+                // ({recommendation, priority, related_finding_id}); plain
+                // strings are also accepted.
+                const text = typeof rec === 'string' ? rec : rec.recommendation || rec.description || '';
+                const priority = typeof rec === 'object' ? rec.priority : null;
+                return (
+                  <li key={idx} className="flex items-start gap-2 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <span className="text-blue-500 font-bold">{idx + 1}.</span>
+                    <span className="flex-1">{text}</span>
+                    {priority && (
+                      <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-semibold ${
+                        priority.toLowerCase() === 'urgent' ? 'bg-red-100 text-red-700' :
+                        priority.toLowerCase() === 'high' ? 'bg-orange-100 text-orange-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {priority}
+                      </span>
+                    )}
+                  </li>
+                );
+              })
             ) : (
               <li className="text-gray-500 italic">No specific recommendations provided.</li>
             )}
           </ul>
         </div>
-
-        {reportData.report_url && (
-          <div className="mb-8">
-            <a href={reportData.report_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm font-medium">
-              View Full Report Online <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
-        )}
 
         {/* Detailed Lists */}
         {loadingExtras ? (

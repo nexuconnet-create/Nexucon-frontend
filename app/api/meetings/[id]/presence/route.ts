@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 const meetingPresenceStore: Record<string, {
   participants: Array<{
     id: string;
+    peerId?: string;
     name: string;
     email: string;
     role: string;
@@ -40,11 +41,14 @@ export async function GET(
   const meetingId = resolvedParams?.id || 'room';
   const store = getStore(meetingId);
 
-  // Clean stale participants (inactive for more than 15 minutes)
+  // Clean stale participants (inactive for more than 12 seconds — the room
+  // heartbeats every 2.5s, so anything older has left the meeting). The old
+  // 15-minute window kept departed participants visible and made live peers
+  // attempt WebRTC connections to ghost peer ids.
   const now = Date.now();
   store.participants = store.participants.map(p => {
     // keep seeded or active
-    if (now - p.lastSeen > 15 * 60 * 1000 && !p.id.startsWith('p-seed-')) {
+    if (now - p.lastSeen > 12 * 1000 && !p.id.startsWith('p-seed-')) {
       return { ...p, status: 'Dispatched' as const };
     }
     return p;
@@ -79,14 +83,26 @@ export async function POST(
         const pName = participant.name.replace('(You)', '').trim();
         const pEmail = participant.email || '';
         const pRole = participant.role || 'Stakeholder Representative';
+        const pPeerId = participant.peerId || '';
 
-        const existingIdx = store.participants.findIndex(
-          p => (pEmail && p.email === pEmail) || p.name.toLowerCase() === pName.toLowerCase() || p.name.includes(pName)
-        );
+        // Match by peerId first — it is the unique per-tab identity used for
+        // WebRTC signaling. Display names/emails are NOT unique (two tabs can
+        // default to the same agency head), so name/email matching alone
+        // collapses distinct participants into one.
+        let existingIdx = -1;
+        if (pPeerId) {
+          existingIdx = store.participants.findIndex(p => p.peerId === pPeerId);
+        }
+        if (existingIdx < 0) {
+          existingIdx = store.participants.findIndex(
+            p => (pEmail && p.email === pEmail) || p.name.toLowerCase() === pName.toLowerCase() || p.name.includes(pName)
+          );
+        }
 
         if (existingIdx >= 0) {
           store.participants[existingIdx] = {
             ...store.participants[existingIdx],
+            peerId: pPeerId || store.participants[existingIdx].peerId,
             name: pName,
             role: pRole,
             email: pEmail || store.participants[existingIdx].email,
@@ -98,7 +114,8 @@ export async function POST(
           };
         } else {
           store.participants.push({
-            id: `p-${now}-${Math.floor(Math.random() * 1000)}`,
+            id: pPeerId || `p-${now}-${Math.floor(Math.random() * 1000)}`,
+            peerId: pPeerId,
             name: pName,
             email: pEmail,
             role: pRole,
@@ -114,12 +131,23 @@ export async function POST(
     } else if (action === 'raise_hand') {
       if (participant && participant.name) {
         const pName = participant.name.replace('(You)', '').trim();
-        const p = store.participants.find(x => x.name.includes(pName));
+        const pPeerId = participant.peerId || '';
+        const p = pPeerId
+          ? store.participants.find(x => x.peerId === pPeerId)
+          : store.participants.find(x => x.name.includes(pName));
         if (p) {
           p.isHandRaised = Boolean(participant.isHandRaised);
           p.lastSeen = now;
         }
       }
+    } else if (action === 'leave') {
+      // Immediate departure (page unload) — remove the participant instead
+      // of waiting for the staleness window.
+      const pPeerId = participant?.peerId || '';
+      const pName = (participant?.name || '').replace('(You)', '').trim();
+      store.participants = store.participants.filter(
+        p => !(pPeerId && p.peerId === pPeerId) && !(pPeerId ? false : p.name.includes(pName))
+      );
     } else if (action === 'vote') {
       if (vote && vote.voter_name && store.votes) {
         const voter = vote.voter_name;
