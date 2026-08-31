@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
 
     if (!RESEND_API_KEY) {
       console.warn('RESEND_API_KEY is not configured in environment variables');
-      return NextResponse.json({ success: false, message: 'Email service not configured (missing RESEND_API_KEY)' });
+      return NextResponse.json({ success: false, error: 'Email service not configured (missing RESEND_API_KEY)' }, { status: 503 });
     }
 
     const res = await fetch('https://api.resend.com/emails', {
