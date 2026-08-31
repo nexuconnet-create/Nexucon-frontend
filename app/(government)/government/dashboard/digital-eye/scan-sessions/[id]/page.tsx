@@ -72,6 +72,7 @@ const ScanDetail = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [showMetadataModal, setShowMetadataModal] = useState(false);
@@ -355,6 +356,7 @@ const ScanDetail = () => {
 
   const handleDownloadReport = async (format: string) => {
     if (!id) return;
+    setPdfDownloading(true);
     try {
       const res = await api.get(`/scans/${id}/report/pdf/`, {responseType: 'blob'});
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -366,6 +368,8 @@ const ScanDetail = () => {
       link.remove();
     } catch (err) {
       alert("Failed to download report.");
+    } finally {
+      setPdfDownloading(false);
     }
   };
 
@@ -499,10 +503,12 @@ const ScanDetail = () => {
           </a>
           <button
             onClick={() => handleDownloadReport('pdf')}
-            disabled={scan.status !== 'completed'}
+            disabled={pdfDownloading || scan.status !== 'completed'}
             className={secondaryBtn}
           >
-            <Download className="w-4 h-4" /> PDF
+            {pdfDownloading
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Downloading…</>
+              : <><Download className="w-4 h-4" /> PDF</>}
           </button>
           <button
             onClick={handleGenerateReport}

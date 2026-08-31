@@ -28,6 +28,7 @@ export default function ScanToBIMPage() {
   const [filesSession, setFilesSession] = useState("");
   const [alignmentResult, setAlignmentResult] = useState<any>(null);
   const [aligning, setAligning] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
   const [fetchingDetails, setFetchingDetails] = useState(false);
   const [bimOpacity, setBimOpacity] = useState(40);
 
@@ -122,6 +123,7 @@ export default function ScanToBIMPage() {
       notify("Please select a scan session first.", "error");
       return;
     }
+    setExportingReport(true);
     try {
       notify("Generating report, please wait...", "info");
       const res = await api.get(`/scans/${selectedScan}/report/pdf/`, {
@@ -139,6 +141,8 @@ export default function ScanToBIMPage() {
     } catch (error) {
       console.error("Failed to export report", error);
       notify("Failed to export report", "error");
+    } finally {
+      setExportingReport(false);
     }
   };
 
@@ -163,10 +167,12 @@ export default function ScanToBIMPage() {
             {aligning ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />} 
             Run Alignment
           </button>
-          <button 
+          <button
             onClick={handleExportReport}
-            className="px-4 py-2 bg-white border border-gray-200 text-[#022C4F] rounded-xl hover:bg-slate-50 transition-colors font-medium flex items-center gap-2 shadow-sm">
-            <Download size={18} /> Export Report
+            disabled={exportingReport}
+            className="px-4 py-2 bg-white border border-gray-200 text-[#022C4F] rounded-xl hover:bg-slate-50 transition-colors font-medium flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            {exportingReport ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+            {exportingReport ? 'Downloading PDF…' : 'Export Report'}
           </button>
         </div>
       </div>
