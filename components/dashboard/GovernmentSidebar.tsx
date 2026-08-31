@@ -43,6 +43,8 @@ import {
   MessageSquare,
   Milestone,
   X,
+  Radio,
+  Sparkles,
 } from "lucide-react";
 
 interface GovernmentSidebarProps {
@@ -53,6 +55,7 @@ interface GovernmentSidebarProps {
 }
 
 type SidebarItem = {
+  sectionHeader?: string;
   name: string;
   icon: React.ElementType;
   href?: string;
@@ -128,7 +131,8 @@ const sidebarLinks: SidebarItem[] = [
     ],
   },
   {
-    name: "Digital Eye (T-S1 MVP)",
+    sectionHeader: "Digital Eye Workspace",
+    name: "TS-1 (MVP)",
     href: "/government/dashboard/digital-eye/scan-sessions/new",
     icon: Scan,
     subItems: [
@@ -144,6 +148,41 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Compliance Results", href: "/government/dashboard/digital-eye/qa-qc-insights", icon: ShieldCheck },
       { name: "Reports", href: "/government/dashboard/digital-eye/reports", icon: FileText },
       { name: "Integration Settings", href: "/government/dashboard/digital-eye/integration-settings", icon: Settings },
+    ],
+  },
+  {
+    name: "Trimble Connect",
+    icon: Box,
+    subItems: [
+      { name: "3D BIM Viewer", href: "/government/dashboard/digital-eye/trimble/viewer", icon: Box },
+      { name: "CDE Model Sync", href: "/government/dashboard/digital-eye/trimble/sync", icon: Activity },
+      { name: "BCF Topics & Issues", href: "/government/dashboard/digital-eye/trimble/bcf", icon: AlertTriangle },
+      { name: "AI Analysis", href: "/government/dashboard/digital-eye/trimble/ai-analysis", icon: PieChart },
+      { name: "Reports", href: "/government/dashboard/digital-eye/trimble/reports", icon: FileText },
+    ],
+  },
+  {
+    name: "GPR (Subsurface Radar)",
+    icon: Radio,
+    subItems: [
+      { name: "Radargram Inspector", href: "/government/dashboard/digital-eye/gpr/radargrams", icon: Radio },
+      { name: "Rebar Spacing & Cover", href: "/government/dashboard/digital-eye/gpr/rebar-meter", icon: ShieldCheck },
+      { name: "Subsurface Voids", href: "/government/dashboard/digital-eye/gpr/voids", icon: AlertTriangle },
+      { name: "GPR Survey Library", href: "/government/dashboard/digital-eye/gpr/library", icon: Folder },
+      { name: "AI Analysis", href: "/government/dashboard/digital-eye/gpr/ai-analysis", icon: PieChart },
+      { name: "Reports", href: "/government/dashboard/digital-eye/gpr/reports", icon: FileText },
+    ],
+  },
+  {
+    name: "PUNDIT (Ultrasonic NDT)",
+    icon: Sparkles,
+    subItems: [
+      { name: "Waveform Oscillograms", href: "/government/dashboard/digital-eye/pundit/waveforms", icon: Sparkles },
+      { name: "Compressive Strength (fcu)", href: "/government/dashboard/digital-eye/pundit/strength", icon: Activity },
+      { name: "BS 1881-203 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
+      { name: "UPV Test Registry", href: "/government/dashboard/digital-eye/pundit/tests", icon: FileText },
+      { name: "AI Analysis", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: PieChart },
+      { name: "Reports", href: "/government/dashboard/digital-eye/pundit/reports", icon: FileText },
     ],
   },
   {
@@ -403,6 +442,16 @@ export default function GovernmentSidebar({
 
           return (
             <div key={link.name} className="flex flex-col mb-1 w-full">
+              {link.sectionHeader && (isMobile || !isCollapsed) && (
+                <div className="pt-4 pb-1.5 px-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-cyan-300/80 block">
+                    {link.sectionHeader}
+                  </span>
+                </div>
+              )}
+              {link.sectionHeader && !isMobile && isCollapsed && (
+                <div className="w-8 h-px bg-white/20 my-2 mx-auto" />
+              )}
               {/* Main Item */}
               <Link
                 href={isParent && isMobile ? "#" : targetHref}
