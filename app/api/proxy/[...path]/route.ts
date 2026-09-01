@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const isProd = process.env.NODE_ENV === 'production';
 const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const BACKEND_BASE = (validEnvUrl || (isProd ? 'https://nexucon-backend.onrender.com' : 'http://127.0.0.1:8000')).replace(/\/$/, '');
+const BACKEND_BASE = (validEnvUrl || 'https://nexucon-backend.onrender.com').replace(/\/$/, '');
 
 async function handleProxy(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;

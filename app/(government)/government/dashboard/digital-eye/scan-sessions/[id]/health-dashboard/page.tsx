@@ -110,7 +110,7 @@ export default function SiteHealthDashboard() {
   let rgbUrl = scan.rgb_url || (rgbFile ? rgbFile.file_url : null);
   
   if (rgbUrl && rgbUrl.startsWith('/media/')) {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://nexucon-backend.onrender.com';
     rgbUrl = baseUrl + rgbUrl;
   }
 
