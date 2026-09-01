@@ -6,6 +6,7 @@ import { Loader2, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import SensorFileUploader from './SensorFileUploader';
 import ScanReportSummary from './ScanReportSummary';
 import api, { getApiUrl } from '@/lib/api';
+import { getProjects } from '@/services/projects';
 
 type Step = 'init' | 'upload' | 'metadata' | 'processing' | 'report';
 
@@ -27,16 +28,8 @@ export default function NewScanFlow() {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const response = await api.get('/projects/');
-        const data = response.data;
-        if (data && Array.isArray(data.results)) {
-          setProjects(data.results);
-        } else if (Array.isArray(data)) {
-          setProjects(data);
-        } else {
-          setProjects([]);
-          console.warn("Unexpected response format for projects:", data);
-        }
+        const data = await getProjects();
+        setProjects(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error("Failed to fetch projects", error);
         setProjects([]);

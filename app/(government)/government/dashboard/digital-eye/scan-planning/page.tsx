@@ -22,6 +22,7 @@ import {
   Crosshair
 } from "lucide-react";
 import api from "@/lib/api";
+import { getProjects } from "@/services/projects";
 
 const ScanPlanMap = dynamic(
   () => import('@/components/dashboard/digital-eye/ScanPlanMap'),
@@ -109,10 +110,11 @@ export default function ScanPlanning() {
 
   const fetchProjects = async () => {
     try {
-      const res = await api.get('/projects/');
-      setProjects(res.data.results || res.data);
+      const data = await getProjects();
+      setProjects(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch projects", error);
+      setProjects([]);
     }
   };
 

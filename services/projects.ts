@@ -88,11 +88,23 @@ export interface Project {
 
 export const getProjects = async (): Promise<Project[]> => {
   try {
-    const response: any = await api.get('/projects/');
-    if (Array.isArray(response)) return response;
-    if (response?.results && Array.isArray(response.results)) return response.results;
-    if (response?.data && Array.isArray(response.data)) return response.data;
-    if (response?.data?.results && Array.isArray(response.data.results)) return response.data.results;
+    let response: any = await api.get('/projects/');
+    let data = response?.data !== undefined ? response.data : response;
+
+    // Handle case where DRF DefaultRouter returns API root { milestones: '...', projects: '...' }
+    if (data && typeof data === 'object' && !Array.isArray(data) && !Array.isArray(data.results) && data.projects) {
+      try {
+        const subRes: any = await api.get('/projects/projects/');
+        data = subRes?.data !== undefined ? subRes.data : subRes;
+      } catch {
+        // Fallback to empty if sub-endpoint fails
+      }
+    }
+
+    if (Array.isArray(data)) return data;
+    if (data?.results && Array.isArray(data.results)) return data.results;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.data?.results && Array.isArray(data.data.results)) return data.data.results;
     return [];
   } catch (error) {
     console.log("Failed to fetch projects:", error);
