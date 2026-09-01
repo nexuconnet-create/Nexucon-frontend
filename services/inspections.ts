@@ -118,8 +118,17 @@ export const getInspections = async (params?: {
   type?: string;
   search?: string;
 }): Promise<Inspection[]> => {
-  const res: any = await api.get('/inspections/', { params });
-  return Array.isArray(res) ? res : (res.results || res.data || []);
+  try {
+    const res: any = await api.get('/inspections/', { params });
+    if (Array.isArray(res)) return res;
+    if (res?.results && Array.isArray(res.results)) return res.results;
+    if (res?.data && Array.isArray(res.data)) return res.data;
+    if (res?.data?.results && Array.isArray(res.data.results)) return res.data.results;
+    return [];
+  } catch (error) {
+    console.log("Failed to fetch inspections:", error);
+    return [];
+  }
 };
 
 export const getInspectionById = async (id: string): Promise<Inspection> => {

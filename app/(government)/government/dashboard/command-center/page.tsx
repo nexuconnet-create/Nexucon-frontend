@@ -53,15 +53,22 @@ export default function GovernmentCommandCenter() {
           getInspections(),
           api.get('/government/dashboard/quick-actions/').catch(() => ({ data: null }))
         ]);
-        setProjects(projectsData || []);
-        setInspections(inspectionsData || []);
+        const pList = Array.isArray(projectsData)
+          ? projectsData
+          : ((projectsData as any)?.results || (projectsData as any)?.data || []);
+        const iList = Array.isArray(inspectionsData)
+          ? inspectionsData
+          : ((inspectionsData as any)?.results || (inspectionsData as any)?.data || []);
+
+        setProjects(pList);
+        setInspections(iList);
         if (quickActionsRes && quickActionsRes.data) {
           setQuickActionsSummary(quickActionsRes.data);
         }
 
         if (
-          (inspectionsData || []).some(i => i.status === 'FAILED') ||
-          (projectsData || []).some(p => p.status === 'SUSPENDED')
+          iList.some((i: any) => i.status === 'FAILED') ||
+          pList.some((p: any) => p.status === 'SUSPENDED')
         ) {
           setShowAlertsModal(true);
         }

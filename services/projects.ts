@@ -88,8 +88,12 @@ export interface Project {
 
 export const getProjects = async (): Promise<Project[]> => {
   try {
-    const response = await api.get('/projects/');
-    return response as unknown as Project[]; // Data unwrapped by interceptor
+    const response: any = await api.get('/projects/');
+    if (Array.isArray(response)) return response;
+    if (response?.results && Array.isArray(response.results)) return response.results;
+    if (response?.data && Array.isArray(response.data)) return response.data;
+    if (response?.data?.results && Array.isArray(response.data.results)) return response.data.results;
+    return [];
   } catch (error) {
     console.log("Failed to fetch projects:", error);
     return [];
