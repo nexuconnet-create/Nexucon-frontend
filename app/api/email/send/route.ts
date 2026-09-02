@@ -176,10 +176,14 @@ export async function POST(req: NextRequest) {
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.error('Resend API Error:', data);
-      return NextResponse.json({ error: data.message || 'Failed to dispatch email via Resend' }, { status: res.status });
+      const statusCode = res.status === 401 ? 502 : res.status;
+      return NextResponse.json({
+        success: false,
+        error: data.message || 'Failed to dispatch email via Resend (Authentication or service error)'
+      }, { status: statusCode });
     }
 
     return NextResponse.json({
