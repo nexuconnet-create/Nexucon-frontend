@@ -13,7 +13,12 @@ export const metadata: Metadata = {
   title: "Nexucon",
   description: "Construction Workflow and Project Coordination Platform",
   icons: {
-    icon: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg",
+    icon: [
+      { url: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+    shortcut: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg",
+    apple: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg",
   },
 };
 

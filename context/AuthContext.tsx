@@ -96,18 +96,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const refreshUser = async () => {
+    let hasToken = false;
+    let hasCached = false;
     if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('nexucon_access_token');
+      hasToken = !!token;
       const cached = localStorage.getItem('nexucon_auth_user');
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.email) {
             setUser(parsed);
+            hasCached = true;
           }
         } catch {
           // ignore corrupted cache
         }
       }
+    }
+
+    // Do not make speculative unauthenticated calls to /auth/me/ on public pages
+    if (!hasToken && !hasCached) {
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -124,6 +135,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             handleSetUser(data.data);
           }
         }
+      } else if (res.status === 401) {
+        // Stale or expired token; clean up state silently
+        handleSetUser(null);
       }
     } catch (err) {
       console.warn('Network sync for user session:', err);
