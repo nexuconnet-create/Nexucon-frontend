@@ -225,8 +225,19 @@ export default function PunditWaveformViewer({
           <div className="text-slate-300">
             Velocity: <span className="text-amber-400 font-bold text-sm">{computedVelocity.toLocaleString()} m/s</span>
           </div>
-          <div className="text-slate-300">
-            Est. fcu: <span className="text-emerald-400 font-bold text-sm">{computedFcu} MPa</span>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Threshold (25 MPa):</span>
+            {computedFcu >= 25 ? (
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px]">
+                <CheckCircle2 size={12} className="text-emerald-400" />
+                <span>{computedFcu} MPa (PASS ≥ 25)</span>
+              </span>
+            ) : (
+              <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px] animate-pulse">
+                <AlertTriangle size={12} className="text-rose-400" />
+                <span>{computedFcu} MPa (DEFICIENT &lt; 25)</span>
+              </span>
+            )}
           </div>
           <div className="text-slate-300 hidden sm:block">
             Modulus (Ed): <span className="text-sky-400 font-bold text-sm">{computedEdGpa} GPa</span>
@@ -255,7 +266,9 @@ export default function PunditWaveformViewer({
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Est. Compressive (fcu):</span>
-                <span className="text-emerald-400 font-bold">{computedFcu} MPa</span>
+                <span className={`font-bold ${computedFcu >= 25 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {computedFcu} MPa {computedFcu >= 25 ? '(≥25 MPa ✓)' : '(<25 MPa ✗)'}
+                </span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Acoustic Path (L):</span>
