@@ -50,7 +50,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // If the backend returns a StandardResponse, unwrap it to return the 'data' payload
-    if (response.data && response.data.status === 'success' && response.data.data !== undefined) {
+    if (response.data && (response.data.status === 'success' || response.data.success === true) && response.data.data !== undefined) {
       return response.data.data;
     }
     return response.data;
@@ -60,7 +60,8 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined') {
         const hasSession = localStorage.getItem('nexucon_auth_user');
-        if (!hasSession && !window.location.pathname.includes('/login') && !window.location.pathname.includes('/accept-invite')) {
+        const token = localStorage.getItem('nexucon_access_token');
+        if (!token && !hasSession && !window.location.pathname.includes('/login') && !window.location.pathname.includes('/accept-invite')) {
           window.location.href = '/government/login';
         }
       }

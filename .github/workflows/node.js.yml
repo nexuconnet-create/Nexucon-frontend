@@ -2,9 +2,9 @@ name: Node.js CI
 
 on:
   push:
-    branches: [ "main", "reviews" ]
+    branches: [ "main", "reviews", "develop" ]
   pull_request:
-    branches: [ "main", "reviews" ]
+    branches: [ "main", "reviews", "develop" ]
 
 jobs:
   build:
@@ -12,16 +12,32 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [22.x]
+        node-version: [20.x, 22.x]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-        cache-dependency-path: package-lock.json
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Install dependencies & Build
+      run: |
+        if [ -f "package.json" ]; then
+          npm ci
+          npm run build
+          npm test
+        elif [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
+          cd frontend
+          npm ci
+          npm run build
+          npm test
+        else
+          echo "No package.json found"
+          exit 1
+        fi
+
