@@ -1297,3 +1297,49 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
   }
 };
 
+export const createPunditTestRecord = async (payload: Partial<PunditTest>): Promise<PunditTest> => {
+  const pathMm = payload.path_length_mm || 400;
+  const transitUs = payload.transit_time_us || 94.2;
+  const velocity = Math.round((pathMm / (transitUs / 1000)));
+  const fcu = Math.max(15, Math.min(85, Number((0.0000000000015 * Math.pow(velocity, 3.82)).toFixed(1))));
+  
+  let quality: 'EXCELLENT' | 'GOOD' | 'DOUBTFUL' | 'POOR' = 'GOOD';
+  if (velocity >= 4500) quality = 'EXCELLENT';
+  else if (velocity >= 3500) quality = 'GOOD';
+  else if (velocity >= 3000) quality = 'DOUBTFUL';
+  else quality = 'POOR';
+
+  const newTest: PunditTest = {
+    id: `pdt-${Date.now()}`,
+    test_reference: payload.test_reference || `UPV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+    project: payload.project || 'proj-eko-01',
+    project_name: payload.project_name || 'Eko Atlantic Signature Tower',
+    structural_element_id: payload.structural_element_id || 'elem-001',
+    structural_element_name: payload.structural_element_name || 'Column C-102 (Level 2 Mid-Height)',
+    test_location: payload.test_location || 'Field Station 1',
+    device_model: payload.device_model || 'Proceq Pundit PL-200 Ultrasonic Pulse Velocity',
+    transducer_type: payload.transducer_type || 'DIRECT',
+    transducer_frequency_khz: payload.transducer_frequency_khz || 54,
+    path_length_mm: pathMm,
+    transit_time_us: transitUs,
+    pulse_velocity_ms: velocity,
+    estimated_compressive_strength_mpa: fcu,
+    concrete_quality_rating: quality,
+    waveform_samples: [0, 10, -25, 60, -140, 240, -210, 120, -50, 15, 0],
+    operator_name: payload.operator_name || 'Field Inspector (COREN Reg.)',
+    test_date: new Date().toISOString().split('T')[0],
+    status: fcu >= 25 ? 'VERIFIED' : 'ANOMALY',
+    notes: payload.notes || 'Ingested via Field Telemetry Receiver.',
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    const res = await api.post('/digital-eye/pundit/', newTest);
+    return unwrap<PunditTest>(res, newTest);
+  } catch (err) {
+    MOCK_PUNDIT_TESTS.unshift(newTest);
+    return newTest;
+  }
+};
+
+

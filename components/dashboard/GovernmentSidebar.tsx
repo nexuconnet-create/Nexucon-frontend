@@ -45,6 +45,8 @@ import {
   X,
   Radio,
   Sparkles,
+  UploadCloud,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -138,6 +140,7 @@ const sidebarLinks: SidebarItem[] = [
     icon: Scan,
     subItems: [
       { name: "Overview", href: "/government/dashboard/digital-eye/overview", icon: Eye },
+      { name: "Data Collection & Ingestion", href: "/government/dashboard/digital-eye/data-collection", icon: UploadCloud },
       { name: "Scan Planning", href: "/government/dashboard/digital-eye/scan-planning", icon: ListTodo },
       { name: "Site Surveys", href: "/government/dashboard/digital-eye/scan-sessions", icon: Activity },
       { name: "Scan Library", href: "/government/dashboard/digital-eye/scan-library", icon: Folder },
@@ -180,6 +183,7 @@ const sidebarLinks: SidebarItem[] = [
     subItems: [
       { name: "Waveform Oscillograms", href: "/government/dashboard/digital-eye/pundit/waveforms", icon: Sparkles },
       { name: "Compressive Strength (fcu)", href: "/government/dashboard/digital-eye/pundit/strength", icon: Activity },
+      { name: "Data Collection & Ingestion", href: "/government/dashboard/digital-eye/pundit/data-collection", icon: UploadCloud },
       { name: "BS 1881-203 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
       { name: "UPV Test Registry", href: "/government/dashboard/digital-eye/pundit/tests", icon: FileText },
       { name: "AI Analysis", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: PieChart },
