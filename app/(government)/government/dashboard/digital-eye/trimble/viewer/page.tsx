@@ -30,10 +30,10 @@ export default function TrimbleViewerPage() {
   const [inspectPunditTest, setInspectPunditTest] = useState<PunditTest | null>(null);
 
   useEffect(() => {
-    getBIMStructuralElements({ project: selectedProjectId }).then(setElements);
-    getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus);
+    getBIMStructuralElements({ project: selectedProjectId }).then(setElements).catch(() => setElements([]));
+    getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus).catch(() => setTrimbleStatus(null));
     getGPRScans({ project: selectedProjectId }).then(setGprScans);
-    getPunditTests({ project: selectedProjectId }).then(setPunditTests);
+    getPunditTests({ project: selectedProjectId }).then(setPunditTests).catch(() => setPunditTests([]));
   }, [selectedProjectId]);
 
   const activeElement = elements.find(e => e.id === selectedElementId) || (elements.length > 0 ? elements[0] : null);

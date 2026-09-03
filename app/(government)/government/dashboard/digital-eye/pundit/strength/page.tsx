@@ -24,9 +24,29 @@ import {
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
-import { PunditTest, getPunditTests, BIMStructuralElement, getBIMStructuralElements } from "@/services/digitalEye";
+import {
+  PunditTest,
+  getPunditTests,
+  BIMStructuralElement,
+  getBIMStructuralElements,
+  linkPunditTestToElement,
+  downloadNdtReport,
+} from "@/services/digitalEye";
 
 const CRITICAL_STRENGTH_THRESHOLD_MPA = 25.0; // 25 MPa Statutory Concrete Acceptance Rule
+// E.C.S calibration curve — identical to the backend engine
+// (apps/reports/ndt_reports.py): fcu = 8.961·V − 7.97 N/mm², valid 2.0–5.0 km/s.
+const ECS_SLOPE = 8.961;
+const ECS_INTERCEPT = -7.97;
+const ecsFromVelocityMs = (velocityMs: number): number | null => {
+  const vKmS = velocityMs / 1000;
+  if (vKmS < 2.0 || vKmS > 5.0) return null;
+  return Number((ECS_SLOPE * vKmS + ECS_INTERCEPT).toFixed(1));
+};
+
+// SVG chart scales: velocity 2000–5000 m/s -> x 40–580; fcu 0–50 MPa -> y 190–20
+const xOfVelocity = (vMs: number) => 40 + ((vMs - 2000) / 3000) * 540;
+const yOfFcu = (fcu: number) => 190 - (Math.min(fcu, 50) / 50) * 170;
 
 export default function PunditStrengthPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -37,45 +57,86 @@ export default function PunditStrengthPage() {
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [cloudSyncSuccess, setCloudSyncSuccess] = useState<boolean>(false);
   const [isCreateFindingOpen, setIsCreateFindingOpen] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Quick Decision Simulator States
+  // Quick Decision Simulator States — seeded from the selected station's real
+  // measurements (never invented defaults); simTouched stops re-seeding once
+  // the user moves a slider.
   const [simPathLengthMm, setSimPathLengthMm] = useState<number>(400);
   const [simTransitTimeUs, setSimTransitTimeUs] = useState<number>(94.2);
+  const [simTouched, setSimTouched] = useState<boolean>(false);
 
-  // Physics Formula: V = L / t (m/s)
-  const simVelocity = Math.round((simPathLengthMm / (simTransitTimeUs / 1000)));
-  // Strength Estimation Curve fcu (MPa)
-  const simFcu = Math.max(15, Math.min(85, Number((0.0000000000015 * Math.pow(simVelocity, 3.82)).toFixed(1))));
-  const isSimPassed = simFcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+  // Physics Formula: V = L / t (m/s); fcu via the platform E.C.S calibration curve
+  const simVelocity = simTransitTimeUs > 0 ? Math.round(simPathLengthMm / (simTransitTimeUs / 1000)) : 0;
+  const simFcu = ecsFromVelocityMs(simVelocity);
+  const isSimPassed = simFcu != null && simFcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+
+  const selectedElement = elements.find(el => el.id === selectedElementId) || null;
+
+  const refresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId || undefined });
+      setElements(fetchedElements);
+      const selected = fetchedElements.find(el => el.id === selectedElementId) || null;
+      const fetchedTests = await getPunditTests({
+        project: selectedProjectId || undefined,
+        element_name: selected?.name,
+      });
+      setTests(fetchedTests);
+      setActiveTest(prev => prev && fetchedTests.some(t => t.id === prev.id)
+        ? fetchedTests.find(t => t.id === prev.id)!
+        : (fetchedTests[0] || null));
+    } catch (err: any) {
+      setTests([]);
+      setError(err?.response?.data?.detail || err?.message || 'Failed to load strength stations from the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getPunditTests({ project: selectedProjectId, element_id: selectedElementId }).then((res) => {
-      setTests(res);
-      if (res.length > 0 && !activeTest) setActiveTest(res[0]);
-    });
-    getBIMStructuralElements({ project: selectedProjectId }).then(setElements);
+    refresh();
   }, [selectedProjectId, selectedElementId]);
 
-  // Aggregate Metrics
-  const totalStations = tests.length || 6;
-  const compliantStations = tests.filter(t => t.estimated_compressive_strength_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA).length || 5;
-  const deficientStations = tests.filter(t => t.estimated_compressive_strength_mpa < CRITICAL_STRENGTH_THRESHOLD_MPA).length || 1;
-  const complianceRate = Math.round((compliantStations / Math.max(1, totalStations)) * 100);
+  // Keep the evaluator coupled to the selected station's real measurements
+  // until the user takes manual control of a slider.
+  useEffect(() => {
+    if (!simTouched && activeTest?.path_length_mm && activeTest?.transit_time_us) {
+      setSimPathLengthMm(activeTest.path_length_mm);
+      setSimTransitTimeUs(activeTest.transit_time_us);
+    }
+  }, [activeTest, simTouched]);
 
-  // Cloud Ingestion Handler (Abdulwahab Onike Strategy)
+  // Aggregate Metrics — only stations the server engine has assessed (fcu != null)
+  const assessedTests = tests.filter(t => t.estimated_compressive_strength_mpa != null);
+  const totalStations = tests.length;
+  const compliantStations = assessedTests.filter(t => (t.estimated_compressive_strength_mpa as number) >= CRITICAL_STRENGTH_THRESHOLD_MPA).length;
+  const deficientStations = assessedTests.length - compliantStations;
+  const complianceRate = assessedTests.length > 0 ? Math.round((compliantStations / assessedTests.length) * 100) : 0;
+  const meanFcu = assessedTests.length > 0
+    ? Number((assessedTests.reduce((sum, t) => sum + (t.estimated_compressive_strength_mpa as number), 0) / assessedTests.length).toFixed(1))
+    : null;
+  const worstTest = assessedTests.length > 0
+    ? assessedTests.reduce((worst, t) => ((t.estimated_compressive_strength_mpa as number) < (worst.estimated_compressive_strength_mpa as number) ? t : worst))
+    : null;
+
+  // Cloud Ingestion Handler — pulls the latest registry state from the server
   const handleCloudIngestion = () => {
     setIsCloudSyncing(true);
-    setTimeout(() => {
+    refresh().then(() => {
       setIsCloudSyncing(false);
       setCloudSyncSuccess(true);
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: {
-          message: "☁️ Cloud Receiver: Direct on-site telemetry from Proceq Pundit PL-200 received & verified with 0% human tampering.",
+          message: `☁️ Registry synchronized: ${totalStations} PUNDIT test station(s) pulled from the regulatory database.`,
           type: "success"
         }
       }));
       setTimeout(() => setCloudSyncSuccess(false), 6000);
-    }, 1200);
+    }).catch(() => setIsCloudSyncing(false));
   };
 
   return (
@@ -124,7 +185,7 @@ export default function PunditStrengthPage() {
       {cloudSyncSuccess && (
         <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 text-xs flex items-center gap-3 animate-in fade-in">
           <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-          <span><strong>Cloud Ingestion Verified:</strong> 6 ultrasonic pulse test stations synchronized from field rover terminal directly into the regulatory database.</span>
+          <span><strong>Cloud Ingestion Verified:</strong> {tests.length} ultrasonic pulse test station(s) synchronized from the regulatory database.</span>
         </div>
       )}
 
@@ -155,11 +216,19 @@ export default function PunditStrengthPage() {
               <TrendingUp size={16} />
             </span>
           </div>
-          <p className="text-3xl font-black text-gray-900 mt-2 font-mono">42.5 MPa</p>
-          <span className="text-xs text-emerald-600 font-bold block mt-2">
-            ✓ +17.5 MPa above 25 MPa Threshold
-          </span>
-          <p className="text-[11px] text-gray-500 mt-1">C35/45 Specified Design Mix.</p>
+          <p className="text-3xl font-black text-gray-900 mt-2 font-mono">{meanFcu != null ? `${meanFcu} MPa` : '—'}</p>
+          {meanFcu != null && meanFcu >= CRITICAL_STRENGTH_THRESHOLD_MPA ? (
+            <span className="text-xs text-emerald-600 font-bold block mt-2">
+              ✓ +{(meanFcu - CRITICAL_STRENGTH_THRESHOLD_MPA).toFixed(1)} MPa above 25 MPa Threshold
+            </span>
+          ) : meanFcu != null ? (
+            <span className="text-xs text-rose-600 font-bold block mt-2">
+              ✗ {(CRITICAL_STRENGTH_THRESHOLD_MPA - meanFcu).toFixed(1)} MPa below 25 MPa Threshold
+            </span>
+          ) : (
+            <span className="text-xs text-gray-500 font-bold block mt-2">No assessed stations yet</span>
+          )}
+          <p className="text-[11px] text-gray-500 mt-1">Mean of {assessedTests.length} assessed station(s) via E.C.S calibration.</p>
         </div>
 
         {/* Card 3: Compliance Pass Rate */}
@@ -172,7 +241,7 @@ export default function PunditStrengthPage() {
           </div>
           <p className="text-3xl font-black text-[#022C4F] mt-2 font-mono">{complianceRate}%</p>
           <span className="text-xs text-slate-600 font-medium block mt-2">
-            {compliantStations} of {totalStations} Stations Green
+            {compliantStations} of {assessedTests.length} Assessed Stations Green
           </span>
           <p className="text-[11px] text-gray-500 mt-1">Direct statutory qualification.</p>
         </div>
@@ -185,11 +254,15 @@ export default function PunditStrengthPage() {
               <ShieldAlert size={16} />
             </span>
           </div>
-          <p className="text-3xl font-black text-rose-600 mt-2 font-mono">{deficientStations} Station</p>
+          <p className="text-3xl font-black text-rose-600 mt-2 font-mono">{deficientStations} Station{deficientStations === 1 ? '' : 's'}</p>
           <span className="text-xs text-rose-700 font-bold block mt-2">
-            Bored Pile P-42 (22.4 MPa)
+            {deficientStations > 0 && worstTest
+              ? `${worstTest.test_reference} (${(worstTest.estimated_compressive_strength_mpa as number).toFixed(1)} MPa)`
+              : assessedTests.length === 0 ? 'No assessed stations yet' : 'All assessed stations green'}
           </span>
-          <p className="text-[11px] text-gray-500 mt-1">Requires core test or grouting NCR.</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            {deficientStations > 0 ? 'Requires core test or grouting NCR.' : 'No non-compliant stations recorded.'}
+          </p>
         </div>
 
       </div>
@@ -227,37 +300,52 @@ export default function PunditStrengthPage() {
                 <line x1="40" y1="90" x2="580" y2="90" stroke="#1e293b" strokeDasharray="3 3" />
                 <line x1="40" y1="40" x2="580" y2="40" stroke="#1e293b" strokeDasharray="3 3" />
 
-                {/* Statutory 25 MPa Line (Critical Threshold) */}
-                <line x1="40" y1="110" x2="580" y2="110" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
-                <text x="585" y="114" fill="#10b981" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="end">25.0 MPa Statutory Threshold</text>
+                {/* Statutory 25 MPa Line (Critical Threshold) — y = yOfFcu(25) = 105 */}
+                <line x1="40" y1="105" x2="580" y2="105" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
+                <text x="585" y="100" fill="#10b981" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="end">25.0 MPa Statutory Threshold</text>
 
                 {/* Sub-threshold red zone */}
-                <rect x="40" y="110" width="540" height="80" fill="rgba(244, 63, 94, 0.08)" />
+                <rect x="40" y="105" width="540" height="85" fill="rgba(244, 63, 94, 0.08)" />
 
-                {/* Empirical Power-law Strength Curve */}
-                <path
-                  d="M 40 185 Q 240 160, 360 110 T 560 30"
+                {/* E.C.S Calibration Curve (fcu = 8.961·V − 7.97, valid 2.0–5.0 km/s) */}
+                <polyline
+                  points={Array.from({ length: 13 }, (_, i) => {
+                    const vMs = 2000 + i * 250;
+                    const fcu = ECS_SLOPE * (vMs / 1000) + ECS_INTERCEPT;
+                    return `${xOfVelocity(vMs).toFixed(1)},${yOfFcu(fcu).toFixed(1)}`;
+                  }).join(' ')}
                   fill="none"
                   stroke="#38bdf8"
                   strokeWidth="3"
                 />
 
-                {/* Station Data Points */}
-                {/* Station 1: Column C-102 (4,246 m/s -> 42.5 MPa - GREEN) */}
-                <circle cx="440" cy="65" r="7" fill="#10b981" stroke="#ffffff" strokeWidth="2" />
-                <text x="440" y="52" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle">C-102 (42.5 MPa ✓)</text>
-
-                {/* Station 2: Transfer Slab TS-04 (4,120 m/s -> 38.4 MPa - GREEN) */}
-                <circle cx="410" cy="78" r="7" fill="#10b981" stroke="#ffffff" strokeWidth="2" />
-                <text x="410" y="95" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle">TS-04 (38.4 MPa ✓)</text>
-
-                {/* Station 3: Bored Pile P-42 (3,480 m/s -> 22.4 MPa - RED DEFICIENT) */}
-                <circle cx="280" cy="135" r="8" fill="#f43f5e" stroke="#ffffff" strokeWidth="2" />
-                <text x="280" y="155" fill="#fb7185" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle">P-42 (22.4 MPa ✗ &lt;25)</text>
+                {/* Real Station Data Points — only server-assessed stations (fcu != null) */}
+                {assessedTests.map((t) => {
+                  const fcu = t.estimated_compressive_strength_mpa as number;
+                  const passed = fcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+                  const cx = xOfVelocity(t.pulse_velocity_ms);
+                  const cy = yOfFcu(fcu);
+                  return (
+                    <g key={t.id}>
+                      <circle cx={cx} cy={cy} r="7" fill={passed ? '#10b981' : '#f43f5e'} stroke="#ffffff" strokeWidth="2" />
+                      <text x={cx} y={passed ? cy - 12 : cy + 20} fill={passed ? '#34d399' : '#fb7185'} fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                        {t.test_reference} ({fcu.toFixed(1)} MPa {passed ? '✓' : '✗ &lt;25'})
+                      </text>
+                    </g>
+                  );
+})}
+                {assessedTests.length === 0 && (
+                  <text x="310" y="100" fill="#64748b" fontSize="11" fontFamily="monospace" textAnchor="middle">
+                    NO ASSESSED STATIONS YET — RUN ANALYSIS VIA DATA COLLECTION
+                  </text>
+                )}
 
                 {/* Axis Labels */}
                 <text x="40" y="15" fill="#94a3b8" fontSize="9" fontFamily="monospace">fcu (MPa)</text>
-                <text x="580" y="205" fill="#94a3b8" fontSize="9" fontFamily="monospace" textAnchor="end">Pulse Velocity V (m/s) &rarr;</text>
+                <text x="40" y="208" fill="#94a3b8" fontSize="9" fontFamily="monospace">2,000</text>
+                <text x="310" y="208" fill="#94a3b8" fontSize="9" fontFamily="monospace" textAnchor="middle">3,500</text>
+                <text x="580" y="208" fill="#94a3b8" fontSize="9" fontFamily="monospace" textAnchor="end">5,000</text>
+                <text x="580" y="218" fill="#94a3b8" fontSize="9" fontFamily="monospace" textAnchor="end">Pulse Velocity V (m/s) &rarr;</text>
               </svg>
             </div>
           </div>
@@ -293,7 +381,7 @@ export default function PunditStrengthPage() {
                 max="1000"
                 step="25"
                 value={simPathLengthMm}
-                onChange={(e) => setSimPathLengthMm(Number(e.target.value))}
+                onChange={(e) => { setSimTouched(true); setSimPathLengthMm(Number(e.target.value)); }}
                 className="w-full accent-emerald-500 cursor-pointer"
               />
             </div>
@@ -310,31 +398,40 @@ export default function PunditStrengthPage() {
                 max="250"
                 step="1"
                 value={simTransitTimeUs}
-                onChange={(e) => setSimTransitTimeUs(Number(e.target.value))}
+                onChange={(e) => { setSimTouched(true); setSimTransitTimeUs(Number(e.target.value)); }}
                 className="w-full accent-sky-500 cursor-pointer"
               />
             </div>
 
             {/* Live Calculation Output Card */}
             <div className={`p-4 rounded-xl border transition-all ${
-              isSimPassed 
-                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200' 
+              simFcu == null
+                ? 'bg-slate-900/60 border-slate-600/60 text-slate-300'
+                : isSimPassed
+                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
                 : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
             }`}>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-xs text-slate-400 uppercase font-bold">Estimated Strength:</span>
-                <span className={`text-xl font-black font-mono ${isSimPassed ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {simFcu} MPa
+                <span className={`text-xl font-black font-mono ${
+                  simFcu == null ? 'text-slate-400' : isSimPassed ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {simFcu != null ? `${simFcu} MPa` : '—'}
                 </span>
               </div>
 
               <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-slate-700/60">
                 <span className="text-slate-400">Velocity:</span>
-                <span className="text-amber-300 font-bold">{simVelocity.toLocaleString()} m/s</span>
+                <span className="text-amber-300 font-bold">{simVelocity > 0 ? `${simVelocity.toLocaleString()} m/s` : '—'}</span>
               </div>
 
               <div className="mt-3 pt-2 border-t border-slate-700/60 flex items-center gap-1.5 text-xs font-bold">
-                {isSimPassed ? (
+                {simFcu == null ? (
+                  <>
+                    <Info size={15} className="text-amber-400" />
+                    <span>OUTSIDE E.C.S CALIBRATION RANGE (2.0–5.0 KM/S)</span>
+                  </>
+                ) : isSimPassed ? (
                   <>
                     <CheckCircle2 size={15} className="text-emerald-400" />
                     <span>GREEN DATA POINT (≥ 25 MPa PASSED)</span>
@@ -351,19 +448,28 @@ export default function PunditStrengthPage() {
 
           <button
             onClick={() => {
+              if (simFcu == null) return;
               if (isSimPassed) {
-                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Approved Station: ${simFcu} MPa qualifies for Statutory Structural Permit!`, type: "success" } }));
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Evaluated at ${simFcu} MPa — qualifies for statutory pass (≥ 25 MPa). Record the station via Data Collection to make it official.`, type: "success" } }));
               } else {
                 setIsCreateFindingOpen(true);
               }
             }}
-            className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-              isSimPassed 
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30' 
-                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30'
+            disabled={simFcu == null}
+            className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              simFcu == null
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                : isSimPassed
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 cursor-pointer'
+                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 cursor-pointer'
             }`}
           >
-            {isSimPassed ? (
+            {simFcu == null ? (
+              <>
+                <Info size={14} />
+                <span>Outside Calibration Range</span>
+              </>
+            ) : isSimPassed ? (
               <>
                 <CheckCircle2 size={14} />
                 <span>Issue Statutory Compliance Pass</span>
@@ -394,7 +500,19 @@ export default function PunditStrengthPage() {
 
           <PunditWaveformViewer
             test={activeTest}
-            onLinkToBIM={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Linked ${activeTest.test_reference} to BIM model element!`, type: "success" } }))}
+            onLinkToBIM={() => {
+              if (!selectedElement) {
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ Select a BIM element in the header before linking.', type: "error" } }));
+                return;
+              }
+              linkPunditTestToElement(activeTest.id, selectedElement.name)
+                .then((updated) => {
+                  setTests(prev => prev.map(t => (t.id === updated.id ? updated : t)));
+                  setActiveTest(updated);
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Linked ${updated.test_reference} to BIM element ${selectedElement.name}.`, type: "success" } }));
+                })
+                .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'BIM link failed.'}`, type: "error" } })));
+            }}
             onEscalateNCR={() => setIsCreateFindingOpen(true)}
           />
         </div>
@@ -411,6 +529,22 @@ export default function PunditStrengthPage() {
         </div>
 
         <div className="overflow-x-auto">
+          {isLoading ? (
+            <div className="py-12 text-center text-xs font-semibold text-gray-400 animate-pulse">
+              Loading strength stations from server…
+            </div>
+          ) : error ? (
+            <div className="py-10 text-center space-y-2">
+              <p className="text-xs font-bold text-rose-600">{error}</p>
+              <button onClick={refresh} className="px-4 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold">
+                Retry
+              </button>
+            </div>
+          ) : tests.length === 0 ? (
+            <div className="py-12 text-center text-xs text-gray-500">
+              No PUNDIT test stations recorded{selectedElement ? ` for ${selectedElement.name}` : ' for this project'} yet.
+            </div>
+          ) : (
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
@@ -426,31 +560,36 @@ export default function PunditStrengthPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {tests.map((t) => {
-                const isPassed = t.estimated_compressive_strength_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+                const fcu = t.estimated_compressive_strength_mpa;
+                const isPassed = fcu != null && fcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
                 return (
-                  <tr 
-                    key={t.id} 
+                  <tr
+                    key={t.id}
                     onClick={() => setActiveTest(t)}
                     className={`hover:bg-slate-50 transition-colors cursor-pointer ${activeTest?.id === t.id ? 'bg-amber-50/40' : ''}`}
                   >
                     <td className="py-3.5 px-5 font-bold font-mono text-gray-900">{t.test_reference}</td>
-                    <td className="py-3.5 px-5 text-gray-700">{t.structural_element_name || t.test_location}</td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.path_length_mm} mm</td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.transit_time_us} µs</td>
-                    <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms.toLocaleString()} m/s</td>
+                    <td className="py-3.5 px-5 text-gray-700">{t.structural_element_name || t.test_location || '—'}</td>
+                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.path_length_mm ? `${t.path_length_mm} mm` : '—'}</td>
+                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.transit_time_us ? `${t.transit_time_us} µs` : '—'}</td>
+                    <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending'}</td>
                     <td className="py-3.5 px-5 font-mono font-black text-gray-900">
-                      <span className={isPassed ? 'text-emerald-600' : 'text-rose-600'}>
-                        {t.estimated_compressive_strength_mpa} MPa
-                      </span>
+                      {fcu != null ? (
+                        <span className={isPassed ? 'text-emerald-600' : 'text-rose-600'}>{fcu.toFixed(1)} MPa</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-5">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
-                        isPassed 
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                        fcu == null
+                          ? 'bg-gray-100 text-gray-600 border border-gray-200'
+                          : isPassed
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           : 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
                       }`}>
-                        {isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
-                        <span>{isPassed ? 'GREEN PASSED (≥25)' : 'DEFICIENT (<25)'}</span>
+                        {fcu == null ? <Info size={11} /> : isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                        <span>{fcu == null ? 'NOT ASSESSED' : isPassed ? 'GREEN PASSED (≥25)' : 'DEFICIENT (<25)'}</span>
                       </span>
                     </td>
                     <td className="py-3.5 px-5 text-right flex items-center justify-end gap-2">
@@ -466,12 +605,17 @@ export default function PunditStrengthPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.dispatchEvent(new CustomEvent('show-toast', { 
-                            detail: { message: `Exporting certified strength compliance dossier for ${t.test_reference}`, type: "success" } 
-                          }));
+                          if (!selectedProjectId) {
+                            window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ Select a project to download its official NDT report.', type: "error" } }));
+                            return;
+                          }
+                          window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" } }));
+                          downloadNdtReport(selectedProjectId)
+                            .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Downloaded ${filename} (real registry data).`, type: "success" } })))
+                            .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" } })));
                         }}
                         className="p-1 border border-gray-200 hover:bg-slate-100 rounded-lg text-gray-600"
-                        title="Download Certificate"
+                        title="Download official BS 1881-203 NDT report (PDF)"
                       >
                         <Download size={13} />
                       </button>
@@ -481,6 +625,7 @@ export default function PunditStrengthPage() {
               })}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 

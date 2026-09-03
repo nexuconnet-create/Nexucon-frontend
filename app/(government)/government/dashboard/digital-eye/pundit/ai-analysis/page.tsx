@@ -19,32 +19,66 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests } from "@/services/digitalEye";
+import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, getBIMStructuralElements, BIMStructuralElement } from "@/services/digitalEye";
 
 export default function PunditAIAnalysisPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [findings, setFindings] = useState<DigitalEyeFinding[]>([]);
   const [tests, setTests] = useState<PunditTest[]>([]);
+  const [analyses, setAnalyses] = useState<PunditAIAnalysis[]>([]);
+  const [elements, setElements] = useState<BIMStructuralElement[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<DigitalEyeFinding | null>(null);
   const [inspectTest, setInspectTest] = useState<PunditTest | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId || undefined });
+      setElements(fetchedElements);
+      const selected = fetchedElements.find(el => el.id === selectedElementId) || null;
+      const [fetchedFindings, fetchedTests, fetchedAnalyses] = await Promise.all([
+        getDigitalEyeFindings({ project: selectedProjectId || undefined, element_name: selected?.name }),
+        getPunditTests({ project: selectedProjectId || undefined, element_name: selected?.name }),
+        getPunditAIAnalyses({ project: selectedProjectId || undefined }),
+      ]);
+      setFindings(fetchedFindings);
+      setTests(fetchedTests);
+      setAnalyses(fetchedAnalyses);
+    } catch (err: any) {
+      setFindings([]);
+      setTests([]);
+      setAnalyses([]);
+      setError(err?.response?.data?.detail || err?.message || 'Failed to load AI analysis data from the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getDigitalEyeFindings({ project: selectedProjectId, element_id: selectedElementId }).then(res => {
-      setFindings(res.filter(f => 
-        f.taxonomy === 'LOW_PULSE_VELOCITY_ZONE' || 
-        f.taxonomy === 'CRACK_DEPTH_ANOMALY' ||
-        f.taxonomy === 'CONCRETE_HONEYCOMBING'
-      ));
-    });
-    getPunditTests({ project: selectedProjectId, element_id: selectedElementId }).then(setTests);
+    refresh();
   }, [selectedProjectId, selectedElementId]);
 
-  const filteredFindings = findings.filter(f => 
-    f.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  // Real computed metrics — no fabricated figures
+  const analyzedTests = tests.filter(t => t.pulse_velocity_ms > 0);
+  const meanVelocity = analyzedTests.length > 0
+    ? Math.round(analyzedTests.reduce((sum, t) => sum + t.pulse_velocity_ms, 0) / analyzedTests.length)
+    : null;
+  const assessedTests = tests.filter(t => t.estimated_compressive_strength_mpa != null);
+  const meanFcu = assessedTests.length > 0
+    ? Number((assessedTests.reduce((sum, t) => sum + (t.estimated_compressive_strength_mpa as number), 0) / assessedTests.length).toFixed(1))
+    : null;
+  const analysisCoverage = tests.length > 0 ? Math.round((analyzedTests.length / tests.length) * 100) : null;
+  const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
+
+  const filteredFindings = findings.filter(f =>
+    f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.finding_reference.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -71,8 +105,10 @@ export default function PunditAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">AI Waveforms Inferred</span>
-          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{tests.length * 6 + 24}</p>
-          <span className="text-[11px] text-gray-400 mt-1 block">Acoustic P-Wave Inversion v2.8</span>
+          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{tests.length}</p>
+          <span className="text-[11px] text-gray-400 mt-1 block">
+            {latestAnalysis ? `${latestAnalysis.model_provider || 'Platform'} ${latestAnalysis.model_version || ''}`.trim() : 'No AI analysis run yet'}
+          </span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -85,8 +121,10 @@ export default function PunditAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Mean Velocity (AI Calibrated)</span>
-          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">4,120 m/s</p>
-          <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">Est. Strength: 42.5 MPa (C35/45)</span>
+          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">{meanVelocity != null ? `${meanVelocity.toLocaleString()} m/s` : '—'}</p>
+          <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">
+            {meanFcu != null ? `Est. Strength: ${meanFcu} MPa (E.C.S)` : 'No assessed stations yet'}
+          </span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -113,8 +151,8 @@ export default function PunditAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Transit-Time Auto-Picker</span>
-          <p className="text-3xl font-bold text-purple-600 font-mono mt-1">98.9%</p>
-          <span className="text-[11px] text-purple-700 font-medium mt-1 block">Sub-microsecond resolution</span>
+          <p className="text-3xl font-bold text-purple-600 font-mono mt-1">{analysisCoverage != null ? `${analysisCoverage}%` : '—'}</p>
+          <span className="text-[11px] text-purple-700 font-medium mt-1 block">{analyzedTests.length} of {tests.length} stations analyzed</span>
         </motion.div>
       </div>
 
@@ -142,7 +180,25 @@ export default function PunditAIAnalysisPage() {
         </div>
 
         <div className="divide-y divide-gray-100">
-          {filteredFindings.map((finding) => (
+          {isLoading ? (
+            <div className="p-12 text-center text-xs font-semibold text-gray-400 animate-pulse">
+              Loading AI correlation findings from server…
+            </div>
+          ) : error ? (
+            <div className="py-10 text-center space-y-2">
+              <p className="text-xs font-bold text-rose-600">{error}</p>
+              <button onClick={refresh} className="px-4 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold">
+                Retry
+              </button>
+            </div>
+          ) : filteredFindings.length === 0 ? (
+            <div className="p-12 text-center text-xs text-gray-500">
+              {findings.length === 0
+                ? 'No AI correlation findings recorded yet. Findings are generated by the platform correlation engine when an analysis runs for this project.'
+                : 'No findings match your search.'}
+            </div>
+          ) : (
+          filteredFindings.map((finding) => (
             <div
               key={finding.id}
               onClick={() => {
@@ -182,7 +238,8 @@ export default function PunditAIAnalysisPage() {
                 Inspect UPV & NCR →
               </button>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
 

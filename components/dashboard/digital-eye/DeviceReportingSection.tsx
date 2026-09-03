@@ -26,12 +26,17 @@ import {
   RefreshCw,
   QrCode
 } from "lucide-react";
-import { 
-  DeviceReportRecord, 
-  getDeviceReports, 
+import {
+  DeviceReportRecord,
+  getDeviceReports,
   generateDeviceReport,
   BIMStructuralElement,
-  getBIMStructuralElements 
+  getBIMStructuralElements,
+  PunditTest,
+  getPunditTests,
+  downloadNdtReport,
+  downloadArchivedReport,
+  openArchivedReport
 } from "@/services/digitalEye";
 import { useAuth } from "@/context/AuthContext";
 
@@ -48,26 +53,36 @@ export default function DeviceReportingSection({
   deviceType,
   title,
   subtitle,
-  projectId = "proj-eko-01",
+  projectId = "",
   elementId,
   onReportGenerated
 }: DeviceReportingSectionProps) {
   const { user } = useAuth();
   const [reports, setReports] = useState<DeviceReportRecord[]>([]);
   const [elements, setElements] = useState<BIMStructuralElement[]>([]);
+  const [punditTests, setPunditTests] = useState<PunditTest[]>([]);
   const [selectedReport, setSelectedReport] = useState<DeviceReportRecord | null>(null);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadReports();
-    getBIMStructuralElements({ project: projectId }).then(setElements);
+    getBIMStructuralElements({ project: projectId || undefined }).then(setElements).catch(() => setElements([]));
+    if (deviceType === "pundit") {
+      // PUNDIT deliverables stream from the backend report engine — the
+      // compliance KPI is computed from the real test registry.
+      getPunditTests({ project: projectId || undefined })
+        .then(setPunditTests)
+        .catch(() => setPunditTests([]));
+    }
   }, [deviceType, projectId, elementId]);
 
   const loadReports = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await getDeviceReports({
         device_type: deviceType.toUpperCase(),
@@ -75,6 +90,10 @@ export default function DeviceReportingSection({
         element_id: elementId
       });
       setReports(data);
+    } catch (err: any) {
+      // Error -> error state. Never fabricate registry rows to hide a failure.
+      setReports([]);
+      setLoadError(err?.response?.data?.detail || err?.message || 'The dossier registry could not be loaded.');
     } finally {
       setIsLoading(false);
     }
@@ -134,14 +153,66 @@ export default function DeviceReportingSection({
     return matchesSearch && matchesStatus;
   });
 
-  const handleDownloadPDF = (report: DeviceReportRecord) => {
+  // PUNDIT official deliverable — real backend-generated BS 1881-203 PDF
+  const handleDownloadNdtReport = () => {
+    if (!projectId) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
+      }));
+      return;
+    }
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { 
-        message: `Downloading certified PDF: ${report.report_reference}...`, 
-        type: "success" 
+      detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" }
+    }));
+    downloadNdtReport(projectId)
+      .then((filename) => {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Downloaded ${filename} (MTL-style NDT dossier, real registry data).`, type: "success" }
+        }));
+        // The backend just archived this dossier — re-list the registry.
+        loadReports();
+      })
+      .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" }
+      })));
+  };
+
+  const handleDownloadPDF = (report: DeviceReportRecord) => {
+    // PUNDIT rows are real archived dossiers — stream the exact sealed bytes
+    // the platform generated (checksummed server-side), never a re-render.
+    if (report.device_type === 'PUNDIT') {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Downloading archived dossier ${report.report_reference}…`, type: "info" }
+      }));
+      downloadArchivedReport(report.id, report.report_reference)
+        .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Downloaded ${filename} — byte-exact archived dossier.`, type: "success" }
+        })))
+        .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Download failed.'}`, type: "error" }
+        })));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: {
+        message: `Downloading certified PDF: ${report.report_reference}...`,
+        type: "success"
       }
     }));
     // Open printable viewer as simulated export
+    setSelectedReport(report);
+  };
+
+  // PUNDIT "View PDF" — open the real archived PDF in the browser's viewer.
+  const handleViewPdf = (report: DeviceReportRecord) => {
+    if (report.device_type === 'PUNDIT') {
+      openArchivedReport(report.id).catch((err: any) =>
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Could not open the archived dossier.'}`, type: "error" }
+        }))
+      );
+      return;
+    }
     setSelectedReport(report);
   };
 
@@ -158,10 +229,15 @@ export default function DeviceReportingSection({
   };
 
   const handleExportBatchData = () => {
+    if (deviceType === "pundit") {
+      // The full PUNDIT registry is exported through the official backend PDF.
+      handleDownloadNdtReport();
+      return;
+    }
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { 
-        message: `Exporting complete raw ${deviceType.toUpperCase()} sensor package (CSV + Meta)...`, 
-        type: "info" 
+      detail: {
+        message: `Exporting complete raw ${deviceType.toUpperCase()} sensor package (CSV + Meta)...`,
+        type: "info"
       }
     }));
   };
@@ -292,9 +368,16 @@ export default function DeviceReportingSection({
           <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
             <span className="text-emerald-700 block text-[10px] font-bold uppercase">Compliance Pass Rate</span>
             <span className="text-xl font-bold text-emerald-800 font-mono mt-0.5 block">
-              {reports.length > 0
+              {deviceType === "pundit"
+                ? (() => {
+                    const assessed = punditTests.filter(t => t.estimated_compressive_strength_mpa != null);
+                    if (assessed.length === 0) return "—";
+                    const passed = assessed.filter(t => (t.estimated_compressive_strength_mpa as number) >= 25).length;
+                    return `${Math.round((passed / assessed.length) * 100)}%`;
+                  })()
+                : reports.length > 0
                 ? `${Math.round((reports.filter(r => r.compliance_status === 'COMPLIANT' || r.compliance_status === 'VERIFIED').length / reports.length) * 100)}%`
-                : "100%"}
+                : "—"}
             </span>
           </div>
 
@@ -386,7 +469,13 @@ export default function DeviceReportingSection({
           </div>
         </div>
 
-        {filteredReports.length === 0 ? (
+        {loadError ? (
+          <div className="p-12 text-center text-rose-600 text-xs">
+            <AlertTriangle size={32} className="mx-auto text-rose-300 mb-2" />
+            <p className="font-semibold">The dossier registry could not be loaded</p>
+            <p className="text-gray-400 mt-1">{loadError}</p>
+          </div>
+        ) : filteredReports.length === 0 ? (
           <div className="p-12 text-center text-gray-500 text-xs">
             <FileText size={32} className="mx-auto text-gray-300 mb-2" />
             <p className="font-semibold text-gray-700">No device dossiers match your criteria</p>
@@ -447,9 +536,9 @@ export default function DeviceReportingSection({
                     <td className="py-3.5 px-5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => setSelectedReport(rep)}
+                          onClick={() => handleViewPdf(rep)}
                           className="px-2.5 py-1 bg-white border border-gray-200 hover:border-blue-300 text-blue-700 rounded-lg text-xs font-bold shadow-sm cursor-pointer"
-                          title="View Stamped Printable Dossier"
+                          title={rep.device_type === 'PUNDIT' ? 'Open Archived Dossier PDF' : 'View Stamped Printable Dossier'}
                         >
                           View PDF
                         </button>
@@ -495,7 +584,10 @@ export default function DeviceReportingSection({
             projectId={projectId}
             elements={elements}
             defaultElementId={elementId}
+            certifierDefault={user ? `${user.first_name} ${user.last_name}`.trim() : ""}
             onClose={() => setIsGenerateOpen(false)}
+            onRegenerated={loadReports}
+            existingArchive={deviceType === "pundit" && reports.length > 0 ? reports[0] : undefined}
             onGenerated={(newRep) => {
               setReports([newRep, ...reports]);
               setIsGenerateOpen(false);
@@ -702,15 +794,23 @@ function GenerateReportModal({
   projectId,
   elements,
   defaultElementId,
+  certifierDefault = "",
   onClose,
-  onGenerated
+  onGenerated,
+  onRegenerated,
+  existingArchive
 }: {
   deviceType: "gpr" | "pundit" | "trimble";
   projectId: string;
   elements: BIMStructuralElement[];
   defaultElementId?: string;
+  certifierDefault?: string;
   onClose: () => void;
   onGenerated: (report: DeviceReportRecord) => void;
+  onRegenerated?: () => void;
+  /** Latest archived dossier for this project (PUNDIT) — shown as an
+      already-generated warning in the modal. */
+  existingArchive?: DeviceReportRecord;
 }) {
   const [title, setTitle] = useState(
     deviceType === "gpr"
@@ -726,13 +826,34 @@ function GenerateReportModal({
   const [executiveNotes, setExecutiveNotes] = useState(
     "Non-destructive physical inspection conducted on site. Sensor calibration verified against statutory reference standards."
   );
-  const [certifierName, setCertifierName] = useState("Engr. Babatunde Sanusi, FNSE");
+  const [certifierName, setCertifierName] = useState(certifierDefault);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      // PUNDIT: the deliverable is generated by the backend report engine
+      // (real registry data, E.C.S calibration, integrity digest) and streamed
+      // as an official BS 1881-203 PDF — no client-side fabricated metrics.
+      if (deviceType === "pundit") {
+        if (!projectId) {
+          window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
+          }));
+          return;
+        }
+        const filename = await downloadNdtReport(projectId);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Downloaded ${filename} — official BS 1881-203 dossier with real registry data.`, type: "success" }
+        }));
+        // The backend just archived this dossier — re-list so the registry
+        // shows the new row immediately (real server row, not a client mock).
+        if (onRegenerated) onRegenerated();
+        onClose();
+        return;
+      }
+
       const activeElem = elements.find(el => el.id === selectedElementId);
       const rep = await generateDeviceReport({
         title,
@@ -741,17 +862,13 @@ function GenerateReportModal({
         element_id: selectedElementId,
         element_name: activeElem?.name || "All Structural Elements",
         report_type: reportType,
-        standards_cited: deviceType === "gpr" 
+        standards_cited: deviceType === "gpr"
           ? ["ASTM D4748", "ACI 228.2R", "NBC 2020 §14.2"]
-          : deviceType === "pundit"
-          ? ["BS 1881: Part 203", "ASTM C597", "IS 13311"]
           : ["NBC 2020 §14.2", "ISO 19650-2", "BuildingSMART BCF 3.0"],
         compliance_status: "VERIFIED",
         executive_summary: executiveNotes,
         metrics: deviceType === "gpr"
           ? { scans_or_tests_count: 8, pass_rate_pct: 98.2, avg_rebar_spacing_mm: 196, min_cover_depth_mm: 40 }
-          : deviceType === "pundit"
-          ? { scans_or_tests_count: 12, pass_rate_pct: 100, mean_pulse_velocity_ms: 4180, est_compressive_strength_mpa: 43.1 }
           : { scans_or_tests_count: 14250, pass_rate_pct: 98.4, max_tolerance_deviation_mm: 12.8, rms_deviation_mm: 7.9 },
         certified_engineer: certifierName,
         generated_by: "Engr. Inspector (Lead NDT Geophysicist)"
@@ -791,6 +908,18 @@ function GenerateReportModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          {deviceType === "pundit" && existingArchive && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex gap-2.5 text-[11px] text-amber-900 leading-relaxed">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                <strong>An official dossier has already been generated for this project.</strong>
+                {' '}Latest: <span className="font-mono font-bold">{existingArchive.report_reference}</span>
+                {' '}({new Date(existingArchive.stamped_at).toLocaleString()}, {existingArchive.compliance_status.replace(/_/g, ' ')}).
+                Generating again is allowed — but identical data will <strong>not</strong> create a second archive;
+                a new dossier version is only recorded when the field data has changed since.
+              </span>
+            </div>
+          )}
           <div>
             <label className="font-bold text-gray-700 block mb-1">Dossier Title</label>
             <input

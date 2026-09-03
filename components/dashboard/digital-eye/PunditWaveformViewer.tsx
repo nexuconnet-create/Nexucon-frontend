@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
   Compass
 } from "lucide-react";
-import { PunditTest } from "@/services/digitalEye";
+import { PunditTest, downloadNdtReport } from "@/services/digitalEye";
 
 interface PunditWaveformViewerProps {
   test: PunditTest;
@@ -36,30 +36,53 @@ export default function PunditWaveformViewer({
   onLinkToBIM,
   onEscalateNCR
 }: PunditWaveformViewerProps) {
-  const [transducerFreq, setTransducerFreq] = useState<number>(test.transducer_frequency_khz || 54);
+  const [transducerFreq, setTransducerFreq] = useState<number>(test.transducer_frequency_khz || 0);
   const [appliedGain, setAppliedGain] = useState<number>(20);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Ultrasonic Physics States (Path Length L is Constant; Transit Time t is Variable)
-  const [pathLengthMm, setPathLengthMm] = useState<number>(test.path_length_mm || 400);
-  const [transitTimeUs, setTransitTimeUs] = useState<number>(test.transit_time_us || 94.2);
+  const [pathLengthMm, setPathLengthMm] = useState<number>(test.path_length_mm || 0);
+  const [transitTimeUs, setTransitTimeUs] = useState<number>(test.transit_time_us || 0);
   const [isAutomatedPicking, setIsAutomatedPicking] = useState<boolean>(true);
-  const [aicConfidence, setAicConfidence] = useState<number>(99.4);
-  const [transducerMode, setTransducerMode] = useState<'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT'>(
-    (test.transducer_type as any) || 'DIRECT'
+  const [transducerMode, setTransducerMode] = useState<'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT' | ''>(
+    test.transducer_type || ''
   );
 
+  // The useState initialisers above only run on FIRST mount. When the parent
+  // hands us a different test (e.g. the user clicks another registry row), the
+  // prop changes but this state would keep holding the previous station's
+  // values — so the canvas kept drawing the old oscillogram. Re-sync whenever
+  // the selected test's identity changes.
+  useEffect(() => {
+    setTransducerFreq(test.transducer_frequency_khz || 0);
+    setPathLengthMm(test.path_length_mm || 0);
+    setTransitTimeUs(test.transit_time_us || 0);
+    setTransducerMode(test.transducer_type || '');
+    setIsAutomatedPicking(true);
+    setAppliedGain(20);
+  }, [test.id]);
+
   // Dynamic Physics Calculation: Velocity V = Path Length (L) / Transit Time (t)
-  const computedVelocity = Math.round((pathLengthMm / (transitTimeUs / 1000))); // in m/s
-  
-  // Empirical Compressive Strength Estimation fcu (MPa) based on BS 1881-203 / IS 13311
-  const computedFcu = Math.max(15, Math.min(85, Number((0.0000000000015 * Math.pow(computedVelocity, 3.82)).toFixed(1))));
+  const computedVelocity = transitTimeUs > 0 ? Math.round(pathLengthMm / (transitTimeUs / 1000)) : 0; // in m/s
+
+  // E.C.S calibration curve — identical to the backend engine (apps/reports/ndt_reports.py):
+  // fcu = 8.961·V − 7.97 N/mm², valid 2.0–5.0 km/s only (never extrapolated).
+  const ECS_SLOPE = 8.961;
+  const ECS_INTERCEPT = -7.97;
+  const computedFcu = (() => {
+    const vKmS = computedVelocity / 1000;
+    if (vKmS < 2.0 || vKmS > 5.0) return null;
+    return Number((ECS_SLOPE * vKmS + ECS_INTERCEPT).toFixed(1));
+  })();
 
   // Dynamic Modulus of Elasticity Ed (GPa) assuming density = 2400 kg/m3, Poisson's ratio = 0.2
-  const computedEdGpa = Number(((2400 * Math.pow(computedVelocity, 2) * (1 + 0.2) * (1 - 2 * 0.2) / (1 - 0.2)) / 1e9).toFixed(1));
+  const computedEdGpa = computedVelocity > 0
+    ? Number(((2400 * Math.pow(computedVelocity, 2) * (1 + 0.2) * (1 - 2 * 0.2) / (1 - 0.2)) / 1e9).toFixed(1))
+    : 0;
 
   // Dynamic Concrete Quality Classification
   const getDynamicQuality = (velocity: number) => {
+    if (velocity <= 0) return { rating: "NOT ASSESSED", badge: "bg-slate-500/20 text-slate-300 border-slate-500/30", color: "#94a3b8" };
     if (velocity >= 4500) return { rating: "EXCELLENT", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", color: "#34d399" };
     if (velocity >= 3500) return { rating: "GOOD", badge: "bg-blue-500/20 text-blue-300 border-blue-500/30", color: "#60a5fa" };
     if (velocity >= 3000) return { rating: "DOUBTFUL", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30", color: "#fbbf24" };
@@ -143,14 +166,20 @@ export default function PunditWaveformViewer({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Arrival Label & Auto-Picker Indicator
+    // Arrival Label & Picker Indicator
     ctx.fillStyle = isAutomatedPicking ? "#38BDF8" : "#fbbf24";
     ctx.font = "bold 11px monospace";
     ctx.fillText(
-      `${isAutomatedPicking ? '🤖 AIC Auto-Picked' : '👆 Manual Pick'} t0: ${transitTimeUs.toFixed(1)} µs`,
+      `${isAutomatedPicking ? '⏱ Recorded t₀ (device-reported)' : '👆 Manual Pick'}: ${transitTimeUs.toFixed(1)} µs`,
       Math.min(width - 180, t0_pixel + 8),
       35
     );
+
+    // Honest disclosure: the oscillogram is rendered from the recorded transit
+    // time — the platform stores no raw waveform samples for this test.
+    ctx.fillStyle = "rgba(251, 191, 36, 0.75)";
+    ctx.font = "9px monospace";
+    ctx.fillText('SIMULATED TRACE — rendered from recorded t₀; no raw waveform stored', 12, 16);
 
     // Path Length & Physics Annotation
     ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -161,9 +190,8 @@ export default function PunditWaveformViewer({
 
   const handleResetAutomated = () => {
     setIsAutomatedPicking(true);
-    setTransitTimeUs(test.transit_time_us || 94.2);
-    setPathLengthMm(test.path_length_mm || 400);
-    setAicConfidence(99.4);
+    setTransitTimeUs(test.transit_time_us || 0);
+    setPathLengthMm(test.path_length_mm || 0);
   };
 
   return (
@@ -227,7 +255,12 @@ export default function PunditWaveformViewer({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-slate-400">Threshold (25 MPa):</span>
-            {computedFcu >= 25 ? (
+            {computedFcu == null ? (
+              <span className="bg-slate-500/20 text-slate-300 border border-slate-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px]">
+                <Info size={12} className="text-slate-400" />
+                <span>{computedVelocity > 0 ? 'OUTSIDE E.C.S CALIBRATION (2.0–5.0 KM/S)' : 'NOT RECORDED'}</span>
+              </span>
+            ) : computedFcu >= 25 ? (
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px]">
                 <CheckCircle2 size={12} className="text-emerald-400" />
                 <span>{computedFcu} MPa (PASS ≥ 25)</span>
@@ -239,8 +272,9 @@ export default function PunditWaveformViewer({
               </span>
             )}
           </div>
-          <div className="text-slate-300 hidden sm:block">
+          <div className="text-slate-300 hidden sm:block" title="Ed = ρV²(1+ν)(1−2ν)/(1−ν) using the measured pulse velocity and an assumed concrete density ρ = 2400 kg/m³, ν = 0.2 (density is not recorded per test).">
             Modulus (Ed): <span className="text-sky-400 font-bold text-sm">{computedEdGpa} GPa</span>
+            <span className="text-slate-500 text-[10px]"> (assumed ρ = 2400 kg/m³)</span>
           </div>
         </div>
       </div>
@@ -266,8 +300,8 @@ export default function PunditWaveformViewer({
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Est. Compressive (fcu):</span>
-                <span className={`font-bold ${computedFcu >= 25 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {computedFcu} MPa {computedFcu >= 25 ? '(≥25 MPa ✓)' : '(<25 MPa ✗)'}
+                <span className={`font-bold ${computedFcu == null ? 'text-slate-400' : computedFcu >= 25 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {computedFcu != null ? `${computedFcu} MPa ${computedFcu >= 25 ? '(≥25 MPa ✓)' : '(<25 MPa ✗)'}` : '— (outside 2.0–5.0 km/s)'}
                 </span>
               </div>
               <div className="flex justify-between gap-4">
@@ -281,7 +315,7 @@ export default function PunditWaveformViewer({
               <div className="flex justify-between gap-4 pt-1 border-t border-slate-800">
                 <span className="text-slate-400">Detection Method:</span>
                 <span className="text-sky-400 font-bold">
-                  {isAutomatedPicking ? `AIC Auto (${aicConfidence}%)` : 'Manual Cursor'}
+                  {isAutomatedPicking ? 'Device-Reported t₀' : 'Manual Cursor (local)'}
                 </span>
               </div>
             </div>
@@ -330,8 +364,8 @@ export default function PunditWaveformViewer({
                 />
               </div>
               <p className="text-[11px] text-slate-400 leading-tight">
-                {isAutomatedPicking 
-                  ? "AIC first-break thresholding eliminates manual cursor picking errors."
+                {isAutomatedPicking
+                  ? "Showing the transit time recorded by the field device."
                   : "Manual inspection mode activated for forensic acoustic review."}
               </p>
             </div>
@@ -384,6 +418,9 @@ export default function PunditWaveformViewer({
                 onChange={(e) => setTransducerFreq(Number(e.target.value))}
                 className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 outline-none"
               >
+                {![25, 54, 150, 250].includes(transducerFreq) && (
+                  <option value={transducerFreq}>Not recorded</option>
+                )}
                 <option value={25}>25 kHz (Mass Concrete / Long Acoustic Paths / Foundations)</option>
                 <option value={54}>54 kHz (Standard Structural Concrete)</option>
                 <option value={150}>150 kHz (High Precision Mortar / Core)</option>
@@ -411,15 +448,15 @@ export default function PunditWaveformViewer({
             <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-slate-400">Transmission Mode:</span>
-                <span className="font-bold text-slate-200">{transducerMode} (Face-to-Face)</span>
+                <span className="font-bold text-slate-200">{transducerMode ? (transducerMode === 'DIRECT' ? 'DIRECT (Face-to-Face)' : transducerMode) : 'NOT RECORDED'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Zero-Offset Calibration:</span>
-                <span className="font-mono text-emerald-400">0.0 µs (Calibrated Bar)</span>
+                <span className="font-mono text-slate-400">Not recorded</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Coupling Medium:</span>
-                <span className="text-slate-300">Ultrasonic Gel (Couplant)</span>
+                <span className="text-slate-400">Not recorded</span>
               </div>
             </div>
           </div>
@@ -449,7 +486,16 @@ export default function PunditWaveformViewer({
             ) : null}
 
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Exported NDT Test Certificate for ${test.test_reference}`, type: "success" } }))}
+              onClick={() => {
+                if (!test.project) {
+                  window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ No project linked to this test — cannot generate the official NDT report.', type: "error" } }));
+                  return;
+                }
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" } }));
+                downloadNdtReport(test.project)
+                  .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Downloaded ${filename} (includes ${test.test_reference}).`, type: "success" } })))
+                  .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" } })));
+              }}
               className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
               <Download size={13} />

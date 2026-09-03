@@ -32,7 +32,7 @@ export default function RadargramViewer({
   onLinkToBIM,
   onEscalateNCR
 }: RadargramViewerProps) {
-  const [permittivity, setPermittivity] = useState<number>(scan.dielectric_permittivity || 6.2);
+  const [permittivity, setPermittivity] = useState<number>(6.2);
   const [selectedDepthSlice, setSelectedDepthSlice] = useState<string>("100-200");
   const [gainLevel, setGainLevel] = useState<number>(35);
   const [activeTab, setActiveTab] = useState<"bscan" | "cscan" | "rebar">("bscan");
@@ -53,9 +53,14 @@ export default function RadargramViewer({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Draw Radargram B-Scan
+    // Draw Radargram B-Scan frame
     ctx.fillStyle = "#0B1120";
     ctx.fillRect(0, 0, width, height);
+
+    // The recorded depth range drives the vertical scale — never invented.
+    const maxDepthM = scan.depth_range_m && scan.depth_range_m > 0
+      ? scan.depth_range_m
+      : Math.max(0.5, ...scan.anomalies.map(a => a.depth_m ?? 0));
 
     // Time-depth scale lines
     ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
@@ -66,77 +71,84 @@ export default function RadargramViewer({
       ctx.lineTo(width, y);
       ctx.stroke();
 
-      // Depth labels
-      const depthMm = Math.round((y / height) * 600);
+      const depthMm = Math.round((y / height) * maxDepthM * 1000);
       ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
       ctx.font = "10px monospace";
       ctx.fillText(`${depthMm}mm`, 5, y + 3);
     }
 
-    // Distance scale lines (x-axis)
-    for (let x = 60; x < width; x += 60) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
+    // Distance scale lines (x-axis) — grid spacing recorded on the survey.
+    if (scan.grid_spacing_m && scan.grid_spacing_m > 0) {
+      for (let x = 60; x < width; x += 60) {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
 
-      const distM = ((x / width) * scan.transect_length_m).toFixed(1);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-      ctx.font = "10px monospace";
-      ctx.fillText(`${distM}m`, x - 10, height - 5);
+        const distM = ((x / width) * (scan.grid_spacing_m * 10)).toFixed(1);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.font = "10px monospace";
+        ctx.fillText(`${distM}m`, x - 10, height - 5);
+      }
     }
 
-    // Draw hyperbolic reflections (Rebars and Tendons)
-    const rebarPositions = [
-      { x: 120, y: 140, width: 70, height: 40, label: "#1" },
-      { x: 230, y: 150, width: 75, height: 45, label: "#2" },
-      { x: 340, y: 145, width: 70, height: 42, label: "#3" },
-      { x: 450, y: 160, width: 80, height: 50, label: "#4 (Wide Gap)" },
-      { x: 600, y: 142, width: 70, height: 40, label: "#5" },
-      { x: 710, y: 148, width: 75, height: 44, label: "#6" },
-    ];
+    if (scan.anomalies.length === 0) {
+      ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+      ctx.font = "bold 13px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("No subsurface anomalies recorded on this survey yet.", width / 2, height / 2 - 10);
+      ctx.font = "11px monospace";
+      ctx.fillText("Recorded anomalies (voids, rebar, delamination…) plot here with their measured depths.", width / 2, height / 2 + 12);
+      ctx.textAlign = "left";
+      return;
+    }
 
-    rebarPositions.forEach((rb) => {
-      // Hyperbola curve
+    // Plot the REAL recorded anomalies — position comes from each anomaly's
+    // recorded depth (y) and grid coordinates (x) when present; the marker is
+    // colour-coded by severity and labelled with the anomaly type.
+    const SEVERITY_COLORS: Record<string, string> = {
+      critical: "#f43f5e",
+      high: "#fb923c",
+      medium: "#fde047",
+      low: "#38bdf8",
+    };
+    scan.anomalies.forEach((a, i) => {
+      const depthM = a.depth_m ?? 0;
+      const y = 40 + (Math.min(depthM, maxDepthM) / maxDepthM) * (height - 80);
+      const coords = a.coordinates;
+      const x = coords?.x != null
+        ? 60 + (Number(coords.x) % 1) * (width - 120)
+        : 70 + (i * ((width - 140) / Math.max(1, scan.anomalies.length - 1 || 1)));
+      const color = SEVERITY_COLORS[a.severity] ?? "#38bdf8";
+
+      // Hyperbola reflection marker at the recorded depth
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(rb.x - rb.width / 2, rb.y + rb.height);
-      ctx.quadraticCurveTo(rb.x, rb.y - 15, rb.x + rb.width / 2, rb.y + rb.height);
-      ctx.strokeStyle = rb.label.includes("Wide") ? "#f43f5e" : "#38bdf8";
+      ctx.moveTo(x - 30, y + 18);
+      ctx.quadraticCurveTo(x, y - 10, x + 30, y + 18);
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2.5;
       ctx.stroke();
-
-      // Infill glow
-      ctx.fillStyle = rb.label.includes("Wide") ? "rgba(244, 63, 94, 0.15)" : "rgba(56, 189, 248, 0.15)";
+      ctx.fillStyle = `${color}26`;
       ctx.fill();
 
-      // Apex Marker
+      // Apex marker
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
-      ctx.arc(rb.x, rb.y - 3, 3.5, 0, Math.PI * 2);
+      ctx.arc(x, y - 2, 3.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Label
-      ctx.fillStyle = rb.label.includes("Wide") ? "#fda4af" : "#bae6fd";
+      // Label: type @ depth (confidence when recorded)
+      ctx.fillStyle = color;
       ctx.font = "bold 10px monospace";
-      ctx.fillText(rb.label, rb.x - 15, rb.y - 12);
+      ctx.fillText(
+        `${a.anomaly_type_display || a.anomaly_type} @ ${(depthM).toFixed(2)}m${a.confidence != null ? ` (${Math.round(a.confidence * 100)}%)` : ''}`,
+        Math.min(x - 20, width - 200), y - 14,
+      );
       ctx.restore();
     });
-
-    // Void / Defect Zone
-    ctx.save();
-    ctx.strokeStyle = "rgba(234, 179, 8, 0.8)";
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(480, 220, 110, 60);
-    ctx.fillStyle = "rgba(234, 179, 8, 0.1)";
-    ctx.fillRect(480, 220, 110, 60);
-    ctx.fillStyle = "#fde047";
-    ctx.font = "bold 10px sans-serif";
-    ctx.fillText("Anomalous Phase Inversion (Void)", 485, 240);
-    ctx.restore();
-
-  }, [permittivity, gainLevel, scan]);
+  }, [scan]);
 
   return (
     <div className={`w-full bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-xl overflow-hidden ${isFullscreen ? 'fixed inset-0 z-50 p-4 flex flex-col' : ''}`}>
@@ -149,12 +161,12 @@ export default function RadargramViewer({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm text-slate-100">{scan.scan_reference}</h3>
+              <h3 className="font-bold text-sm text-slate-100">{scan.survey_reference}</h3>
               <span className="text-[10px] font-mono bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-bold">
-                {scan.antenna_frequency.replace('_', ' ')}
+                {scan.antenna_frequency_mhz ? `${scan.antenna_frequency_mhz} MHz` : 'ANTENNA NOT RECORDED'}
               </span>
             </div>
-            <p className="text-xs text-slate-400">{scan.project_name} • Axis: {scan.grid_axis} ({scan.transect_length_m}m)</p>
+            <p className="text-xs text-slate-400">{scan.project_name} • {scan.survey_area || 'Survey area not recorded'}</p>
           </div>
         </div>
 
@@ -216,24 +228,28 @@ export default function RadargramViewer({
             </div>
           </div>
 
-          {/* Quick Stats Bar */}
+          {/* Quick Stats Bar — real recorded values only */}
           <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
             <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-[10px] uppercase font-bold block">Measured Spacing</span>
-              <span className="text-sm font-bold text-rose-400 font-mono">{scan.measured_rebar_spacing_mm} mm</span>
-              <span className="text-[10px] text-rose-300 block">Design Spec: {scan.specified_rebar_spacing_mm} mm (Failed)</span>
+              <span className="text-slate-400 text-[10px] uppercase font-bold block">Recorded Anomalies</span>
+              <span className="text-sm font-bold text-cyan-400 font-mono">{scan.anomaly_count}</span>
+              <span className="text-[10px] text-slate-400 block">{scan.anomaly_count === 0 ? 'None recorded' : 'Plotted on B-Scan'}</span>
             </div>
 
             <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-[10px] uppercase font-bold block">Cover Depth</span>
-              <span className="text-sm font-bold text-emerald-400 font-mono">{scan.measured_cover_depth_mm} mm</span>
-              <span className="text-[10px] text-emerald-300 block">Min Required: 35 mm (Pass)</span>
+              <span className="text-slate-400 text-[10px] uppercase font-bold block">Rebar Cover (detected)</span>
+              <span className="text-sm font-bold text-emerald-400 font-mono">
+                {scan.anomalies.filter(a => a.anomaly_type === 'rebar' && a.rebar_cover_mm != null).length > 0
+                  ? `${Math.min(...scan.anomalies.filter(a => a.anomaly_type === 'rebar' && a.rebar_cover_mm != null).map(a => a.rebar_cover_mm!))} mm (min)`
+                  : '—'}
+              </span>
+              <span className="text-[10px] text-slate-400 block">From rebar anomaly records</span>
             </div>
 
             <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-[10px] uppercase font-bold block">Status</span>
-              <span className="text-sm font-bold text-rose-400 uppercase font-mono">{scan.status}</span>
-              <span className="text-[10px] text-slate-400 block">Requires NCR Escalation</span>
+              <span className="text-slate-400 text-[10px] uppercase font-bold block">Survey Status</span>
+              <span className="text-sm font-bold text-cyan-400 uppercase font-mono">{scan.status_display || scan.status}</span>
+              <span className="text-[10px] text-slate-400 block">{scan.anomaly_count > 0 ? 'Review anomalies before clearance' : 'No anomalies recorded'}</span>
             </div>
           </div>
         </div>
@@ -320,13 +336,15 @@ export default function RadargramViewer({
               </button>
             )}
 
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Exported raw SEG-Y & DZT radar package for ${scan.scan_reference}`, type: "info" } }))}
-              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Download size={13} />
-              <span>Export Raw SEG-Y</span>
-            </button>
+            {scan.raw_file_urls.length > 0 && (
+              <button
+                onClick={() => window.open(scan.raw_file_urls[0], '_blank')}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Download size={13} />
+                <span>Download Raw Data Package ({scan.raw_file_urls.length})</span>
+              </button>
+            )}
           </div>
 
         </div>

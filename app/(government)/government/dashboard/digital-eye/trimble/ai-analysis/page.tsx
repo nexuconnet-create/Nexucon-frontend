@@ -20,13 +20,11 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import TrimbleBIMViewer from "@/components/dashboard/digital-eye/TrimbleBIMViewer";
-import { 
-  DigitalEyeFinding, 
-  getDigitalEyeFindings, 
-  BIMStructuralElement, 
-  getBIMStructuralElements,
-  TrimbleConnection,
-  getTrimbleConnectionStatus 
+import {
+  DigitalEyeFinding,
+  getDigitalEyeFindings,
+  BIMStructuralElement,
+  getBIMStructuralElements
 } from "@/services/digitalEye";
 
 export default function TrimbleAIAnalysisPage() {
@@ -34,7 +32,6 @@ export default function TrimbleAIAnalysisPage() {
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [findings, setFindings] = useState<DigitalEyeFinding[]>([]);
   const [elements, setElements] = useState<BIMStructuralElement[]>([]);
-  const [trimbleStatus, setTrimbleStatus] = useState<TrimbleConnection | null>(null);
   const [selectedFinding, setSelectedFinding] = useState<DigitalEyeFinding | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -42,13 +39,12 @@ export default function TrimbleAIAnalysisPage() {
 
   useEffect(() => {
     getDigitalEyeFindings({ project: selectedProjectId, element_id: selectedElementId }).then(res => {
-      setFindings(res.filter(f => 
-        f.taxonomy === 'BIM_GEOMETRIC_DEVIATION' || 
+      setFindings(res.filter(f =>
+        f.taxonomy === 'BIM_GEOMETRIC_DEVIATION' ||
         f.taxonomy === 'UNMAPPED_UTILITY_CONDUIT'
       ));
-    });
-    getBIMStructuralElements({ project: selectedProjectId }).then(setElements);
-    getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus);
+    }).catch(() => setFindings([]));
+    getBIMStructuralElements({ project: selectedProjectId }).then(setElements).catch(() => setElements([]));
   }, [selectedProjectId, selectedElementId]);
 
   const filteredFindings = findings.filter(f => 
@@ -79,7 +75,7 @@ export default function TrimbleAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">BIM Elements Evaluated</span>
-          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{trimbleStatus?.synced_elements_count || 14250}</p>
+          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{elements.length}</p>
           <span className="text-[11px] text-gray-400 mt-1 block">Revit / Tekla IFC4 Synchronized</span>
         </motion.div>
 
@@ -107,7 +103,7 @@ export default function TrimbleAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Geometric Outliers & Clashes</span>
-          <p className="text-3xl font-bold text-rose-600 font-mono mt-1">{findings.length || 3}</p>
+          <p className="text-3xl font-bold text-rose-600 font-mono mt-1">{findings.length}</p>
           <span className="text-[11px] text-rose-600 font-semibold mt-1 block">Shear Wall & Lift Core Offset</span>
         </motion.div>
 

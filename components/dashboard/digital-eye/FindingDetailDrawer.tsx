@@ -63,9 +63,13 @@ export default function FindingDetailDrawer({
       setIsEscalating(false);
       if (onRefresh) onRefresh();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+        || (err?.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : undefined)
+        || err?.message
+        || 'Failed to escalate finding to NCR';
       window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: "Failed to escalate finding to NCR", type: "error" }
+        detail: { message: `⚠️ ${detail}`, type: "error" }
       }));
     } finally {
       setIsSubmittingNCR(false);
@@ -226,7 +230,7 @@ export default function FindingDetailDrawer({
           {/* Footer Actions */}
           <div className="p-6 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-3">
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Exported BCF Issue XML topic for ${finding.finding_reference}`, type: "success" } }))}
+              onClick={() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Trimble BCF export is not yet supported by the backend. Escalate to an NCR to route this finding through the statutory workflow.', type: "info" } }))}
               className="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
             >
               <Share2 size={15} />
