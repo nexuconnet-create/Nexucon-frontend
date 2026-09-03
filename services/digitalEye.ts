@@ -103,7 +103,7 @@ export interface PunditTest {
   test_location: string; // e.g. "Column C-102 (Level 2 Mid-Height)"
   device_model: string; // e.g. "Proceq Pundit PL-200 UPV"
   transducer_type: 'DIRECT' | 'INDIRECT' | 'SEMI_DIRECT';
-  transducer_frequency_khz: number; // 54 or 250 kHz
+  transducer_frequency_khz: number; // 25, 54, 150, or 250 kHz
   path_length_mm: number; // e.g. 400 mm
   transit_time_us: number; // e.g. 94.2 microseconds
   pulse_velocity_ms: number; // e.g. 4246 m/s
@@ -479,7 +479,7 @@ const MOCK_PUNDIT_TESTS: PunditTest[] = [
     test_location: "Pile Cap P-42 Core Depth 1.2m",
     device_model: "Proceq Pundit PL-200 Ultrasonic Pulse Velocity",
     transducer_type: "DIRECT",
-    transducer_frequency_khz: 54,
+    transducer_frequency_khz: 25,
     path_length_mm: 600,
     transit_time_us: 172.4,
     pulse_velocity_ms: 3480, // Under 3500 m/s indicates doubtful concrete!

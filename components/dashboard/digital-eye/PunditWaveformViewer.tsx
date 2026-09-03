@@ -384,6 +384,7 @@ export default function PunditWaveformViewer({
                 onChange={(e) => setTransducerFreq(Number(e.target.value))}
                 className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 outline-none"
               >
+                <option value={25}>25 kHz (Mass Concrete / Long Acoustic Paths / Foundations)</option>
                 <option value={54}>54 kHz (Standard Structural Concrete)</option>
                 <option value={150}>150 kHz (High Precision Mortar / Core)</option>
                 <option value={250}>250 kHz (Micro-Crack Depth Measurement)</option>
