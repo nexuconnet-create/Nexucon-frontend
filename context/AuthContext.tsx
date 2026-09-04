@@ -31,11 +31,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const isProd = process.env.NODE_ENV === 'production';
-const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const backendUrl = (validEnvUrl || 'http://127.0.0.1:8000').replace(/\/$/, '');
-const API_BASE_URL = `${backendUrl}/api/v1`;
+function getApiBaseUrl(): string {
+  const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+  const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
+  let fallback = 'http://127.0.0.1:8000';
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('nexucon.net')) {
+      fallback = 'https://api.nexucon.net';
+    } else if (host === 'localhost' || host === '127.0.0.1') {
+      fallback = 'http://127.0.0.1:8000';
+    } else if (window.location.protocol === 'https:') {
+      fallback = 'https://api.nexucon.net';
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    fallback = 'https://api.nexucon.net';
+  }
+
+  let base = (validEnvUrl || fallback).replace(/\/+$/, '');
+  if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
+  return base;
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);

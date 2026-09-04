@@ -110,7 +110,9 @@ export default function SiteHealthDashboard() {
   let rgbUrl = scan.rgb_url || (rgbFile ? rgbFile.file_url : null);
   
   if (rgbUrl && rgbUrl.startsWith('/media/')) {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+    const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+    const isNexucon = typeof window !== 'undefined' && window.location.hostname.includes('nexucon.net');
+    const baseUrl = envUrl || (isNexucon ? 'https://api.nexucon.net' : 'http://127.0.0.1:8000');
     rgbUrl = baseUrl + rgbUrl;
   }
 
