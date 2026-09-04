@@ -32,7 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const isProd = process.env.NODE_ENV === 'production';
 const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const backendUrl = (validEnvUrl || 'https://nexucon-backend.onrender.com').replace(/\/$/, '');
+const backendUrl = (validEnvUrl || 'http://127.0.0.1:8000').replace(/\/$/, '');
 const API_BASE_URL = `${backendUrl}/api/v1`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {

@@ -176,13 +176,13 @@ export default function Reports() {
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [selectedProjectId]);
 
   const fetchReports = async () => {
     try {
       setLoading(true);
       const [sessionsRes, reportsRes, templatesRes] = await Promise.all([
-        api.get("/scans/sessions/").catch(() => ({ data: [] })),
+        api.get("/scans/sessions/", { params: { project: selectedProjectId || undefined } }).catch(() => ({ data: [] })),
         api.get("/quality-reports/").catch(() => ({ data: [] })),
         api.get("/report-templates/").catch(() => ({ data: [] })),
       ]);

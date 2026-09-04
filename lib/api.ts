@@ -16,7 +16,7 @@ import axios, {
 function resolveBaseUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
   const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
-  const fallback = 'https://nexucon-backend.onrender.com';
+  const fallback = 'http://127.0.0.1:8000';
   let base = (validEnvUrl || fallback).replace(/\/+$/, '');
   if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
   return base;

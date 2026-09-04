@@ -57,6 +57,9 @@ export default function DigitalEyeHeader({
       if (!selectedProjectId && pList.length > 0 && onProjectChange) {
         onProjectChange(pList[0].id);
       }
+    }).catch(() => {
+      // Backend unavailable / route missing — leave the selector empty (honest).
+      setProjects([]);
     });
   }, []);
 
@@ -66,24 +69,37 @@ export default function DigitalEyeHeader({
       if (!selectedElementId && res.length > 0 && onElementChange) {
         onElementChange(res[0].id);
       }
+      // A project switch invalidates the previous project's element selection —
+      // snap to the new project's first element (or clear it) so pages that
+      // filter by element never query with a stale id.
+      if (selectedElementId && onElementChange && !res.some(el => el.id === selectedElementId)) {
+        onElementChange(res.length > 0 ? res[0].id : "");
+      }
+    }).catch(() => {
+      // Backend unavailable / route missing — leave the selector hidden (honest).
+      setElements([]);
     });
     getTrimbleConnectionStatus(selectedProjectId).then(res => {
       setTrimbleStatus(res);
+    }).catch(() => {
+      // Backend unavailable / route missing — no connection to report (honest).
+      setTrimbleStatus(null);
     });
   }, [selectedProjectId]);
 
   const handleSyncTrimble = async () => {
-    if (!selectedProjectId) return;
+    if (!trimbleStatus) return;
     setIsSyncing(true);
     try {
-      const res = await triggerTrimbleSync(selectedProjectId);
+      const res = await triggerTrimbleSync(trimbleStatus.id);
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: res.message, type: 'success' }
       }));
-      getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus);
-    } catch (err) {
+      getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus).catch(() => setTrimbleStatus(null));
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Failed to synchronize with Trimble Connect';
       window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: 'Failed to synchronize with Trimble Connect', type: 'error' }
+        detail: { message: `⚠️ ${detail}`, type: 'error' }
       }));
     } finally {
       setIsSyncing(false);
@@ -145,8 +161,11 @@ export default function DigitalEyeHeader({
 
         {/* Trimble Connect Status Indicator */}
         {trimbleStatus && (
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <div
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs"
+            title={`Trimble Connect: ${trimbleStatus.status_display || trimbleStatus.status}`}
+          >
+            <div className={`w-2 h-2 rounded-full ${trimbleStatus.status === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
             <span className="text-blue-900 font-semibold">Trimble CDE</span>
             <button
               onClick={handleSyncTrimble}

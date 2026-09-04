@@ -4,20 +4,33 @@ import React, { useState, useEffect } from "react";
 import { Sparkles, ShieldCheck, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
-import { PunditTest, getPunditTests, DigitalEyeFinding, getDigitalEyeFindings } from "@/services/digitalEye";
+import { DigitalEyeFinding, getDigitalEyeFindings } from "@/services/digitalEye";
 
 export default function PunditCompliancePage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [tests, setTests] = useState<PunditTest[]>([]);
   const [findings, setFindings] = useState<DigitalEyeFinding[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<DigitalEyeFinding | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Real AI correlation findings from the platform — no taxonomy filter,
+      // every flagged element the engine produced for this project is shown.
+      setFindings(await getDigitalEyeFindings({ project: selectedProjectId || undefined }));
+    } catch (err: any) {
+      setFindings([]);
+      setError(err?.response?.data?.detail || err?.message || 'Failed to load flagged findings from the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getPunditTests({ project: selectedProjectId }).then(setTests);
-    getDigitalEyeFindings({ project: selectedProjectId }).then(res => {
-      setFindings(res.filter(f => f.taxonomy === 'LOW_PULSE_VELOCITY_ZONE'));
-    });
+    refresh();
   }, [selectedProjectId]);
 
   return (
@@ -62,13 +75,31 @@ export default function PunditCompliancePage() {
         </div>
       </div>
 
-      {findings.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-6">
-          <h3 className="text-sm font-bold text-rose-700 mb-3 flex items-center gap-2">
-            <AlertTriangle size={16} /> Flagged Low-Velocity Structural Elements (Action Required)
-          </h3>
-          <div className="space-y-3">
-            {findings.map((f) => (
+      {isLoading ? (
+        <div className="bg-white rounded-2xl p-12 border border-gray-100 shadow-sm mb-6 text-center text-xs font-semibold text-gray-400 animate-pulse">
+          Loading flagged findings from server…
+        </div>
+      ) : error ? (
+        <div className="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm mb-6 text-center space-y-2">
+          <p className="text-xs font-bold text-rose-600">{error}</p>
+          <button onClick={refresh} className="px-4 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold">
+            Retry
+          </button>
+        </div>
+      ) : findings.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 border border-gray-100 shadow-sm mb-6 text-center space-y-2">
+          <CheckCircle2 size={20} className="text-emerald-600 mx-auto" />
+          <p className="text-xs text-gray-500">
+            No flagged structural elements for this project. AI correlation findings appear here when the platform analysis engine flags low-velocity or defective zones.
+          </p>
+        </div>
+      ) : (
+      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-6">
+        <h3 className="text-sm font-bold text-rose-700 mb-3 flex items-center gap-2">
+          <AlertTriangle size={16} /> Flagged Low-Velocity Structural Elements (Action Required)
+        </h3>
+        <div className="space-y-3">
+          {findings.map((f) => (
               <div
                 key={f.id}
                 onClick={() => {
@@ -87,8 +118,8 @@ export default function PunditCompliancePage() {
                 </button>
               </div>
             ))}
-          </div>
         </div>
+      </div>
       )}
 
       <FindingDetailDrawer

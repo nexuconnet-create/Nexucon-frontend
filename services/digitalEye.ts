@@ -44,51 +44,60 @@ export interface BIMStructuralElement {
   last_inspected_at?: string;
 }
 
+// Mirrors the backend TrimbleConnectionSerializer (apps/digital_eye).
 export interface TrimbleConnection {
   id: string;
-  project: string;
-  project_name: string;
-  trimble_project_id: string;
-  trimble_project_name: string;
-  region: 'EU-West' | 'US-East' | 'APAC' | 'GLOBAL';
-  status: 'CONNECTED' | 'SYNCING' | 'AUTH_REQUIRED' | 'DISCONNECTED';
-  last_sync_at: string;
-  synced_models_count: number;
-  synced_elements_count: number;
-  bcf_topics_count: number;
-  webhook_active: boolean;
+  name: string;
+  status: 'CONNECTED' | 'AUTH_REQUIRED' | 'DISCONNECTED' | 'ERROR';
+  status_display: string;
+  scope: string;
+  trimble_user_id: string;
+  trimble_user_name: string;
+  last_health_check_at: string | null;
+  last_health_status: string;
+  last_error: string;
 }
 
+/** A detected subsurface feature on a GPR survey (real GPRAnomaly row). */
+export interface GPRAnomalyRecord {
+  id: string;
+  survey: string;
+  anomaly_type: 'void' | 'utility' | 'rebar' | 'delamination' | 'moisture' | 'burial' | 'other';
+  anomaly_type_display: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity_display: string;
+  depth_m: number | null;
+  estimated_size_m: number | null;
+  rebar_cover_mm: number | null;
+  coordinates: { x?: number; y?: number; latitude?: number; longitude?: number } | null;
+  description: string;
+  confidence: number | null;
+  detected_by: string;
+  created_at: string;
+}
+
+/** A real GPR survey row (GET /digital-eye/gpr-surveys/). Derived values the
+ *  backend does not record (rebar spacing, dielectric, transect length) are
+ *  honestly absent — never fabricated. */
 export interface GPRScan {
   id: string;
-  scan_reference: string;
+  survey_reference: string;
   project: string;
   project_name: string;
-  structural_element_id?: string;
-  structural_element_name?: string;
-  structural_element_guid?: string;
-  grid_axis: string; // e.g. "Grid 4-C to 4-D"
-  antenna_frequency: '100_MHZ' | '400_MHZ' | '900_MHZ' | '1.6_GHZ' | '2.0_GHZ' | '2.6_GHZ';
-  device_name: string; // e.g. "Proceq GS8000 Subsurface GPR"
+  title: string;
+  survey_area: string;
+  structural_element: string;
+  antenna_frequency_mhz: number | null;
+  depth_range_m: number | null;
+  grid_spacing_m: number | null;
   operator_name: string;
-  survey_date: string;
-  transect_length_m: number;
-  max_penetration_depth_m: number;
-  measured_rebar_spacing_mm: number;
-  specified_rebar_spacing_mm?: number;
-  measured_cover_depth_mm: number;
-  rebar_deficiency_detected: boolean;
-  void_detected: boolean;
-  delamination_detected: boolean;
-  utility_strike_hazard: boolean;
-  dielectric_constant: number; // e.g. 6.2 for cured concrete
-  dielectric_permittivity?: number;
-  radargram_image_url: string;
-  c_scan_heatmap_url?: string;
-  raw_data_file_url?: string;
-  file_size: string;
-  status: 'PROCESSED' | 'IN_REVIEW' | 'FLAGGED' | 'VERIFIED';
-  notes?: string;
+  status: 'draft' | 'in_progress' | 'processing' | 'completed' | 'failed';
+  status_display: string;
+  notes: string;
+  anomaly_count: number;
+  anomalies: GPRAnomalyRecord[];
+  // URLs of attached SensorDataFile artifacts (radargrams, raw datasets).
+  raw_file_urls: string[];
   created_at: string;
 }
 
@@ -97,25 +106,30 @@ export interface PunditTest {
   test_reference: string;
   project: string;
   project_name: string;
+  test_type: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
   structural_element_id?: string;
   structural_element_name?: string;
   structural_element_guid?: string;
-  test_location: string; // e.g. "Column C-102 (Level 2 Mid-Height)"
-  device_model: string; // e.g. "Proceq Pundit PL-200 UPV"
-  transducer_type: 'DIRECT' | 'INDIRECT' | 'SEMI_DIRECT';
+  test_location: string; // e.g. "Grid D-7 Core Section"
+  transducer_type: 'DIRECT' | 'INDIRECT' | 'SEMI_DIRECT' | '';
   transducer_frequency_khz: number; // 25, 54, 150, or 250 kHz
   path_length_mm: number; // e.g. 400 mm
   transit_time_us: number; // e.g. 94.2 microseconds
-  pulse_velocity_ms: number; // e.g. 4246 m/s
-  estimated_compressive_strength_mpa: number; // e.g. 42.5 MPa
-  concrete_quality_rating: 'EXCELLENT' | 'GOOD' | 'DOUBTFUL' | 'POOR';
-  estimated_crack_depth_mm?: number;
-  waveform_samples: number[]; // Oscillogram amplitudes
+  // Crack-depth method (BS 1881-203 time difference): 0 when not a crack test.
+  crack_path_length_mm: number;
+  crack_pulse_time_us: number;
+  uncracked_pulse_time_us: number;
+  surface_condition: string;
+  surface_temperature_c: number | null;
+  pulse_velocity_ms: number; // m/s; 0 until the server-side BS 1881-203 analysis has run
+  estimated_compressive_strength_mpa: number | null; // E.C.S via the platform calibration curve; null outside its 2.0-5.0 km/s validity
+  concrete_quality_rating: 'EXCELLENT' | 'GOOD' | 'DOUBTFUL' | 'POOR' | 'VERY_POOR' | 'PENDING';
+  estimated_crack_depth_mm?: number | null;
   operator_name: string;
   test_date: string;
-  status: 'PASSED' | 'ANOMALY' | 'RE_TEST_REQUIRED' | 'VERIFIED';
   notes?: string;
   created_at: string;
+  file_count: number; // attached SensorDataFile artifacts (photos / raw exports)
 }
 
 export type FindingTaxonomy =
@@ -140,7 +154,7 @@ export interface DigitalEyeFinding {
   structural_element_guid?: string;
   gpr_scan_id?: string;
   pundit_test_id?: string;
-  taxonomy: FindingTaxonomy;
+  taxonomy?: FindingTaxonomy;
   title: string;
   description: string;
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -158,43 +172,6 @@ export interface DigitalEyeFinding {
   corrective_action?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface AIAnalysisRecord {
-  id: string;
-  project: string;
-  project_name: string;
-  scan_reference: string;
-  model_version: string; // e.g. "Nexucon Structural-Vision v3.2 + GPR-Inversion"
-  analysis_type: 'SURFACE_DEFECT' | 'GPR_SUBSURFACE' | 'THERMAL_ANOMALY' | 'SCAN_TO_BIM_DEVIATION' | 'MULTI_MODAL_FUSION';
-  analyzed_at: string;
-  confidence_score: number;
-  overall_health_score: number; // 0 - 100
-  total_elements_scanned: number;
-  anomalies_detected: number;
-  critical_defects_count: number;
-  compliance_check_passed: boolean;
-  findings: Array<{
-    id: string;
-    label: string;
-    type: string;
-    severity: string;
-    confidence: number;
-    location: string;
-    recommended_action: string;
-  }>;
-  thermal_metrics?: {
-    avg_temp_c: number;
-    max_temp_c: number;
-    variance_c: number;
-    leakage_detected: boolean;
-  };
-  deviation_summary?: {
-    max_positive_mm: number;
-    max_negative_mm: number;
-    rms_deviation_mm: number;
-    tolerance_threshold_mm: number;
-  };
 }
 
 export interface ProcessingQueueJob {
@@ -246,17 +223,6 @@ export interface EvidenceSpatialPoint {
   timestamp: string;
 }
 
-export interface DigitalEyeOverviewStats {
-  active_rovers: number;
-  scans_today: number;
-  processing_queue_count: number;
-  ai_anomalies_detected: number;
-  verified_gpr_scans: number;
-  verified_pundit_tests: number;
-  open_critical_findings: number;
-  trimble_sync_status: 'SYNCED' | 'PENDING' | 'ERROR';
-}
-
 export interface DeviceReportRecord {
   id: string;
   report_reference: string;
@@ -268,7 +234,7 @@ export interface DeviceReportRecord {
   element_name?: string;
   report_type: string;
   standards_cited: string[];
-  compliance_status: 'COMPLIANT' | 'FLAGGED_DEFECTS' | 'CRITICAL_NCR' | 'VERIFIED';
+  compliance_status: 'COMPLIANT' | 'FLAGGED_DEFECTS' | 'CRITICAL_NCR' | 'VERIFIED' | 'NOT_ASSESSED';
   executive_summary: string;
   metrics: {
     scans_or_tests_count?: number;
@@ -289,320 +255,10 @@ export interface DeviceReportRecord {
 }
 
 // ==========================================
-// 2. MOCK DATA GENERATOR (RESILIENT FALLBACK)
+// 2. MOCK DATA — REMOVED.
+//    Every Digital Eye module (GPR, PUNDIT, Trimble) now renders only real
+//    API rows; empty/error states are honest (no fabricated fallback data).
 // ==========================================
-
-const MOCK_STRUCTURAL_ELEMENTS: BIMStructuralElement[] = [
-  {
-    id: "elem-001",
-    element_guid: "3b4a8e91-7c22-4d1a-9f5e-1102938475a1",
-    name: "Column C-102 (Core Axis)",
-    category: "COLUMN",
-    discipline: "Structural",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    model_name: "Eko_Atlantic_Tower_v4.ifc",
-    grid_location: "Grid Axis 4-C / Level 2",
-    level: "Level 2 (Podium)",
-    coordinates_3d: { x: 12.4, y: 34.8, z: 8.5 },
-    designed_concrete_grade: "C40/50",
-    designed_rebar_spacing_mm: 150,
-    designed_cover_depth_mm: 45,
-    gpr_clearance_status: "VERIFIED",
-    pundit_clearance_status: "VERIFIED",
-    ai_anomaly_count: 0,
-    open_findings_count: 0,
-    last_inspected_at: "2026-08-28T10:30:00Z"
-  },
-  {
-    id: "elem-002",
-    element_guid: "8f219b44-1234-4bc8-88aa-9918273645e2",
-    name: "Transfer Slab TS-04 (Post-Tensioned)",
-    category: "SLAB",
-    discipline: "Structural",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    model_name: "Eko_Atlantic_Tower_v4.ifc",
-    grid_location: "Grid D-7 to E-9",
-    level: "Level 4 (Transfer Deck)",
-    coordinates_3d: { x: 45.2, y: 18.6, z: 16.0 },
-    designed_concrete_grade: "C45/55",
-    designed_rebar_spacing_mm: 125,
-    designed_cover_depth_mm: 40,
-    gpr_clearance_status: "ANOMALY_DETECTED",
-    pundit_clearance_status: "VERIFIED",
-    ai_anomaly_count: 2,
-    open_findings_count: 1,
-    last_inspected_at: "2026-08-30T14:15:00Z"
-  },
-  {
-    id: "elem-003",
-    element_guid: "2c776a01-9988-4221-a1b2-c3d4e5f6a7b8",
-    name: "Foundation Bored Pile P-42",
-    category: "FOUNDATION_PILE",
-    discipline: "Geotechnical",
-    project: "proj-ikoyi-02",
-    project_name: "Ikoyi Luxury Waterfront Heights",
-    model_name: "Ikoyi_Waterfront_Foundation.ifc",
-    grid_location: "South Perimeter Grid P-42",
-    level: "Substructure (-12.0m)",
-    coordinates_3d: { x: -8.5, y: 12.0, z: -12.0 },
-    designed_concrete_grade: "C35/45",
-    designed_rebar_spacing_mm: 100,
-    designed_cover_depth_mm: 75,
-    gpr_clearance_status: "VERIFIED",
-    pundit_clearance_status: "ANOMALY_DETECTED",
-    ai_anomaly_count: 1,
-    open_findings_count: 1,
-    last_inspected_at: "2026-08-29T09:00:00Z"
-  },
-  {
-    id: "elem-004",
-    element_guid: "a9988776-5544-4332-2211-009988776655",
-    name: "Shear Wall SW-01 (Lift Core)",
-    category: "CORE_WALL",
-    discipline: "Structural",
-    project: "proj-lekki-03",
-    project_name: "Lekki Deep Sea Port Logistics Hub",
-    model_name: "Lekki_Port_Admin_BIM.ifc",
-    grid_location: "Grid Core A / Levels 1-6",
-    level: "Level 1 to 3",
-    coordinates_3d: { x: 22.0, y: 10.5, z: 4.2 },
-    designed_concrete_grade: "C40/50",
-    designed_rebar_spacing_mm: 150,
-    designed_cover_depth_mm: 40,
-    gpr_clearance_status: "VERIFIED",
-    pundit_clearance_status: "VERIFIED",
-    ai_anomaly_count: 0,
-    open_findings_count: 0,
-    last_inspected_at: "2026-08-31T08:30:00Z"
-  }
-];
-
-const MOCK_GPR_SCANS: GPRScan[] = [
-  {
-    id: "gpr-001",
-    scan_reference: "GPR-2026-089",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    structural_element_id: "elem-002",
-    structural_element_name: "Transfer Slab TS-04 (Post-Tensioned)",
-    structural_element_guid: "8f219b44-1234-4bc8-88aa-9918273645e2",
-    grid_axis: "Grid D-7 to E-9 (Transect Line B4)",
-    antenna_frequency: "2.0_GHZ",
-    device_name: "Proceq GS8000 Subsurface High-Frequency GPR",
-    operator_name: "Engr. Babatunde Alabi, FNSE",
-    survey_date: "2026-08-30",
-    transect_length_m: 14.5,
-    max_penetration_depth_m: 0.85,
-    measured_rebar_spacing_mm: 185, // 185mm vs 125mm designed!
-    measured_cover_depth_mm: 32, // 32mm vs 40mm designed!
-    rebar_deficiency_detected: true,
-    void_detected: false,
-    delamination_detected: true,
-    utility_strike_hazard: false,
-    dielectric_constant: 6.4,
-    radargram_image_url: "/radargrams/gpr-slice-089.png",
-    c_scan_heatmap_url: "/radargrams/gpr-cscan-089.png",
-    file_size: "148.5 MB",
-    status: "FLAGGED",
-    notes: "Post-tensioning tendon profile checked. Rebar spacing exceeds tolerance at Grid E-8 (+60mm variance). Inter-layer delamination suspected at 180mm depth.",
-    created_at: "2026-08-30T15:00:00Z"
-  },
-  {
-    id: "gpr-002",
-    scan_reference: "GPR-2026-088",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    structural_element_id: "elem-001",
-    structural_element_name: "Column C-102 (Core Axis)",
-    structural_element_guid: "3b4a8e91-7c22-4d1a-9f5e-1102938475a1",
-    grid_axis: "Grid Axis 4-C / Level 2 Perimeter",
-    antenna_frequency: "2.6_GHZ",
-    device_name: "Proceq GS8000 Subsurface High-Frequency GPR",
-    operator_name: "Engr. Babatunde Alabi, FNSE",
-    survey_date: "2026-08-28",
-    transect_length_m: 4.8,
-    max_penetration_depth_m: 0.60,
-    measured_rebar_spacing_mm: 148,
-    measured_cover_depth_mm: 46,
-    rebar_deficiency_detected: false,
-    void_detected: false,
-    delamination_detected: false,
-    utility_strike_hazard: false,
-    dielectric_constant: 6.2,
-    radargram_image_url: "/radargrams/gpr-slice-088.png",
-    file_size: "62.4 MB",
-    status: "VERIFIED",
-    notes: "Reinforcement cages aligned with structural drawings. Cover depth compliant with BS EN 1992-1-1 standards.",
-    created_at: "2026-08-28T11:00:00Z"
-  },
-  {
-    id: "gpr-003",
-    scan_reference: "GPR-2026-087",
-    project: "proj-ikoyi-02",
-    project_name: "Ikoyi Luxury Waterfront Heights",
-    structural_element_id: "elem-003",
-    structural_element_name: "Foundation Bored Pile P-42",
-    structural_element_guid: "2c776a01-9988-4221-a1b2-c3d4e5f6a7b8",
-    grid_axis: "Pile Cap 42 Top Surface",
-    antenna_frequency: "900_MHZ",
-    device_name: "GSSI UtilityScan Pro 900",
-    operator_name: "Tariq Adeleke, Geophysics Lead",
-    survey_date: "2026-08-27",
-    transect_length_m: 8.0,
-    max_penetration_depth_m: 2.2,
-    measured_rebar_spacing_mm: 102,
-    measured_cover_depth_mm: 74,
-    rebar_deficiency_detected: false,
-    void_detected: true,
-    delamination_detected: false,
-    utility_strike_hazard: false,
-    dielectric_constant: 7.1,
-    radargram_image_url: "/radargrams/gpr-slice-087.png",
-    file_size: "94.0 MB",
-    status: "IN_REVIEW",
-    notes: "Deep anomaly detected between 1.1m and 1.4m depth. Correlated with UPV acoustic velocity drop.",
-    created_at: "2026-08-27T16:30:00Z"
-  }
-];
-
-const MOCK_PUNDIT_TESTS: PunditTest[] = [
-  {
-    id: "pdt-001",
-    test_reference: "UPV-2026-054",
-    project: "proj-ikoyi-02",
-    project_name: "Ikoyi Luxury Waterfront Heights",
-    structural_element_id: "elem-003",
-    structural_element_name: "Foundation Bored Pile P-42",
-    structural_element_guid: "2c776a01-9988-4221-a1b2-c3d4e5f6a7b8",
-    test_location: "Pile Cap P-42 Core Depth 1.2m",
-    device_model: "Proceq Pundit PL-200 Ultrasonic Pulse Velocity",
-    transducer_type: "DIRECT",
-    transducer_frequency_khz: 25,
-    path_length_mm: 600,
-    transit_time_us: 172.4,
-    pulse_velocity_ms: 3480, // Under 3500 m/s indicates doubtful concrete!
-    estimated_compressive_strength_mpa: 27.8, // Specified 35 MPa
-    concrete_quality_rating: "DOUBTFUL",
-    estimated_crack_depth_mm: 42,
-    waveform_samples: [0, 8, -14, 28, -64, 112, -180, 240, -190, 120, -50, 20, 0],
-    operator_name: "Dr. K. Okonjo, Materials NDT Specialist",
-    test_date: "2026-08-29",
-    status: "ANOMALY",
-    notes: "Pulse velocity of 3,480 m/s falls below statutory threshold of 3,800 m/s for Grade C35 concrete. Internal micro-voiding or honeycombing likely.",
-    created_at: "2026-08-29T10:00:00Z"
-  },
-  {
-    id: "pdt-002",
-    test_reference: "UPV-2026-053",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    structural_element_id: "elem-001",
-    structural_element_name: "Column C-102 (Core Axis)",
-    structural_element_guid: "3b4a8e91-7c22-4d1a-9f5e-1102938475a1",
-    test_location: "Column C-102 Base (Level 2)",
-    device_model: "Proceq Pundit PL-200 Ultrasonic Pulse Velocity",
-    transducer_type: "DIRECT",
-    transducer_frequency_khz: 54,
-    path_length_mm: 500,
-    transit_time_us: 114.2,
-    pulse_velocity_ms: 4378,
-    estimated_compressive_strength_mpa: 46.2,
-    concrete_quality_rating: "EXCELLENT",
-    waveform_samples: [0, 15, -30, 85, -190, 320, -280, 160, -80, 30, -10, 0],
-    operator_name: "Dr. K. Okonjo, Materials NDT Specialist",
-    test_date: "2026-08-28",
-    status: "PASSED",
-    notes: "Homogeneous concrete structure. Velocity 4,378 m/s satisfies Excellent durability rating per BS 1881-203.",
-    created_at: "2026-08-28T12:00:00Z"
-  }
-];
-
-const MOCK_FINDINGS: DigitalEyeFinding[] = [
-  {
-    id: "fnd-001",
-    finding_reference: "FND-DE-2026-018",
-    project: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    structural_element_id: "elem-002",
-    structural_element_name: "Transfer Slab TS-04 (Post-Tensioned)",
-    structural_element_guid: "8f219b44-1234-4bc8-88aa-9918273645e2",
-    gpr_scan_id: "gpr-001",
-    taxonomy: "REBAR_SPACING_DEFICIENCY",
-    title: "Rebar Spacing Discrepancy & Delamination at Transfer Slab TS-04",
-    description: "High-frequency GPR scanning revealed rebar spacing of 185mm against designed 125mm center-to-center. Concrete cover reduced to 32mm with acoustic delamination indicator at 180mm depth.",
-    severity: "HIGH",
-    confidence_score: 94,
-    depth_mm: 180,
-    deviation_mm: 60,
-    gps_coordinates: { lat: 6.45214, lng: 3.43521, elevation: 18.2 },
-    evidence_photos: [
-      "https://images.unsplash.com/photo-1541888946425-d0fbb180c5f5?auto=format&fit=crop&w=800&q=80"
-    ],
-    radargram_snippet_url: "/radargrams/gpr-slice-089.png",
-    status: "OPEN",
-    assigned_inspector: "Engr. Babatunde Alabi",
-    resolution_deadline: "2026-09-08",
-    corrective_action: "Structural consultant must verify load transfer capacity and prescribe carbon-fiber re-strengthening or rebar supplementary dowels.",
-    created_at: "2026-08-30T15:30:00Z",
-    updated_at: "2026-08-30T15:30:00Z"
-  },
-  {
-    id: "fnd-002",
-    finding_reference: "FND-DE-2026-017",
-    project: "proj-ikoyi-02",
-    project_name: "Ikoyi Luxury Waterfront Heights",
-    structural_element_id: "elem-003",
-    structural_element_name: "Foundation Bored Pile P-42",
-    structural_element_guid: "2c776a01-9988-4221-a1b2-c3d4e5f6a7b8",
-    gpr_scan_id: "gpr-003",
-    pundit_test_id: "pdt-001",
-    taxonomy: "SUBSURFACE_VOID",
-    title: "Honeycomb Void & Low Compressive Strength in Pile Cap P-42",
-    description: "Ultrasonic NDT pulse velocity dropped to 3,480 m/s (compressive strength 27.8 MPa vs 35 MPa spec). GPR radargram migration confirms 240mm diameter consolidation void in pile head zone.",
-    severity: "CRITICAL",
-    confidence_score: 98,
-    depth_mm: 1200,
-    gps_coordinates: { lat: 6.44890, lng: 3.42910, elevation: -12.0 },
-    evidence_photos: [
-      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80"
-    ],
-    radargram_snippet_url: "/radargrams/gpr-slice-087.png",
-    status: "CONVERTED_TO_NCR",
-    ncr_reference: "NCR-2026-0042",
-    assigned_inspector: "Dr. K. Okonjo",
-    resolution_deadline: "2026-09-04",
-    corrective_action: "Pressure epoxy injection grouting and core testing under supervision of Lagos State Materials Testing Laboratory (LSMTL).",
-    created_at: "2026-08-29T11:00:00Z",
-    updated_at: "2026-08-29T16:00:00Z"
-  },
-  {
-    id: "fnd-003",
-    finding_reference: "FND-DE-2026-016",
-    project: "proj-lekki-03",
-    project_name: "Lekki Deep Sea Port Logistics Hub",
-    structural_element_id: "elem-004",
-    structural_element_name: "Shear Wall SW-01 (Lift Core)",
-    structural_element_guid: "a9988776-5544-4332-2211-009988776655",
-    taxonomy: "BIM_GEOMETRIC_DEVIATION",
-    title: "3D SLAM Scan-to-BIM Verticality Offset on Lift Core Wall",
-    description: "Automated point cloud alignment against Revit model indicates 18mm outward tilt at Level 3 elevation, approaching statutory tolerance envelope limit of 20mm.",
-    severity: "MEDIUM",
-    confidence_score: 91,
-    deviation_mm: 18,
-    gps_coordinates: { lat: 6.41800, lng: 3.88200, elevation: 4.2 },
-    evidence_photos: [
-      "https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=800&q=80"
-    ],
-    status: "INVESTIGATING",
-    assigned_inspector: "Surveyor A. Bello",
-    resolution_deadline: "2026-09-12",
-    corrective_action: "Formwork alignment re-calibration before casting subsequent floor level.",
-    created_at: "2026-08-31T09:00:00Z",
-    updated_at: "2026-08-31T09:00:00Z"
-  }
-];
 
 const MOCK_PROCESSING_JOBS: ProcessingQueueJob[] = [
   {
@@ -724,63 +380,6 @@ const MOCK_SPATIAL_POINTS: EvidenceSpatialPoint[] = [
   }
 ];
 
-const MOCK_AI_RECORD: AIAnalysisRecord = {
-  id: "ai-rec-01",
-  project: "proj-eko-01",
-  project_name: "Eko Atlantic Signature Tower",
-  scan_reference: "SCN-2026-089",
-  model_version: "Nexucon AI-Fusion v3.4 (Gemini 2.5 Flash + GPR Deep-Inversion)",
-  analysis_type: "MULTI_MODAL_FUSION",
-  analyzed_at: "2026-08-31T11:30:00Z",
-  confidence_score: 94.6,
-  overall_health_score: 82,
-  total_elements_scanned: 184,
-  anomalies_detected: 3,
-  critical_defects_count: 1,
-  compliance_check_passed: false,
-  findings: [
-    {
-      id: "ai-f-1",
-      label: "Rebar Density Under-Specification",
-      type: "Structural Deficiency",
-      severity: "HIGH",
-      confidence: 94,
-      location: "Transfer Slab TS-04 (Grid D-7 to E-9)",
-      recommended_action: "Issue non-conformance notice to structural engineer of record for recalculation."
-    },
-    {
-      id: "ai-f-2",
-      label: "Concrete Density Void Indicator",
-      type: "Material Integrity",
-      severity: "CRITICAL",
-      confidence: 98,
-      location: "Foundation Bored Pile P-42",
-      recommended_action: "Perform immediate core drill testing or pressure epoxy grouting."
-    },
-    {
-      id: "ai-f-3",
-      label: "Thermal Dissipation Plume",
-      type: "HVAC / Envelope",
-      severity: "LOW",
-      confidence: 88,
-      location: "Level 6 Service Riser Duct",
-      recommended_action: "Inspect seal on mechanical expansion joint."
-    }
-  ],
-  thermal_metrics: {
-    avg_temp_c: 26.4,
-    max_temp_c: 41.2,
-    variance_c: 8.6,
-    leakage_detected: true
-  },
-  deviation_summary: {
-    max_positive_mm: 18.4,
-    max_negative_mm: -12.1,
-    rms_deviation_mm: 7.8,
-    tolerance_threshold_mm: 20.0
-  }
-};
-
 // ==========================================
 // 3. API SERVICE METHODS
 // ==========================================
@@ -797,257 +396,626 @@ const unwrap = <T>(res: any, fallback: T): T => {
   return res as T;
 };
 
-export const getDigitalEyeStats = async (projectId?: string): Promise<DigitalEyeOverviewStats> => {
-  try {
-    const res = await api.get('/digital-eye/stats/', { params: { project: projectId } });
-    return unwrap(res, {
-      active_rovers: 8,
-      scans_today: 24,
-      processing_queue_count: 3,
-      ai_anomalies_detected: 14,
-      verified_gpr_scans: 48,
-      verified_pundit_tests: 32,
-      open_critical_findings: 2,
-      trimble_sync_status: 'SYNCED'
-    });
-  } catch (err) {
-    return {
-      active_rovers: 8,
-      scans_today: 24,
-      processing_queue_count: 3,
-      ai_anomalies_detected: 14,
-      verified_gpr_scans: 48,
-      verified_pundit_tests: 32,
-      open_critical_findings: 2,
-      trimble_sync_status: 'SYNCED'
-    };
-  }
+// ==========================================
+// 3a. BACKEND ROW -> UI MODEL MAPPERS (PUNDIT)
+// Every PUNDIT / BIM / finding value rendered by the dashboard comes from a
+// real API row through these mappers — never from fabricated fallback data.
+// ==========================================
+
+const GRADE_TO_RATING: Record<string, PunditTest['concrete_quality_rating']> = {
+  excellent: 'EXCELLENT',
+  good: 'GOOD',
+  questionable: 'DOUBTFUL',
+  poor: 'POOR',
+  very_poor: 'VERY_POOR',
+  pending: 'PENDING',
 };
+
+const TRANSDUCER_DISPLAY: Record<string, PunditTest['transducer_type']> = {
+  direct: 'DIRECT',
+  semi_direct: 'SEMI_DIRECT',
+  indirect: 'INDIRECT',
+  '': '',
+};
+
+/** Map a PUNDITTest API row to the PunditTest shape the UI renders. */
+function mapPunditTest(row: any): PunditTest {
+  return {
+    id: String(row.id),
+    test_reference: row.test_reference ?? '',
+    project: String(row.project ?? ''),
+    project_name: row.project_name ?? '',
+    test_type: row.test_type ?? 'pulse_velocity',
+    structural_element_name: row.structural_element || undefined,
+    test_location: row.test_location || '',
+    transducer_type: TRANSDUCER_DISPLAY[row.transducer_type] ?? '',
+    transducer_frequency_khz: row.transducer_frequency_khz ?? 0,
+    path_length_mm: row.path_length_mm ?? 0,
+    transit_time_us: row.pulse_time_us ?? 0,
+    crack_path_length_mm: row.crack_path_length_mm ?? 0,
+    crack_pulse_time_us: row.crack_pulse_time_us ?? 0,
+    uncracked_pulse_time_us: row.uncracked_pulse_time_us ?? 0,
+    surface_condition: row.surface_condition || '',
+    surface_temperature_c: row.surface_temperature_c ?? null,
+    pulse_velocity_ms: row.velocity_km_s != null ? Math.round(row.velocity_km_s * 1000) : 0,
+    estimated_compressive_strength_mpa: row.estimated_compressive_strength_mpa ?? null,
+    concrete_quality_rating: GRADE_TO_RATING[row.quality_grade] ?? 'PENDING',
+    estimated_crack_depth_mm: row.crack_depth_mm ?? null,
+    operator_name: row.operator_name ?? '',
+    test_date: row.tested_at ?? row.created_at ?? '',
+    notes: row.notes || undefined,
+    created_at: row.created_at ?? '',
+    file_count: Array.isArray(row.files) ? row.files.length : 0,
+  };
+}
+
+/** Map a BIMElementMapping API row to the BIMStructuralElement shape the UI renders. */
+function mapBimElement(row: any): BIMStructuralElement {
+  const coords = row.coordinates || {};
+  const props = row.properties || {};
+  return {
+    id: String(row.id),
+    element_guid: row.bim_guid || '',
+    name: row.element_name || row.element_id || 'Unnamed Element',
+    category: (row.element_type || 'UNKNOWN') as StructuralCategory,
+    discipline: (row.discipline || 'Structural') as StructuralDiscipline,
+    project: String(row.project ?? ''),
+    grid_location: row.element_id || row.level || '',
+    level: row.level || '',
+    coordinates_3d: {
+      x: Number(coords.x ?? 0),
+      y: Number(coords.y ?? 0),
+      z: Number(coords.z ?? 0),
+    },
+    designed_concrete_grade: props.concrete_grade || props.grade || '',
+    designed_rebar_spacing_mm: Number(props.rebar_spacing_mm ?? 0),
+    designed_cover_depth_mm: Number(props.cover_depth_mm ?? 0),
+    // No clearance verdicts exist until scans/tests are correlated — never
+    // fabricated as VERIFIED.
+    gpr_clearance_status: 'PENDING',
+    pundit_clearance_status: 'PENDING',
+    ai_anomaly_count: 0,
+    open_findings_count: 0,
+  };
+}
+
+const FINDING_SEVERITY: Record<string, DigitalEyeFinding['severity']> = {
+  critical: 'CRITICAL',
+  high: 'HIGH',
+  medium: 'MEDIUM',
+  low: 'LOW',
+  info: 'LOW',
+};
+
+const FINDING_STATUS: Record<string, DigitalEyeFinding['status']> = {
+  pending_review: 'OPEN',
+  accepted: 'VERIFIED',
+  rejected: 'RESOLVED',
+  modified: 'INVESTIGATING',
+  escalated: 'CONVERTED_TO_NCR',
+};
+
+/** Map a CorrelationFinding API row to the DigitalEyeFinding shape the UI renders. */
+function mapFinding(row: any): DigitalEyeFinding {
+  return {
+    id: String(row.id),
+    finding_reference: row.finding_reference ?? '',
+    project: String(row.project ?? ''),
+    project_name: row.project_name ?? '',
+    structural_element_id: row.structural_element_id || undefined,
+    structural_element_name: row.structural_element_id || undefined,
+    structural_element_guid: row.bim_guid || undefined,
+    taxonomy: (row.group_key as DigitalEyeFinding['taxonomy']) || undefined,
+    title: row.title ?? '',
+    description: row.description ?? '',
+    severity: FINDING_SEVERITY[row.risk_level] ?? 'MEDIUM',
+    // Backend risk_score is 0.0–1.0; the UI renders a 0–100 confidence percent.
+    confidence_score: row.risk_score != null ? Math.round(Number(row.risk_score) * 100) : 0,
+    evidence_photos: [],
+    status: FINDING_STATUS[row.status] ?? 'OPEN',
+    ncr_reference: row.linked_ncr_reference || undefined,
+    corrective_action: undefined,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+  };
+}
 
 export const getBIMStructuralElements = async (params?: { project?: string; discipline?: string; search?: string }): Promise<BIMStructuralElement[]> => {
-  try {
-    const res = await api.get('/digital-eye/elements/', { params });
-    const list = unwrap<BIMStructuralElement[]>(res, MOCK_STRUCTURAL_ELEMENTS);
-    if (!list || list.length === 0) return MOCK_STRUCTURAL_ELEMENTS;
-    return list;
-  } catch (err) {
-    let filtered = MOCK_STRUCTURAL_ELEMENTS;
-    if (params?.project) {
-      filtered = filtered.filter(e => e.project === params.project || e.project_name?.toLowerCase().includes(params.project!.toLowerCase()));
-    }
-    if (params?.discipline && params.discipline !== 'all') {
-      filtered = filtered.filter(e => e.discipline.toLowerCase() === params.discipline!.toLowerCase());
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      filtered = filtered.filter(e => e.name.toLowerCase().includes(q) || e.element_guid.toLowerCase().includes(q) || e.grid_location.toLowerCase().includes(q));
-    }
-    return filtered;
+  const res = await api.get('/digital-eye/bim-elements/', {
+    params: {
+      project: params?.project || undefined,
+      search: params?.search || undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  let list = (Array.isArray(rows) ? rows : []).map(mapBimElement);
+  if (params?.discipline && params.discipline !== 'all') {
+    list = list.filter(e => e.discipline.toLowerCase() === params.discipline!.toLowerCase());
   }
+  return list;
 };
 
-export const getTrimbleConnectionStatus = async (projectId?: string): Promise<TrimbleConnection> => {
-  try {
-    const res = await api.get('/digital-eye/trimble/status/', { params: { project: projectId } });
-    return unwrap(res, {
-      id: "trimble-01",
-      project: projectId || "proj-eko-01",
-      project_name: "Eko Atlantic Signature Tower",
-      trimble_project_id: "TC-PRJ-99201",
-      trimble_project_name: "Eko Atlantic Phase 2 CDE",
-      region: "EU-West",
-      status: "CONNECTED",
-      last_sync_at: "2026-08-31T12:00:00Z",
-      synced_models_count: 6,
-      synced_elements_count: 14250,
-      bcf_topics_count: 18,
-      webhook_active: true
-    });
-  } catch (err) {
-    return {
-      id: "trimble-01",
-      project: projectId || "proj-eko-01",
-      project_name: "Eko Atlantic Signature Tower",
-      trimble_project_id: "TC-PRJ-99201",
-      trimble_project_name: "Eko Atlantic Phase 2 CDE",
-      region: "EU-West",
-      status: "CONNECTED",
-      last_sync_at: "2026-08-31T12:00:00Z",
-      synced_models_count: 6,
-      synced_elements_count: 14250,
-      bcf_topics_count: 18,
-      webhook_active: true
-    };
-  }
+/**
+ * Import BIM structural elements from a real design model file — .ifc parsed
+ * directly (credential-free GUID mappings), .rvt translated to IFC through
+ * Autodesk APS server-side (columns, slabs, walls etc. with levels and
+ * coordinates). Backend: POST /digital-eye/bim-elements/import-ifc/
+ * (BIMElementImportView).
+ */
+export const importBIMElementsFromIFC = async (
+  projectId: string,
+  file: File,
+): Promise<{
+  file: string;
+  translated_from_rvt?: boolean;
+  elements_extracted: number;
+  mappings_created: number;
+  mappings_updated: number;
+}> => {
+  const form = new FormData();
+  form.append('project', projectId);
+  form.append('file', file);
+  const res = await api.post('/digital-eye/bim-elements/import-ifc/', form);
+  return unwrap<any>(res, null);
 };
 
-export const triggerTrimbleSync = async (projectId: string): Promise<{ success: boolean; message: string }> => {
-  try {
-    const res = await api.post(`/digital-eye/trimble/sync/`, { project: projectId });
-    return unwrap(res, { success: true, message: 'Trimble Connect models and BCF topics synchronized successfully.' });
-  } catch (err) {
-    return { success: true, message: 'Trimble Connect models and BCF topics synchronized successfully.' };
-  }
+const TRIMBLE_STATUS: Record<string, TrimbleConnection['status']> = {
+  connected: 'CONNECTED',
+  pending_authorization: 'AUTH_REQUIRED',
+  disconnected: 'DISCONNECTED',
+  error: 'ERROR',
 };
+
+/**
+ * Real Trimble Connect connection state. Connections are workspace-global on
+ * the backend (not project-scoped) — the most recent one wins. Returns null
+ * when no connection exists or the API is unreachable: no fabricated status.
+ */
+export const getTrimbleConnectionStatus = async (projectId?: string): Promise<TrimbleConnection | null> => {
+  const res = await api.get('/digital-eye/trimble/connections/', { params: { project: projectId || undefined } });
+  const data = unwrap<any>(res, null);
+  // Tolerate both a bare list and a paginated {count, results} envelope.
+  const rows = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name ?? '',
+    status: TRIMBLE_STATUS[row.status] ?? 'DISCONNECTED',
+    status_display: row.status_display ?? '',
+    scope: row.scope ?? '',
+    trimble_user_id: row.trimble_user_id ?? '',
+    trimble_user_name: row.trimble_user_name ?? '',
+    last_health_check_at: row.last_health_check_at ?? null,
+    last_health_status: row.last_health_status ?? '',
+    last_error: row.last_error ?? '',
+  };
+};
+
+export const triggerTrimbleSync = async (connectionId: string): Promise<{ success: boolean; message: string }> => {
+  const res = await api.post(`/digital-eye/trimble/connections/${connectionId}/sync/`);
+  const payload = unwrap<any>(res, {});
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  return { success: true, message: `Trimble Connect sync completed for ${results.length} project(s).` };
+};
+
+// ==========================================
+// 4. GPR SURVEYS (real /digital-eye/gpr-surveys/ endpoints)
+// ==========================================
+
+/** Map a GPRSurvey API row to the GPRScan shape the UI renders. */
+function mapGPRSurvey(row: any): GPRScan {
+  return {
+    id: String(row.id),
+    survey_reference: row.survey_reference ?? '',
+    project: String(row.project ?? ''),
+    project_name: row.project_name ?? '',
+    title: row.title ?? '',
+    survey_area: row.survey_area || '',
+    structural_element: row.structural_element || '',
+    antenna_frequency_mhz: row.antenna_frequency_mhz ?? null,
+    depth_range_m: row.depth_range_m ?? null,
+    grid_spacing_m: row.grid_spacing_m ?? null,
+    operator_name: row.operator_name ?? '',
+    status: row.status ?? 'draft',
+    status_display: row.status_display ?? '',
+    notes: row.notes || '',
+    anomaly_count: Array.isArray(row.anomalies) ? row.anomalies.length : (row.anomaly_count ?? 0),
+    raw_file_urls: (Array.isArray(row.files) ? row.files : [])
+      .map((f: any) => (f?.file ? String(f.file) : ''))
+      .filter(Boolean),
+    anomalies: (Array.isArray(row.anomalies) ? row.anomalies : []).map((a: any) => ({
+      id: String(a.id),
+      survey: String(a.survey ?? row.id),
+      anomaly_type: a.anomaly_type ?? 'other',
+      anomaly_type_display: a.anomaly_type_display ?? '',
+      severity: a.severity ?? 'low',
+      severity_display: a.severity_display ?? '',
+      depth_m: a.depth_m ?? null,
+      estimated_size_m: a.estimated_size_m ?? null,
+      rebar_cover_mm: a.rebar_cover_mm ?? null,
+      coordinates: a.coordinates ?? null,
+      description: a.description || '',
+      confidence: a.confidence ?? null,
+      detected_by: a.detected_by ?? 'manual',
+      created_at: a.created_at ?? '',
+    })),
+    created_at: row.created_at ?? '',
+  };
+}
 
 export const getGPRScans = async (params?: { project?: string; element_id?: string; search?: string }): Promise<GPRScan[]> => {
-  try {
-    const res = await api.get('/digital-eye/gpr/', { params });
-    const list = unwrap<GPRScan[]>(res, MOCK_GPR_SCANS);
-    if (!list || list.length === 0) return MOCK_GPR_SCANS;
-    return list;
-  } catch (err) {
-    let list = MOCK_GPR_SCANS;
-    if (params?.project) {
-      list = list.filter(g => g.project === params.project || g.project_name.toLowerCase().includes(params.project!.toLowerCase()));
+  const res = await api.get('/digital-eye/gpr-surveys/', {
+    params: {
+      project: params?.project || undefined,
+      search: params?.search || undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  let surveys = (Array.isArray(rows) ? rows : []).map(mapGPRSurvey);
+  if (params?.element_id) {
+    // Surveys anchor to BIM elements through the structural-element string —
+    // resolve the header dropdown's element id to its name, then filter.
+    const elements = await getBIMStructuralElements({ project: params.project || undefined });
+    const element = elements.find(el => el.id === params.element_id);
+    if (element) {
+      const q = element.name.toLowerCase();
+      surveys = surveys.filter(s => s.structural_element.toLowerCase().includes(q));
     }
-    if (params?.element_id) {
-      list = list.filter(g => g.structural_element_id === params.element_id);
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      list = list.filter(g => g.scan_reference.toLowerCase().includes(q) || g.grid_axis.toLowerCase().includes(q) || g.notes?.toLowerCase().includes(q));
-    }
-    return list;
   }
+  return surveys;
 };
 
 export const getGPRScanById = async (id: string): Promise<GPRScan | null> => {
-  try {
-    const res = await api.get(`/digital-eye/gpr/${id}/`);
-    return unwrap<GPRScan | null>(res, MOCK_GPR_SCANS.find(s => s.id === id) || null);
-  } catch (err) {
-    return MOCK_GPR_SCANS.find(s => s.id === id) || null;
-  }
+  const res = await api.get(`/digital-eye/gpr-surveys/${id}/`);
+  return mapGPRSurvey(unwrap<any>(res, res));
 };
 
-export const createGPRScan = async (data: Partial<GPRScan>): Promise<GPRScan> => {
-  try {
-    const res = await api.post('/digital-eye/gpr/', data);
-    return unwrap<GPRScan>(res, {
-      ...data,
-      id: `gpr-${Date.now()}`,
-      scan_reference: `GPR-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString()
-    } as GPRScan);
-  } catch (err) {
-    return {
-      ...data,
-      id: `gpr-${Date.now()}`,
-      scan_reference: `GPR-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString()
-    } as GPRScan;
-  }
+/** Create a GPR survey (POST /digital-eye/gpr-surveys/). Raw radargrams are
+ *  attached as SensorDataFile uploads passed through file_ids. */
+export interface GPRSurveyInput {
+  project: string;
+  title: string;
+  survey_area?: string;
+  structural_element?: string;
+  antenna_frequency_mhz?: number;
+  depth_range_m?: number;
+  grid_spacing_m?: number;
+  operator_name?: string;
+  notes?: string;
+  file_ids?: string[];
+}
+
+export const createGPRSurvey = async (input: GPRSurveyInput): Promise<GPRScan> => {
+  const body: Record<string, unknown> = { project: input.project, title: input.title };
+  if (input.survey_area) body.survey_area = input.survey_area;
+  if (input.structural_element) body.structural_element = input.structural_element;
+  if (input.antenna_frequency_mhz != null) body.antenna_frequency_mhz = input.antenna_frequency_mhz;
+  if (input.depth_range_m != null) body.depth_range_m = input.depth_range_m;
+  if (input.grid_spacing_m != null) body.grid_spacing_m = input.grid_spacing_m;
+  if (input.operator_name) body.operator_name = input.operator_name;
+  if (input.notes) body.notes = input.notes;
+  if (input.file_ids?.length) body.file_ids = input.file_ids;
+  const res = await api.post('/digital-eye/gpr-surveys/', body);
+  return mapGPRSurvey(unwrap<any>(res, res));
 };
 
-export const getPunditTests = async (params?: { project?: string; element_id?: string; search?: string }): Promise<PunditTest[]> => {
-  try {
-    const res = await api.get('/digital-eye/pundit/', { params });
-    const list = unwrap<PunditTest[]>(res, MOCK_PUNDIT_TESTS);
-    if (!list || list.length === 0) return MOCK_PUNDIT_TESTS;
-    return list;
-  } catch (err) {
-    let list = MOCK_PUNDIT_TESTS;
-    if (params?.project) {
-      list = list.filter(p => p.project === params.project || p.project_name.toLowerCase().includes(params.project!.toLowerCase()));
-    }
-    if (params?.element_id) {
-      list = list.filter(p => p.structural_element_id === params.element_id);
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      list = list.filter(p => p.test_reference.toLowerCase().includes(q) || p.test_location.toLowerCase().includes(q));
-    }
-    return list;
-  }
+/** Run the deterministic GPR adapter over a survey's recorded anomalies. */
+export const analyzeGPRSurvey = async (surveyId: string): Promise<{
+  survey: string; risk_level: string; risk_score: number;
+  observations: string[]; recommendations: any[];
+}> => {
+  const res = await api.post(`/digital-eye/gpr-surveys/${surveyId}/analyze/`);
+  return unwrap<any>(res, res);
 };
 
-export const createPunditTest = async (data: Partial<PunditTest>): Promise<PunditTest> => {
-  try {
-    const res = await api.post('/digital-eye/pundit/', data);
-    return unwrap<PunditTest>(res, {
-      ...data,
-      id: `pdt-${Date.now()}`,
-      test_reference: `UPV-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString()
-    } as PunditTest);
-  } catch (err) {
-    return {
-      ...data,
-      id: `pdt-${Date.now()}`,
-      test_reference: `UPV-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString()
-    } as PunditTest;
-  }
+/** Anchor a GPR survey to a BIM structural element (real PATCH). */
+export const linkGPRSurveyToElement = async (surveyId: string, elementName: string): Promise<GPRScan> => {
+  const res = await api.patch(`/digital-eye/gpr-surveys/${surveyId}/`, {
+    structural_element: elementName,
+  });
+  return mapGPRSurvey(unwrap<any>(res, res));
 };
 
-export const getDigitalEyeFindings = async (params?: { project?: string; severity?: string; element_id?: string; status?: string }): Promise<DigitalEyeFinding[]> => {
-  try {
-    const res = await api.get('/digital-eye/findings/', { params });
-    const list = unwrap<DigitalEyeFinding[]>(res, MOCK_FINDINGS);
-    if (!list || list.length === 0) return MOCK_FINDINGS;
-    return list;
-  } catch (err) {
-    let list = MOCK_FINDINGS;
-    if (params?.project) {
-      list = list.filter(f => f.project === params.project || f.project_name.toLowerCase().includes(params.project!.toLowerCase()));
-    }
-    if (params?.severity && params.severity !== 'all') {
-      list = list.filter(f => f.severity.toLowerCase() === params.severity!.toLowerCase());
-    }
-    if (params?.status && params.status !== 'all') {
-      list = list.filter(f => f.status.toLowerCase() === params.status!.toLowerCase());
-    }
-    if (params?.element_id) {
-      list = list.filter(f => f.structural_element_id === params.element_id);
-    }
-    return list;
+/** Registered Digital Eye field hardware (GET /digital-eye/devices/). */
+export interface FieldDeviceRecord {
+  id: string;
+  device_reference: string;
+  device_id: string;
+  name: string;
+  device_type: string;
+  device_type_display: string;
+  model: string;
+  manufacturer: string;
+  firmware_version: string;
+  status: string;
+  status_display: string;
+  battery_level: number | null;
+  last_seen: string | null;
+  calibration_date: string | null;
+  is_active: boolean;
+}
+
+export const getFieldDevices = async (params?: { device_type?: string; project?: string }): Promise<FieldDeviceRecord[]> => {
+  const res = await api.get('/digital-eye/devices/', {
+    params: {
+      device_type: params?.device_type || undefined,
+      assigned_project: params?.project || undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  return Array.isArray(rows) ? rows : [];
+};
+
+export const getPunditTests = async (params?: {
+  project?: string;
+  element_name?: string;
+  search?: string;
+  test_type?: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
+  quality_grade?: string;
+}): Promise<PunditTest[]> => {
+  const res = await api.get('/digital-eye/pundit-tests/', {
+    params: {
+      project: params?.project || undefined,
+      search: params?.search || undefined,
+      test_type: params?.test_type || undefined,
+      quality_grade: params?.quality_grade || undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  let tests = (Array.isArray(rows) ? rows : []).map(mapPunditTest);
+  if (params?.element_name) {
+    // Tests anchor to BIM elements through the structural-element string.
+    const q = params.element_name.toLowerCase();
+    tests = tests.filter(t => (t.structural_element_name || '').toLowerCase().includes(q));
   }
+  return tests;
+};
+
+/** Anchor a PUNDIT test to a BIM structural element (real PATCH). */
+export const linkPunditTestToElement = async (testId: string, elementName: string): Promise<PunditTest> => {
+  const res = await api.patch(`/digital-eye/pundit-tests/${testId}/`, {
+    structural_element: elementName,
+  });
+  return mapPunditTest(unwrap<any>(res, res));
+};
+
+/**
+ * Edit a PUNDIT test record (real PATCH to /digital-eye/pundit-tests/<id>/).
+ * Only the recorded field measurements / observations are editable — the
+ * analysis outputs (velocity, grade, E.C.S, crack depth) stay read-only and
+ * are re-derived server-side from the corrected inputs.
+ */
+export const updatePunditTest = async (
+  testId: string,
+  patch: Partial<PunditTestInput> & {
+    operator_name?: string;
+    tested_at?: string;
+    notes?: string;
+    surface_temperature_c?: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }
+): Promise<PunditTest> => {
+  const res = await api.patch(`/digital-eye/pundit-tests/${testId}/`, patch);
+  return mapPunditTest(unwrap<any>(res, res));
+};
+
+/** Raw measurement payload accepted by POST /digital-eye/pundit-tests/ */
+export interface PunditTestInput {
+  project: string;
+  test_type?: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
+  structural_element?: string;
+  transducer_frequency_khz?: number;
+  transducer_type?: 'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT';
+  test_location?: string;
+  path_length_mm?: number;
+  pulse_time_us?: number;
+  // Crack-depth method (BS 1881-203 time difference) — all three required
+  // by the serializer when test_type === 'crack_depth'.
+  crack_path_length_mm?: number;
+  crack_pulse_time_us?: number;
+  uncracked_pulse_time_us?: number;
+  // Surface-quality / homogeneity observations.
+  surface_condition?: string;
+  surface_temperature_c?: number;
+  operator_name?: string;
+  notes?: string;
+  device?: string;
+  latitude?: number;
+  longitude?: number;
+  // SensorDataFile ids (photos / raw device exports) attached on creation.
+  file_ids?: string[];
+}
+
+export const createPunditTest = async (input: PunditTestInput): Promise<PunditTest> => {
+  const body: Record<string, unknown> = {
+    project: input.project,
+    test_type: input.test_type || 'pulse_velocity',
+  };
+  if (input.structural_element) body.structural_element = input.structural_element;
+  if (input.transducer_frequency_khz != null) body.transducer_frequency_khz = input.transducer_frequency_khz;
+  if (input.transducer_type) body.transducer_type = input.transducer_type.toLowerCase();
+  if (input.test_location) body.test_location = input.test_location;
+  if (input.path_length_mm != null) body.path_length_mm = input.path_length_mm;
+  if (input.pulse_time_us != null) body.pulse_time_us = input.pulse_time_us;
+  if (input.crack_path_length_mm != null) body.crack_path_length_mm = input.crack_path_length_mm;
+  if (input.crack_pulse_time_us != null) body.crack_pulse_time_us = input.crack_pulse_time_us;
+  if (input.uncracked_pulse_time_us != null) body.uncracked_pulse_time_us = input.uncracked_pulse_time_us;
+  if (input.surface_condition) body.surface_condition = input.surface_condition;
+  if (input.surface_temperature_c != null) body.surface_temperature_c = input.surface_temperature_c;
+  if (input.operator_name) body.operator_name = input.operator_name;
+  if (input.notes) body.notes = input.notes;
+  if (input.device) body.device = input.device;
+  if (input.latitude != null) body.latitude = input.latitude;
+  if (input.longitude != null) body.longitude = input.longitude;
+  if (input.file_ids?.length) body.file_ids = input.file_ids;
+
+  const res = await api.post('/digital-eye/pundit-tests/', body);
+  const created = mapPunditTest(unwrap<any>(res, res));
+
+  // Velocity, quality grade, E.C.S and crack depth are computed by the
+  // server-side BS 1881-203 engine on the analyze endpoint — run it so the
+  // registry row is complete, then return the persisted record. Failures
+  // surface the honest pending row instead of an invented result.
+  const needsAnalysis = created.pulse_velocity_ms === 0
+    || ((created.test_type === 'crack_depth') && created.estimated_crack_depth_mm == null);
+  if (needsAnalysis) {
+    try {
+      await api.post(`/digital-eye/pundit-tests/${created.id}/analyze/`);
+      const refreshed = await api.get(`/digital-eye/pundit-tests/${created.id}/`);
+      return mapPunditTest(unwrap<any>(refreshed, refreshed));
+    } catch {
+      return created;
+    }
+  }
+  return created;
+};
+
+/** Upload a raw sensor artifact (photo, PUNDIT raw export, radargram) and
+ *  return its server id — pass it as a PunditTestInput.file_ids entry. */
+export interface SensorFileRecord {
+  id: string;
+  file_name: string;
+  file_type: string;
+  file_size_bytes: number;
+  sha256_checksum: string;
+  description: string;
+}
+
+export const uploadSensorFile = async (
+  file: File,
+  fileType: 'photo' | 'pundit_raw' | 'gpr_radargram' | 'gpr_depth_slice' | 'gpr_raw' | 'gnss_rinex' | 'video' | 'other',
+  description?: string,
+): Promise<SensorFileRecord> => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('file_type', fileType);
+  if (description) form.append('description', description);
+  const res = await api.post('/digital-eye/files/', form);
+  const row = unwrap<any>(res, res);
+  return {
+    id: String(row.id),
+    file_name: row.file_name ?? file.name,
+    file_type: row.file_type ?? fileType,
+    file_size_bytes: row.file_size_bytes ?? file.size,
+    sha256_checksum: row.sha256_checksum ?? '',
+    description: row.description ?? description ?? '',
+  };
+};
+
+export const getDigitalEyeFindings = async (params?: { project?: string; severity?: string; element_name?: string; element_id?: string; status?: string }): Promise<DigitalEyeFinding[]> => {
+  const res = await api.get('/evidence/findings/', {
+    params: {
+      project: params?.project || undefined,
+      risk_level: params?.severity && params.severity !== 'all' ? params.severity.toLowerCase() : undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  let findings = (Array.isArray(rows) ? rows : []).map(mapFinding);
+  if (params?.status && params.status !== 'all') {
+    findings = findings.filter(f => f.status.toLowerCase() === params.status!.toLowerCase());
+  }
+  if (params?.element_id) {
+    // Findings anchor to BIM elements via the element's GUID (bim_guid).
+    findings = findings.filter(f => (f.structural_element_guid || '') === params.element_id);
+  }
+  if (params?.element_name) {
+    const q = params.element_name.toLowerCase();
+    findings = findings.filter(f => (f.structural_element_name || '').toLowerCase().includes(q));
+  }
+  return findings;
 };
 
 export const createDigitalEyeFinding = async (data: Partial<DigitalEyeFinding>): Promise<DigitalEyeFinding> => {
-  try {
-    const res = await api.post('/digital-eye/findings/', data);
-    return unwrap<DigitalEyeFinding>(res, {
-      ...data,
-      id: `fnd-${Date.now()}`,
-      finding_reference: `FND-DE-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    } as DigitalEyeFinding);
-  } catch (err) {
-    return {
-      ...data,
-      id: `fnd-${Date.now()}`,
-      finding_reference: `FND-DE-2026-${Math.floor(100 + Math.random() * 900)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    } as DigitalEyeFinding;
-  }
+  const res = await api.post('/evidence/findings/', {
+    project: data.project,
+    structural_element_id: data.structural_element_id,
+    structural_element_name: data.structural_element_name,
+    structural_element_guid: data.structural_element_guid,
+    title: data.title,
+    description: data.description,
+    taxonomy: data.taxonomy,
+    severity: data.severity,
+    depth_mm: data.depth_mm,
+    deviation_mm: data.deviation_mm,
+    status: data.status,
+  });
+  const row = unwrap<any>(res, res);
+  return mapFinding(row);
 };
 
-export const escalateFindingToNCR = async (findingId: string, payload: { corrective_action: string; root_cause?: string; deadline_days?: number }): Promise<{ success: boolean; ncr_reference: string }> => {
-  try {
-    const res = await api.post(`/digital-eye/findings/${findingId}/escalate-ncr/`, payload);
-    return unwrap(res, {
-      success: true,
-      ncr_reference: `NCR-2026-00${Math.floor(10 + Math.random() * 90)}`
-    });
-  } catch (err) {
-    return {
-      success: true,
-      ncr_reference: `NCR-2026-00${Math.floor(10 + Math.random() * 90)}`
-    };
+export const escalateFindingToNCR = async (
+  findingId: string,
+  payload: { corrective_action: string; root_cause?: string; deadline_days?: number }
+): Promise<{ success: boolean; ncr_reference: string }> => {
+  let corrective_due_date: string | undefined;
+  if (payload.deadline_days) {
+    const due = new Date();
+    due.setDate(due.getDate() + payload.deadline_days);
+    corrective_due_date = due.toISOString().slice(0, 10);
   }
+  const res = await api.post(`/evidence/findings/${findingId}/issue-ncr/`, {
+    corrective_action: payload.corrective_action,
+    ...(corrective_due_date ? { corrective_due_date } : {}),
+  });
+  const data = unwrap<any>(res, res);
+  if (!data || !data.ncr_reference) {
+    throw new Error('The backend did not return an NCR reference for this escalation.');
+  }
+  return { success: true, ncr_reference: data.ncr_reference };
 };
 
-export const getAIAnalysis = async (params?: { project?: string; scan_ref?: string }): Promise<AIAnalysisRecord> => {
-  try {
-    const res = await api.get('/digital-eye/ai-analysis/', { params });
-    return unwrap<AIAnalysisRecord>(res, MOCK_AI_RECORD);
-  } catch (err) {
-    return MOCK_AI_RECORD;
-  }
+/** PUNDIT AI analysis records from /evidence/analyses/?analysis_type=pundit */
+export interface PunditAIAnalysis {
+  id: string;
+  analysis_reference: string;
+  project: string;
+  project_name: string;
+  analysis_type: string;
+  analysis_type_display: string;
+  risk_level: string;
+  risk_score: number | null;
+  confidence: number | null;
+  requires_human_review: boolean;
+  observations: string;
+  recommendations: string[];
+  reasoning_log: string[];
+  model_provider: string;
+  model_version: string;
+  created_at: string;
+}
+
+function mapPunditAnalysis(row: any): PunditAIAnalysis {
+  return {
+    id: String(row.id),
+    analysis_reference: row.analysis_reference ?? '',
+    project: String(row.project ?? ''),
+    project_name: row.project_name ?? '',
+    analysis_type: row.analysis_type ?? 'pundit',
+    analysis_type_display: row.analysis_type_display ?? 'PUNDIT Ultrasonic NDT Analysis',
+    risk_level: row.risk_level ?? 'info',
+    risk_score: row.risk_score ?? null,
+    confidence: row.confidence ?? null,
+    requires_human_review: Boolean(row.requires_human_review),
+    observations: row.observations ?? '',
+    recommendations: Array.isArray(row.recommendations) ? row.recommendations : [],
+    reasoning_log: Array.isArray(row.reasoning_log) ? row.reasoning_log : [],
+    model_provider: row.model_provider ?? '',
+    model_version: row.model_version ?? '',
+    created_at: row.created_at ?? '',
+  };
+}
+
+export const getPunditAIAnalyses = async (params?: { project?: string }): Promise<PunditAIAnalysis[]> => {
+  const res = await api.get('/evidence/analyses/', {
+    params: {
+      project: params?.project || undefined,
+      analysis_type: 'pundit',
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  return (Array.isArray(rows) ? rows : []).map(mapPunditAnalysis);
 };
 
 export const getProcessingQueue = async (params?: { project?: string; status?: string }): Promise<ProcessingQueueJob[]> => {
@@ -1136,58 +1104,9 @@ export const MOCK_DEVICE_REPORTS: DeviceReportRecord[] = [
     stamped_at: "2026-08-29T11:15:00Z",
     file_size: "4.2 MB"
   },
-  // PUNDIT UPV REPORTS
-  {
-    id: "rep-pnd-001",
-    report_reference: "RPT-PND-2026-042",
-    title: "BS 1881: Part 203 Ultrasonic Pulse Velocity (UPV) Homogeneity Certificate",
-    device_type: "PUNDIT",
-    project_id: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    element_id: "elem-001",
-    element_name: "Column C-102 (Core Axis)",
-    report_type: "Acoustic Homogeneity Certificate",
-    standards_cited: ["BS 1881: Part 203", "ASTM C597", "IS 13311 (Part 1)"],
-    compliance_status: "COMPLIANT",
-    executive_summary: "Direct transmission UPV tests with 54 kHz transducers recorded mean pulse velocity of 4,120 m/s across Column C-102, confirming 'Good Quality' structural density and an estimated characteristic compressive strength (fcu) of 42.5 MPa, surpassing the designed C35/45 rating.",
-    metrics: {
-      scans_or_tests_count: 12,
-      pass_rate_pct: 100.0,
-      mean_pulse_velocity_ms: 4120,
-      est_compressive_strength_mpa: 42.5,
-      transducer_freq_khz: 54,
-      quality_rating: "GOOD / EXCELLENT"
-    },
-    generated_by: "Dr. O. Fashola (Concrete Materials Specialist)",
-    certified_engineer: "Engr. Fatima Garba, COREN Reg.",
-    stamped_at: "2026-08-30T14:20:00Z",
-    file_size: "2.9 MB"
-  },
-  {
-    id: "rep-pnd-002",
-    report_reference: "RPT-PND-2026-049",
-    title: "PUNDIT In-Situ Compressive Strength & Core Extraction Assessment",
-    device_type: "PUNDIT",
-    project_id: "proj-eko-01",
-    project_name: "Eko Atlantic Signature Tower",
-    element_id: "elem-003",
-    element_name: "Transfer Beam TB-01 (Span 12m)",
-    report_type: "Compressive Strength Assessment",
-    standards_cited: ["BS 1881-203", "BS EN 12504-4"],
-    compliance_status: "FLAGGED_DEFECTS",
-    executive_summary: "Station UPV-03 recorded pulse velocity of 3,480 m/s ('Doubtful Quality'). Estimated fcu of 31.8 MPa falls short of specified C35/45 threshold. Core drilling recommended per BS EN 12504-1 before structural sign-off.",
-    metrics: {
-      scans_or_tests_count: 6,
-      pass_rate_pct: 83.3,
-      mean_pulse_velocity_ms: 3820,
-      est_compressive_strength_mpa: 36.4,
-      doubtful_stations: 1
-    },
-    generated_by: "Dr. O. Fashola",
-    certified_engineer: "Engr. Fatima Garba, COREN Reg.",
-    stamped_at: "2026-08-28T09:40:00Z",
-    file_size: "3.4 MB"
-  },
+  // PUNDIT UPV REPORTS — none persisted: the official PUNDIT deliverable is
+  // the MTL-style NDT report streamed by GET /reports/projects/<id>/ndt-report/
+  // (see downloadNdtReport). No fake registry entries.
   // TRIMBLE CONNECT REPORTS
   {
     id: "rep-trm-001",
@@ -1241,10 +1160,62 @@ export const MOCK_DEVICE_REPORTS: DeviceReportRecord[] = [
   }
 ];
 
+const formatFileSize = (bytes: number): string => {
+  if (!bytes || bytes <= 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Backend ArchivedReport row -> DeviceReportRecord. Every field comes from the
+// archived dossier record itself (checksum, real counts, real verdict) —
+// nothing is invented client-side.
+const mapArchivedNdtReport = (row: any): DeviceReportRecord => {
+  const assessed = row.assessed_count ?? 0;
+  const passed = row.passed_count ?? 0;
+  const testCount = row.test_count ?? 0;
+  const summary = assessed === 0
+    ? `${testCount} field test record(s) in this dossier; no strength-assessed pulse velocity results, so no strength compliance conclusion is drawn.`
+    : `${testCount} test record(s) archived — ${assessed} strength-assessed against the 25 MPa threshold, ${passed} passing. Byte-exact archive sealed with SHA-256 checksum.`;
+  return {
+    id: String(row.id),
+    report_reference: row.report_reference,
+    title: row.title,
+    device_type: 'PUNDIT',
+    project_id: String(row.project ?? ''),
+    project_name: row.project_name ?? '—',
+    report_type: 'NDT / UPV Statutory Dossier (Archived)',
+    standards_cited: ['BS 1881-203:1999', 'ASTM C597'],
+    compliance_status: row.compliance_status ?? 'NOT_ASSESSED',
+    executive_summary: summary,
+    metrics: {
+      scans_or_tests_count: testCount,
+      ...(assessed > 0 ? { pass_rate_pct: Math.round((passed / assessed) * 1000) / 10 } : {}),
+    },
+    generated_by: row.generated_by_name || '—',
+    certified_engineer: row.generated_by_name || '—',
+    stamped_at: row.created_at,
+    file_size: formatFileSize(row.file_size_bytes ?? 0),
+    download_url: `/reports/archived-reports/${row.id}/download/`,
+  };
+};
+
 export const getDeviceReports = async (params?: { device_type?: string; project_id?: string; element_id?: string }): Promise<DeviceReportRecord[]> => {
+  // PUNDIT's registry is the backend's archived-dossier table: every
+  // generated MTL-style NDT report is persisted (checksummed) server-side at
+  // /reports/projects/<id>/archived-reports/. Only real archived rows are
+  // listed — an empty registry means no report has been generated yet.
+  if (params?.device_type && params.device_type.toLowerCase() === 'pundit') {
+    if (!params.project_id) return []; // no project selected -> nothing to list
+    const res = await api.get(`/reports/projects/${params.project_id}/archived-reports/`, {
+      params: { kind: 'ndt' },
+    });
+    const rows = unwrap<any[]>(res, []);
+    return (rows || []).map(mapArchivedNdtReport);
+  }
   try {
     const res = await api.get('/digital-eye/reports/devices/', { params });
-    const list = unwrap<DeviceReportRecord[]>(res, MOCK_DEVICE_REPORTS);
+    const list = unwrap<DeviceReportRecord[]>(res, []);
     if (!list || list.length === 0) return filterMockReports(params);
     return list;
   } catch (err) {
@@ -1267,6 +1238,12 @@ function filterMockReports(params?: { device_type?: string; project_id?: string;
 }
 
 export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>): Promise<DeviceReportRecord> => {
+  // PUNDIT reports are generated by the backend (MTL-style NDT dossier, real
+  // data only) — never fabricated client-side.
+  if (payload.device_type && payload.device_type.toLowerCase() === 'pundit') {
+    throw new Error('PUNDIT reports are generated by the backend — use downloadNdtReport(projectId).');
+  }
+
   const newReport: DeviceReportRecord = {
     id: `rep-${Date.now()}`,
     report_reference: `RPT-${(payload.device_type || 'NDT')}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
@@ -1297,49 +1274,70 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
   }
 };
 
-export const createPunditTestRecord = async (payload: Partial<PunditTest>): Promise<PunditTest> => {
-  const pathMm = payload.path_length_mm || 400;
-  const transitUs = payload.transit_time_us || 94.2;
-  const velocity = Math.round((pathMm / (transitUs / 1000)));
-  const fcu = Math.max(15, Math.min(85, Number((0.0000000000015 * Math.pow(velocity, 3.82)).toFixed(1))));
-  
-  let quality: 'EXCELLENT' | 'GOOD' | 'DOUBTFUL' | 'POOR' = 'GOOD';
-  if (velocity >= 4500) quality = 'EXCELLENT';
-  else if (velocity >= 3500) quality = 'GOOD';
-  else if (velocity >= 3000) quality = 'DOUBTFUL';
-  else quality = 'POOR';
-
-  const newTest: PunditTest = {
-    id: `pdt-${Date.now()}`,
-    test_reference: payload.test_reference || `UPV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-    project: payload.project || 'proj-eko-01',
-    project_name: payload.project_name || 'Eko Atlantic Signature Tower',
-    structural_element_id: payload.structural_element_id || 'elem-001',
-    structural_element_name: payload.structural_element_name || 'Column C-102 (Level 2 Mid-Height)',
-    test_location: payload.test_location || 'Field Station 1',
-    device_model: payload.device_model || 'Proceq Pundit PL-200 Ultrasonic Pulse Velocity',
-    transducer_type: payload.transducer_type || 'DIRECT',
-    transducer_frequency_khz: payload.transducer_frequency_khz || 54,
-    path_length_mm: pathMm,
-    transit_time_us: transitUs,
-    pulse_velocity_ms: velocity,
-    estimated_compressive_strength_mpa: fcu,
-    concrete_quality_rating: quality,
-    waveform_samples: [0, 10, -25, 60, -140, 240, -210, 120, -50, 15, 0],
-    operator_name: payload.operator_name || 'Field Inspector (COREN Reg.)',
-    test_date: new Date().toISOString().split('T')[0],
-    status: fcu >= 25 ? 'VERIFIED' : 'ANOMALY',
-    notes: payload.notes || 'Ingested via Field Telemetry Receiver.',
-    created_at: new Date().toISOString()
-  };
-
-  try {
-    const res = await api.post('/digital-eye/pundit/', newTest);
-    return unwrap<PunditTest>(res, newTest);
-  } catch (err) {
-    MOCK_PUNDIT_TESTS.unshift(newTest);
-    return newTest;
-  }
+/**
+ * Download the official MTL-style NDT report (BS 1881-203 PUNDIT dossier)
+ * streamed by GET /reports/projects/<id>/ndt-report/ — real database rows only.
+ */
+export const downloadNdtReport = async (projectId: string): Promise<string> => {
+  const res = await api.get(`/reports/projects/${projectId}/ndt-report/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const filename = `ndt_report_${projectId}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
 };
 
+/**
+ * Download an archived dossier — the exact bytes the platform generated and
+ * sealed (SHA-256 checksummed) at generation time — via
+ * GET /reports/archived-reports/<id>/download/.
+ */
+export const downloadArchivedReport = async (reportId: string, reportReference?: string): Promise<string> => {
+  const res = await api.get(`/reports/archived-reports/${reportId}/download/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const safeRef = (reportReference || reportId).replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+  const filename = `ndt_report_${safeRef}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
 
+/**
+ * Open an archived dossier's exact sealed bytes in the browser's PDF viewer
+ * (new tab). If a popup blocker intervenes, fall back to a file download so
+ * the real document still reaches the user — never a fabricated re-render.
+ */
+export const openArchivedReport = async (reportId: string): Promise<void> => {
+  const res = await api.get(`/reports/archived-reports/${reportId}/download/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const url = window.URL.createObjectURL(blob);
+  const opened = window.open(url, '_blank');
+  if (!opened) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ndt_report_${reportId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  // Give the viewer time to load before releasing the blob handle.
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+};

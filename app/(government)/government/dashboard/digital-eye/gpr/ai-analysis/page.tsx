@@ -51,6 +51,16 @@ export default function GPRAIAnalysisPage() {
     return matchesSearch && matchesSeverity;
   });
 
+  // Real aggregate telemetry from the recorded surveys and anomalies — the
+  // adapter's confidence values are per-detection; nothing is invented.
+  const allAnomalies = scans.flatMap(s => s.anomalies);
+  const confidenceValues = allAnomalies.map(a => a.confidence).filter((c): c is number => c != null);
+  const averageConfidence = confidenceValues.length > 0
+    ? Math.round((confidenceValues.reduce((sum, c) => sum + c, 0) / confidenceValues.length) * 1000) / 10
+    : null;
+  const antennas = Array.from(new Set(scans.map(s => s.antenna_frequency_mhz).filter((f): f is number => f != null))).sort((a, b) => a - b);
+  const deepestAnomaly = allAnomalies.reduce((max, a) => (a.depth_m != null && a.depth_m > (max?.depth_m ?? 0) ? a : max), null as typeof allAnomalies[number] | null);
+
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
       <DigitalEyeHeader
@@ -62,7 +72,7 @@ export default function GPRAIAnalysisPage() {
         onNewFindingClick={() => setIsCreateOpen(true)}
       />
 
-      {/* AI TELEMETRY METRICS */}
+      {/* AI TELEMETRY METRICS — real aggregates from recorded surveys/anomalies */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-start mb-3">
@@ -73,9 +83,9 @@ export default function GPRAIAnalysisPage() {
               Inversion Active
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Radar Transects Inferred</span>
-          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{scans.length * 4 + 18}</p>
-          <span className="text-[11px] text-gray-400 mt-1 block">Stolt F-K Migration Model v3.4</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">GPR Surveys Ingested</span>
+          <p className="text-3xl font-bold text-gray-900 font-mono mt-1">{scans.length}</p>
+          <span className="text-[11px] text-gray-400 mt-1 block">{scans.length > 0 ? 'Real /digital-eye/gpr-surveys/ records' : 'No surveys recorded yet'}</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -89,7 +99,7 @@ export default function GPRAIAnalysisPage() {
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Flagged Subsurface Anomalies</span>
           <p className="text-3xl font-bold text-rose-600 font-mono mt-1">{findings.length}</p>
-          <span className="text-[11px] text-rose-600 font-semibold mt-1 block">Voids & Cover Deficiencies</span>
+          <span className="text-[11px] text-rose-600 font-semibold mt-1 block">{allAnomalies.length} anomaly record(s) on surveys</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -98,12 +108,12 @@ export default function GPRAIAnalysisPage() {
               <Zap size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              High Accuracy
+              Detection Record
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Hyperbolic Vertex Confidence</span>
-          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">94.8%</p>
-          <span className="text-[11px] text-emerald-700 font-medium mt-1 block">Dielectric Constant: ε_r = 6.2</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Average Detection Confidence</span>
+          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">{averageConfidence != null ? `${averageConfidence}%` : '—'}</p>
+          <span className="text-[11px] text-emerald-700 font-medium mt-1 block">{confidenceValues.length > 0 ? `${confidenceValues.length} confidence-scored detection(s)` : 'No confidence-scored detections yet'}</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -112,12 +122,12 @@ export default function GPRAIAnalysisPage() {
               <Radio size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-              Dual-Band
+              Antenna Log
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Antenna Sensor Fusion</span>
-          <p className="text-xl font-bold text-gray-900 font-mono mt-2">400MHz / 2.0GHz</p>
-          <span className="text-[11px] text-gray-400 mt-1 block">Subsurface Depth to 1.8m</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Antenna Frequencies In Use</span>
+          <p className="text-xl font-bold text-gray-900 font-mono mt-2">{antennas.length > 0 ? antennas.map(f => `${f}MHz`).join(' / ') : '—'}</p>
+          <span className="text-[11px] text-gray-400 mt-1 block">{deepestAnomaly?.depth_m != null ? `Deepest recorded anomaly: ${deepestAnomaly.depth_m.toFixed(2)}m` : 'No depth-recorded anomalies yet'}</span>
         </motion.div>
       </div>
 
@@ -158,7 +168,11 @@ export default function GPRAIAnalysisPage() {
         </div>
 
         <div className="divide-y divide-gray-100">
-          {filteredFindings.map((finding) => (
+          {filteredFindings.length === 0 ? (
+            <div className="py-12 text-center text-xs text-gray-500">
+              No GPR-related AI findings recorded for this {selectedElementId ? 'element' : 'project'} yet. Findings appear here once the correlation engine links GPR evidence.
+            </div>
+          ) : filteredFindings.map((finding) => (
             <div
               key={finding.id}
               onClick={() => {
