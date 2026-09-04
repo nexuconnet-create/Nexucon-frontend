@@ -14,11 +14,11 @@ export const metadata: Metadata = {
   description: "Construction Workflow and Project Coordination Platform",
   icons: {
     icon: [
-      { url: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg", type: "image/svg+xml" },
+      { url: "https://res.cloudinary.com/depeqzb6z/image/upload/v1774500774/gaskia_logo-04_112538_1_1_ye9l2c.png", type: "image/png" },
       { url: "/favicon.ico" },
     ],
-    shortcut: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg",
-    apple: "https://res.cloudinary.com/depeqzb6z/image/upload/v1763210697/white_logo_mn0ohx.svg",
+    shortcut: "https://res.cloudinary.com/depeqzb6z/image/upload/v1774500774/gaskia_logo-04_112538_1_1_ye9l2c.png",
+    apple: "https://res.cloudinary.com/depeqzb6z/image/upload/v1774500774/gaskia_logo-04_112538_1_1_ye9l2c.png",
   },
 };
 
