@@ -133,8 +133,11 @@ export default function GovernmentRegister() {
 
     const success = await register(userData);
     if (success) {
+      setShowTermsModal(false);
       setStep(5);
       setResendCooldown(60);
+    } else {
+      setShowTermsModal(false);
     }
   };
 
@@ -568,6 +571,11 @@ export default function GovernmentRegister() {
               </form>
 
               <div className="flex flex-col gap-6 mt-auto lg:mt-0 mb-6 lg:mb-0">
+                {authError && (
+                  <div className="p-3.5 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                    {authError}
+                  </div>
+                )}
                 <button
                   onClick={handleNextStep4}
                   type="button"
@@ -709,20 +717,32 @@ export default function GovernmentRegister() {
               </label>
             </div>
 
+            {authError && (
+              <div className="p-3.5 mb-4 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                {authError}
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={() => setShowTermsModal(false)}
                 type="button"
-                className="flex-1 py-4 border-2 border-[#022C4F] text-[#022C4F] font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={isLoading}
+                className="flex-1 py-4 border-2 border-[#022C4F] text-[#022C4F] font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Not right now
               </button>
               <button
                 onClick={handleTermsSubmit}
                 type="button"
-                className="flex-1 py-4 bg-[#022C4F] text-white font-semibold rounded-xl hover:bg-[#022C4F]/90 transition-colors"
+                disabled={isLoading}
+                className="flex-1 py-4 bg-[#022C4F] text-white font-semibold rounded-xl hover:bg-[#022C4F]/90 transition-colors flex items-center justify-center disabled:opacity-70"
               >
-                I Agree
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  "I Agree"
+                )}
               </button>
             </div>
           </div>

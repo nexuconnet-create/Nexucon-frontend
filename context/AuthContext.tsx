@@ -249,7 +249,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
           return true;
         } else {
-          setError(data.message || 'Registration failed');
+          let errorMsg = data.message || 'Registration failed';
+          if (data.errors && typeof data.errors === 'object') {
+            const firstKey = Object.keys(data.errors)[0];
+            const firstErr = data.errors[firstKey];
+            if (Array.isArray(firstErr) && firstErr.length > 0) {
+              errorMsg = firstErr[0];
+            } else if (typeof firstErr === 'string') {
+              errorMsg = firstErr;
+            }
+          }
+          setError(errorMsg);
           return false;
         }
       }

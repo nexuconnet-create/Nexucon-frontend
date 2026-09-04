@@ -133,8 +133,6 @@ export default function ClientRegister() {
       return;
     }
 
-    setShowTermsModal(false);
-
     const userData = {
       email: formData.email.trim().toLowerCase(),
       password: formData.password,
@@ -145,8 +143,11 @@ export default function ClientRegister() {
 
     const success = await register(userData);
     if (success) {
+      setShowTermsModal(false);
       setStep(6);
       setResendCooldown(60);
+    } else {
+      setShowTermsModal(false);
     }
   };
 
@@ -660,6 +661,11 @@ export default function ClientRegister() {
                   By creating an account, you gain access to Nexucon's secure construction project
                   management and hiring ecosystem.
                 </p>
+                {authError && (
+                  <div className="p-3.5 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                    {authError}
+                  </div>
+                )}
                 <button
                   onClick={handleNextStep5}
                   type="button"
@@ -818,20 +824,32 @@ export default function ClientRegister() {
               After registration, a verification link or OTP code will be sent to your email or phone number to activate your account securely.
             </p>
 
+            {authError && (
+              <div className="p-3.5 mb-4 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                {authError}
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={() => setShowTermsModal(false)}
                 type="button"
-                className="flex-1 py-4 border-2 border-[#022C4F] text-[#022C4F] font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={isLoading}
+                className="flex-1 py-4 border-2 border-[#022C4F] text-[#022C4F] font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Not right now
               </button>
               <button
                 onClick={handleTermsSubmit}
                 type="button"
-                className="flex-1 py-4 bg-[#022C4F] text-white font-semibold rounded-xl hover:bg-[#022C4F]/90 transition-colors"
+                disabled={isLoading}
+                className="flex-1 py-4 bg-[#022C4F] text-white font-semibold rounded-xl hover:bg-[#022C4F]/90 transition-colors flex items-center justify-center disabled:opacity-70"
               >
-                I Agree
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  "I Agree"
+                )}
               </button>
             </div>
           </div>
