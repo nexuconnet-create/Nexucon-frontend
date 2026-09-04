@@ -9,12 +9,14 @@ import { CustomSelect } from "../../../../components/CustomSelect";
 import { useAuth } from "@/context/AuthContext";
 
 export default function GovernmentRegister() {
-  const { register, isLoading, error: authError } = useAuth();
+  const { register, verifyEmail, resendVerificationCode, isLoading, error: authError } = useAuth();
   const [step, setStep] = useState(1);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     fullName: '', email: '', phone: '', role: 'government',
@@ -27,6 +29,13 @@ export default function GovernmentRegister() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   const handleInputChange = (field: string, value: string | boolean | string[]) => {
     setFormData(prev => {
@@ -102,16 +111,30 @@ export default function GovernmentRegister() {
     }
   };
 
-  const handleTermsSubmit = () => {
+  const handleTermsSubmit = async () => {
     const newErrors: Record<string, string> = {};
     if (!formData.termsAccepted) newErrors.termsAccepted = "You must accept the Terms & Conditions";
     if (!formData.privacyAccepted) newErrors.privacyAccepted = "You must accept the Privacy Policy";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-    } else {
-      setShowTermsModal(false);
+      return;
+    }
+
+    setShowTermsModal(false);
+
+    const userData = {
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      first_name: formData.fullName.split(' ')[0] || '',
+      last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
+      phone_number: formData.phone,
+    };
+
+    const success = await register(userData);
+    if (success) {
       setStep(5);
+      setResendCooldown(60);
     }
   };
 
@@ -145,24 +168,27 @@ export default function GovernmentRegister() {
     otpRefs.current[focusIndex]?.focus();
   };
 
+  const handleResendCode = async () => {
+    if (resendCooldown > 0) return;
+    setResendMessage(null);
+    const res = await resendVerificationCode(formData.email);
+    if (res.success) {
+      setResendCooldown(60);
+      setResendMessage({ type: 'success', text: res.message || 'Verification code resent to your email.' });
+    } else {
+      setResendMessage({ type: 'error', text: res.message || 'Failed to resend code. Please try again.' });
+    }
+  };
+
   const handleFinalSubmit = async () => {
-    const isOtpComplete = formData.otp.every(char => char.trim() !== '');
-    if (!isOtpComplete) {
-      setErrors({ otp: 'Please enter the complete verification code' });
+    const otpString = formData.otp.join('').trim();
+    if (otpString.length !== 6) {
+      setErrors({ otp: 'Please enter the complete 6-digit verification code' });
       return;
     }
 
-    const userData = {
-      email: formData.email,
-      password: formData.password,
-      first_name: formData.fullName.split(' ')[0] || '',
-      last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
-      phone_number: formData.phone,
-    };
-
-    const success = await register(userData);
-    
-    if (success) {
+    const verified = await verifyEmail(formData.email, otpString);
+    if (verified) {
       setShowSuccessModal(true);
     }
   };
@@ -562,16 +588,21 @@ export default function GovernmentRegister() {
 
           {step === 5 && (
             <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Verify Your Account</h2>
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-blue-50 text-[#022C4F] rounded-2xl flex items-center justify-center mx-auto mb-3 border border-blue-100">
+                  <CheckCircle2 className="w-6 h-6 text-[#0A66C2]" />
+                </div>
+                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-2">Verify Your Account</h2>
                 <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  We've sent a verification link and security code to your email address.
-                  Please verify your account to continue securely.
+                  We've sent a 6-digit verification passcode to:
                 </p>
+                <div className="inline-block mt-2 px-3.5 py-1 bg-slate-100 text-[#022C4F] text-xs sm:text-sm font-bold rounded-full border border-slate-200">
+                  {formData.email}
+                </div>
               </div>
 
-              <div className="flex flex-col gap-3 mb-10 lg:mb-8 mt-4">
-                <label className="text-sm font-bold text-[#022C4F]">Verification Code</label>
+              <div className="flex flex-col gap-3 mb-6 mt-2">
+                <label className="text-sm font-bold text-[#022C4F]">Enter 6-Digit Code</label>
                 <div className="flex gap-2 sm:gap-4 justify-between w-full">
                   {[...Array(6)].map((_, i) => (
                     <input
@@ -587,14 +618,35 @@ export default function GovernmentRegister() {
                     />
                   ))}
                 </div>
-                {errors.otp && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.otp}</span>}
+                {errors.otp && <span className="text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm animate-pulse">{errors.otp}</span>}
               </div>
 
-              <div className="flex flex-col gap-6 mt-auto lg:mt-0 mb-6 lg:mb-0">
-                <p className="text-[13px] text-gray-600 leading-relaxed text-left">
-                  Check your inbox and follow the verification instructions provided. If you don't see it, please check your spam folder.
+              {/* Resend Code Section */}
+              <div className="flex flex-col sm:flex-row justify-between items-center py-2 px-1 mb-4 border-b border-gray-100 gap-2">
+                <span className="text-xs text-gray-500 font-medium">
+                  Didn't receive the email?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0}
+                  className="text-xs font-bold text-[#022C4F] hover:underline disabled:text-gray-400 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
+                </button>
+              </div>
+
+              {resendMessage && (
+                <div className={`p-3 rounded-lg text-xs font-medium mb-4 border ${resendMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                  {resendMessage.text}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-5 mt-auto lg:mt-0 mb-6 lg:mb-0">
+                <p className="text-[12px] text-gray-500 leading-relaxed text-left">
+                  Check your inbox and spam folder. Entering this statutory code confirms identity and activates your regulatory dashboard.
                 </p>
-                {authError && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">{authError}</p>}
+                {authError && <p className="text-xs text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 font-medium">{authError}</p>}
                 <button
                   onClick={handleFinalSubmit}
                   type="button"
@@ -606,6 +658,13 @@ export default function GovernmentRegister() {
                   ) : (
                     "Verify Account & Continue"
                   )}
+                </button>
+                <button
+                  onClick={() => setStep(4)}
+                  type="button"
+                  className="text-xs text-gray-500 hover:text-gray-800 text-center font-medium"
+                >
+                  ← Edit account details
                 </button>
               </div>
             </>

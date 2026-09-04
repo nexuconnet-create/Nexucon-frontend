@@ -6,15 +6,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { Country, State } from "country-state-city";
 import { CustomSelect } from "../../../../components/CustomSelect";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ClientRegister() {
+  const { register, verifyEmail, resendVerificationCode, isLoading, error: authError } = useAuth();
   const [step, setStep] = useState(1);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     fullName: '', email: '', phone: '', role: 'client',
@@ -27,6 +29,13 @@ export default function ClientRegister() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   const handleInputChange = (field: string, value: string | boolean | string[]) => {
     setFormData(prev => {
@@ -114,21 +123,35 @@ export default function ClientRegister() {
     }
   };
 
-  const handleTermsSubmit = () => {
+  const handleTermsSubmit = async () => {
     const newErrors: Record<string, string> = {};
     if (!formData.termsAccepted) newErrors.termsAccepted = "You must accept the Terms & Conditions";
     if (!formData.privacyAccepted) newErrors.privacyAccepted = "You must accept the Privacy Policy";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-    } else {
-      setShowTermsModal(false);
+      return;
+    }
+
+    setShowTermsModal(false);
+
+    const userData = {
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      first_name: formData.fullName.split(' ')[0] || '',
+      last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
+      phone_number: formData.phone,
+    };
+
+    const success = await register(userData);
+    if (success) {
       setStep(6);
+      setResendCooldown(60);
     }
   };
 
   const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return; // Prevent multi-char if not paste
+    if (value.length > 1) return;
     const newOtp = [...formData.otp];
     newOtp[index] = value;
     handleInputChange('otp', newOtp);
@@ -153,22 +176,33 @@ export default function ClientRegister() {
     });
     handleInputChange('otp', newOtp);
 
-    // Focus last filled or next empty
     const focusIndex = Math.min(pastedData.length, 5);
     otpRefs.current[focusIndex]?.focus();
   };
 
-  const handleFinalSubmit = () => {
-    const isOtpComplete = formData.otp.every(char => char.trim() !== '');
-    if (!isOtpComplete) {
-      setErrors({ otp: 'Please enter the complete verification code' });
+  const handleResendCode = async () => {
+    if (resendCooldown > 0) return;
+    setResendMessage(null);
+    const res = await resendVerificationCode(formData.email);
+    if (res.success) {
+      setResendCooldown(60);
+      setResendMessage({ type: 'success', text: res.message || 'Verification code resent to your email.' });
+    } else {
+      setResendMessage({ type: 'error', text: res.message || 'Failed to resend code. Please try again.' });
+    }
+  };
+
+  const handleFinalSubmit = async () => {
+    const otpString = formData.otp.join('').trim();
+    if (otpString.length !== 6) {
+      setErrors({ otp: 'Please enter the complete 6-digit verification code' });
       return;
     }
 
-    // Backend Integration goes here!
-    console.log("Submitting Client Registration Data:", formData);
-
-    setShowSuccessModal(true);
+    const verified = await verifyEmail(formData.email, otpString);
+    if (verified) {
+      setShowSuccessModal(true);
+    }
   };
 
   return (
@@ -640,17 +674,22 @@ export default function ClientRegister() {
           {step === 6 && (
             <>
               {/* Form Header */}
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Verify Your Account</h2>
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-blue-50 text-[#022C4F] rounded-2xl flex items-center justify-center mx-auto mb-3 border border-blue-100">
+                  <CheckCircle2 className="w-6 h-6 text-[#0A66C2]" />
+                </div>
+                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-2">Verify Your Account</h2>
                 <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  We've sent a verification link and security code to your email address.
-                  Please verify your account to activate your Nexucon profile and continue securely.
+                  We've sent a 6-digit verification passcode to:
                 </p>
+                <div className="inline-block mt-2 px-3.5 py-1 bg-slate-100 text-[#022C4F] text-xs sm:text-sm font-bold rounded-full border border-slate-200">
+                  {formData.email}
+                </div>
               </div>
 
               {/* Form Fields Step 6 */}
-              <div className="flex flex-col gap-3 mb-10 lg:mb-8 mt-4">
-                <label className="text-sm font-bold text-[#022C4F]">Verification Code</label>
+              <div className="flex flex-col gap-3 mb-6 mt-2">
+                <label className="text-sm font-bold text-[#022C4F]">Enter 6-Digit Code</label>
                 <div className="flex gap-2 sm:gap-4 justify-between w-full">
                   {[...Array(6)].map((_, i) => (
                     <input
@@ -666,26 +705,55 @@ export default function ClientRegister() {
                     />
                   ))}
                 </div>
-                {errors.otp && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.otp}</span>}
+                {errors.otp && <span className="text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm animate-pulse">{errors.otp}</span>}
               </div>
 
+              {/* Resend Code Section */}
+              <div className="flex flex-col sm:flex-row justify-between items-center py-2 px-1 mb-4 border-b border-gray-100 gap-2">
+                <span className="text-xs text-gray-500 font-medium">
+                  Didn't receive the email?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0}
+                  className="text-xs font-bold text-[#022C4F] hover:underline disabled:text-gray-400 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
+                </button>
+              </div>
+
+              {resendMessage && (
+                <div className={`p-3 rounded-lg text-xs font-medium mb-4 border ${resendMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                  {resendMessage.text}
+                </div>
+              )}
+
               {/* Action Buttons Step 6 */}
-              <div className="flex flex-col gap-6 mt-auto lg:mt-0 mb-6 lg:mb-0">
-                <p className="text-[13px] text-gray-600 leading-relaxed text-left">
-                  Check your inbox and follow the verification instructions provided in the email. If you don't see the message, please check your spam or junk folder.
+              <div className="flex flex-col gap-5 mt-auto lg:mt-0 mb-6 lg:mb-0">
+                <p className="text-[12px] text-gray-500 leading-relaxed text-left">
+                  Check your inbox and spam folder. Entering this security passcode confirms your identity and activates your Client Developer portal.
                 </p>
+                {authError && <p className="text-xs text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 font-medium">{authError}</p>}
                 <button
                   onClick={handleFinalSubmit}
                   type="button"
-                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
+                  disabled={isLoading}
+                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
                 >
-                  Verify Account & Continue
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    "Verify Account & Continue"
+                  )}
                 </button>
-                <div className="text-right mt-2">
-                  <p className="text-[9px] text-gray-500 max-w-[150px] ml-auto leading-tight">
-                    Having trouble verifying your account? Contact Nexucon support for assistance.
-                  </p>
-                </div>
+                <button
+                  onClick={() => setStep(5)}
+                  type="button"
+                  className="text-xs text-gray-500 hover:text-gray-800 text-center font-medium"
+                >
+                  ← Edit account details
+                </button>
               </div>
             </>
           )}
