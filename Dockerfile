@@ -1,0 +1,65 @@
+# Stage 1: Base image
+FROM node:20-alpine AS base
+
+# Stage 2: Install dependencies
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Stage 3: Build application
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build-time public environment variables
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_FRONTEND_URL
+ARG NEXT_PUBLIC_APP_NAME
+ARG NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+ARG NEXT_PUBLIC_CLOUDINARY_API_KEY
+ARG NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+ARG NEXT_PUBLIC_CLOUDFLARE_R2_BUCKET_NAME
+ARG NEXT_PUBLIC_CLOUDFLARE_R2_API_URL
+ARG NEXT_PUBLIC_CLOUDFLARE_R2_ENDPOINT
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_FRONTEND_URL=$NEXT_PUBLIC_FRONTEND_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+ENV NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=$NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+ENV NEXT_PUBLIC_CLOUDINARY_API_KEY=$NEXT_PUBLIC_CLOUDINARY_API_KEY
+ENV NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=$NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+ENV NEXT_PUBLIC_CLOUDFLARE_R2_BUCKET_NAME=$NEXT_PUBLIC_CLOUDFLARE_R2_BUCKET_NAME
+ENV NEXT_PUBLIC_CLOUDFLARE_R2_API_URL=$NEXT_PUBLIC_CLOUDFLARE_R2_API_URL
+ENV NEXT_PUBLIC_CLOUDFLARE_R2_ENDPOINT=$NEXT_PUBLIC_CLOUDFLARE_R2_ENDPOINT
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN npm run build
+
+# Stage 4: Production Runner
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy static assets and compiled standalone server
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]
