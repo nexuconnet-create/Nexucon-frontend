@@ -19,7 +19,7 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, getBIMStructuralElements, BIMStructuralElement } from "@/services/digitalEye";
+import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, PunditProjectAnalysis, analyzePunditProject, getBIMStructuralElements, BIMStructuralElement } from "@/services/digitalEye";
 
 export default function PunditAIAnalysisPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -35,6 +35,10 @@ export default function PunditAIAnalysisPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // D1: real AI narrative — the run button hits the backend analysis
+  // endpoint; the record it stores is rendered back verbatim.
+  const [isRunningAnalysis, setIsRunningAnalysis] = useState<boolean>(false);
+  const [freshRun, setFreshRun] = useState<PunditProjectAnalysis | null>(null);
 
   const refresh = async () => {
     setIsLoading(true);
@@ -81,6 +85,112 @@ export default function PunditAIAnalysisPage() {
     f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.finding_reference.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Run the project-level analysis: deterministic BS 1881-203 pass over every
+  // test + one AI narrative, all server-side. The response is shown verbatim —
+  // nothing is composed client-side.
+  const handleRunAnalysis = async () => {
+    if (!selectedProjectId) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '⚠️ Select a project before running the AI analysis.', type: "error" }
+      }));
+      return;
+    }
+    if (tests.length === 0) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '⚠️ No PUNDIT tests recorded for this project yet — record field measurements first.', type: "error" }
+      }));
+      return;
+    }
+    setIsRunningAnalysis(true);
+    try {
+      const result = await analyzePunditProject(selectedProjectId);
+      setFreshRun(result);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `AI analysis complete — ${result.tests_analysed} test${result.tests_analysed === 1 ? '' : 's'} analysed (${result.model_provider || 'deterministic engine'}).`, type: "success" }
+      }));
+      await refresh(); // pull the stored analysis record back from the registry
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'The analysis run failed.'}`, type: "error" }
+      }));
+    } finally {
+      setIsRunningAnalysis(false);
+    }
+  };
+
+  const normalizeLines = (val: unknown): string[] => {
+    if (Array.isArray(val)) {
+      return val.map(item => (typeof item === 'string' ? item : JSON.stringify(item))).filter(Boolean);
+    }
+    if (typeof val === 'string' && val.trim()) {
+      return val.split('\n').map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const normalizeRecs = (val: unknown): Array<{ priority: string; recommendation: string } | string> => {
+    if (Array.isArray(val)) {
+      return val as Array<{ priority: string; recommendation: string } | string>;
+    }
+    if (typeof val === 'string' && val.trim()) {
+      return val.split('\n').map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  // What the output panel shows: the run that just happened, else the latest
+  // stored analysis record for this project.
+  const shownAnalysis: {
+    reference: string;
+    observations: string[];
+    recommendations: Array<{ priority: string; recommendation: string } | string>;
+    reasoningLog: string[];
+    riskLevel: string;
+    provider: string;
+    model: string;
+    testsAnalysed: number;
+  } | null = freshRun
+    ? {
+        reference: freshRun.analysis_id,
+        observations: normalizeLines(freshRun.observations),
+        recommendations: normalizeRecs(freshRun.recommendations),
+        reasoningLog: normalizeLines(freshRun.reasoning_log),
+        riskLevel: freshRun.risk_level,
+        provider: freshRun.model_provider,
+        model: freshRun.model_version,
+        testsAnalysed: freshRun.tests_analysed,
+      }
+    : latestAnalysis
+      ? {
+          reference: latestAnalysis.analysis_reference,
+          observations: normalizeLines(latestAnalysis.observations),
+          recommendations: normalizeRecs(latestAnalysis.recommendations),
+          reasoningLog: normalizeLines(latestAnalysis.reasoning_log),
+          riskLevel: latestAnalysis.risk_level,
+          provider: latestAnalysis.model_provider,
+          model: latestAnalysis.model_version,
+          testsAnalysed: tests.length,
+        }
+      : null;
+
+  // Per-element reading summaries: each test's velocity / E.C.S IS the
+  // element mean across its A/B/C… points when readings exist.
+  const elementSummaries = tests
+    .filter(t => t.pulse_velocity_ms > 0)
+    .map(t => ({
+      id: t.id,
+      reference: t.test_reference,
+      element: t.structural_element_name || t.test_location || '—',
+      floor: t.floor || '—',
+      points: t.readings.length > 0 ? t.readings.length : 1,
+      pointLabels: t.readings.length > 0
+        ? t.readings.map(r => r.point_label).join('/')
+        : 'A',
+      meanVelocity: t.pulse_velocity_ms,
+      meanFcu: t.estimated_compressive_strength_mpa,
+      grade: t.concrete_quality_rating,
+    }));
 
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
@@ -156,6 +266,156 @@ export default function PunditAIAnalysisPage() {
         </motion.div>
       </div>
 
+      {/* AI ANALYSIS RUNNER + OUTPUT (D1) — real backend narrative, shown verbatim */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+        <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
+              <BrainCircuit className="text-amber-500" size={20} />
+              Project AI Analysis
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Deterministic BS 1881-203 pass over every recorded test, then one AI narrative written strictly from the real measurements — no fabricated figures.
+            </p>
+          </div>
+          <button
+            onClick={handleRunAnalysis}
+            disabled={isRunningAnalysis || isLoading}
+            className="px-5 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            <Sparkles size={14} className={isRunningAnalysis ? "animate-pulse" : ""} />
+            <span>{isRunningAnalysis ? 'Running Analysis…' : 'Run AI Analysis'}</span>
+          </button>
+        </div>
+
+        {shownAnalysis ? (
+          <div className="p-6 space-y-5">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono font-bold">
+              <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200">
+                RECORD {shownAnalysis.reference || '—'}
+              </span>
+              <span className={`px-2.5 py-1 rounded-lg border ${
+                shownAnalysis.riskLevel === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : shownAnalysis.riskLevel === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}>
+                RISK: {(shownAnalysis.riskLevel || '—').toUpperCase()}
+              </span>
+              <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-lg">
+                {shownAnalysis.testsAnalysed} TEST{shownAnalysis.testsAnalysed === 1 ? '' : 'S'} ANALYSED
+              </span>
+              <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg">
+                MODEL: {shownAnalysis.provider ? `${shownAnalysis.provider}${shownAnalysis.model ? ` · ${shownAnalysis.model}` : ''}` : 'DETERMINISTIC ENGINE'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Activity size={13} className="text-amber-500" /> AI Observations
+                </h4>
+                {shownAnalysis.observations.length > 0 ? (
+                  <ul className="space-y-2">
+                    {shownAnalysis.observations.map((obs, i) => (
+                      <li key={i} className="text-xs text-gray-700 bg-slate-50 border border-gray-100 rounded-xl p-3 leading-relaxed">
+                        {obs}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-400">No observations recorded in this analysis.</p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <ShieldCheck size={13} className="text-emerald-500" /> Recommendations
+                </h4>
+                {shownAnalysis.recommendations.length > 0 ? (
+                  <ul className="space-y-2">
+                    {shownAnalysis.recommendations.map((rec, i) => (
+                      <li key={i} className="text-xs text-gray-700 bg-emerald-50/40 border border-emerald-100 rounded-xl p-3 leading-relaxed">
+                        {typeof rec === 'string' ? rec : `${rec.priority ? `[${rec.priority}] ` : ''}${rec.recommendation}`}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-400">No recommendations recorded in this analysis.</p>
+                )}
+              </div>
+            </div>
+
+            {shownAnalysis.reasoningLog.length > 0 && (
+              <details className="text-xs">
+                <summary className="font-bold text-gray-600 cursor-pointer select-none">
+                  Reasoning Log ({shownAnalysis.reasoningLog.length} entries — deterministic BS 1881-203 math trace)
+                </summary>
+                <div className="mt-2 p-4 bg-slate-950 text-slate-300 rounded-xl border border-slate-800 font-mono text-[10px] space-y-1 max-h-64 overflow-y-auto">
+                  {shownAnalysis.reasoningLog.map((line, i) => (
+                    <div key={i}>&gt; {line}</div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        ) : (
+          <div className="p-12 text-center text-xs text-gray-500">
+            No AI analysis has been run for this project yet — click <strong>Run AI Analysis</strong> to analyse the recorded PUNDIT tests.
+          </div>
+        )}
+      </div>
+
+      {/* PER-ELEMENT READING SUMMARIES (A1) — element means across A/B/C… points */}
+      {elementSummaries.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+          <div className="p-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
+              <Box className="text-amber-500" size={20} />
+              Element Verdicts (Test-Point Means)
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Each element's velocity and E.C.S are the server-computed means across its test points (A, B, C…).
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-gray-600 text-[10px] uppercase tracking-wider">
+                  <th className="text-left px-6 py-3 font-bold">Element</th>
+                  <th className="text-left px-4 py-3 font-bold">Test Reference</th>
+                  <th className="text-left px-4 py-3 font-bold">Floor</th>
+                  <th className="text-center px-4 py-3 font-bold">Points</th>
+                  <th className="text-right px-4 py-3 font-bold">Mean Velocity</th>
+                  <th className="text-right px-4 py-3 font-bold">Mean E.C.S</th>
+                  <th className="text-center px-6 py-3 font-bold">Grade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {elementSummaries.map(e => (
+                  <tr key={e.id} className="hover:bg-slate-50/60">
+                    <td className="px-6 py-3 font-semibold text-gray-900">{e.element}</td>
+                    <td className="px-4 py-3 font-mono text-gray-500">{e.reference}</td>
+                    <td className="px-4 py-3 text-gray-600">{e.floor}</td>
+                    <td className="px-4 py-3 text-center font-mono text-gray-700">{e.pointLabels} <span className="text-gray-400">({e.points})</span></td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-amber-700">{e.meanVelocity.toLocaleString()} m/s</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-800">{e.meanFcu != null ? `${e.meanFcu.toFixed(1)} MPa` : '—'}</td>
+                    <td className="px-6 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        e.grade === 'EXCELLENT' || e.grade === 'GOOD' ? 'bg-emerald-100 text-emerald-800'
+                          : e.grade === 'PENDING' ? 'bg-gray-100 text-gray-600'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {e.grade}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* AI ANOMALIES FEED */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
         <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -221,6 +481,11 @@ export default function PunditAIAnalysisPage() {
                     <span className="text-[10px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold">
                       AI Inversion Confidence: {finding.confidence_score}%
                     </span>
+                    {finding.status === 'CONVERTED_TO_NCR' && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        CONVERTED TO NCR
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-bold text-sm text-gray-900 group-hover:text-amber-700 transition-colors">{finding.title}</h3>
                   <p className="text-xs text-gray-600 mt-1 max-w-2xl">{finding.description}</p>
@@ -233,9 +498,10 @@ export default function PunditAIAnalysisPage() {
                   setSelectedFinding(finding);
                   setIsDrawerOpen(true);
                 }}
-                className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer shrink-0"
+                className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer shrink-0 flex items-center gap-1.5"
               >
-                Inspect UPV & NCR →
+                <Sparkles size={13} className="text-amber-400" />
+                <span>Inspect UPV & NCR →</span>
               </button>
             </div>
           ))
@@ -247,6 +513,7 @@ export default function PunditAIAnalysisPage() {
         finding={selectedFinding}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        punditTests={tests}
       />
 
       <CreateFindingModal

@@ -865,13 +865,11 @@ function GenerateReportModal({
         standards_cited: deviceType === "gpr"
           ? ["ASTM D4748", "ACI 228.2R", "NBC 2020 §14.2"]
           : ["NBC 2020 §14.2", "ISO 19650-2", "BuildingSMART BCF 3.0"],
-        compliance_status: "VERIFIED",
+        // No fabricated metrics or pre-stamped compliance verdict here — the
+        // backend derives compliance from real registry data and stamps the
+        // record with what it actually computed.
         executive_summary: executiveNotes,
-        metrics: deviceType === "gpr"
-          ? { scans_or_tests_count: 8, pass_rate_pct: 98.2, avg_rebar_spacing_mm: 196, min_cover_depth_mm: 40 }
-          : { scans_or_tests_count: 14250, pass_rate_pct: 98.4, max_tolerance_deviation_mm: 12.8, rms_deviation_mm: 7.9 },
         certified_engineer: certifierName,
-        generated_by: "Engr. Inspector (Lead NDT Geophysicist)"
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', {

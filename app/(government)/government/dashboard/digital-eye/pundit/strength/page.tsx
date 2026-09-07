@@ -562,35 +562,95 @@ export default function PunditStrengthPage() {
               {tests.map((t) => {
                 const fcu = t.estimated_compressive_strength_mpa;
                 const isPassed = fcu != null && fcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+                // A7 multi-reading model: crack-depth and surface-quality tests
+                // carry their own measurements — show those instead of PV dashes.
+                const isCrack = t.test_type === 'crack_depth';
+                const isSurface = t.test_type === 'surface_quality';
+                const crackDepth = t.estimated_crack_depth_mm;
+                const readingCount = t.readings?.length ?? 0;
                 return (
                   <tr
                     key={t.id}
                     onClick={() => setActiveTest(t)}
                     className={`hover:bg-slate-50 transition-colors cursor-pointer ${activeTest?.id === t.id ? 'bg-amber-50/40' : ''}`}
                   >
-                    <td className="py-3.5 px-5 font-bold font-mono text-gray-900">{t.test_reference}</td>
-                    <td className="py-3.5 px-5 text-gray-700">{t.structural_element_name || t.test_location || '—'}</td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.path_length_mm ? `${t.path_length_mm} mm` : '—'}</td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.transit_time_us ? `${t.transit_time_us} µs` : '—'}</td>
-                    <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending'}</td>
+                    <td className="py-3.5 px-5 font-bold font-mono text-gray-900">
+                      <span className="flex items-center gap-1.5">
+                        {t.test_reference}
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          isCrack ? 'bg-orange-100 text-orange-800' : isSurface ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {isCrack ? 'CRACK' : isSurface ? 'SURFACE' : 'PV'}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-gray-700">
+                      {t.structural_element_name || t.test_location || '—'}
+                      {readingCount > 1 && (
+                        <span className="block text-[10px] text-gray-400 mt-0.5">{readingCount} test points (A–{String.fromCharCode(64 + readingCount)})</span>
+                      )}
+                      {isSurface && t.surface_condition && (
+                        <span className="block text-[10px] text-gray-400 mt-0.5">{t.surface_condition}</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-5 font-mono text-gray-600">
+                      {isCrack
+                        ? (t.crack_path_length_mm ? `${t.crack_path_length_mm} mm` : '—')
+                        : isSurface ? '—'
+                        : (t.path_length_mm ? `${t.path_length_mm} mm` : '—')}
+                    </td>
+                    <td className="py-3.5 px-5 font-mono text-gray-600">
+                      {isCrack
+                        ? (t.crack_pulse_time_us && t.uncracked_pulse_time_us
+                            ? `${t.crack_pulse_time_us}/${t.uncracked_pulse_time_us} µs`
+                            : '—')
+                        : isSurface ? '—'
+                        : (t.transit_time_us ? `${t.transit_time_us} µs` : '—')}
+                    </td>
+                    <td className="py-3.5 px-5 font-mono font-bold text-amber-700">
+                      {isCrack
+                        ? (crackDepth != null ? `d = ${crackDepth.toFixed(1)} mm` : 'Pending')
+                        : isSurface ? 'Visual'
+                        : (t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending')}
+                    </td>
                     <td className="py-3.5 px-5 font-mono font-black text-gray-900">
-                      {fcu != null ? (
+                      {isCrack || isSurface ? (
+                        <span className="text-gray-400">{isCrack ? 'n/a (crack)' : 'n/a (visual)'}</span>
+                      ) : fcu != null ? (
                         <span className={isPassed ? 'text-emerald-600' : 'text-rose-600'}>{fcu.toFixed(1)} MPa</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
                     <td className="py-3.5 px-5">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
-                        fcu == null
-                          ? 'bg-gray-100 text-gray-600 border border-gray-200'
-                          : isPassed
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
-                      }`}>
-                        {fcu == null ? <Info size={11} /> : isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
-                        <span>{fcu == null ? 'NOT ASSESSED' : isPassed ? 'GREEN PASSED (≥25)' : 'DEFICIENT (<25)'}</span>
-                      </span>
+                      {isCrack ? (
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                          crackDepth == null
+                            ? 'bg-gray-100 text-gray-600 border border-gray-200'
+                            : crackDepth > 25
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {crackDepth == null ? <Info size={11} /> : crackDepth > 25 ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+                          <span>{crackDepth == null ? 'NOT ASSESSED' : crackDepth > 25 ? `d=${crackDepth.toFixed(1)}mm · REVIEW` : `d=${crackDepth.toFixed(1)}mm · WITHIN LIMIT`}</span>
+                        </span>
+                      ) : isSurface ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 bg-cyan-50 text-cyan-800 border border-cyan-200">
+                          <Info size={11} />
+                          <span>VISUAL RECORD</span>
+                        </span>
+                      ) : (
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                          fcu == null
+                            ? 'bg-gray-100 text-gray-600 border border-gray-200'
+                            : isPassed
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+                        }`}>
+                          {fcu == null ? <Info size={11} /> : isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                          <span>{fcu == null ? 'NOT ASSESSED' : isPassed ? 'GREEN PASSED (≥25)' : 'DEFICIENT (<25)'}</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-5 text-right flex items-center justify-end gap-2">
                       <button

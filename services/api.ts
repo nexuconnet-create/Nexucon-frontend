@@ -1,12 +1,13 @@
 import axios from 'axios';
 
 const isProd = process.env.NODE_ENV === 'production';
-const envUrl = process.env.NEXT_PUBLIC_API_URL || '';
+const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
 const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-const backendUrl = (validEnvUrl || 'http://127.0.0.1:8000').replace(/\/$/, '');
+let base = (validEnvUrl || 'https://api.nexucon.net').replace(/\/+$/, '');
+if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
 
 const api = axios.create({
-  baseURL: `${backendUrl}/api/v1`,
+  baseURL: base,
   headers: {
     'Content-Type': 'application/json',
   },
