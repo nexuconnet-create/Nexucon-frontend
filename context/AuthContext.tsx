@@ -21,6 +21,8 @@ interface AuthContextType {
   error: string | null;
   login: (credentials: any) => Promise<boolean>;
   register: (userData: any) => Promise<boolean>;
+  verifyEmail: (email: string, code: string) => Promise<boolean>;
+  resendVerificationCode: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
   refreshUser: () => Promise<void>;
@@ -29,12 +31,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const isProd = process.env.NODE_ENV === 'production';
-const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-let base = (validEnvUrl || 'https://api.nexucon.net').replace(/\/+$/, '');
-if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
-const API_BASE_URL = base;
+function getApiBaseUrl(): string {
+  const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+  const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
+  const fallback = 'https://api.nexucon.net';
+  let base = (validEnvUrl || fallback).replace(/\/+$/, '');
+  if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
+  return base;
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -243,10 +249,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (data.data?.access && typeof window !== 'undefined') {
             localStorage.setItem('nexucon_access_token', data.data.access);
           }
-          handleSetUser(data.data.user);
+          if (data.data?.user) {
+            handleSetUser(data.data.user);
+          }
           return true;
         } else {
-          setError(data.message || 'Registration failed');
+          let errorMsg = data.message || 'Registration failed';
+          if (data.errors && typeof data.errors === 'object') {
+            const firstKey = Object.keys(data.errors)[0];
+            const firstErr = data.errors[firstKey];
+            if (Array.isArray(firstErr) && firstErr.length > 0) {
+              errorMsg = firstErr[0];
+            } else if (typeof firstErr === 'string') {
+              errorMsg = firstErr;
+            }
+          }
+          setError(errorMsg);
           return false;
         }
       }
@@ -257,6 +275,76 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return false;
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const verifyEmail = async (email: string, code: string): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/verify-email/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: code.trim(),
+        }),
+      });
+
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.data?.access && typeof window !== 'undefined') {
+            localStorage.setItem('nexucon_access_token', data.data.access);
+          }
+          if (data.data?.user) {
+            handleSetUser(data.data.user);
+          }
+          return true;
+        } else {
+          setError(data.message || 'Verification failed. Please check your 6-digit code.');
+          return false;
+        }
+      }
+      setError('Server returned an unexpected response');
+      return false;
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred during verification');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendVerificationCode = async (email: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/resend-verification/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (res.ok && data.success) {
+          return {
+            success: true,
+            message: data.message || 'A new 6-digit verification code has been sent.',
+          };
+        } else {
+          return {
+            success: false,
+            message: data.message || 'Failed to resend verification code.',
+          };
+        }
+      }
+      return { success: false, message: 'Server returned an unexpected response.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Network error while resending code.' };
     }
   };
 
@@ -336,6 +424,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         error,
         login,
         register,
+        verifyEmail,
+        resendVerificationCode,
         logout,
         hasPermission,
         refreshUser,

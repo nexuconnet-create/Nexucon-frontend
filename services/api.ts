@@ -1,9 +1,14 @@
 import axios from 'axios';
 
-const isProd = process.env.NODE_ENV === 'production';
-const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
-let base = (validEnvUrl || 'https://api.nexucon.net').replace(/\/+$/, '');
+export function getBackendUrl(): string {
+  const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+  const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
+  const fallback = 'https://api.nexucon.net';
+  return (validEnvUrl || fallback).replace(/\/+$/, '');
+}
+
+export const backendUrl = getBackendUrl();
+let base = backendUrl;
 if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
 
 const api = axios.create({
