@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  Sparkles, 
+import {
+  ArrowLeft,
+  Sparkles,
   Layers, 
   Maximize2, 
   Minimize2, 
@@ -219,6 +220,17 @@ export default function PunditWaveformViewer({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* E5: in full-screen mode the station list is hidden behind the
+              overlay — give the operator an explicit way back to it. */}
+          {isFullscreen && (
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={12} />
+              <span>Back to Waveform Stations</span>
+            </button>
+          )}
           <button
             onClick={handleResetAutomated}
             title="Reset to automated AIC first-arrival pick"

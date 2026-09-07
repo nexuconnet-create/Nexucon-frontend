@@ -8,7 +8,7 @@ import axios, {
  * Base URL for the Nexucon backend (Digital Eye / scans endpoints).
  *
  * Resolves the same env var the rest of this app uses, then normalises it:
- * the value may be a bare origin ("http://localhost:8000") or already carry
+ * the value may be a bare origin ("https://api.nexucon.net") or already carry
  * the "/api/v1" prefix — either way API_BASE_URL ends with "/api/v1".
  * Never append "/api/v1" again at a call site — use `apiOrigin()` below when
  * you need the bare server origin (WebSockets, SSE, media URLs).
@@ -16,21 +16,7 @@ import axios, {
 function resolveBaseUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
   const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
-  let fallback = 'http://127.0.0.1:8000';
-
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host.includes('nexucon.net')) {
-      fallback = 'https://api.nexucon.net';
-    } else if (host === 'localhost' || host === '127.0.0.1') {
-      fallback = 'http://127.0.0.1:8000';
-    } else if (window.location.protocol === 'https:') {
-      fallback = 'https://api.nexucon.net';
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    fallback = 'https://api.nexucon.net';
-  }
-
+  const fallback = 'https://api.nexucon.net';
   let base = (validEnvUrl || fallback).replace(/\/+$/, '');
   if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
   return base;
@@ -75,7 +61,7 @@ export function getApiUrl(path: string): string {
 
 /**
  * WebSocket URL for a backend path outside the REST prefix.
- * e.g. getWsUrl('/ws/processing/<id>/') -> ws://localhost:8000/ws/processing/<id>/
+ * e.g. getWsUrl('/ws/processing/<id>/') -> wss://api.nexucon.net/ws/processing/<id>/
  */
 export function getWsUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;

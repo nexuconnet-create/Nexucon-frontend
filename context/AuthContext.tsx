@@ -34,21 +34,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 function getApiBaseUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
   const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
-  let fallback = 'http://127.0.0.1:8000';
-
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host.includes('nexucon.net')) {
-      fallback = 'https://api.nexucon.net';
-    } else if (host === 'localhost' || host === '127.0.0.1') {
-      fallback = 'http://127.0.0.1:8000';
-    } else if (window.location.protocol === 'https:') {
-      fallback = 'https://api.nexucon.net';
-    }
-  } else if (process.env.NODE_ENV === 'production') {
-    fallback = 'https://api.nexucon.net';
-  }
-
+  const fallback = 'https://api.nexucon.net';
   let base = (validEnvUrl || fallback).replace(/\/+$/, '');
   if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
   return base;

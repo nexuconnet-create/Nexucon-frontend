@@ -38,6 +38,10 @@ export interface Project {
   plot_number?: string;
   block_number?: string;
   land_title_reference?: string;
+  // GNSS coordinates — drive the Google Maps link + static map in the NDT
+  // report's site location section.
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 
   permit_number?: string;
   permit_status?: string;

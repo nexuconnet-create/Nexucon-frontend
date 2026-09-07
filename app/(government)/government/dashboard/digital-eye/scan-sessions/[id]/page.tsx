@@ -147,10 +147,9 @@ const ScanDetail = () => {
   useEffect(() => {
     if (!id || scan?.status !== 'processing') return;
 
-    const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-    const isNexucon = typeof window !== 'undefined' && window.location.hostname.includes('nexucon.net');
-    const baseUrl = envUrl || (isNexucon ? 'https://api.nexucon.net' : 'http://127.0.0.1:8000');
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/processing/${id}/`;
+    const rawBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://api.nexucon.net').trim();
+    const origin = rawBaseUrl.replace(/\/api\/v\d+.*$/, '').replace(/\/+$/, '');
+    const wsUrl = origin.replace(/^http/, 'ws') + `/ws/processing/${id}/`;
     const ws = new WebSocket(wsUrl);
 
     ws.onmessage = (event) => {

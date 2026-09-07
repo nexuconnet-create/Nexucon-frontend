@@ -80,8 +80,8 @@ async function main() {
     }
     if (msg.method === 'Network.responseReceived') {
       const r = msg.params.response;
-      if (r.status >= 400 && r.url.includes('localhost:8000')) {
-        events.failed.push(r.status + ' ' + r.url.replace('http://localhost:8000', ''));
+      if (r.status >= 400 && (r.url.includes('localhost:8000') || r.url.includes('api.nexucon.net'))) {
+        events.failed.push(r.status + ' ' + r.url.replace('http://localhost:8000', '').replace('https://api.nexucon.net', ''));
       }
     }
   });

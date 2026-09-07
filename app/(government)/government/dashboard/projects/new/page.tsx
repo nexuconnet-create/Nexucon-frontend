@@ -335,15 +335,37 @@ export default function RegisterProjectWizard() {
       
       <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl mt-4">
         <h4 className="text-sm font-bold text-blue-900 mb-2">GNSS Coordinates</h4>
-        <p className="text-xs text-blue-700 mb-4">Provide accurate geospatial coordinates for map integration and boundary tracking.</p>
+        <p className="text-xs text-blue-700 mb-4">Provide accurate geospatial coordinates for map integration and boundary tracking. These drive the Google Maps link in the NDT report&apos;s site location section.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-blue-900 mb-1">Latitude</label>
-            <input type="text" className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm" placeholder="e.g. 6.4281" />
+            <input
+              type="text"
+              name="latitude"
+              value={formData.latitude != null ? String(formData.latitude) : ''}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                latitude: e.target.value === '' ? null : e.target.value,
+              }))}
+              className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm"
+              placeholder="e.g. 6.4281"
+              inputMode="decimal"
+            />
           </div>
           <div>
             <label className="block text-xs font-bold text-blue-900 mb-1">Longitude</label>
-            <input type="text" className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm" placeholder="e.g. 3.4219" />
+            <input
+              type="text"
+              name="longitude"
+              value={formData.longitude != null ? String(formData.longitude) : ''}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                longitude: e.target.value === '' ? null : e.target.value,
+              }))}
+              className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm"
+              placeholder="e.g. 3.4219"
+              inputMode="decimal"
+            />
           </div>
         </div>
       </div>

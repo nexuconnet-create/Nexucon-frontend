@@ -82,18 +82,18 @@ export default function ApprovedBIM() {
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">Approved By</span>
-                <span className="text-sm font-bold text-gray-900">{selectedModel?.certified_by_name || 'Dir. O. Adeleke'}</span>
+                <span className="text-sm font-bold text-gray-900">{selectedModel?.certified_by_name || '—'}</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">Timestamp</span>
                 <span className="text-sm font-bold text-gray-900">
-                  {selectedModel?.certified_at ? new Date(selectedModel.certified_at).toLocaleDateString() : 'Recent'}
+                  {selectedModel?.certified_at ? new Date(selectedModel.certified_at).toLocaleDateString() : '—'}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">Hash Signature</span>
                 <span className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  {selectedModel?.hash_signature || '0x3f8a...c91'}
+                  {selectedModel?.hash_signature || '—'}
                 </span>
               </div>
             </div>
