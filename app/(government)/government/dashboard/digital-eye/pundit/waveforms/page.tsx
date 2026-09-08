@@ -11,6 +11,7 @@ import {
   getBIMStructuralElements,
   BIMStructuralElement,
   linkPunditTestToElement,
+  formatVelocityMs,
 } from "@/services/digitalEye";
 
 export default function PunditWaveformsPage() {
@@ -133,7 +134,7 @@ export default function PunditWaveformsPage() {
               </div>
               <p className="text-xs font-semibold text-gray-700">{t.structural_element_name || t.test_location || '—'}</p>
               <div className="flex justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-200/60 font-mono">
-                <span>Velocity: <strong className="text-amber-700">{t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending'}</strong></span>
+                <span>Velocity: <strong className="text-amber-700">{t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}</strong></span>
                 <span>fcu: <strong className="text-gray-800">{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : '—'}</strong></span>
               </div>
             </div>

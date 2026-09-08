@@ -168,7 +168,12 @@ export default function CreateFindingModal({
                   required
                 >
                   {elements.map(el => (
-                    <option key={el.id} value={el.id}>{el.name} ({el.category})</option>
+                    // Category only when it adds information — Revit type
+                    // names often equal the element name and printed
+                    // "Floor:200THK RC SLAB (Floor:200THK RC SLAB)".
+                    <option key={el.id} value={el.id}>
+                      {el.name}{el.category && el.category !== el.name ? ` (${el.category})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>

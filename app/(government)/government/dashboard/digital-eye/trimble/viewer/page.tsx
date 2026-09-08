@@ -1,20 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Box, Sliders, RefreshCw, Share2, Layers, Download } from "lucide-react";
+import { Box, Sliders } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import TrimbleBIMViewer from "@/components/dashboard/digital-eye/TrimbleBIMViewer";
-import RadargramViewer from "@/components/dashboard/digital-eye/RadargramViewer";
-import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import { 
-  BIMStructuralElement, 
-  TrimbleConnection, 
-  GPRScan, 
-  PunditTest,
-  getBIMStructuralElements, 
-  getTrimbleConnectionStatus, 
-  getGPRScans, 
-  getPunditTests 
+import {
+  BIMStructuralElement,
+  TrimbleConnection,
+  getBIMStructuralElements,
+  getTrimbleConnectionStatus
 } from "@/services/digitalEye";
 
 export default function TrimbleViewerPage() {
@@ -22,18 +16,11 @@ export default function TrimbleViewerPage() {
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [elements, setElements] = useState<BIMStructuralElement[]>([]);
   const [trimbleStatus, setTrimbleStatus] = useState<TrimbleConnection | null>(null);
-  const [gprScans, setGprScans] = useState<GPRScan[]>([]);
-  const [punditTests, setPunditTests] = useState<PunditTest[]>([]);
   const [toleranceThresholdMm, setToleranceThresholdMm] = useState<number>(20);
-
-  const [inspectGprScan, setInspectGprScan] = useState<GPRScan | null>(null);
-  const [inspectPunditTest, setInspectPunditTest] = useState<PunditTest | null>(null);
 
   useEffect(() => {
     getBIMStructuralElements({ project: selectedProjectId }).then(setElements).catch(() => setElements([]));
     getTrimbleConnectionStatus(selectedProjectId).then(setTrimbleStatus).catch(() => setTrimbleStatus(null));
-    getGPRScans({ project: selectedProjectId }).then(setGprScans);
-    getPunditTests({ project: selectedProjectId }).then(setPunditTests).catch(() => setPunditTests([]));
   }, [selectedProjectId]);
 
   const activeElement = elements.find(e => e.id === selectedElementId) || (elements.length > 0 ? elements[0] : null);
@@ -50,14 +37,11 @@ export default function TrimbleViewerPage() {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-1 mb-8">
         <TrimbleBIMViewer
+          projectId={selectedProjectId}
           elements={elements}
           selectedElement={activeElement}
           onSelectElement={(elem) => setSelectedElementId(elem.id)}
           trimbleStatus={trimbleStatus}
-          linkedGprScans={gprScans}
-          linkedPunditTests={punditTests}
-          onOpenGprDetail={(scan) => setInspectGprScan(scan)}
-          onOpenPunditDetail={(test) => setInspectPunditTest(test)}
         />
       </div>
 
@@ -155,22 +139,6 @@ export default function TrimbleViewerPage() {
           </div>
         </div>
       </div>
-
-      {inspectGprScan && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-5xl w-full my-auto">
-            <RadargramViewer scan={inspectGprScan} onClose={() => setInspectGprScan(null)} />
-          </div>
-        </div>
-      )}
-
-      {inspectPunditTest && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-4xl w-full my-auto">
-            <PunditWaveformViewer test={inspectPunditTest} onClose={() => setInspectPunditTest(null)} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

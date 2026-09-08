@@ -31,6 +31,7 @@ import {
   getBIMStructuralElements,
   linkPunditTestToElement,
   downloadNdtReport,
+  formatVelocityMs,
 } from "@/services/digitalEye";
 
 const CRITICAL_STRENGTH_THRESHOLD_MPA = 25.0; // 25 MPa Statutory Concrete Acceptance Rule
@@ -422,7 +423,7 @@ export default function PunditStrengthPage() {
 
               <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-slate-700/60">
                 <span className="text-slate-400">Velocity:</span>
-                <span className="text-amber-300 font-bold">{simVelocity > 0 ? `${simVelocity.toLocaleString()} m/s` : '—'}</span>
+                <span className="text-amber-300 font-bold">{simVelocity > 0 ? `${formatVelocityMs(simVelocity)} m/s` : '—'}</span>
               </div>
 
               <div className="mt-3 pt-2 border-t border-slate-700/60 flex items-center gap-1.5 text-xs font-bold">
@@ -553,7 +554,7 @@ export default function PunditStrengthPage() {
                 <th className="py-3 px-5">Path L (mm)</th>
                 <th className="py-3 px-5">Transit t (µs)</th>
                 <th className="py-3 px-5">Velocity V (m/s)</th>
-                <th className="py-3 px-5">Est. fcu (MPa)</th>
+                <th className="py-3 px-5">{tests.some(t => t.readings.length > 1) ? 'Avg. Compressive Strength (MPa)' : 'Est. fcu (MPa)'}</th>
                 <th className="py-3 px-5">25 MPa Rule</th>
                 <th className="py-3 px-5 text-right">Actions</th>
               </tr>
@@ -611,7 +612,7 @@ export default function PunditStrengthPage() {
                       {isCrack
                         ? (crackDepth != null ? `d = ${crackDepth.toFixed(1)} mm` : 'Pending')
                         : isSurface ? 'Visual'
-                        : (t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending')}
+                        : (t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending')}
                     </td>
                     <td className="py-3.5 px-5 font-mono font-black text-gray-900">
                       {isCrack || isSurface ? (

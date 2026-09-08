@@ -29,7 +29,8 @@ import {
   Search,
   X,
   ChevronDown,
-  FolderOpen
+  FolderOpen,
+  Loader2
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
@@ -52,6 +53,7 @@ import {
   BIMImportStatus,
   importPunditReadings,
   downloadPunditImportTemplate,
+  formatVelocityMs,
   PunditImportError,
   PunditImportResult,
 } from "@/services/digitalEye";
@@ -89,6 +91,12 @@ export default function DataCollectionPage() {
   // BIM model import (real structural elements from the project's IFC file)
   const [ifcFile, setIfcFile] = useState<File | null>(null);
   const [isImportingIfc, setIsImportingIfc] = useState<boolean>(false);
+  // B7 — honest import feedback. 'uploading' carries a real percent from the
+  // axios progress events; 'processing' starts once the request body is sent
+  // and the server is parsing/tessellating (no measurable progress there —
+  // RVT translation via Autodesk can take several minutes).
+  const [bimImportPhase, setBimImportPhase] = useState<'uploading' | 'processing' | null>(null);
+  const [bimUploadPercent, setBimUploadPercent] = useState(0);
   // Batch Excel import (A2): the picked template workbook, its per-row
   // rejection detail, and the last import summary. All-or-nothing.
   const [excelFile, setExcelFile] = useState<File | null>(null);
@@ -137,6 +145,9 @@ export default function DataCollectionPage() {
   // Operator-recorded report context (weather / floor) — never auto-generated.
   const [formFloor, setFormFloor] = useState<string>("");
   const [formWeatherCondition, setFormWeatherCondition] = useState<string>("");
+  // 7 Sep meeting: optional concrete age at test time (days). '' = not
+  // recorded — never a fabricated default.
+  const [formConcreteAgeDays, setFormConcreteAgeDays] = useState<string | number>("");
   // Photo / raw-export attachments uploaded with the manual record.
   const [formAttachments, setFormAttachments] = useState<File[]>([]);
   // Registry search & filters (server-side ?search= / ?test_type= / ?quality_grade=).
@@ -153,6 +164,8 @@ export default function DataCollectionPage() {
   const [editForm, setEditForm] = useState<{
     structural_element: string;
     test_location: string;
+    floor: string;
+    concrete_age_days: string;
     path_length_mm: string;
     pulse_time_us: string;
     crack_path_length_mm: string;
@@ -167,6 +180,8 @@ export default function DataCollectionPage() {
   }>({
     structural_element: '',
     test_location: '',
+    floor: '',
+    concrete_age_days: '',
     path_length_mm: '',
     pulse_time_us: '',
     crack_path_length_mm: '',
@@ -185,6 +200,8 @@ export default function DataCollectionPage() {
     setEditForm({
       structural_element: t.structural_element_name || '',
       test_location: t.test_location || '',
+      floor: t.floor || '',
+      concrete_age_days: t.concrete_age_days != null ? String(t.concrete_age_days) : '',
       path_length_mm: t.path_length_mm ? String(t.path_length_mm) : '',
       pulse_time_us: t.transit_time_us ? String(t.transit_time_us) : '',
       crack_path_length_mm: t.crack_path_length_mm ? String(t.crack_path_length_mm) : '',
@@ -214,6 +231,8 @@ export default function DataCollectionPage() {
       const patch: Record<string, unknown> = {
         structural_element: editForm.structural_element.trim() || undefined,
         test_location: editForm.test_location.trim() || undefined,
+        floor: editForm.floor.trim() || undefined,
+        concrete_age_days: num(editForm.concrete_age_days),
         transducer_type: editForm.transducer_type || undefined,
         transducer_frequency_khz: num(editForm.transducer_frequency_khz),
         path_length_mm: num(editForm.path_length_mm),
@@ -435,13 +454,20 @@ export default function DataCollectionPage() {
     }
     const pickedName = ifcFile.name;
     setIsImportingIfc(true);
-    importBIMElementsFromIFC(selectedProjectId, ifcFile)
+    setBimImportPhase('uploading');
+    setBimUploadPercent(0);
+    importBIMElementsFromIFC(selectedProjectId, ifcFile, (percent) => {
+      setBimUploadPercent(percent);
+      // Body fully sent — everything after this is server-side work.
+      if (percent >= 100) setBimImportPhase('processing');
+    })
       .then((res) => finishBimImport(res, pickedName))
       .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: `⚠️ IFC import failed: ${err?.response?.data?.detail || err?.message || 'The server could not process this model.'}`, type: "error" }
       })))
       .finally(() => {
         setIsImportingIfc(false);
+        setBimImportPhase(null);
         setIfcFile(null);
       });
   };
@@ -452,12 +478,16 @@ export default function DataCollectionPage() {
     if (!selectedProjectId) return;
     setIsBimPickerOpen(false);
     setIsImportingIfc(true);
+    setBimImportPhase('processing'); // no upload — server work only
     importBIMElementsFromStored(selectedProjectId, fileId)
       .then((res) => finishBimImport(res, fileName))
       .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: `⚠️ IFC import failed: ${err?.response?.data?.detail || err?.message || 'The server could not process this model.'}`, type: "error" }
       })))
-      .finally(() => setIsImportingIfc(false));
+      .finally(() => {
+        setIsImportingIfc(false);
+        setBimImportPhase(null);
+      });
   };
 
   // Batch Excel import (A2): one row per test point, an element's consecutive
@@ -538,7 +568,7 @@ export default function DataCollectionPage() {
       setActiveTest(created);
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: {
-          message: `☁️ Cloud Receiver: Ingested ${created.test_reference}${created.pulse_velocity_ms ? ` (${created.pulse_velocity_ms.toLocaleString()} m/s${created.estimated_compressive_strength_mpa != null ? `, ${created.estimated_compressive_strength_mpa.toFixed(1)} MPa` : ''})` : ''}.`,
+          message: `☁️ Cloud Receiver: Ingested ${created.test_reference}${created.pulse_velocity_ms ? ` (${formatVelocityMs(created.pulse_velocity_ms)} m/s${created.estimated_compressive_strength_mpa != null ? `, ${created.estimated_compressive_strength_mpa.toFixed(1)} MPa` : ''})` : ''}.`,
           type: "success"
         }
       }));
@@ -658,6 +688,9 @@ export default function DataCollectionPage() {
         ...(formTestType === 'surface_quality' ? {
           surface_temperature_c: formSurfaceTemperatureC > 0 ? formSurfaceTemperatureC : undefined,
         } : {}),
+        ...(formConcreteAgeDays !== '' && formConcreteAgeDays != null ? {
+          concrete_age_days: Number(formConcreteAgeDays),
+        } : {}),
         operator_name: formOperator || undefined,
         notes: `[MANUAL_FIELD_ENTRY${formStationRef ? ` — Station ${formStationRef}` : ''}] ${formNotes}`,
         ...(registeredDevice ? { device: registeredDevice.id } : {}),
@@ -675,7 +708,7 @@ export default function DataCollectionPage() {
         detail: {
           message: formTestType === 'crack_depth'
             ? `📝 Record ${created.test_reference} registered. Server-computed crack depth: ${created.estimated_crack_depth_mm != null ? `${created.estimated_crack_depth_mm.toFixed(1)} mm` : 'analysis pending'}.`
-            : `📝 Record ${created.test_reference} registered. Server-computed: ${created.pulse_velocity_ms ? `${created.pulse_velocity_ms.toLocaleString()} m/s` : 'analysis pending'}${created.estimated_compressive_strength_mpa != null ? ` (${created.estimated_compressive_strength_mpa.toFixed(1)} MPa)` : ''}.`,
+            : `📝 Record ${created.test_reference} registered. Server-computed: ${created.pulse_velocity_ms ? `${formatVelocityMs(created.pulse_velocity_ms)} m/s` : 'analysis pending'}${created.estimated_compressive_strength_mpa != null ? ` (${created.estimated_compressive_strength_mpa.toFixed(1)} MPa)` : ''}.`,
           type: "success"
         }
       }));
@@ -780,7 +813,7 @@ export default function DataCollectionPage() {
                 </span>
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {/* B6 — "Choose file" is a platform picker: pick a model file
                   already kept on the platform, or upload from the device. */}
               <div className="relative">
@@ -862,6 +895,33 @@ export default function DataCollectionPage() {
                 <UploadCloud size={14} className={isImportingIfc ? "animate-bounce" : ""} />
                 <span>{isImportingIfc ? "Importing Model…" : "Import Elements"}</span>
               </button>
+              {isImportingIfc && bimImportPhase && (
+                <div className="w-full basis-full min-w-[240px]">
+                  {bimImportPhase === 'uploading' ? (
+                    <>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
+                        <span>Uploading {ifcFile?.name || 'model'}…</span>
+                        <span className="font-mono font-bold text-[#022C4F]">{bimUploadPercent}%</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#022C4F] rounded-full transition-all duration-300"
+                          style={{ width: `${Math.max(bimUploadPercent, 2)}%` }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-start gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-800">
+                      <Loader2 size={13} className="animate-spin shrink-0 mt-0.5" />
+                      <span>
+                        Uploaded — processing on the server. The model is being parsed and
+                        tessellated (Revit files are translated via Autodesk first); this can
+                        take several minutes. The page stays usable meanwhile.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1323,7 +1383,7 @@ export default function DataCollectionPage() {
                             className="flex-1 p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
                           />
                           <span className={`w-28 text-right text-[10px] font-mono font-bold ${previewVelocity > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-                            {previewVelocity > 0 ? `${previewVelocity.toLocaleString()} m/s` : '—'}
+                            {previewVelocity > 0 ? `${formatVelocityMs(previewVelocity)} m/s` : '—'}
                           </span>
                           <button
                             type="button"
@@ -1531,24 +1591,30 @@ export default function DataCollectionPage() {
               {/* Operator-recorded report context (C6): floor drives the report's
                   per-floor grouping; weather prints in the site section. Both
                   are typed by the operator — never derived or fabricated.
-                  Available for every test type. */}
+                  Available for every test type.
+                  7 Sep meeting: free-text floor — "mezzanine floor" and any
+                  other level name must be accepted (datalist offers the
+                  common ones as suggestions only). */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <label className="block text-gray-700 font-semibold mb-1">Floor / Level (report grouping)</label>
-                  <select
+                  <input
+                    type="text"
+                    list="pundit-floor-suggestions"
+                    placeholder="e.g. Ground Floor, Mezzanine Floor"
                     value={formFloor}
                     onChange={(e) => setFormFloor(e.target.value)}
                     className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
-                  >
-                    <option value="">Not recorded</option>
-                    <option value="Basement">Basement</option>
-                    <option value="Ground Floor">Ground Floor</option>
-                    <option value="First Floor">First Floor</option>
-                    <option value="Second Floor">Second Floor</option>
-                    <option value="Third Floor">Third Floor</option>
-                    <option value="Fourth Floor">Fourth Floor</option>
-                    <option value="Roof">Roof</option>
-                  </select>
+                  />
+                  <datalist id="pundit-floor-suggestions">
+                    <option value="Basement" />
+                    <option value="Ground Floor" />
+                    <option value="First Floor" />
+                    <option value="Second Floor" />
+                    <option value="Third Floor" />
+                    <option value="Fourth Floor" />
+                    <option value="Roof" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-gray-700 font-semibold mb-1">Weather Condition (as observed on site)</label>
@@ -1559,6 +1625,24 @@ export default function DataCollectionPage() {
                     onChange={(e) => setFormWeatherCondition(e.target.value)}
                     className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Concrete Age at Test (days — optional)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={36500}
+                    placeholder="e.g. 28 — blank if not recorded"
+                    value={formConcreteAgeDays}
+                    onChange={(e) => setFormConcreteAgeDays(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Informative beyond 28 days (strength gain past 28 days is minimal); printed in the report when recorded.
+                  </p>
                 </div>
               </div>
 
@@ -1715,8 +1799,8 @@ export default function DataCollectionPage() {
                           <th className="py-1.5 pr-3">TYPE</th>
                           <th className="py-1.5 pr-3">FLOOR</th>
                           <th className="py-1.5 pr-3">POINTS</th>
-                          <th className="py-1.5 pr-3">MEAN V (KM/S)</th>
-                          <th className="py-1.5">GRADE</th>
+                          <th className="py-1.5 pr-3">MEAN V (M/S)</th>
+                          <th className="py-1.5">REMARK</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1736,7 +1820,7 @@ export default function DataCollectionPage() {
                             <td className="py-1.5 pr-3 text-gray-500">{t.test_type.replace(/_/g, ' ')}</td>
                             <td className="py-1.5 pr-3 text-gray-500">{t.floor || '—'}</td>
                             <td className="py-1.5 pr-3 text-gray-700">{t.points}</td>
-                            <td className="py-1.5 pr-3 text-gray-700">{t.velocity_km_s != null ? t.velocity_km_s.toFixed(2) : '—'}</td>
+                            <td className="py-1.5 pr-3 text-gray-700">{formatVelocityMs(t.velocity_km_s != null ? t.velocity_km_s * 1000 : null)}</td>
                             <td className="py-1.5 text-gray-700 uppercase">{t.quality_grade}</td>
                           </tr>
                         ))}
@@ -1862,8 +1946,8 @@ export default function DataCollectionPage() {
               <>
             {/* Pulse Velocity (V) Display */}
             <div className="flex justify-between items-center text-xs font-mono p-2.5 bg-slate-800/80 rounded-xl">
-              <span className="text-slate-400">Pulse Velocity (V):</span>
-              <span className="text-amber-300 font-bold">{computedVelocity > 0 ? `${computedVelocity.toLocaleString()} m/s` : '—'}</span>
+              <span className="text-slate-400">{manualPointVelocities.length > 1 ? 'Average Pulse Velocity (V):' : 'Pulse Velocity (V):'}</span>
+              <span className="text-amber-300 font-bold">{computedVelocity > 0 ? `${formatVelocityMs(computedVelocity)} m/s` : '—'}</span>
             </div>
 
             {/* Characteristic Compressive Strength (fcu) Display */}
@@ -1873,7 +1957,7 @@ export default function DataCollectionPage() {
                 : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
             }`}>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Est. Strength (fcu):</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">{manualPointVelocities.length > 1 ? 'Average Compressive Strength (fcu):' : 'Est. Strength (fcu):'}</span>
                 <span className={`text-2xl font-black font-mono ${isStrengthCompliant ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {computedFcu != null ? `${computedFcu} MPa` : '—'}
                 </span>
@@ -1907,6 +1991,23 @@ export default function DataCollectionPage() {
             <p className="text-[11px] text-slate-400 leading-tight">
               Formula: V = L / t; fcu ≈ 8.961·V − 7.97 N/mm² (E.C.S calibration curve, valid 2.0–5.0 km/s). Evaluated under BS 1881-203.
             </p>
+            {/* Live derivation (7 Sep meeting: every figure recomputable by
+                hand) — the exact chain the server runs, with the numbers
+                currently typed. */}
+            {manualPointVelocities.length > 0 && (
+              <p className="text-[10px] text-slate-500 leading-relaxed font-mono break-words">
+                {formReadingTimes
+                  .filter(t => t > 0)
+                  .map((t, idx) => `V${String.fromCharCode(65 + idx)} = ${formPathLengthMm} mm ÷ ${t} µs = ${formatVelocityMs(manualPointVelocities[idx])} m/s`)
+                  .join(' · ')}
+                {manualPointVelocities.length > 1
+                  ? ` · V(element) = mean of ${manualPointVelocities.length} points = ${formatVelocityMs(computedVelocity)} m/s`
+                  : ''}
+                {computedFcu != null
+                  ? ` · fcu = 8.961 × ${(computedVelocity / 1000).toFixed(3)} − 7.97 = ${computedFcu} MPa`
+                  : ''}
+              </p>
+            )}
               </>
             )}
           </div>
@@ -1916,7 +2017,7 @@ export default function DataCollectionPage() {
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('show-toast', {
                   detail: {
-                    message: `Validated: V = ${computedVelocity.toLocaleString()} m/s, fcu = ${computedFcu != null ? `${computedFcu} MPa` : 'outside calibration range'}. Submit the record through the ingestion form to enter the statutory registry.`,
+                    message: `Validated: V = ${formatVelocityMs(computedVelocity)} m/s, fcu = ${computedFcu != null ? `${computedFcu} MPa` : 'outside calibration range'}. Submit the record through the ingestion form to enter the statutory registry.`,
                     type: computedFcu != null && isStrengthCompliant ? "success" : "error"
                   }
                 }));
@@ -2120,7 +2221,7 @@ export default function DataCollectionPage() {
                         : isSurface ? '—' : `${t.transit_time_us} µs`}
                     </td>
                     <td className="py-3.5 px-5 font-mono font-bold text-amber-700">
-                      {isCrack || isSurface ? '—' : t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending'}
+                      {isCrack || isSurface ? '—' : t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}
                     </td>
                     <td className="py-3.5 px-5 font-mono font-black">
                       <span className={isPassed ? 'text-emerald-600' : isAssessed ? 'text-rose-600' : 'text-gray-400'}>
@@ -2241,6 +2342,16 @@ export default function DataCollectionPage() {
                     className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs"
                   />
                 </label>
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase text-gray-500">Floor</span>
+                  <input
+                    list="pundit-floor-suggestions"
+                    value={editForm.floor}
+                    onChange={(e) => setEditForm(f => ({ ...f, floor: e.target.value }))}
+                    placeholder="e.g. Mezzanine Floor"
+                    className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs"
+                  />
+                </label>
               </div>
 
               {editingTest.test_type === 'pulse_velocity' && (
@@ -2346,6 +2457,16 @@ export default function DataCollectionPage() {
                     value={editForm.operator_name}
                     onChange={(e) => setEditForm(f => ({ ...f, operator_name: e.target.value }))}
                     className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase text-gray-500">Concrete age (days)</span>
+                  <input
+                    type="number" min="1" step="1"
+                    value={editForm.concrete_age_days}
+                    onChange={(e) => setEditForm(f => ({ ...f, concrete_age_days: e.target.value }))}
+                    placeholder="Blank = not recorded"
+                    className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
                   />
                 </label>
               </div>

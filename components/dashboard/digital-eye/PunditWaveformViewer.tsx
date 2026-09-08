@@ -22,7 +22,7 @@ import {
   SlidersHorizontal,
   Compass
 } from "lucide-react";
-import { PunditTest, downloadNdtReport } from "@/services/digitalEye";
+import { PunditTest, downloadNdtReport, formatVelocityMs } from "@/services/digitalEye";
 
 interface PunditWaveformViewerProps {
   test: PunditTest;
@@ -185,7 +185,7 @@ export default function PunditWaveformViewer({
     // Path Length & Physics Annotation
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.font = "10px monospace";
-    ctx.fillText(`L = ${pathLengthMm} mm | V = ${computedVelocity.toLocaleString()} m/s`, 12, height - 14);
+    ctx.fillText(`L = ${pathLengthMm} mm | V = ${formatVelocityMs(computedVelocity)} m/s`, 12, height - 14);
 
   }, [transducerFreq, appliedGain, pathLengthMm, transitTimeUs, isAutomatedPicking, quality]);
 
@@ -263,7 +263,7 @@ export default function PunditWaveformViewer({
 
         <div className="flex items-center gap-4 text-xs font-mono">
           <div className="text-slate-300">
-            Velocity: <span className="text-amber-400 font-bold text-sm">{computedVelocity.toLocaleString()} m/s</span>
+            Velocity: <span className="text-amber-400 font-bold text-sm">{formatVelocityMs(computedVelocity)} m/s</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-slate-400">Threshold (25 MPa):</span>
@@ -308,7 +308,7 @@ export default function PunditWaveformViewer({
             <div className="absolute top-3 right-3 bg-slate-900/90 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-700 text-xs space-y-1.5 font-mono">
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Pulse Velocity (V):</span>
-                <span className="text-amber-400 font-bold">{computedVelocity.toLocaleString()} m/s</span>
+                <span className="text-amber-400 font-bold">{formatVelocityMs(computedVelocity)} m/s</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-400">Est. Compressive (fcu):</span>
@@ -337,7 +337,7 @@ export default function PunditWaveformViewer({
           <div className="mt-4 p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
             <div className="flex justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
               <span>BS 1881-203 / ASTM C597 Velocity Classification Scale</span>
-              <span>Observed Velocity: {computedVelocity.toLocaleString()} m/s</span>
+              <span>Observed Velocity: {formatVelocityMs(computedVelocity)} m/s</span>
             </div>
 
             <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold">

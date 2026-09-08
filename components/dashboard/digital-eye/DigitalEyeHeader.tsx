@@ -15,12 +15,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getProjects, Project } from "@/services/projects";
-import { 
-  BIMStructuralElement, 
-  TrimbleConnection, 
-  getBIMStructuralElements, 
-  getTrimbleConnectionStatus, 
-  triggerTrimbleSync 
+import {
+  BIMStructuralElement,
+  TrimbleConnection,
+  getBIMImportStatus,
+  getBIMStructuralElements,
+  getTrimbleConnectionStatus,
+  triggerTrimbleSync
 } from "@/services/digitalEye";
 
 interface DigitalEyeHeaderProps {
@@ -49,6 +50,10 @@ export default function DigitalEyeHeader({
   const [elements, setElements] = useState<BIMStructuralElement[]>([]);
   const [trimbleStatus, setTrimbleStatus] = useState<TrimbleConnection | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  // Display name of the currently imported BIM model (e.g. "test gps") —
+  // shown beside the element selector so the model in view is always
+  // named at the top of the workspace (7 Sep review follow-up).
+  const [bimModelName, setBimModelName] = useState<string | null>(null);
 
   useEffect(() => {
     getProjects().then(res => {
@@ -78,6 +83,12 @@ export default function DigitalEyeHeader({
     }).catch(() => {
       // Backend unavailable / route missing — leave the selector hidden (honest).
       setElements([]);
+    });
+    getBIMImportStatus(selectedProjectId || '').then(res => {
+      setBimModelName(res?.currently_imported?.source_file ?? null);
+    }).catch(() => {
+      // No import status for this project — no model name to show (honest).
+      setBimModelName(null);
     });
     getTrimbleConnectionStatus(selectedProjectId).then(res => {
       setTrimbleStatus(res);
@@ -137,6 +148,21 @@ export default function DigitalEyeHeader({
             </select>
           </div>
         </div>
+
+        {/* Imported BIM Model Name */}
+        {bimModelName && (
+          <div
+            className="flex items-start gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs"
+            title={`Currently imported BIM model: ${bimModelName}`}
+          >
+            <Box size={14} className="text-blue-500 shrink-0 mt-px" />
+            {/* Long file names (e.g. "PROPOSED STACKING AREA_IFC.rvt") must
+                read in full — the chip wraps instead of truncating. */}
+            <span className="font-semibold text-blue-900 max-w-[200px] sm:max-w-[280px] leading-snug break-words">
+              {bimModelName}
+            </span>
+          </div>
+        )}
 
         {/* Structural Element IFC GUID Selector */}
         {onElementChange && elements.length > 0 && (

@@ -4,6 +4,17 @@ import api from './api';
 // 1. DATA MODELS & TAXONOMY
 // ==========================================
 
+/**
+ * Pulse velocity in m/s for display — client unit standard (7 Sep 2026):
+ * two decimals, decimal points, NEVER thousands separators (4285.71, not
+ * "4,285.71"). Null renders as an em dash.
+ */
+export function formatVelocityMs(velocityMs: number | null | undefined): string {
+  return velocityMs == null || Number.isNaN(velocityMs)
+    ? '—'
+    : velocityMs.toFixed(2);
+}
+
 export type StructuralDiscipline = 'Structural' | 'Civil' | 'MEP' | 'Geotechnical' | 'Architecture';
 
 export type StructuralCategory =
@@ -149,6 +160,9 @@ export interface PunditTest {
   // Operator-recorded context for the NDT report (never auto-generated).
   weather_condition: string;
   floor: string;
+  // Optional concrete maturity at test time (7 Sep review item 18);
+  // null = not recorded.
+  concrete_age_days?: number | null;
   // Crack-depth method (BS 1881-203 time difference): 0 when not a crack test.
   crack_path_length_mm: number;
   crack_pulse_time_us: number;
@@ -192,7 +206,8 @@ export interface DigitalEyeFinding {
   title: string;
   description: string;
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  confidence_score: number; // 0 - 100
+  confidence_score: number; // 0 - 100; 0 = not assessed (no number invented)
+  logged_manually?: boolean;
   depth_mm?: number;
   deviation_mm?: number;
   gps_coordinates?: { lat: number; lng: number; elevation: number };
@@ -365,6 +380,7 @@ function mapPunditTest(row: any): PunditTest {
     })),
     weather_condition: row.weather_condition || '',
     floor: row.floor || '',
+    concrete_age_days: row.concrete_age_days ?? null,
     crack_path_length_mm: row.crack_path_length_mm ?? 0,
     crack_pulse_time_us: row.crack_pulse_time_us ?? 0,
     uncracked_pulse_time_us: row.uncracked_pulse_time_us ?? 0,
@@ -386,14 +402,21 @@ function mapPunditTest(row: any): PunditTest {
 function mapBimElement(row: any): BIMStructuralElement {
   const coords = row.coordinates || {};
   const props = row.properties || {};
+  const name = row.element_name || row.element_id || 'Unnamed Element';
   return {
     id: String(row.id),
     element_guid: row.bim_guid || '',
-    name: row.element_name || row.element_id || 'Unnamed Element',
+    name,
     category: (row.element_type || 'UNKNOWN') as StructuralCategory,
     discipline: (row.discipline || 'Structural') as StructuralDiscipline,
     project: String(row.project ?? ''),
-    grid_location: row.element_id || row.level || '',
+    // Designation / grid reference shown next to the name. IFC imports key
+    // element_id by NAME, so falling back to it printed
+    // "Floor:200THK RC SLAB (Floor:200THK RC SLAB)" in every element
+    // selector — only use it when it differs from the name, else the level.
+    grid_location: (row.element_id && row.element_id !== name)
+      ? row.element_id
+      : (row.level || ''),
     level: row.level || '',
     coordinates_3d: {
       x: Number(coords.x ?? 0),
@@ -448,8 +471,12 @@ function mapFinding(row: any): DigitalEyeFinding {
     title: row.title ?? '',
     description: row.description ?? '',
     severity: FINDING_SEVERITY[row.risk_level] ?? 'MEDIUM',
-    // Backend risk_score is 0.0–1.0; the UI renders a 0–100 confidence percent.
-    confidence_score: row.risk_score != null ? Math.round(Number(row.risk_score) * 100) : 0,
+    // Evidence confidence (0.0-1.0 from the linked evidence records) — NOT
+    // risk_score: a 0.78 risk was being displayed as "78% confidence"
+    // (7 Sep meeting item 6). 0 = no evidence confidence recorded; the UI
+    // hides the badge rather than inventing a number.
+    confidence_score: row.confidence != null ? Math.round(Number(row.confidence) * 100) : 0,
+    logged_manually: row.logged_manually ?? false,
     evidence_photos: [],
     status: FINDING_STATUS[row.status] ?? 'OPEN',
     ncr_reference: row.linked_ncr_reference || undefined,
@@ -487,6 +514,7 @@ export const getBIMStructuralElements = async (params?: { project?: string; disc
 export const importBIMElementsFromIFC = async (
   projectId: string,
   file: File,
+  onUploadProgress?: (percent: number) => void,
 ): Promise<{
   file: string;
   translated_from_rvt?: boolean;
@@ -500,7 +528,15 @@ export const importBIMElementsFromIFC = async (
   const form = new FormData();
   form.append('project', projectId);
   form.append('file', file);
-  const res = await api.post('/digital-eye/bim-elements/import-ifc/', form);
+  const res = await api.post('/digital-eye/bim-elements/import-ifc/', form, {
+    // Upload progress only — once the request body is sent the server is
+    // parsing/tessellating, which has no measurable progress (B7).
+    onUploadProgress: onUploadProgress
+      ? (e) => {
+          if (e.total) onUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      : undefined,
+  });
   return unwrap<any>(res, null);
 };
 
@@ -865,6 +901,8 @@ export interface PunditTestInput {
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
   floor?: string;
+  // Optional concrete age at test time in days (7 Sep review item 18).
+  concrete_age_days?: number;
   // Multi-point readings (A/B/C…): the operator types the raw field
   // measurements only — transit times (pulse velocity), cracked/uncracked
   // times (crack depth) or surface conditions (surface quality). Velocity /
@@ -904,6 +942,7 @@ export const createPunditTest = async (input: PunditTestInput): Promise<PunditTe
   if (input.surface_temperature_c != null) body.surface_temperature_c = input.surface_temperature_c;
   if (input.weather_condition) body.weather_condition = input.weather_condition;
   if (input.floor) body.floor = input.floor;
+  if (input.concrete_age_days != null) body.concrete_age_days = input.concrete_age_days;
   if (input.readings?.length) {
     // Keep any point that carries a real field measurement — a transit time
     // (pulse velocity), a t_c/t_0 pair (crack depth) or an observed surface
@@ -1041,11 +1080,43 @@ export const downloadPunditImportTemplate = async (projectId?: string): Promise<
   a.remove();
   window.URL.revokeObjectURL(url);
 };
+
+/**
+ * Export the project's PUNDIT results to Excel — the same values the
+ * official NDT report's Section 5.0 tables print (velocities in m/s).
+ * Mirrors the downloadPunditImportTemplate blob handling above.
+ */
+export const exportPunditResults = async (projectId: string): Promise<string> => {
+  const res = await api.get(
+    `/digital-eye/pundit-tests/export_results/?project=${encodeURIComponent(projectId)}`,
+    { responseType: 'blob' },
+  );
+  const blob = res instanceof Blob
+    ? res
+    : new Blob([res.data || res], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+  const disposition = (res as any)?.headers?.['content-disposition'] || '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const filename = match ? match[1] : 'nexucon_pundit_results.xlsx';
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
 export interface PunditProjectAnalysis {
   project: string;
   tests_analysed: number;
   analysis_id: string;
   risk_level: string;
+  /** Evidence-based analysis confidence (0.0-1.0), or null when nothing
+   *  was gradable — never a fabricated number. */
+  confidence: number | null;
   observations: string[];
   recommendations: Array<{ priority: string; recommendation: string } | string>;
   reasoning_log: string[];
