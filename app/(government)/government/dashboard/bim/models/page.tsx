@@ -404,13 +404,13 @@ export default function BIMModelsRepository() {
                                   {model.name}
                                 </span>
                                 <span className="font-mono text-[10px] text-slate-400">
-                                  {model.model_reference || 'MDL-2026'}
+                                  {model.model_reference || '—'}
                                 </span>
                               </div>
                             </div>
                           </td>
                           <td className="py-4 px-6 font-bold text-slate-700">
-                            {model.project_name || 'Lagos Project'}
+                            {model.project_name || '—'}
                           </td>
                           <td className="py-4 px-6">
                             <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${getDisciplineColor(model.discipline)}`}>
@@ -421,7 +421,7 @@ export default function BIMModelsRepository() {
                             {model.current_version}
                           </td>
                           <td className="py-4 px-6 text-slate-600">
-                            <span className="font-bold">{model.element_count?.toLocaleString() || '12,500'}</span> elem • {model.file_size}
+                            <span className="font-bold">{model.element_count?.toLocaleString() || '—'}</span> elem • {model.file_size}
                           </td>
                           <td className="py-4 px-6">
                             {model.is_digitally_certified ? (
@@ -436,8 +436,8 @@ export default function BIMModelsRepository() {
                           </td>
                           <td className="py-4 px-6 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button 
-                                onClick={() => router.push('/government/dashboard/bim/review')}
+                              <button
+                                onClick={() => router.push(`/government/dashboard/bim/review?model=${model.id}`)}
                                 className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 transition-colors"
                                 title="Open 3D Viewer"
                               >
@@ -477,8 +477,8 @@ export default function BIMModelsRepository() {
                     >
                       <div>
                         {/* 3D Model Thumbnail Viewport */}
-                        <div 
-                          onClick={() => router.push(`/government/dashboard/bim/review`)}
+                        <div
+                          onClick={() => router.push(`/government/dashboard/bim/review?model=${model.id}`)}
                           className="h-44 bg-gradient-to-br from-slate-900 to-[#022C4F] flex items-center justify-center relative overflow-hidden cursor-pointer"
                         >
                           <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-20 mix-blend-overlay"></div>
@@ -488,17 +488,18 @@ export default function BIMModelsRepository() {
                             <Box size={40} className="text-white/80" />
                           </div>
 
-                          {/* Top Left Project Code */}
+                          {/* Top Left Project Code — only the recorded values, never
+                              invented format/LOD placeholders. */}
                           <div className="absolute top-3 left-3 z-20">
                             <span className="px-2 py-0.5 bg-black/50 backdrop-blur-md text-white rounded text-[9px] font-mono font-bold">
-                              {model.format || 'IFC4'} • {model.lod || 'LOD 350'}
+                              {[model.format, model.lod].filter(Boolean).join(' • ') || 'BIM Model'}
                             </span>
                           </div>
                           
                           {/* Actions Overlay Top Right */}
                           <div className="absolute top-3 right-3 flex gap-1 z-20">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); router.push('/government/dashboard/bim/review'); }} 
+                            <button
+                              onClick={(e) => { e.stopPropagation(); router.push(`/government/dashboard/bim/review?model=${model.id}`); }}
                               className="p-1.5 bg-black/50 hover:bg-white hover:text-slate-900 text-white rounded-lg backdrop-blur-md shadow transition-colors"
                               title="Open in 3D Viewer"
                             >
@@ -520,8 +521,8 @@ export default function BIMModelsRepository() {
                             <span className="text-[10px] font-mono font-bold text-slate-400 block mb-0.5">
                               {model.project_name || 'Project Model'}
                             </span>
-                            <h3 
-                              onClick={() => router.push(`/government/dashboard/bim/review`)}
+                            <h3
+                              onClick={() => router.push(`/government/dashboard/bim/review?model=${model.id}`)}
                               className="font-black text-[#022C4F] text-sm line-clamp-2 group-hover:text-blue-600 transition-colors cursor-pointer"
                             >
                               {model.name}
@@ -550,7 +551,7 @@ export default function BIMModelsRepository() {
                             </div>
                             <div>
                               <span className="text-slate-400 text-[10px] font-bold uppercase block">Elements</span>
-                              <span className="text-slate-800 font-bold">{model.element_count?.toLocaleString() || '14,200'}</span>
+                              <span className="text-slate-800 font-bold">{model.element_count?.toLocaleString() || '—'}</span>
                             </div>
                           </div>
                         </div>

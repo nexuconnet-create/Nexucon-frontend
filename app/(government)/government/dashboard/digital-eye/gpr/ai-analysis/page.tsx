@@ -196,9 +196,15 @@ export default function GPRAIAnalysisPage() {
                     }`}>
                       {finding.severity}
                     </span>
-                    <span className="text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded font-semibold">
-                      AI Confidence: {finding.confidence_score}%
-                    </span>
+                    {(finding.confidence_score ?? 0) > 0 ? (
+                      <span className="text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded font-semibold">
+                        AI Confidence: {finding.confidence_score}%
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded font-semibold">
+                        Confidence: not yet assessed
+                      </span>
+                    )}
                     {finding.depth_mm && (
                       <span className="text-[10px] font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
                         Depth: {finding.depth_mm}mm

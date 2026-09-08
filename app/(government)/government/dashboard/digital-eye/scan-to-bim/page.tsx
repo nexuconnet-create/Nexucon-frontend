@@ -107,6 +107,10 @@ export default function ScanToBIMPage() {
   const plyFile = files.find(f => f.file_type === 'gaussian_splat' || f.file_type === 'raw_scan');
   const bimFile = files.find(f => f.file_type === 'bim');
 
+  // The scan session's project — its imported BIM model overlays the point
+  // cloud (real tessellated geometry; B8).
+  const sessionProjectId = (sessions.find(s => s.id === selectedScan) as any)?.project || undefined;
+
   // Stored file URLs are presigned R2 links that (a) expire ~1h after upload
   // and (b) cannot be fetched cross-origin from the browser. Route the viewer
   // through the same-origin backend streaming proxy instead. Keyed on
@@ -280,7 +284,7 @@ export default function ScanToBIMPage() {
 
         {/* Right Panel - Real 3D Viewer */}
         <div className="lg:col-span-3 bg-slate-900 rounded-2xl overflow-hidden relative shadow-lg flex flex-col border border-slate-800">
-          <BimViewer plyUrl={contentUrl(plyFile)} bimUrl={contentUrl(bimFile)} bimOpacity={bimOpacity / 100} />
+          <BimViewer plyUrl={contentUrl(plyFile)} bimUrl={contentUrl(bimFile)} projectId={sessionProjectId} bimOpacity={bimOpacity / 100} />
 
           {/* Tooltips Overlay */}
           {alignmentResult && hasDeviation && (

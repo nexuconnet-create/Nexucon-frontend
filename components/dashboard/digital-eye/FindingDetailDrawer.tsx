@@ -33,13 +33,15 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { 
-  DigitalEyeFinding, 
-  escalateFindingToNCR, 
-  FindingAIDiagnostic, 
-  getFindingAIDiagnostic, 
-  downloadNcrReport, 
-  PunditTest 
+import {
+  DigitalEyeFinding,
+  escalateFindingToNCR,
+  FindingAIDiagnostic,
+  getFindingAIDiagnostic,
+  downloadNcrReport,
+  getBIMImportStatus,
+  PunditTest,
+  formatVelocityMs
 } from "@/services/digitalEye";
 
 interface FindingDetailDrawerProps {
@@ -79,7 +81,7 @@ function getFallbackDiagnostic(finding: DigitalEyeFinding, punditTests?: PunditT
     structural_element: elem,
     bim_guid: finding.structural_element_guid,
     severity: finding.severity,
-    confidence_score: finding.confidence_score || 78,
+    confidence_score: finding.confidence_score || 0,
     status: finding.status,
     ncr_reference: finding.ncr_reference || (finding.status === 'CONVERTED_TO_NCR' ? `NCR-2026-${finding.finding_reference.slice(-6)}` : null),
     acoustic_inversion: {
@@ -88,7 +90,7 @@ function getFallbackDiagnostic(finding: DigitalEyeFinding, punditTests?: PunditT
       quality_grade: grade,
       anomaly_depth_mm: depth,
       spacing_variance_mm: variance,
-      inversion_summary: `Acoustic pulse velocity inversion across ${elem} estimates localized velocity at ${meanV.toFixed(2)} km/s (${Math.round(meanV * 1000).toLocaleString()} m/s), indicating a '${grade}' concrete density zone. Acoustic wave attenuation and signal diffraction align with ±${variance}mm rebar spacing variance at ${depth}mm depth.`,
+      inversion_summary: `Acoustic pulse velocity inversion across ${elem} estimates localized velocity at ${formatVelocityMs(meanV * 1000)} m/s, indicating a '${grade}' concrete density zone. Acoustic wave attenuation and signal diffraction align with ±${variance}mm rebar spacing variance at ${depth}mm depth.`,
     },
     root_cause_analysis: `Localized reinforcement displacement during concrete placement created a ${variance}mm bar spacing irregularity in ${elem}. Aggregate bridging and restricted vibration compaction produced a low-velocity acoustic shadow and potential internal honeycombing.`,
     standards_compliance: [
@@ -144,6 +146,22 @@ export default function FindingDetailDrawer({
   const [diagnostic, setDiagnostic] = useState<FindingAIDiagnostic | null>(null);
   const [isLoadingDiagnostic, setIsLoadingDiagnostic] = useState(false);
   const [isDownloadingNcr, setIsDownloadingNcr] = useState(false);
+  const [bimModelName, setBimModelName] = useState<string | null>(null);
+
+  // BIM model display name for the anchor block (7 Sep review: the uploaded
+  // model's name — e.g. "test gps" — must be visible on the finding).
+  const anchorProjectId = finding?.project || '';
+  useEffect(() => {
+    let cancelled = false;
+    setBimModelName(null);
+    if (!anchorProjectId) return;
+    getBIMImportStatus(anchorProjectId)
+      .then((status) => {
+        if (!cancelled) setBimModelName(status?.currently_imported?.source_file ?? null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [anchorProjectId]);
 
   useEffect(() => {
     if (isOpen && finding) {
@@ -280,7 +298,9 @@ export default function FindingDetailDrawer({
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-200 block flex items-center gap-1.5">
                   Technical Defect Record
-                  <span className="bg-blue-800 text-blue-100 px-1.5 py-0.2 rounded text-[9px]">AI INFERRED</span>
+                  <span className="bg-blue-800 text-blue-100 px-1.5 py-0.2 rounded text-[9px]">
+                    {finding.logged_manually ? 'FIELD LOGGED' : 'AI INFERRED'}
+                  </span>
                 </span>
                 <h2 className="text-lg font-bold font-mono">{finding.finding_reference}</h2>
               </div>
@@ -301,10 +321,17 @@ export default function FindingDetailDrawer({
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${getSeverityStyle(finding.severity)}`}>
                   {finding.severity} Severity
                 </span>
-                <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono">
-                  <Sparkles size={12} className="text-amber-500" />
-                  AI Confidence: {finding.confidence_score}%
-                </span>
+                {(finding.confidence_score ?? 0) > 0 ? (
+                  <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                    <Sparkles size={12} className="text-amber-500" />
+                    AI Confidence: {finding.confidence_score}%
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full flex items-center gap-1 font-mono" title="No evidence-backed confidence is recorded for this finding yet — no number is invented.">
+                    <Sparkles size={12} className="text-gray-400" />
+                    Confidence: not yet assessed
+                  </span>
+                )}
                 <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
                   finding.status === 'CONVERTED_TO_NCR'
                     ? 'bg-purple-50 text-purple-700 border-purple-200'
@@ -326,19 +353,29 @@ export default function FindingDetailDrawer({
                 Structural BIM Anchor
               </h4>
               <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="col-span-2">
+                  <span className="text-gray-400 block text-[10px] uppercase font-bold">BIM Model:</span>
+                  <span className="font-semibold text-gray-800">
+                    {bimModelName || 'No model imported for this project'}
+                  </span>
+                </div>
                 <div>
                   <span className="text-gray-400 block text-[10px] uppercase font-bold">Project:</span>
-                  <span className="font-semibold text-gray-800">{finding.project_name || "Botanical Garden Road, Ebute Metta"}</span>
+                  <span className="font-semibold text-gray-800">{finding.project_name || '—'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 block text-[10px] uppercase font-bold">Element:</span>
-                  <span className="font-semibold text-gray-800">{finding.structural_element_name || finding.structural_element_id || "Floor:200THK RC SLAB:780904"}</span>
+                  <span className="font-semibold text-gray-800">{finding.structural_element_name || finding.structural_element_id || '—'}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-gray-400 block text-[10px] uppercase font-bold">IFC GUID:</span>
-                  <span className="font-mono text-gray-700 text-[11px] select-all bg-white px-2 py-0.5 rounded border border-gray-200 inline-block mt-0.5">
-                    {finding.structural_element_guid || "232RR9q4f7eQ9Jps1smHAy"}
-                  </span>
+                  {finding.structural_element_guid ? (
+                    <span className="font-mono text-gray-700 text-[11px] select-all bg-white px-2 py-0.5 rounded border border-gray-200 inline-block mt-0.5">
+                      {finding.structural_element_guid}
+                    </span>
+                  ) : (
+                    <span className="text-gray-700 text-[11px]">Not anchored to a BIM element</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -407,7 +444,7 @@ export default function FindingDetailDrawer({
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block">Est. Velocity</span>
                   <span className="text-base font-bold font-mono text-amber-700">
-                    {activeDiag.acoustic_inversion.velocity_ms.toLocaleString()} m/s
+                    {formatVelocityMs(activeDiag.acoustic_inversion.velocity_ms)} m/s
                   </span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
@@ -513,7 +550,7 @@ export default function FindingDetailDrawer({
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-amber-700">
-                          {test.velocity_km_s != null ? `${test.velocity_km_s.toFixed(2)} km/s` : 'Pending'}
+                          {test.velocity_km_s != null ? `${formatVelocityMs(test.velocity_km_s * 1000)} m/s` : 'Pending'}
                         </span>
                         <span className="ml-2 text-[10px] uppercase font-bold text-gray-500">
                           ({test.quality_grade})

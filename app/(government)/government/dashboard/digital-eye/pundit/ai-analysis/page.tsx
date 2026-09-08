@@ -19,7 +19,7 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, PunditProjectAnalysis, analyzePunditProject, getBIMStructuralElements, BIMStructuralElement } from "@/services/digitalEye";
+import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, PunditProjectAnalysis, analyzePunditProject, getBIMStructuralElements, BIMStructuralElement, formatVelocityMs } from "@/services/digitalEye";
 
 export default function PunditAIAnalysisPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -150,6 +150,7 @@ export default function PunditAIAnalysisPage() {
     provider: string;
     model: string;
     testsAnalysed: number;
+    confidence: number | null;
   } | null = freshRun
     ? {
         reference: freshRun.analysis_id,
@@ -160,6 +161,7 @@ export default function PunditAIAnalysisPage() {
         provider: freshRun.model_provider,
         model: freshRun.model_version,
         testsAnalysed: freshRun.tests_analysed,
+        confidence: freshRun.confidence ?? null,
       }
     : latestAnalysis
       ? {
@@ -171,6 +173,7 @@ export default function PunditAIAnalysisPage() {
           provider: latestAnalysis.model_provider,
           model: latestAnalysis.model_version,
           testsAnalysed: tests.length,
+          confidence: latestAnalysis.confidence ?? null,
         }
       : null;
 
@@ -231,7 +234,7 @@ export default function PunditAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Mean Velocity (AI Calibrated)</span>
-          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">{meanVelocity != null ? `${meanVelocity.toLocaleString()} m/s` : '—'}</p>
+          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">{meanVelocity != null ? `${formatVelocityMs(meanVelocity)} m/s` : '—'}</p>
           <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">
             {meanFcu != null ? `Est. Strength: ${meanFcu} MPa (E.C.S)` : 'No assessed stations yet'}
           </span>
@@ -307,6 +310,11 @@ export default function PunditAIAnalysisPage() {
               <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg">
                 MODEL: {shownAnalysis.provider ? `${shownAnalysis.provider}${shownAnalysis.model ? ` · ${shownAnalysis.model}` : ''}` : 'DETERMINISTIC ENGINE'}
               </span>
+              {shownAnalysis.confidence != null && (
+                <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-lg">
+                  EVIDENCE CONFIDENCE: {Math.round(shownAnalysis.confidence * 100)}%
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -397,7 +405,7 @@ export default function PunditAIAnalysisPage() {
                     <td className="px-4 py-3 font-mono text-gray-500">{e.reference}</td>
                     <td className="px-4 py-3 text-gray-600">{e.floor}</td>
                     <td className="px-4 py-3 text-center font-mono text-gray-700">{e.pointLabels} <span className="text-gray-400">({e.points})</span></td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-amber-700">{e.meanVelocity.toLocaleString()} m/s</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-amber-700">{formatVelocityMs(e.meanVelocity)} m/s</td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-gray-800">{e.meanFcu != null ? `${e.meanFcu.toFixed(1)} MPa` : '—'}</td>
                     <td className="px-6 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -478,9 +486,11 @@ export default function PunditAIAnalysisPage() {
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
                       {finding.severity}
                     </span>
-                    <span className="text-[10px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold">
-                      AI Inversion Confidence: {finding.confidence_score}%
-                    </span>
+                    {finding.confidence_score > 0 && (
+                      <span className="text-[10px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold">
+                        Evidence Confidence: {finding.confidence_score}%
+                      </span>
+                    )}
                     {finding.status === 'CONVERTED_TO_NCR' && (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
                         CONVERTED TO NCR

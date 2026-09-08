@@ -19,7 +19,6 @@ import { motion } from "framer-motion";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
-import TrimbleBIMViewer from "@/components/dashboard/digital-eye/TrimbleBIMViewer";
 import {
   DigitalEyeFinding,
   getDigitalEyeFindings,
@@ -47,10 +46,15 @@ export default function TrimbleAIAnalysisPage() {
     getBIMStructuralElements({ project: selectedProjectId }).then(setElements).catch(() => setElements([]));
   }, [selectedProjectId, selectedElementId]);
 
-  const filteredFindings = findings.filter(f => 
-    f.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredFindings = findings.filter(f =>
+    f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.finding_reference.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Metric-card figures are computed from the loaded records only — no
+  // fabricated compliance/accuracy percentages (B8 honesty rule).
+  const highSeverityCount = findings.filter(f => f.severity === 'HIGH' || f.severity === 'CRITICAL').length;
+  const openCount = findings.filter(f => f.status === 'OPEN').length;
 
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
@@ -81,16 +85,16 @@ export default function TrimbleAIAnalysisPage() {
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex justify-between items-start mb-3">
-            <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl">
+            <div className="p-2.5 bg-amber-50 text-amber-700 rounded-xl">
               <ShieldCheck size={22} />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              NBC 2020 §14.2
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+              Review Required
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Tolerance Compliance (±20mm)</span>
-          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">97.8%</p>
-          <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">RMS Deviation: 8.4 mm</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">High-Severity Outliers</span>
+          <p className="text-3xl font-bold text-amber-600 font-mono mt-1">{highSeverityCount}</p>
+          <span className="text-[11px] text-gray-500 mt-1 block">HIGH / CRITICAL severity findings recorded</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -99,12 +103,12 @@ export default function TrimbleAIAnalysisPage() {
               <AlertTriangle size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full">
-              BCF Sync Req.
+              Action Queue
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Geometric Outliers & Clashes</span>
-          <p className="text-3xl font-bold text-rose-600 font-mono mt-1">{findings.length}</p>
-          <span className="text-[11px] text-rose-600 font-semibold mt-1 block">Shear Wall & Lift Core Offset</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Open Geometric Outliers</span>
+          <p className="text-3xl font-bold text-rose-600 font-mono mt-1">{openCount}</p>
+          <span className="text-[11px] text-gray-500 mt-1 block">Findings not yet resolved</span>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -113,12 +117,14 @@ export default function TrimbleAIAnalysisPage() {
               <Zap size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
-              Point-to-Mesh
+              Correlation
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">ICP Registration Accuracy</span>
-          <p className="text-3xl font-bold text-indigo-600 font-mono mt-1">± 3.2 mm</p>
-          <span className="text-[11px] text-indigo-700 font-medium mt-1 block">Automated SLAM alignment</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Findings With Recorded Confidence</span>
+          <p className="text-3xl font-bold text-indigo-600 font-mono mt-1">
+            {findings.filter(f => (f.confidence_score ?? 0) > 0).length}
+          </p>
+          <span className="text-[11px] text-gray-500 mt-1 block">Carry an evidence-based AI confidence score</span>
         </motion.div>
       </div>
 
@@ -166,9 +172,18 @@ export default function TrimbleAIAnalysisPage() {
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
                       {finding.severity}
                     </span>
-                    <span className="text-[10px] font-mono text-blue-800 bg-blue-50 px-2 py-0.5 rounded font-semibold">
-                      AI Tolerance Confidence: {finding.confidence_score}%
-                    </span>
+                    {(finding.confidence_score ?? 0) > 0 ? (
+                      <span className="text-[10px] font-mono text-blue-800 bg-blue-50 px-2 py-0.5 rounded font-semibold">
+                        AI Confidence: {finding.confidence_score}%
+                      </span>
+                    ) : (
+                      <span
+                        className="text-[10px] font-mono text-gray-500 bg-gray-50 px-2 py-0.5 rounded"
+                        title="Confidence is only shown when the platform has computed an evidence-based score for this finding"
+                      >
+                        Confidence: not yet assessed
+                      </span>
+                    )}
                     {finding.deviation_mm && (
                       <span className="text-[10px] font-mono text-rose-700 bg-rose-50 px-2 py-0.5 rounded font-bold">
                         Variance: +{finding.deviation_mm}mm

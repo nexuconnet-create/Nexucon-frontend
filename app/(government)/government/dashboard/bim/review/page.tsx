@@ -54,7 +54,10 @@ export default function DesignReview() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    // Deep link from the models page — ?model=<id> selects that model on
+    // load instead of defaulting to the first one.
+    const modelParam = new URLSearchParams(window.location.search).get('model');
+    fetchData(modelParam || undefined);
   }, [fetchData]);
 
   const handleModelChange = async (modelId: string) => {

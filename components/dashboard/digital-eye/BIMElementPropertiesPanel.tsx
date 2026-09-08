@@ -170,9 +170,11 @@ export default function BIMElementPropertiesPanel({
             <Row label="Centre X" value={`${fmtCoord(bounds.center[0])} m`} />
             <Row label="Centre Y" value={`${fmtCoord(bounds.center[1])} m`} />
             <Row label="Centre Z" value={`${fmtCoord(bounds.center[2])} m`} />
-            <Row label="Size X" value={`${fmtCoord(bounds.size[0])} m`} />
-            <Row label="Size Y" value={`${fmtCoord(bounds.size[1])} m`} />
-            <Row label="Size Z" value={`${fmtCoord(bounds.size[2])} m`} />
+            {/* Axis terminology per 7 Sep review; dimensions shown in metres,
+                matching the section title and the Centre rows above. */}
+            <Row label="Dimension X (m)" value={`${fmtCoord(bounds.size[0])} m`} />
+            <Row label="Dimension Y (m)" value={`${fmtCoord(bounds.size[1])} m`} />
+            <Row label="Dimension Z (m)" value={`${fmtCoord(bounds.size[2])} m`} />
           </div>
         </div>
       )}

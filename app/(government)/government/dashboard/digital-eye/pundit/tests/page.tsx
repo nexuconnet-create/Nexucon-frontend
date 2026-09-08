@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Sparkles, Download, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import { PunditTest, getPunditTests, downloadNdtReport } from "@/services/digitalEye";
+import { PunditTest, getPunditTests, downloadNdtReport, exportPunditResults, formatVelocityMs } from "@/services/digitalEye";
 
 export default function PunditTestsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -43,6 +43,17 @@ export default function PunditTestsPage() {
       .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" } })));
   };
 
+  // Excel export whose values match the report's Section 5.0 tables exactly.
+  const handleExportResults = () => {
+    if (!selectedProjectId) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ Select a project to export its results to Excel.', type: "error" } }));
+      return;
+    }
+    exportPunditResults(selectedProjectId)
+      .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Downloaded ${filename} — values match the generated NDT report (m/s).`, type: "success" } })))
+      .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Excel export failed.'}`, type: "error" } })));
+  };
+
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
       <DigitalEyeHeader
@@ -54,7 +65,17 @@ export default function PunditTestsPage() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
         <div className="p-5 border-b border-gray-100 flex justify-between items-center">
           <h2 className="text-base font-bold text-[#022C4F]">Proceq Pundit PL-200 NDT Test Records</h2>
-          <span className="text-xs text-gray-500 font-mono">{tests.length} Records</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportResults}
+              disabled={!selectedProjectId}
+              title="Export results to Excel — values match the generated NDT report"
+              className="px-3 py-1.5 border border-gray-200 hover:bg-slate-100 rounded-lg text-xs font-bold text-gray-700 cursor-pointer disabled:opacity-50"
+            >
+              Export to Excel
+            </button>
+            <span className="text-xs text-gray-500 font-mono">{tests.length} Records</span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -84,8 +105,8 @@ export default function PunditTestsPage() {
                 <th className="py-3 px-5">Points</th>
                 <th className="py-3 px-5">Transducer Mode</th>
                 <th className="py-3 px-5">Velocity (m/s)</th>
-                <th className="py-3 px-5">Strength (MPa)</th>
-                <th className="py-3 px-5">Grade</th>
+                <th className="py-3 px-5">{tests.some(t => t.readings.length > 1) ? 'Avg. Compressive Strength (MPa)' : 'Strength (MPa)'}</th>
+                <th className="py-3 px-5">Remarks</th>
                 <th className="py-3 px-5 text-right">Actions</th>
               </tr>
             </thead>
@@ -110,8 +131,8 @@ export default function PunditTestsPage() {
                       : 'A'}
                   </td>
                   <td className="py-3.5 px-5 font-mono text-gray-600">{t.transducer_type ? `${t.transducer_type} (${t.transducer_frequency_khz || '—'}kHz)` : `${t.transducer_frequency_khz || '—'} kHz`}</td>
-                  <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms ? `${t.pulse_velocity_ms.toLocaleString()} m/s` : 'Pending'}</td>
-                  <td className="py-3.5 px-5 font-mono font-bold text-gray-800">{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : '—'}</td>
+                  <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}</td>
+                  <td className="py-3.5 px-5 font-mono font-bold text-gray-800" title={t.readings.length > 1 ? 'Element mean across its test points' : undefined}>{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : '—'}</td>
                   <td className="py-3.5 px-5">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                       t.concrete_quality_rating === 'EXCELLENT' || t.concrete_quality_rating === 'GOOD'
@@ -212,7 +233,7 @@ export default function PunditTestsPage() {
                                     <td className="py-2 px-4 font-bold text-gray-900">{r.point_label}</td>
                                     <td className="py-2 px-4 text-right text-gray-700">{r.path_length_mm ?? '—'}</td>
                                     <td className="py-2 px-4 text-right text-gray-700">{r.transit_time_us ?? '—'}</td>
-                                    <td className="py-2 px-4 text-right font-bold text-amber-700">{r.velocity_km_s != null ? `${(r.velocity_km_s * 1000).toLocaleString()}` : '—'}</td>
+                                    <td className="py-2 px-4 text-right font-bold text-amber-700">{formatVelocityMs(r.velocity_km_s != null ? r.velocity_km_s * 1000 : null)}</td>
                                     <td className="py-2 px-4 text-right text-gray-800">{r.ecs_mpa != null ? r.ecs_mpa.toFixed(1) : '—'}</td>
                                   </tr>
                                 ))}
