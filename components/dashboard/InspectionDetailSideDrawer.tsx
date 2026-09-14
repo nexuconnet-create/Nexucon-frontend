@@ -156,7 +156,8 @@ export default function InspectionDetailSideDrawer({
 
     const optimisticFinding: InspectionFinding = {
       id: `temp_${Date.now()}`,
-      finding_reference: `FND-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      // Reference is issued server-side on log-finding; left blank until the backend responds
+      finding_reference: '',
       inspection: currentInspection.id,
       project: currentInspection.project,
       project_name: currentInspection.project_name,
@@ -552,7 +553,7 @@ export default function InspectionDetailSideDrawer({
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-extrabold text-slate-500 uppercase">{f.finding_reference}</span>
+                          <span className="text-xs font-extrabold text-slate-500 uppercase">{f.finding_reference || 'Ref pending'}</span>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
                             f.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-700' :
                             f.severity === 'HIGH' ? 'bg-orange-100 text-orange-700' :

@@ -1,27 +1,70 @@
 'use client';
 
-import React, { useState } from 'react';
-import Image from 'next/image';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ArrowRight } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import InviteTeamDrawer from '@/components/dashboard/InviteTeamDrawer';
 import InviteTeamSuccessModal from '@/components/dashboard/InviteTeamSuccessModal';
 import StartDiscussionDrawer from '@/components/dashboard/StartDiscussionDrawer';
+import { getProjectTeams, ProjectStakeholderTeam } from '@/services/stakeholders';
+
+interface TeamMember {
+  name: string;
+  role: string;
+  initials: string;
+  teamId: string;
+  projectName: string;
+  teamStatus: string;
+}
 
 export default function TeamPage() {
   const [isInviteTeamOpen, setIsInviteTeamOpen] = useState(false);
   const [isInviteSuccessOpen, setIsInviteSuccessOpen] = useState(false);
   const [isStartDiscussionOpen, setIsStartDiscussionOpen] = useState(false);
 
-  const teamMembers = [
-    { name: 'Olivia Thompson', role: 'Lead Architect', online: true, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/1Mask_group1_ehvtjh.png', activeProjects: 3 },
-    { name: 'Engr. Michael Adeyemi', role: 'Structural Engineer', online: false, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/2Mask_group_rrpgdg.png', activeProjects: 2 },
-    { name: 'James Ibrahim', role: 'Electrical Design Engineer', online: false, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/3Mask_group_hdcntt.png', activeProjects: 4 },
-    { name: 'Samuel Bello', role: 'Quantity Surveyor', online: true, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/4Mask_group_v4mbix.png', activeProjects: 1 },
-    { name: 'Ahmed Musa', role: 'BIM Coordinator', online: true, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/7_kdpcfe.png', activeProjects: 5 },
-    { name: 'David Johnson', role: 'Project Manager', online: false, image: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1784556246/5_nn193g.png', activeProjects: 3 },
-  ];
+  const [teams, setTeams] = useState<ProjectStakeholderTeam[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProjectTeams()
+      .then((data) => {
+        if (!cancelled) setTeams(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTeams([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Flatten real project teams into the member grid. No presence/online state
+  // is shown because the teams API does not provide it.
+  const teamMembers: TeamMember[] = useMemo(
+    () =>
+      teams.flatMap((team) =>
+        Object.entries(team.team_data || {}).map(([roleKey, member]) => ({
+          name: member.name,
+          role: member.role || roleKey,
+          initials: member.initials,
+          teamId: team.id,
+          projectName: team.project_name,
+          teamStatus: team.status,
+        }))
+      ),
+    [teams]
+  );
+
+  const totalMembers = teamMembers.length;
+  const activeTeams = teams.filter(
+    (team) => team.status !== 'COMPLETED' && team.status !== 'ABANDONED'
+  ).length;
+  const distinctRoles = new Set(teamMembers.map((member) => member.role)).size;
 
   const executionTeamRoles = [
     'Project Manager', 'Structural Engineer',
@@ -60,22 +103,31 @@ export default function TeamPage() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {[
-          { label: 'Total Team Members', value: '18' },
-          { label: 'Internal Team', value: '9' },
-          { label: 'External Consultants', value: '5' },
-          { label: 'Peer Reviewers', value: '4' },
-        ].map((stat, idx) => (
-          <div key={idx} className="bg-white border border-[#022C4F] rounded-[32px] p-6 flex flex-col justify-between min-h-[140px] shadow-sm relative group hover:shadow-md transition-shadow">
-            <h4 className="text-[12px] font-bold text-[#022C4F]">{stat.label}</h4>
-            <p className="text-[32px] font-extrabold text-[#0F181F] leading-tight mt-4 pr-10">
-              {stat.value}
-            </p>
-            <div className="absolute top-6 right-6 w-8 h-8 rounded-full border border-[#022C4F] flex items-center justify-center text-[#022C4F] group-hover:bg-[#022C4F] group-hover:text-white transition-colors cursor-pointer">
-              <ArrowUpRight size={16} strokeWidth={3} />
+        {isLoading ? (
+          [0, 1, 2, 3].map((idx) => (
+            <div key={idx} className="bg-white border border-[#022C4F] rounded-[32px] p-6 flex flex-col justify-between min-h-[140px] shadow-sm">
+              <h4 className="text-[12px] font-bold text-[#022C4F]">Loading…</h4>
+              <p className="text-[32px] font-extrabold text-gray-300 leading-tight mt-4">…</p>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          [
+            { label: 'Project Teams', value: teams.length.toString() },
+            { label: 'Team Members', value: totalMembers.toString() },
+            { label: 'Active Project Teams', value: activeTeams.toString() },
+            { label: 'Distinct Roles', value: distinctRoles.toString() },
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-white border border-[#022C4F] rounded-[32px] p-6 flex flex-col justify-between min-h-[140px] shadow-sm relative group hover:shadow-md transition-shadow">
+              <h4 className="text-[12px] font-bold text-[#022C4F]">{stat.label}</h4>
+              <p className="text-[32px] font-extrabold text-[#0F181F] leading-tight mt-4 pr-10">
+                {stat.value}
+              </p>
+              <div className="absolute top-6 right-6 w-8 h-8 rounded-full border border-[#022C4F] flex items-center justify-center text-[#022C4F] group-hover:bg-[#022C4F] group-hover:text-white transition-colors cursor-pointer">
+                <ArrowUpRight size={16} strokeWidth={3} />
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Main Grid */}
@@ -83,33 +135,46 @@ export default function TeamPage() {
 
         {/* Left Column: Team Grid */}
         <div className="w-full lg:w-[65%] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {teamMembers.map((member, index) => (
-            <div key={index} className="bg-white border border-gray-300 rounded-[24px] p-6 shadow-sm flex flex-col items-center text-center hover:border-[#022C4F] hover:shadow-md transition-all">
-
-              <div className="relative w-24 h-24 mb-4">
-                <div className="w-full h-full rounded-full overflow-hidden border-4 border-white shadow-sm bg-gray-100 relative">
-                  <Image src={member.image} alt={member.name} fill className="object-cover" />
-                </div>
-                <div className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white ${member.online ? 'bg-[#8BC34A]' : 'bg-gray-400'}`}></div>
-              </div>
-
-              <h3 className="text-[14px] font-extrabold text-[#022C4F] mb-1">{member.name}</h3>
-              <p className="text-[11px] text-gray-500 font-medium mb-3">{member.role}</p>
-              <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 mb-6">
-                <span className="text-[10px] font-bold text-[#0F181F]">{member.activeProjects} Active Projects</span>
-              </div>
-
-              <div className="flex flex-col w-full gap-2 mt-auto">
-                <Button variant="outline" className="!w-full h-[36px] text-[11px]">
-                  Message
-                </Button>
-                <Button variant="primary" className="!w-full h-[36px] text-[11px]">
-                  View Profile
-                </Button>
-              </div>
-
+          {isLoading ? (
+            <div className="col-span-full py-16 text-center text-xs font-semibold text-gray-400 animate-pulse">
+              Loading project teams…
             </div>
-          ))}
+          ) : teamMembers.length === 0 ? (
+            <div className="col-span-full bg-white border border-gray-300 rounded-[24px] py-16 text-center text-xs font-medium text-gray-500">
+              No project teams yet. Team members assigned to your projects will appear here.
+            </div>
+          ) : (
+            teamMembers.map((member, index) => (
+              <div key={`${member.teamId}-${member.role}-${index}`} className="bg-white border border-gray-300 rounded-[24px] p-6 shadow-sm flex flex-col items-center text-center hover:border-[#022C4F] hover:shadow-md transition-all">
+
+                <div className="w-24 h-24 mb-4">
+                  <div className="w-full h-full rounded-full border-4 border-white shadow-sm bg-[#022C4F]/10 flex items-center justify-center">
+                    <span className="text-2xl font-extrabold text-[#022C4F]">{member.initials}</span>
+                  </div>
+                </div>
+
+                <h3 className="text-[14px] font-extrabold text-[#022C4F] mb-1">{member.name}</h3>
+                <p className="text-[11px] text-gray-500 font-medium mb-3">{member.role}</p>
+                <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 mb-6 max-w-full">
+                  <span className="text-[10px] font-bold text-[#0F181F] truncate block">{member.projectName || 'Project not recorded'}</span>
+                </div>
+
+                <div className="flex flex-col w-full gap-2 mt-auto">
+                  <Link href="/client/messages" className="w-full">
+                    <Button variant="outline" className="!w-full h-[36px] text-[11px]">
+                      Message
+                    </Button>
+                  </Link>
+                  <Link href={`/client/team/${member.teamId}`} className="w-full">
+                    <Button variant="primary" className="!w-full h-[36px] text-[11px]">
+                      View Profile
+                    </Button>
+                  </Link>
+                </div>
+
+              </div>
+            ))
+          )}
         </div>
 
         {/* Right Column: Execution Team Builder */}

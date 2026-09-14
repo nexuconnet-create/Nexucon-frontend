@@ -6,7 +6,7 @@ import {
   DollarSign, TrendingDown, TrendingUp, Wallet, 
   Receipt, CreditCard, RefreshCw, Lock, ShieldCheck, Download 
 } from "lucide-react";
-import { FinancialAnalyticsData, getFinancialAnalytics } from "@/services/analytics";
+import { FinancialAnalyticsData, getFinancialAnalytics, createGeneratedReport } from "@/services/analytics";
 import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function FinancialOverview() {
@@ -37,9 +37,17 @@ export default function FinancialOverview() {
 
   const handleExportFinancial = async () => {
     try {
-      const ref = `REP-FIN-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Generating Financial & Capex Audit Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statutory Capital Expenditure & Revenue Collection Report",
+        format: "PDF",
+        report_type: "Financial",
+        modules_included: ["Financial Overview", "Project Performance"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Generating Financial & Capex Audit Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statutory Capital Expenditure & Revenue Collection Report",

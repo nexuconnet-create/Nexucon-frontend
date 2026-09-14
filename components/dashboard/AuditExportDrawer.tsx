@@ -7,9 +7,10 @@ import {
   Layers, Check, Sparkles, AlertTriangle, Printer 
 } from 'lucide-react';
 import { AuditEvent } from '@/services/audit';
-import { 
-  AuditExportConfig, GeneratedAuditDoc, 
-  generateAuditDocument 
+import { GeneratedReport, createGeneratedReport } from '@/services/analytics';
+import {
+  AuditExportConfig, GeneratedAuditDoc,
+  generateAuditDocument
 } from '@/utils/auditDocumentGenerator';
 
 interface AuditExportDrawerProps {
@@ -78,12 +79,28 @@ export default function AuditExportDrawer({
     },
   ];
 
+  // The statutory export reference is issued by the backend (GeneratedReport default=generate_report_ref)
+  const issueServerReportReference = async (format: 'PDF' | 'CSV' | 'XLSX' | 'JSON'): Promise<string> => {
+    const report = await createGeneratedReport({
+      title: `Nexucon Statutory Audit Ledger — ${moduleScope}`,
+      report_type: 'Custom',
+      format,
+      modules_included: [moduleScope],
+      generated_by_name: 'Director of Technical Review'
+    } as Partial<GeneratedReport>);
+    if (!report?.report_reference) {
+      throw new Error('Backend did not issue a report reference for this audit ledger export.');
+    }
+    return report.report_reference;
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
+      const reportReference = await issueServerReportReference(selectedFormat);
       const config: AuditExportConfig = {
         title: `Nexucon Statutory Audit Ledger — ${moduleScope}`,
-        reportReference: `EXP-AUD-${Math.floor(1000 + Math.random() * 9000)}`,
+        reportReference,
         format: selectedFormat,
         module: moduleScope,
         severity: severityFilter,
@@ -118,28 +135,35 @@ export default function AuditExportDrawer({
     }
   };
 
-  const handlePrintPreview = () => {
+  const handlePrintPreview = async () => {
     if (selectedFormat === 'PDF') {
-      const config: AuditExportConfig = {
-        title: `Nexucon Statutory Audit Ledger — ${moduleScope}`,
-        reportReference: `EXP-AUD-${Math.floor(1000 + Math.random() * 9000)}`,
-        format: 'PDF',
-        module: moduleScope,
-        severity: severityFilter,
-        dateRange: dateRange,
-        includeHashes: includeHashes,
-        includeSignatures: includeSignatures,
-        officerName: 'Director of Technical Review',
-        officerRole: 'Director General / Agency Lead'
-      };
-      generateAuditDocument(filteredEvents, config).then(doc => {
+      try {
+        const reportReference = await issueServerReportReference('PDF');
+        const config: AuditExportConfig = {
+          title: `Nexucon Statutory Audit Ledger — ${moduleScope}`,
+          reportReference,
+          format: 'PDF',
+          module: moduleScope,
+          severity: severityFilter,
+          dateRange: dateRange,
+          includeHashes: includeHashes,
+          includeSignatures: includeSignatures,
+          officerName: 'Director of Technical Review',
+          officerRole: 'Director General / Agency Lead'
+        };
+        const doc = await generateAuditDocument(filteredEvents, config);
         const printWindow = window.open('', '_blank');
         if (printWindow && doc.previewHtml) {
           printWindow.document.write(doc.previewHtml);
           printWindow.document.close();
           printWindow.focus();
         }
-      });
+      } catch (err) {
+        console.error("Print preview error:", err);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: 'Failed to issue server report reference for print preview', type: 'error' }
+        }));
+      }
     }
   };
 

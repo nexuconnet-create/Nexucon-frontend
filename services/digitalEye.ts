@@ -163,6 +163,13 @@ export interface PunditTest {
   // Optional concrete maturity at test time (7 Sep review item 18);
   // null = not recorded.
   concrete_age_days?: number | null;
+  // Rebound hammer number recorded with the station — required when the
+  // project's active calibration curve is SonReb (UPV + rebound).
+  rebound_number?: number | null;
+  // Raw A-scan waveform samples recorded by the field device, when exported.
+  // null/empty = the device only reported the transit time; the waveform
+  // viewer must NOT synthesise a trace in that case.
+  waveform_samples?: number[] | null;
   // Crack-depth method (BS 1881-203 time difference): 0 when not a crack test.
   crack_path_length_mm: number;
   crack_pulse_time_us: number;
@@ -381,6 +388,10 @@ function mapPunditTest(row: any): PunditTest {
     weather_condition: row.weather_condition || '',
     floor: row.floor || '',
     concrete_age_days: row.concrete_age_days ?? null,
+    rebound_number: row.rebound_number ?? null,
+    waveform_samples: Array.isArray(row.waveform_samples) && row.waveform_samples.length > 1
+      ? row.waveform_samples.map((s: unknown) => Number(s)).filter((s: number) => Number.isFinite(s))
+      : null,
     crack_path_length_mm: row.crack_path_length_mm ?? 0,
     crack_pulse_time_us: row.crack_pulse_time_us ?? 0,
     uncracked_pulse_time_us: row.uncracked_pulse_time_us ?? 0,
@@ -898,6 +909,7 @@ export interface PunditTestInput {
   // Surface-quality / homogeneity observations.
   surface_condition?: string;
   surface_temperature_c?: number;
+  rebound_number?: number;
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
   floor?: string;
@@ -1281,7 +1293,7 @@ export const downloadNcrReport = async (ncrId: string, ncrReference?: string): P
   const res = await api.get(`/reports/ncrs/${ncrId}/report/`, {
     responseType: 'blob',
   });
-  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const blob = new Blob([res.data || res], { type: 'application/pdf' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -1349,6 +1361,58 @@ export const getPunditAIAnalyses = async (params?: { project?: string }): Promis
   });
   const rows = unwrap<any[]>(res, []);
   return (Array.isArray(rows) ? rows : []).map(mapPunditAnalysis);
+};
+
+/**
+ * Engineer review of a PUNDIT AI analysis (client principle 5): the AI output
+ * is decision-support — a qualified engineer corroborates it (or returns it
+ * for revision) via a separate review record. The analysis itself stays
+ * immutable. `review_status` is 'pending' until a review row exists.
+ */
+export interface PunditAnalysisReview {
+  review_status: 'pending' | 'corroborated' | 'returned';
+  requires_human_review: boolean;
+  decision: 'corroborated' | 'returned' | null;
+  notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
+  return {
+    review_status: (row.review_status ?? 'pending') as PunditAnalysisReview['review_status'],
+    requires_human_review: Boolean(row.requires_human_review),
+    decision: (row.decision ?? null) as PunditAnalysisReview['decision'],
+    notes: row.notes ?? null,
+    reviewed_by: row.reviewed_by ?? null,
+    reviewed_at: row.reviewed_at ?? null,
+  };
+}
+
+export const getPunditAnalysisReview = async (
+  analysisId: string
+): Promise<PunditAnalysisReview> => {
+  const res = await api.get(`/digital-eye/pundit-analysis-review/${analysisId}/`);
+  return mapPunditAnalysisReview(unwrap<any>(res, {}));
+};
+
+export const reviewPunditAnalysis = async (
+  analysisId: string,
+  input: { decision: 'corroborated' | 'returned'; notes?: string }
+): Promise<PunditAnalysisReview> => {
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
+    decision: input.decision,
+    notes: input.notes ?? '',
+  });
+  return mapPunditAnalysisReview(unwrap<any>(res, {}));
+};
+
+/** Withdraw the review — the analysis returns to the honest pending state. */
+export const withdrawPunditAnalysisReview = async (
+  analysisId: string
+): Promise<PunditAnalysisReview> => {
+  const res = await api.delete(`/digital-eye/pundit-analysis-review/${analysisId}/`);
+  return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
 
 export const getProcessingQueue = async (params?: { project?: string; status?: string }): Promise<ProcessingQueueJob[]> => {
@@ -1465,6 +1529,135 @@ export const downloadNdtReport = async (projectId: string): Promise<string> => {
   return filename;
 };
 
+// ---- Report CMS + Word export (8 Sep meeting H7; 4 Sep register C4/C5) ----
+// The statutory NDT report's boilerplate prose sections are editable
+// template variables, password-protected and Director-only. The backend
+// registry is the source of truth — this surface only reads and writes it.
+
+export type ReportCmsSectionKind = 'paragraphs' | 'list' | 'line';
+export type ReportCmsSectionSource =
+  | 'default'
+  | 'platform_override'
+  | 'project_override'
+  // Generated-content sections: 'computed' is the wording the backend
+  // derives from the project's recorded data; 'unavailable' means no
+  // recorded data backs the section yet, so it has no editable body.
+  | 'computed'
+  | 'unavailable';
+
+export interface ReportCmsSection {
+  key: string;
+  label: string;
+  kind: ReportCmsSectionKind;
+  help: string;
+  default: string | null;
+  body: string | null;
+  source: ReportCmsSectionSource;
+  /** Generated-content section — its body is computed per project. */
+  computed?: boolean;
+  /** True for computed sections: a project must be selected to edit. */
+  requires_project?: boolean;
+  /** True when the section needs recorded data that does not exist yet. */
+  requires_data?: boolean;
+}
+
+export interface ReportCmsSectionsResponse {
+  project: string | null;
+  password_set: boolean;
+  sections: ReportCmsSection[];
+}
+
+/**
+ * Every editable template section with its effective body — project
+ * override > platform override > the backend's default wording.
+ * GET /reports/cms/sections/?project=<uuid>
+ */
+export const getReportCmsSections = async (projectId?: string): Promise<ReportCmsSectionsResponse> => {
+  const res = await api.get('/reports/cms/sections/', {
+    params: projectId ? { project: projectId } : undefined,
+  });
+  const data = unwrap<ReportCmsSectionsResponse | null>(res, null);
+  if (!data || !Array.isArray(data.sections)) {
+    throw new Error('Report CMS sections could not be loaded.');
+  }
+  return data;
+};
+
+/**
+ * Save one section's body. Directors only, and only with the CMS password.
+ * Pass projectId to scope the override to that project; omit it for a
+ * platform-wide override.
+ */
+export const saveReportCmsSection = async (
+  key: string,
+  body: string,
+  opts: { projectId?: string; cmsPassword: string },
+): Promise<ReportCmsSection> => {
+  const res = await api.put(`/reports/cms/sections/${key}/`, {
+    body,
+    cms_password: opts.cmsPassword,
+    ...(opts.projectId ? { project: opts.projectId } : {}),
+  });
+  const saved = unwrap<ReportCmsSection | null>(res, null);
+  if (!saved || typeof saved.body !== 'string') {
+    throw new Error('The section could not be saved — the server did not '
+      + 'confirm the saved wording.');
+  }
+  return saved;
+};
+
+/** Revert a section (delete its override) — same password gate. */
+export const revertReportCmsSection = async (
+  key: string,
+  opts: { projectId?: string; cmsPassword: string },
+): Promise<{ key: string; source: ReportCmsSectionSource; body: string | null; reverted: boolean }> => {
+  const res = await api.delete(`/reports/cms/sections/${key}/`, {
+    params: {
+      ...(opts.projectId ? { project: opts.projectId } : {}),
+      cms_password: opts.cmsPassword,
+    },
+  });
+  const reverted = unwrap<{ key: string; source: ReportCmsSectionSource;
+    body: string | null; reverted: boolean } | null>(res, null);
+  if (!reverted || typeof reverted.reverted !== 'boolean') {
+    throw new Error('The section could not be reverted — the server did not '
+      + 'confirm the revert.');
+  }
+  return reverted;
+};
+
+/** Set (first time) or change (current password required) the CMS password. */
+export const setReportCmsPassword = async (payload: {
+  new_password: string;
+  current_password?: string;
+}): Promise<void> => {
+  await api.post('/reports/cms/password/', payload);
+};
+
+/**
+ * Download the editable Word (.docx) edition of the NDT report — the same
+ * sections, CMS overrides and server-computed figures as the PDF, streamed by
+ * GET /reports/projects/<id>/ndt-report-word/.
+ */
+export const downloadNdtReportWord = async (projectId: string): Promise<string> => {
+  const res = await api.get(`/reports/projects/${projectId}/ndt-report-word/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  const filename = `ndt_report_${projectId}.docx`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
 /**
  * Download an archived dossier — the exact bytes the platform generated and
  * sealed (SHA-256 checksummed) at generation time — via
@@ -1510,4 +1703,635 @@ export const openArchivedReport = async (reportId: string): Promise<void> => {
   }
   // Give the viewer time to load before releasing the blob handle.
   window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+};
+
+// ==========================================
+// 3z. NEXUCON LINK (NEURAL LINK) — STRENGTH CALIBRATION
+// Every f_cu the platform reports flows through the project's active
+// calibration curve (8 Sep 2026 meeting): project-specific curves are
+// calibrated from REAL UPV + cube-test pairs before any data injection; the
+// seeded platform default reproduces the documented BS 1881-203 laboratory
+// curve (f_cu = 8.961·V − 7.97, V in km/s) when no project curve exists.
+// ==========================================
+
+export type CurveType = 'linear' | 'polynomial' | 'exponential' | 'sonreb' | 'lookup';
+
+/** A calibration curve row (GET/POST /digital-eye/nexucon-link/curves/).
+ *  Formula parameters are in the m/s velocity domain. */
+export interface StrengthCurve {
+  id: string;
+  name: string;
+  curve_type: CurveType;
+  curve_type_display?: string;
+  standard?: string;
+  project?: string | null;
+  velocity_unit: string; // 'm/s'
+  strength_unit: string; // 'MPa'
+  formula_params: Record<string, any>;
+  formula_display?: string | null;
+  data_points?: Array<{ v: number; f: number; r?: number | null }>;
+  valid_range_min_ms: number;
+  valid_range_max_ms: number;
+  r2_score?: number | null;
+  standard_error?: number | null;
+  aic?: number | null;
+  is_default?: boolean;
+  provenance?: { source?: string; notes?: string; [key: string]: any } | null;
+  version?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** The provenance snapshot stored on every reading/test whose strength a
+ *  curve produced — mirrors apps/digital_eye/strength_curves.py
+ *  curve_snapshot(). */
+export interface CurveSnapshot {
+  curve_id: string | null; // null = built-in fallback
+  name: string;
+  curve_type: CurveType;
+  standard?: string | null;
+  formula: string;
+  formula_params: Record<string, any>;
+  valid_range_ms: [number, number] | null;
+  r2_score?: number | null;
+  provenance_source?: string | null;
+  temperature_correction_applied?: boolean;
+}
+
+/** Built-in fallback curve — identical to the backend engine's last resort
+ *  (apps/digital_eye/strength_curves.py `_builtin_default_params`): the
+ *  documented BS 1881-203 laboratory curve f_cu = 8.961·V − 7.97 N/mm²
+ *  (V in km/s), valid 2.0–5.0 km/s. Used client-side only until the
+ *  project's active calibration curve resolves from the server. */
+export const BUILTIN_CURVE_SNAPSHOT: CurveSnapshot = {
+  curve_id: null,
+  name: 'Built-in laboratory curve (BS 1881-203)',
+  curve_type: 'linear',
+  standard: 'BS 1881-203',
+  formula: 'f_cu = 8.961·V − 7.97 (V in km/s)',
+  formula_params: { m: 8.961 / 1000, c: -7.97 },
+  valid_range_ms: [2000, 5000],
+};
+
+/** Client-side evaluation of a curve in the m/s domain — used ONLY for live
+ *  previews and chart lines. Every STORED strength value is computed
+ *  server-side by the same engine (apps/digital_eye/strength_curves.py
+ *  apply_curve_params), including its ACI 228.2R temperature correction.
+ *  Returns null outside the valid range / without a rebound number for
+ *  SonReb / on any evaluation error — never extrapolates. */
+export const evalCurve = (
+  type: CurveType,
+  params: Record<string, any>,
+  vMs: number,
+  r?: number | null
+): number | null => {
+  try {
+    if (type === 'linear') return params.m * vMs + params.c;
+    if (type === 'polynomial')
+      return (params.coeffs as number[]).reduce(
+        (s, c, i) => s + c * Math.pow(vMs, i),
+        0
+      );
+    if (type === 'exponential')
+      return params.a * Math.exp(params.b * vMs) + params.c;
+    if (type === 'sonreb') {
+      if (r == null) return null;
+      return params.a * Math.pow(vMs, params.b) * Math.pow(r, params.c);
+    }
+    if (type === 'lookup') {
+      const pts = [...(params.points as Array<{ v: number; f: number }>)].sort(
+        (a, b) => a.v - b.v
+      );
+      if (pts.length === 0 || vMs < pts[0].v || vMs > pts[pts.length - 1].v) return null;
+      for (let i = 1; i < pts.length; i++) {
+        if (vMs <= pts[i].v) {
+          const p0 = pts[i - 1];
+          const p1 = pts[i];
+          return p0.f + ((p1.f - p0.f) / (p1.v - p0.v)) * (vMs - p0.v);
+        }
+      }
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+/** Evaluate a curve snapshot at a velocity — range-gated convenience wrapper
+ *  around evalCurve that all live-preview surfaces (strength simulator,
+ *  data-collection form, waveform viewer) share. */
+export const evalCurveSnapshot = (
+  snapshot: CurveSnapshot,
+  vMs: number,
+  r?: number | null
+): number | null => {
+  const [lo, hi] = snapshot.valid_range_ms ?? [2000, 5000];
+  if (vMs < lo || vMs > hi) return null;
+  const f = evalCurve(snapshot.curve_type, snapshot.formula_params, vMs, r);
+  return f != null && Number.isFinite(f) ? f : null;
+};
+
+/** Body returned by GET/POST …/curves/active-curve/?project=<id>. */
+export interface ActiveCurveResponse {
+  project: string;
+  source: 'project_setting' | 'platform_default' | 'builtin_fallback';
+  curve: StrengthCurve | null;
+  curve_snapshot: CurveSnapshot;
+}
+
+/** One fitted candidate from the calibration regression
+ *  (POST …/curves/calibrate/) — the chosen set is then saved as a curve. */
+export interface RegressionFit {
+  curve_type: CurveType;
+  formula_params: Record<string, any>;
+  formula: string;
+  r2_score: number;
+  standard_error: number;
+  aic: number;
+  valid_range_ms: [number, number];
+}
+
+export interface CalibrationResult {
+  n_points: number;
+  results: { linear: RegressionFit | null; polynomial: RegressionFit | null; exponential: RegressionFit | null; sonreb: RegressionFit | null };
+  fit_errors: Record<string, string>;
+  best_fit_type: CurveType | null;
+  advisory: string;
+}
+
+/** Body returned by POST …/curves/preview/ — the live f_cu chain for one
+ *  measurement BEFORE it is recorded. */
+export interface CurvePreviewResponse {
+  project: string;
+  path_length_mm: number;
+  transit_time_us: number;
+  velocity_m_s: number | null;
+  temperature_correction_applied: boolean;
+  corrected_velocity_m_s: number | null;
+  f_cu_mpa: number | null;
+  status: 'ok' | 'rebound_number_required' | 'below_valid_range' | 'above_valid_range' | 'not_computable';
+  curve_snapshot: CurveSnapshot;
+}
+
+/** List calibration curves. With no project: every curve visible to the
+ *  user (their scoped projects + the platform default). With ?project: that
+ *  project's curves plus the platform default. */
+export const getStrengthCurves = async (params?: {
+  project?: string;
+  curve_type?: CurveType;
+  search?: string;
+}): Promise<StrengthCurve[]> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/', {
+    params: {
+      project: params?.project || undefined,
+      curve_type: params?.curve_type || undefined,
+      search: params?.search || undefined,
+    },
+  });
+  const rows = unwrap<any[]>(res, []);
+  return Array.isArray(rows) ? rows : [];
+};
+
+/** Save a calibration curve (Director-level on the backend). */
+export const createStrengthCurve = async (input: {
+  name: string;
+  curve_type: CurveType;
+  formula_params: Record<string, any>;
+  project?: string | null;
+  standard?: string;
+  data_points?: Array<{ v: number; f: number; r?: number | null }>;
+  valid_range_min_ms?: number;
+  valid_range_max_ms?: number;
+  provenance?: Record<string, any>;
+}): Promise<StrengthCurve> => {
+  const res = await api.post('/digital-eye/nexucon-link/curves/', input);
+  return unwrap<any>(res, res);
+};
+
+export const deleteStrengthCurve = async (curveId: string): Promise<void> => {
+  await api.delete(`/digital-eye/nexucon-link/curves/${curveId}/`);
+};
+
+/** Resolve the curve a project's strengths currently flow through — the
+ *  honest fallback chain (project setting -> platform default -> built-in). */
+export const getActiveCurve = async (projectId: string): Promise<ActiveCurveResponse | null> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/active-curve/', {
+    params: { project: projectId },
+  });
+  return unwrap<any>(res, null);
+};
+
+/** Make a saved curve the project's active calibration (Director-level). */
+export const activateStrengthCurve = async (
+  curveId: string,
+  projectId: string
+): Promise<{ project: string; active_curve: StrengthCurve; curve_snapshot: CurveSnapshot }> => {
+  const res = await api.post(`/digital-eye/nexucon-link/curves/${curveId}/activate/`, {
+    project: projectId,
+  });
+  return unwrap<any>(res, res);
+};
+
+/** Run the regression engine over real calibration pairs (UPV + cube
+ *  strength, rebound where SonReb needs it). Nothing is persisted — the
+ *  caller saves the chosen candidate via createStrengthCurve. */
+export const calibrateCurve = async (
+  dataPoints: Array<{ v: number; f: number; r?: number | null }>
+): Promise<CalibrationResult> => {
+  const res = await api.post('/digital-eye/nexucon-link/curves/calibrate/', {
+    data_points: dataPoints,
+  });
+  return unwrap<any>(res, res);
+};
+
+/** Calibration pairs parsed server-side from an uploaded CSV (columns
+ *  v/velocity, f/strength, optional r/rebound). */
+export interface CalibrationCsvResponse {
+  data_points: Array<{ v: number; f: number; r?: number }>;
+}
+
+/** Upload a calibration CSV (v (m/s), f (MPa), optional r) for the
+ *  regression engine — parsed on the server, returned as typed pairs. */
+export const uploadCalibrationCsv = async (file: File): Promise<CalibrationCsvResponse> => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await api.post('/digital-eye/nexucon-link/curves/upload-csv/', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return unwrap<any>(res, res);
+};
+
+// ---------------------------------------------------------------------------
+// Core samples — ground-truth lab results (path-to-95% Layer 3)
+// ---------------------------------------------------------------------------
+
+/** A laboratory core result: every number typed from the test certificate. */
+export interface CoreSample {
+  id: string;
+  project: string;
+  pundit_test: string | null;
+  structural_element: string;
+  test_location: string;
+  core_diameter_mm: number | null;
+  core_length_mm: number | null;
+  lab_strength_mpa: number | null;
+  lab_report_ref: string;
+  sampled_at: string | null;
+  notes: string;
+  /** The real (v m/s, f MPa) pair this core contributes — null when either
+   *  half is missing (no lab result yet / no linked velocity test). Never
+   *  synthesized. */
+  calibration_pair: { v: number; f: number; r?: number } | null;
+  recorded_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** List a project's core samples (empty list = none recorded yet). */
+export const getCoreSamples = async (projectId: string): Promise<CoreSample[]> => {
+  const res = await api.get('/digital-eye/nexucon-link/core-samples/', {
+    params: { project: projectId },
+  });
+  const rows = unwrap<any[]>(res, []);
+  return Array.isArray(rows) ? rows : [];
+};
+
+/** Record a core sample (Director-level on the backend). */
+export const createCoreSample = async (input: {
+  project: string;
+  pundit_test?: string | null;
+  structural_element?: string;
+  test_location?: string;
+  core_diameter_mm?: number | null;
+  core_length_mm?: number | null;
+  lab_strength_mpa?: number | null;
+  lab_report_ref?: string;
+  sampled_at?: string | null;
+  notes?: string;
+}): Promise<CoreSample> => {
+  const res = await api.post('/digital-eye/nexucon-link/core-samples/', input);
+  return unwrap<any>(res, res);
+};
+
+/** Update a core sample (Director-level on the backend). */
+export interface CoreSampleInput {
+  project?: string;
+  pundit_test?: string | null;
+  structural_element?: string;
+  test_location?: string;
+  core_diameter_mm?: number | null;
+  core_length_mm?: number | null;
+  lab_strength_mpa?: number | null;
+  lab_report_ref?: string;
+  sampled_at?: string | null;
+  notes?: string;
+}
+
+export const updateCoreSample = async (
+  coreId: string,
+  patch: Partial<CoreSampleInput>
+): Promise<CoreSample> => {
+  const res = await api.patch(`/digital-eye/nexucon-link/core-samples/${coreId}/`, patch);
+  return unwrap<any>(res, res);
+};
+
+/** Remove a core sample record (Director-level on the backend). */
+export const deleteCoreSample = async (coreId: string): Promise<void> => {
+  await api.delete(`/digital-eye/nexucon-link/core-samples/${coreId}/`);
+};
+
+/** The project's core-sample pairs + (when ≥ 2 pairs) a regression run over
+ *  them by the SAME engine a manual calibration uses. Cores that cannot form
+ *  a pair are listed with the honest reason. */
+export interface CoreSamplePairsResponse {
+  project: string;
+  n_cores: number;
+  n_pairs: number;
+  pairs: Array<{ v: number; f: number; r?: number }>;
+  not_forming_a_pair: Array<{
+    id: string;
+    structural_element: string;
+    test_location: string;
+    reason: string;
+  }>;
+  regression: CalibrationResult | null;
+}
+
+export const getCoreSamplePairs = async (
+  projectId: string
+): Promise<CoreSamplePairsResponse> => {
+  const res = await api.get('/digital-eye/nexucon-link/core-samples/pairs/', {
+    params: { project: projectId },
+  });
+  return unwrap<any>(res, res);
+};
+
+/** Live f_cu preview for one measurement through the project's active
+ *  curve — the same maths (incl. temperature correction) the server applies
+ *  when the reading is actually stored. */
+export const previewCurve = async (input: {
+  project: string;
+  path_length_mm: number;
+  transit_time_us: number;
+  temperature_c?: number | null;
+  rebound_number?: number | null;
+}): Promise<CurvePreviewResponse> => {
+  const res = await api.post('/digital-eye/nexucon-link/curves/preview/', input);
+  return unwrap<any>(res, res);
+};
+
+/** Curve-parameter field layout per type, for the calibration UI. All
+ *  velocities in m/s, strength in MPa — matching the engine's domain. */
+export const CURVE_PARAM_FIELDS: Record<CurveType, Array<{ key: string; label: string; hint?: string }>> = {
+  linear: [
+    { key: 'm', label: 'm (slope)', hint: 'MPa per (m/s)' },
+    { key: 'c', label: 'c (intercept)', hint: 'MPa' },
+  ],
+  polynomial: [{ key: 'coeffs', label: 'coefficients', hint: 'comma-separated, ascending order: c0,c1,c2' }],
+  exponential: [
+    { key: 'a', label: 'a' },
+    { key: 'b', label: 'b' },
+    { key: 'c', label: 'c' },
+  ],
+  sonreb: [
+    { key: 'a', label: 'a' },
+    { key: 'b', label: 'b (V exponent)' },
+    { key: 'c', label: 'c (R exponent)' },
+  ],
+  lookup: [{ key: 'points', label: 'lookup points', hint: 'pairs v (m/s) = f (MPa), comma-separated' }],
+};
+// ==========================================
+// 3aa. REPORT VERIFICATION, PREVIEW, BRANDING & MAP DATA
+// (REFINED EXECUTIVE SUMMARY, 11 Sep 2026)
+// ==========================================
+
+/** Verification facts the public verify endpoint returns for a matched
+ *  archived dossier. Discloses no project data — reference, checksums and
+ *  verdicts only. */
+export interface ReportVerification {
+  verified: boolean;
+  report_reference?: string;
+  title?: string;
+  content_digest?: string;
+  sha256_checksum?: string;
+  test_count?: number;
+  assessed_count?: number;
+  passed_count?: number;
+  compliance_status?: string;
+  archived_at?: string;
+  detail?: string;
+}
+
+/**
+ * PUBLIC verification of an archived NDT dossier — the destination encoded
+ * in the report cover's QR code. GET /reports/verify/?ref=&digest=.
+ * Calls the backend directly (no credentials — the endpoint is public).
+ */
+export const verifyArchivedReport = async (
+  ref: string,
+  digest: string
+): Promise<ReportVerification> => {
+  const res = await api.get('/reports/verify/', {
+    params: { ref, digest },
+  });
+  const data = unwrap<ReportVerification | null>(res, null);
+  if (!data) throw new Error('Report verification could not be loaded.');
+  return data;
+};
+
+/**
+ * PUBLIC download of the authentic archived original for a verified dossier
+ * (12 Sep 2026): the same ref+digest pair the cover QR encodes. Streams the
+ * exact PDF bytes the platform sealed at generation time — so a recipient
+ * holding an edited copy can retrieve the genuine document. GET
+ * /reports/verify/download/?ref=&digest=.
+ */
+export const downloadArchivedReportOriginal = async (
+  ref: string,
+  digest: string
+): Promise<Blob> => {
+  const res = await api.get('/reports/verify/download/', {
+    params: { ref, digest },
+    responseType: 'blob',
+  });
+  return new Blob([res as unknown as BlobPart], { type: 'application/pdf' });
+};
+
+/**
+ * Preview the exact PDF the generate endpoint will produce — same service,
+ * same CMS overrides, same branding — WITHOUT archiving it. Streams the
+ * bytes as a Blob for in-app rendering. GET /reports/projects/<id>/ndt-report-preview/.
+ */
+export const fetchNdtReportPreview = async (projectId: string): Promise<Blob> => {
+  const res = await api.get(`/reports/projects/${projectId}/ndt-report-preview/`, {
+    responseType: 'blob',
+  });
+  return new Blob([res as any], { type: 'application/pdf' });
+};
+
+/** Branding configuration for a project's statutory report (§2.3). */
+export interface ReportBrandingConfig {
+  branding_configured: boolean;
+  logo_url?: string | null;
+  logo_position?: string;
+  logo_size?: string;
+  cover_logo_url?: string | null;
+  cover_logo_hidden?: boolean;
+  watermark_url?: string | null;
+  watermark_opacity_pct?: number;
+  watermark_position?: string;
+  updated_at?: string;
+}
+
+/** Read a project's report branding (or the honest unconfigured state). */
+export const getReportBranding = async (projectId: string): Promise<ReportBrandingConfig> => {
+  const res = await api.get(`/reports/projects/${projectId}/branding/`);
+  const data = unwrap<ReportBrandingConfig | null>(res, null);
+  if (!data) throw new Error('Report branding could not be loaded.');
+  return data;
+};
+
+/**
+ * Upload / update a project's report branding (Directors only). Files are
+ * real uploads (PNG/JPEG); scalar fields validated server-side. Pass
+ * `logo: null` (or 'remove') to remove an image.
+ */
+export const updateReportBranding = async (
+  projectId: string,
+  fields: {
+    logo?: File | '' | 'remove' | null;
+    watermark?: File | '' | 'remove' | null;
+    cover_logo?: File | '' | 'remove' | null;
+    cover_logo_hidden?: boolean;
+    logo_position?: string;
+    logo_size?: string;
+    watermark_opacity_pct?: number;
+    watermark_position?: string;
+  }
+): Promise<ReportBrandingConfig> => {
+  const form = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (value === null) return;
+    if (value instanceof File) {
+      form.append(key, value);
+    } else {
+      form.append(key, String(value));
+    }
+  });
+  const res = await api.patch(`/reports/projects/${projectId}/branding/`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  const data = unwrap<ReportBrandingConfig | null>(res, null);
+  if (!data) throw new Error('Report branding could not be saved.');
+  return data;
+};
+
+/** Remove a project's report branding entirely (Directors only). */
+export const removeReportBranding = async (projectId: string): Promise<ReportBrandingConfig> => {
+  const res = await api.delete(`/reports/projects/${projectId}/branding/`);
+  const data = unwrap<ReportBrandingConfig | null>(res, null);
+  if (!data) throw new Error('Report branding could not be removed.');
+  return data;
+};
+
+/** Approving-engineer COREN credentials for a project's report sign-off (C11). */
+export interface ReportSignOffConfig {
+  signoff_configured: boolean;
+  approved_by_name: string;
+  qualification: string;
+  coren_registration_no: string;
+  firm_name: string;
+  signature_image_url: string | null;
+  updated_at?: string;
+}
+
+/** Read a project's report sign-off (or the honest unconfigured state). */
+export const getReportSignOff = async (projectId: string): Promise<ReportSignOffConfig> => {
+  const res = await api.get(`/reports/projects/${projectId}/signoff/`);
+  const data = unwrap<ReportSignOffConfig | null>(res, null);
+  if (!data) throw new Error('Report sign-off could not be loaded.');
+  return data;
+};
+
+/**
+ * Record / update a project's approving-engineer credentials (Directors
+ * only). Every field is typed by a Director — nothing is derived. Pass
+ * `signature_image: null` (or 'remove') to remove the scanned signature.
+ */
+export const updateReportSignOff = async (
+  projectId: string,
+  fields: {
+    approved_by_name?: string;
+    qualification?: string;
+    coren_registration_no?: string;
+    firm_name?: string;
+    signature_image?: File | '' | 'remove' | null;
+  }
+): Promise<ReportSignOffConfig> => {
+  const form = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (value === null) return;
+    if (value instanceof File) {
+      form.append(key, value);
+    } else {
+      form.append(key, String(value));
+    }
+  });
+  const res = await api.patch(`/reports/projects/${projectId}/signoff/`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  const data = unwrap<ReportSignOffConfig | null>(res, null);
+  if (!data) throw new Error('Report sign-off could not be saved.');
+  return data;
+};
+
+/** Remove a project's report sign-off entirely (Directors only). */
+export const removeReportSignOff = async (projectId: string): Promise<ReportSignOffConfig> => {
+  const res = await api.delete(`/reports/projects/${projectId}/signoff/`);
+  const data = unwrap<ReportSignOffConfig | null>(res, null);
+  if (!data) throw new Error('Report sign-off could not be removed.');
+  return data;
+};
+
+/** One geolocated test point on the interactive report map (§2.4). */
+export interface ReportMapTestPoint {
+  type: 'Feature';
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: {
+    element: string;
+    floor: string;
+    grid_location: string;
+    tested_at: string | null;
+    velocity_m_s: number | null;
+    strength_n_mm2: number | null;
+    band: 'good' | 'poor' | 'unassessed' | 'no_velocity';
+  };
+}
+
+/** One surveyed site-perimeter polygon (from a GNSS boundary survey). */
+export interface ReportMapBoundaryPolygon {
+  survey_reference: string;
+  title: string;
+  polygon: { type: 'Polygon'; coordinates: [number, number][][] };
+}
+
+/** GeoJSON-style map payload — only recorded coordinates, never fabricated. */
+export interface ReportMapData {
+  project_center: [number, number] | null;
+  site_address: string;
+  test_points: { type: 'FeatureCollection'; features: ReportMapTestPoint[] };
+  /** One closed ring per GNSS boundary survey — empty when none recorded. */
+  boundary_polygons: ReportMapBoundaryPolygon[];
+  legend: Record<string, string>;
+}
+
+/** Fetch the real test-point coordinates + bands for the project map. */
+export const getReportMapData = async (projectId: string): Promise<ReportMapData> => {
+  const res = await api.get(`/reports/projects/${projectId}/map/`);
+  const data = unwrap<ReportMapData | null>(res, null);
+  if (!data) throw new Error('The map data could not be loaded.');
+  return data;
 };

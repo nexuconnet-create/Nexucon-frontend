@@ -33,9 +33,17 @@ export default function ComplianceReportsAnalytics() {
 
   const handleExportComplianceReport = async () => {
     try {
-      const ref = `REP-COMP-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Compiling Compliance & Enforcement Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statutory Compliance & Regulatory Enforcement Report",
+        format: "PDF",
+        report_type: "Compliance",
+        modules_included: ["Compliance & Regulatory", "Inspection Analytics"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Compiling Compliance & Enforcement Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statutory Compliance & Regulatory Enforcement Report",

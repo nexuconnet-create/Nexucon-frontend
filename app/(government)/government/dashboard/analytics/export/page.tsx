@@ -138,6 +138,19 @@ const REPORT_TYPES: ReportTypeOption[] = [
   }
 ];
 
+// Maps the nine portal report types onto the backend GeneratedReport classification
+const BACKEND_REPORT_TYPE: Record<ReportType, GeneratedReport['report_type']> = {
+  general: 'Executive',
+  inspection: 'Inspection',
+  agency: 'Performance',
+  project: 'Project',
+  compliance: 'Compliance',
+  risk: 'Custom',
+  progress: 'Project',
+  evm_financial: 'Financial',
+  inspector_analytics: 'Custom'
+};
+
 export default function ExportReports() {
   const [reports, setReports] = useState<GeneratedReport[]>([]);
   const [selectedReportType, setSelectedReportType] = useState<ReportType>('general');
@@ -205,10 +218,11 @@ export default function ExportReports() {
     }
 
     setIsSubmitting(true);
-    const reportRef = `REP-${selectedReportType.toUpperCase().slice(0, 4)}-${Math.floor(100 + Math.random() * 900)}`;
+    // The report reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+    let reportRef: string | null = null;
     const config: ReportConfig = {
       title: reportTitle || `Statutory Government Intelligence Report (${format})`,
-      reportReference: reportRef,
+      reportReference: '',
       format,
       reportType: selectedReportType,
       modules: selectedModules,
@@ -218,26 +232,30 @@ export default function ExportReports() {
     };
 
     try {
-      // 1. Generate & trigger file download directly in browser
-      const docResult = await generateAndDownloadDocument(config);
-
-      // 2. Persist in backend archive (safe non-blocking)
+      // 1. Archive on the backend first so the statutory reference number is issued server-side
       try {
-        await createGeneratedReport({
+        const created = await createGeneratedReport({
           title: config.title,
-          report_reference: reportRef,
           format,
+          report_type: BACKEND_REPORT_TYPE[selectedReportType],
           modules_included: selectedModules,
           period_start: startDate,
-          period_end: endDate,
-          file_size: docResult.fileSize
+          period_end: endDate
         });
+        reportRef = created?.report_reference || null;
       } catch (backendErr) {
         console.warn("Could not archive report on backend:", backendErr);
       }
+      if (!reportRef) {
+        throw new Error('Backend did not issue a report reference for this export.');
+      }
+      config.reportReference = reportRef;
 
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Report "${reportRef}" (${format}) generated and downloaded!`, type: 'success' } 
+      // 2. Generate & trigger file download directly in browser
+      await generateAndDownloadDocument(config);
+
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Report "${reportRef}" (${format}) generated and downloaded!`, type: 'success' }
       }));
 
       fetchReports();
@@ -257,10 +275,9 @@ export default function ExportReports() {
     }
 
     setIsSubmitting(true);
-    const reportRef = `REP-${selectedReportType.toUpperCase().slice(0, 4)}-${Math.floor(100 + Math.random() * 900)}`;
     const config: ReportConfig = {
       title: reportTitle || `Statutory Government Intelligence Report (${format})`,
-      reportReference: reportRef,
+      reportReference: '',
       format,
       reportType: selectedReportType,
       modules: selectedModules,
@@ -270,9 +287,23 @@ export default function ExportReports() {
     };
 
     try {
+      // Issue the statutory reference server-side before previewing (GeneratedReport.generate_report_ref)
+      const created = await createGeneratedReport({
+        title: config.title,
+        format,
+        report_type: BACKEND_REPORT_TYPE[selectedReportType],
+        modules_included: selectedModules,
+        period_start: startDate,
+        period_end: endDate
+      });
+      if (!created?.report_reference) {
+        throw new Error('Backend did not issue a report reference for this preview.');
+      }
+      config.reportReference = created.report_reference;
+
       const data = await compileReportData(config.modules);
-      const docResult = format === 'PDF' 
-        ? generatePDFReport(config, data)
+      const docResult = format === 'PDF'
+        ? await generatePDFReport(config, data)
         : generateCSVReport(config, data);
 
       setPreviewResult(docResult);

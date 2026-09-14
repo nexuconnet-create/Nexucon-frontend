@@ -73,7 +73,9 @@ export function generateAuditJSON(events: AuditEvent[], config: AuditExportConfi
       officerRole: config.officerRole,
       scope: config.module,
       recordsCount: events.length,
-      chainStatus: "VERIFIED_100_PERCENT"
+      // Honest per-record verification flag only — the export makes no
+      // blanket chain-integrity claim it has not actually verified.
+      allRecordsVerified: events.length > 0 ? events.every(e => e.is_verified) : null
     },
     auditRecords: events.map(e => ({
       reference: e.audit_reference,

@@ -38,15 +38,16 @@ export default function MonitoringDetailSideDrawer({
   const [activePhotoPreview, setActivePhotoPreview] = useState<string | null>(null);
   const [isTelemetryActive, setIsTelemetryActive] = useState(false);
   const [telemetryMode, setTelemetryMode] = useState<'distance' | 'coordinates' | 'lidar' | 'sensors'>('distance');
-  const [liveDistanceMeters, setLiveDistanceMeters] = useState(14.852);
-  const [isMeasuringDistance, setIsMeasuringDistance] = useState(false);
-  const [geoCoordinates, setGeoCoordinates] = useState({
-    lat: 6.42814,
-    lng: 3.42197,
-    accuracy: 1.2,
-    source: 'CORS_BASE_DEFAULT',
-    address: 'Plot 14B, Victoria Island, Lagos'
-  });
+  // Telemetry values come only from the record's stored gps_coordinates — nothing is fabricated here
+  const [liveDistanceMeters, setLiveDistanceMeters] = useState<number | null>(null);
+  const [setbackMeasured, setSetbackMeasured] = useState<number | null>(null);
+  const [geoCoordinates, setGeoCoordinates] = useState<{
+    lat: number;
+    lng: number;
+    accuracy: number;
+    source: string;
+    address?: string;
+  } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
@@ -58,11 +59,12 @@ export default function MonitoringDetailSideDrawer({
       setGeoCoordinates({
         lat,
         lng,
-        accuracy: Number(gps.accuracy || 1.2),
+        accuracy: gps.accuracy != null ? Number(gps.accuracy) : 0,
         source: gps.source || 'GPS_HARDWARE',
-        address: gps.address || `Lagos Cadastral Lock (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`
+        address: gps.address || undefined
       });
       if (gps.laser_distance_meters) setLiveDistanceMeters(Number(gps.laser_distance_meters));
+      if (gps.setback_measured_meters != null) setSetbackMeasured(Number(gps.setback_measured_meters));
       if (gps.is_telemetry_active) setIsTelemetryActive(true);
     }
   }, [item]);
@@ -76,12 +78,12 @@ export default function MonitoringDetailSideDrawer({
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        // Only values reported by the device GPS are recorded — no assumed accuracy
         setGeoCoordinates({
           lat: Number(pos.coords.latitude.toFixed(6)),
           lng: Number(pos.coords.longitude.toFixed(6)),
-          accuracy: Number((pos.coords.accuracy || 1.5).toFixed(1)),
-          source: 'GPS_HARDWARE',
-          address: `Lagos Cadastral Lock (${pos.coords.latitude.toFixed(4)}°, ${pos.coords.longitude.toFixed(4)}°)`
+          accuracy: Number.isFinite(pos.coords.accuracy) ? Number(pos.coords.accuracy.toFixed(1)) : 0,
+          source: 'GPS_HARDWARE'
         });
         setIsLocating(false);
         window.dispatchEvent(new CustomEvent('show-toast', {
@@ -100,18 +102,6 @@ export default function MonitoringDetailSideDrawer({
       onClose();
       router.push(`/government/dashboard/projects/view/${projectId}/monitoring`);
     }
-  };
-
-  const triggerLaserDistanceMeasurement = () => {
-    setIsMeasuringDistance(true);
-    setTimeout(() => {
-      const newDistance = Number((12.0 + Math.random() * 6.0).toFixed(3));
-      setLiveDistanceMeters(newDistance);
-      setIsMeasuringDistance(false);
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: `🎯 Laser EDM Ping Acquired: ${newDistance} m (Setback: 3.42 m)`, type: 'success' }
-      }));
-    }, 600);
   };
 
   return (
@@ -160,7 +150,7 @@ export default function MonitoringDetailSideDrawer({
                 </span>
 
                 <span className="text-xs text-slate-400 font-bold">
-                  {data.update_reference || data.observation_reference || data.issue_reference || data.verification_reference || 'REF-LIVE'}
+                  {data.update_reference || data.observation_reference || data.issue_reference || data.verification_reference || data.milestone_code || '—'}
                 </span>
               </div>
               <h2 className="text-lg font-black text-[#022C4F] mt-0.5 line-clamp-1">
@@ -302,30 +292,19 @@ export default function MonitoringDetailSideDrawer({
                     {/* Mode Content */}
                     {telemetryMode === 'distance' && (
                       <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-[10px] text-blue-300 font-mono uppercase tracking-wider block">
-                              Laser Distance (EDM)
+                        <div>
+                          <span className="text-[10px] text-blue-300 font-mono uppercase tracking-wider block">
+                            Laser Distance (EDM) — as recorded on this update
+                          </span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black font-mono text-emerald-400">
+                              {liveDistanceMeters !== null ? liveDistanceMeters.toFixed(3) : '—'}
                             </span>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-2xl font-black font-mono text-emerald-400">
-                                {liveDistanceMeters.toFixed(3)}
-                              </span>
-                              <span className="text-xs text-slate-300">meters (±1.5mm)</span>
-                            </div>
+                            <span className="text-xs text-slate-300">meters</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={triggerLaserDistanceMeasurement}
-                            disabled={isMeasuringDistance}
-                            className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            <Target size={12} className={isMeasuringDistance ? "animate-spin" : ""} />
-                            <span>{isMeasuringDistance ? 'Pinging...' : 'Laser Ping'}</span>
-                          </button>
                         </div>
                         <div className="text-[11px] text-slate-300 flex justify-between border-t border-white/10 pt-1.5">
-                          <span>Setback: <strong className="text-emerald-400">3.42m (Pass)</strong></span>
+                          <span>Setback: <strong className={setbackMeasured !== null ? 'text-emerald-400' : 'text-slate-400'}>{setbackMeasured !== null ? `${setbackMeasured}m` : 'Not recorded'}</strong></span>
                           <span>Cloudflare R2: <strong className="text-blue-300">Backed Up</strong></span>
                         </div>
                       </div>
@@ -350,23 +329,29 @@ export default function MonitoringDetailSideDrawer({
                         <div className="grid grid-cols-2 gap-2 pt-1">
                           <div className="bg-white/5 p-2 rounded-lg">
                             <span className="text-[10px] text-slate-400 block">Coordinates</span>
-                            <span className="text-blue-300 font-bold">{geoCoordinates.lat}°N, {geoCoordinates.lng}°E</span>
+                            <span className="text-blue-300 font-bold">
+                              {geoCoordinates ? `${geoCoordinates.lat}°N, ${geoCoordinates.lng}°E` : 'No fix recorded'}
+                            </span>
                           </div>
                           <div className="bg-white/5 p-2 rounded-lg">
                             <span className="text-[10px] text-slate-400 block">Lock Accuracy</span>
-                            <span className="text-emerald-400 font-bold">±{geoCoordinates.accuracy}m (Fix)</span>
+                            <span className="text-emerald-400 font-bold">
+                              {geoCoordinates ? `±${geoCoordinates.accuracy}m` : '—'}
+                            </span>
                           </div>
                         </div>
                         <div className="bg-white/5 p-2 rounded-lg flex items-center justify-between text-[10px]">
-                          <span className="text-slate-300 truncate">{geoCoordinates.address}</span>
-                          <a
-                            href={`https://www.google.com/maps?q=${geoCoordinates.lat},${geoCoordinates.lng}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold shrink-0 ml-2"
-                          >
-                            Google Maps <ExternalLink size={10} />
-                          </a>
+                          <span className="text-slate-300 truncate">{geoCoordinates?.address || 'Address not recorded'}</span>
+                          {geoCoordinates && (
+                            <a
+                              href={`https://www.google.com/maps?q=${geoCoordinates.lat},${geoCoordinates.lng}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold shrink-0 ml-2"
+                            >
+                              Google Maps <ExternalLink size={10} />
+                            </a>
+                          )}
                         </div>
                       </div>
                     )}
@@ -375,11 +360,11 @@ export default function MonitoringDetailSideDrawer({
                       <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 text-xs grid grid-cols-2 gap-2">
                         <div className="bg-white/5 p-2 rounded-lg">
                           <span className="text-[10px] text-slate-400 block">Point Density</span>
-                          <span className="text-blue-300 font-bold font-mono">14,200 pts/m²</span>
+                          <span className="text-slate-300 font-bold font-mono">Not recorded</span>
                         </div>
                         <div className="bg-white/5 p-2 rounded-lg">
                           <span className="text-[10px] text-slate-400 block">Mesh Tolerance</span>
-                          <span className="text-emerald-400 font-bold font-mono">0.02% Deviation</span>
+                          <span className="text-slate-300 font-bold font-mono">Not recorded</span>
                         </div>
                       </div>
                     )}
@@ -388,15 +373,15 @@ export default function MonitoringDetailSideDrawer({
                       <div className="bg-black/30 p-3 rounded-xl border border-blue-500/20 grid grid-cols-3 gap-2 text-center text-xs">
                         <div className="bg-white/5 p-2 rounded-lg">
                           <span className="text-[10px] text-slate-400 block">Temp</span>
-                          <span className="text-amber-300 font-bold font-mono">31.4°C</span>
+                          <span className="text-slate-300 font-bold font-mono">—</span>
                         </div>
                         <div className="bg-white/5 p-2 rounded-lg">
                           <span className="text-[10px] text-slate-400 block">Wind</span>
-                          <span className="text-blue-300 font-bold font-mono">8.2 km/h</span>
+                          <span className="text-slate-300 font-bold font-mono">—</span>
                         </div>
                         <div className="bg-white/5 p-2 rounded-lg">
                           <span className="text-[10px] text-slate-400 block">Slump</span>
-                          <span className="text-emerald-400 font-bold font-mono">85mm</span>
+                          <span className="text-slate-300 font-bold font-mono">—</span>
                         </div>
                       </div>
                     )}
@@ -575,10 +560,10 @@ export default function MonitoringDetailSideDrawer({
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                 <div className="flex justify-between text-xs font-bold text-slate-700">
                   <span>Milestone Completion Progress</span>
-                  <span className="text-emerald-600 font-extrabold">{data.progress_percentage || (data.status === 'VERIFIED' ? 100 : 50)}%</span>
+                  <span className="text-emerald-600 font-extrabold">{data.progress_percentage ?? 0}%</span>
                 </div>
                 <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${data.progress_percentage || (data.status === 'VERIFIED' ? 100 : 50)}%` }} />
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${data.progress_percentage ?? 0}%` }} />
                 </div>
               </div>
 
@@ -620,7 +605,7 @@ export default function MonitoringDetailSideDrawer({
                   <Compass size={22} className={data.variance_detected ? 'text-rose-600' : 'text-emerald-600'} />
                   <div>
                     <span className="font-extrabold text-xs block">GNSS Coordinate Variance</span>
-                    <span className="text-[11px] font-bold">Deviation: {data.variance_meters || 0.045}m</span>
+                    <span className="text-[11px] font-bold">Deviation: {data.variance_meters ?? '—'}m</span>
                   </div>
                 </div>
                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase ${
@@ -634,11 +619,11 @@ export default function MonitoringDetailSideDrawer({
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Method</span>
-                  <span className="font-bold text-[#022C4F]">{data.method?.replace(/_/g, ' ') || 'GNSS RTK SURVEY'}</span>
+                  <span className="font-bold text-[#022C4F]">{data.method ? data.method.replace(/_/g, ' ') : 'Not recorded'}</span>
                 </div>
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Rover Device</span>
-                  <span className="font-bold text-[#022C4F]">{data.device_identifier || 'Tersus Oscar GNSS RTK #042'}</span>
+                  <span className="font-bold text-[#022C4F]">{data.device_identifier || 'Not recorded'}</span>
                 </div>
               </div>
 
@@ -648,9 +633,19 @@ export default function MonitoringDetailSideDrawer({
                   Field Coordinates Telemetry
                 </label>
                 <div className="p-3 bg-slate-900 text-white rounded-2xl font-mono text-[11px] space-y-1">
-                  <p className="text-emerald-400"># Captured: Lat: 6.425312, Lng: 3.421945, Alt: 12.4m</p>
-                  <p className="text-blue-400"># Approved: Lat: 6.425310, Lng: 3.421942, Alt: 12.4m</p>
-                  <p className="text-slate-400 pt-1 text-[10px]">Delta: dLat: +0.000002, dLng: +0.000003, Variance: 0.045m (Permissible)</p>
+                  <p className="text-emerald-400">
+                    # Captured: {data.captured_coordinates?.lat != null
+                      ? `Lat: ${data.captured_coordinates.lat}, Lng: ${data.captured_coordinates.lng}${data.captured_coordinates.elevation != null ? `, Alt: ${data.captured_coordinates.elevation}m` : ''}`
+                      : 'Not recorded'}
+                  </p>
+                  <p className="text-blue-400">
+                    # Approved: {data.approved_coordinates?.lat != null
+                      ? `Lat: ${data.approved_coordinates.lat}, Lng: ${data.approved_coordinates.lng}${data.approved_coordinates.elevation != null ? `, Alt: ${data.approved_coordinates.elevation}m` : ''}`
+                      : 'Not recorded'}
+                  </p>
+                  <p className="text-slate-400 pt-1 text-[10px]">
+                    Variance: {data.variance_meters != null ? `${data.variance_meters}m` : '—'} • Tolerance: ≤ {data.tolerance_limit_meters ?? 0.05}m
+                  </p>
                 </div>
               </div>
             </div>

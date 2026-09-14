@@ -70,9 +70,8 @@ export default function CreateMilestoneModal({
         }
       });
 
-      // Default auto code
-      const randomSuffix = Math.floor(100 + Math.random() * 900);
-      setMilestoneCode(`MS-26-${randomSuffix}`);
+      // Milestone code is auto-generated server-side when not supplied by the operator
+      setMilestoneCode('');
 
       // Default dates
       const today = new Date();
@@ -114,7 +113,7 @@ export default function CreateMilestoneModal({
     try {
       const payload: Partial<ConstructionMilestone> = {
         project: selectedProjectId,
-        milestone_code: milestoneCode.trim(),
+        milestone_code: milestoneCode.trim() || undefined,
         name: name.trim(),
         phase,
         description: description.trim(),

@@ -54,9 +54,19 @@ export default function AuditRecords() {
     try {
       const res = await verifyAuditHashChain();
       setVerificationResult(res);
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Hash Chain Verified! 100% Tamper-Proof (${res.total_blocks_checked} blocks validated).`, type: 'success' } 
-      }));
+      if (res.status === 'VALID') {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Hash Chain Verified — ${res.chain_integrity} (${res.total_blocks_checked} blocks validated).`, type: 'success' }
+        }));
+      } else if (res.status === 'UNAVAILABLE') {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: 'Verification service unavailable — the hash chain could not be verified at this time.', type: 'error' }
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Hash chain verification result: ${res.status} (${res.tampered_blocks_detected} tampered blocks detected).`, type: 'warning' }
+        }));
+      }
     } catch (err) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Hash chain verification failed', type: 'error' } }));
     } finally {
@@ -109,7 +119,7 @@ export default function AuditRecords() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
-                {verificationResult?.chain_integrity || "100.0% VERIFIED"}
+                {verificationResult?.chain_integrity || "Not yet verified — run verification"}
               </span>
               <span className="text-xs text-blue-200 font-semibold">• SHA-256 Block Signature Engine</span>
             </div>

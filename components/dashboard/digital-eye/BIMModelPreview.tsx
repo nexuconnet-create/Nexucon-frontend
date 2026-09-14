@@ -32,6 +32,9 @@ interface BIMModelPreviewProps {
    *  /digital-eye/bim-elements/) — matched by GUID to the selected mesh so
    *  the properties panel can list every attribute recorded for it. */
   structuralElements?: BIMStructuralElement[];
+  /** A5: forwarded to the element-properties panel — applies a real derived
+   *  mesh dimension as the measurement form's transducer path length. */
+  onApplyPathLength?: (lengthMm: number, axis: 'X' | 'Y' | 'Z') => void;
 }
 
 type LoadState = 'loading' | 'ready' | 'no-model' | 'no-geometry' | 'error';
@@ -43,6 +46,7 @@ export default function BIMModelPreview({
   refreshKey = 0,
   linkedElementCount = 0,
   structuralElements,
+  onApplyPathLength,
 }: BIMModelPreviewProps) {
   const [geometry, setGeometry] = useState<BIMModelGeometry | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -314,6 +318,7 @@ export default function BIMModelPreview({
             geometryElement={selectedGeometryElement}
             geometry={geometry}
             mapping={selectedMapping}
+            onApplyPathLength={onApplyPathLength}
           />
         )}
       </div>

@@ -30,8 +30,6 @@ import {
   Box,
   Layers,
   Search,
-  ShieldCheck,
-  Building2,
   ExternalLink,
   Printer,
 } from "lucide-react";
@@ -87,73 +85,13 @@ const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string
   low:      { label: "LOW",      color: "text-emerald-700", bg: "bg-emerald-100", sla: "14-day SLA" },
 };
 
-const DEFAULT_SAMPLE_REPORTS: ReportItem[] = [
-  {
-    id: "RPT-TS1-101",
-    title: "Eko Atlantic Tower - Weekly LiDAR Scan-to-BIM Deviation Dossier",
-    type: "Spatial Deviation Analysis",
-    date: "10 Oct 2026",
-    size: "2.4 MB",
-    project: "Eko Atlantic High-Rise Complex",
-    device: "Tersus S1 LiDAR",
-    status: "completed",
-    passRate: "98.2%",
-    standard: "NBC 2020 §14.2 / ASTM E57",
-    defects: 2,
-    anomalies: 1,
-    confidence: 0.98,
-  },
-  {
-    id: "RPT-TS1-102",
-    title: "Highway Bridge A4 - Pier 3 Structural Tolerance Verification",
-    type: "Point Cloud Alignment",
-    date: "09 Oct 2026",
-    size: "4.1 MB",
-    project: "Lagos-Ibadan Expressway Expansion",
-    device: "Tersus S1 RTK SLAM",
-    status: "completed",
-    passRate: "89.4%",
-    standard: "BS EN ISO 19650-2",
-    defects: 5,
-    anomalies: 3,
-    confidence: 0.94,
-  },
-  {
-    id: "RPT-TS1-103",
-    title: "Riverside Complex - Foundation Earthworks & Cut/Fill Balance",
-    type: "Topographic Volume Survey",
-    date: "05 Oct 2026",
-    size: "1.8 MB",
-    project: "Riverside Residential Estate",
-    device: "Drone Photogrammetry",
-    status: "completed",
-    passRate: "99.1%",
-    standard: "SURCON Statutory Survey",
-    defects: 0,
-    anomalies: 0,
-    confidence: 0.99,
-  },
-  {
-    id: "RPT-TS1-104",
-    title: "Lekki Deep Sea Port - Quay Wall QA/QC Comprehensive Audit",
-    type: "Quality Control Telemetry",
-    date: "01 Oct 2026",
-    size: "1.1 MB",
-    project: "Lekki Deep Sea Port",
-    device: "Tersus S1 Multi-Sensor",
-    status: "completed",
-    passRate: "96.7%",
-    standard: "COREN Statutory QA/QC",
-    defects: 1,
-    anomalies: 2,
-    confidence: 0.96,
-  },
-];
+// No sample/demo reports: the list shows only what the platform actually
+// generated from real scan sessions (no-dummy-data mandate).
 
 export default function Reports() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [reports, setReports] = useState<ReportItem[]>(DEFAULT_SAMPLE_REPORTS);
+  const [reports, setReports] = useState<ReportItem[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("qaqc");
@@ -214,23 +152,25 @@ export default function Reports() {
               day: "2-digit", month: "short", year: "numeric"
             }),
             size: "PDF",
-            project: s.project_name || s.project || "General Project",
-            status: qr?.status || s.status || "completed",
+            project: s.project_name || s.project || "No project recorded",
+            status: qr?.status || s.status || "recorded",
             defects: qr?.defect_count ?? null,
             anomalies: qr?.anomaly_count ?? null,
             confidence: qr?.overall_ai_confidence ?? null,
-            passRate: qr ? `${Math.round((1 - (qr.defect_count || 0) / 20) * 100)}%` : "98.5%",
-            standard: "NBC 2020 / NIS 87",
-            device: "Tersus S1 LiDAR",
+            // No invented pass rate: only the backend's own compliance figure
+            // would go here, and none is computed for these sessions.
+            passRate: undefined,
+            standard: qr?.standards_cited?.length ? qr.standards_cited.join(", ") : undefined,
+            device: s.scanner_id || (s.sensors_used?.length ? s.sensors_used.join(", ") : undefined),
           };
         });
-        setReports([...generatedReports, ...DEFAULT_SAMPLE_REPORTS]);
+        setReports(generatedReports);
       } else {
-        setReports(DEFAULT_SAMPLE_REPORTS);
+        setReports([]);
       }
     } catch (error) {
       console.error("Failed to fetch reports", error);
-      setReports(DEFAULT_SAMPLE_REPORTS);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -289,9 +229,15 @@ export default function Reports() {
         link.parentNode?.removeChild(link);
         window.URL.revokeObjectURL(url);
       } catch {
-        // Fallback simulated download for static/mock dossiers
-        setDownloadProgress((p) => ({ ...p, [sessionId]: 100 }));
-        notify("Sample statutory report compiled and prepared for download.", "success");
+        // Honest failure: never pretend a download happened.
+        setDownloadProgress((p) => {
+          const np = { ...p };
+          delete np[sessionId];
+          return np;
+        });
+        notify("The report could not be generated from this session. Please try again.", "error");
+        setGeneratingFor(null);
+        return;
       }
 
       notify("Report generated successfully.", "success");
@@ -372,29 +318,31 @@ export default function Reports() {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex justify-between items-start mb-3">
             <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl">
-              <ShieldCheck size={22} />
+              <AlertTriangle size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              Verified
+              Recorded
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Compliance Pass Rate</span>
-          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">96.8%</p>
-          <span className="text-[11px] text-emerald-700 font-medium mt-1 block">NBC 2020 ±20mm Envelope</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Defects on Record</span>
+          <p className="text-3xl font-bold text-emerald-600 font-mono mt-1">
+            {reports.some((r) => r.defects != null) ? reports.reduce((sum, r) => sum + (r.defects ?? 0), 0) : "—"}
+          </p>
+          <span className="text-[11px] text-gray-400 mt-1 block">Across generated reports</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex justify-between items-start mb-3">
             <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl">
-              <Building2 size={22} />
+              <User size={22} />
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
-              Seal Active
+              Required
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">COREN Accreditation</span>
-          <p className="text-base font-bold text-indigo-900 font-mono mt-2">COREN/REG/2026/0914</p>
-          <span className="text-[11px] text-indigo-600 mt-1 block">Digital Sign-Off Key Valid</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Engineer Sign-Off</span>
+          <p className="text-base font-bold text-indigo-900 font-mono mt-2">PENDING</p>
+          <span className="text-[11px] text-indigo-600 mt-1 block">A professional engineer must review before issue</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -708,7 +656,7 @@ export default function Reports() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 flex items-center gap-1.5"><Shield size={12} /> Standard:</span>
-                      <span className="font-medium text-gray-800 truncate max-w-[160px]">{previewReport.standard || "NBC 2020 §14.2"}</span>
+                      <span className="font-medium text-gray-800 truncate max-w-[160px]">{previewReport.standard || "Not recorded"}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 flex items-center gap-1.5"><Clock size={12} /> SLA Tier:</span>
@@ -732,7 +680,7 @@ export default function Reports() {
                       onClick={() => setSelectedReport(previewReport)}
                       className="w-full py-2 bg-slate-100 text-gray-700 text-xs font-semibold rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5"
                     >
-                      <Eye size={13} /> View Statutory Dossier Modal
+                      <Eye size={13} /> View Report Details
                     </button>
                   </div>
                 </div>
@@ -853,7 +801,7 @@ export default function Reports() {
                   <div className="flex items-center gap-3 text-xs text-gray-500 mt-2 font-mono flex-wrap">
                     <span>Ref: {selectedReport.id}</span>
                     <span>•</span>
-                    <span>Standard: {selectedReport.standard || "NBC 2020 §14.2"}</span>
+                    <span>Standard: {selectedReport.standard || "Not recorded"}</span>
                     <span>•</span>
                     <span>Date: {selectedReport.date}</span>
                   </div>
@@ -868,10 +816,12 @@ export default function Reports() {
 
               <div className="py-6 space-y-6 text-xs text-gray-700">
                 <div className="p-4 bg-slate-50 rounded-xl border border-gray-200">
-                  <h4 className="font-bold text-gray-900 uppercase text-[11px] mb-2">Statutory Findings & Evaluation</h4>
+                  <h4 className="font-bold text-gray-900 uppercase text-[11px] mb-2">Recorded Findings & Evaluation</h4>
                   <p className="leading-relaxed">
-                    The spatial LiDAR survey and point-to-BIM correlation indicates a statutory compliance rating of <strong>{selectedReport.passRate || "96.8%"}</strong>.
-                    All geometric tolerances have been validated against NBC 2020 Part II Chapter 14.2 envelope standards.
+                    {selectedReport.passRate
+                      ? <>The survey and point-to-BIM correlation indicates a compliance rating of <strong>{selectedReport.passRate}</strong>.</>
+                      : <>This summary reflects the defects, anomalies and AI confidence recorded for the session — no compliance rating is claimed until the platform computes one from the recorded data.</>}
+                    {} A professional engineer must review and sign off before any statutory issue.
                   </p>
                 </div>
 
@@ -880,29 +830,30 @@ export default function Reports() {
                     <thead className="bg-gray-100 text-gray-600 font-semibold text-[11px]">
                       <tr>
                         <th className="py-2.5 px-4">Evaluation Metric</th>
-                        <th className="py-2.5 px-4">Measured Value</th>
-                        <th className="py-2.5 px-4">Statutory Threshold</th>
+                        <th className="py-2.5 px-4">Recorded Value</th>
                         <th className="py-2.5 px-4">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       <tr>
-                        <td className="py-2 px-4 font-medium">Point Cloud Density</td>
-                        <td className="py-2 px-4 font-mono">2,450 pts/m²</td>
-                        <td className="py-2 px-4 font-mono">&gt; 1,000 pts/m²</td>
-                        <td className="py-2 px-4 text-emerald-600 font-bold">PASSED</td>
+                        <td className="py-2 px-4 font-medium">Defects recorded</td>
+                        <td className="py-2 px-4 font-mono">{selectedReport.defects ?? "—"}</td>
+                        <td className="py-2 px-4 font-bold text-gray-600">{selectedReport.defects == null ? "NOT ASSESSED" : selectedReport.defects > 0 ? "REVIEW REQUIRED" : "NONE RECORDED"}</td>
                       </tr>
                       <tr>
-                        <td className="py-2 px-4 font-medium">RMS Geometric Deviation</td>
-                        <td className="py-2 px-4 font-mono">8.4 mm</td>
-                        <td className="py-2 px-4 font-mono">≤ 20.0 mm</td>
-                        <td className="py-2 px-4 text-emerald-600 font-bold">PASSED</td>
+                        <td className="py-2 px-4 font-medium">Anomalies recorded</td>
+                        <td className="py-2 px-4 font-mono">{selectedReport.anomalies ?? "—"}</td>
+                        <td className="py-2 px-4 font-bold text-gray-600">{selectedReport.anomalies == null ? "NOT ASSESSED" : selectedReport.anomalies > 0 ? "REVIEW REQUIRED" : "NONE RECORDED"}</td>
                       </tr>
                       <tr>
-                        <td className="py-2 px-4 font-medium">COREN Certified Signature</td>
-                        <td className="py-2 px-4 font-mono">VERIFIED</td>
-                        <td className="py-2 px-4 font-mono">Enforced</td>
-                        <td className="py-2 px-4 text-emerald-600 font-bold">ACTIVE</td>
+                        <td className="py-2 px-4 font-medium">AI confidence</td>
+                        <td className="py-2 px-4 font-mono">{selectedReport.confidence != null ? `${(selectedReport.confidence * 100).toFixed(1)}%` : "—"}</td>
+                        <td className="py-2 px-4 font-bold text-gray-600">{selectedReport.confidence != null ? "ASSESSED" : "NOT YET ASSESSED"}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-4 font-medium">Professional engineer sign-off</td>
+                        <td className="py-2 px-4 font-mono">PENDING</td>
+                        <td className="py-2 px-4 font-bold text-amber-600">REQUIRED BEFORE ISSUE</td>
                       </tr>
                     </tbody>
                   </table>
@@ -910,14 +861,14 @@ export default function Reports() {
 
                 <div className="pt-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
                   <div className="text-[11px] text-gray-500">
-                    Digitally Stamped & Authenticated by <strong>COREN/REG/2026/0914</strong>
+                    Generated from recorded session data — not a certified statutory record until engineer sign-off.
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => window.print()}
                       className="px-4 py-2 bg-[#022C4F] text-white rounded-xl font-bold flex items-center gap-1.5 text-xs shadow cursor-pointer hover:bg-[#033c6c] transition-colors"
                     >
-                      <Printer size={13} /> Print Statutory Dossier
+                      <Printer size={13} /> Print Report
                     </button>
                   </div>
                 </div>

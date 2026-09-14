@@ -181,8 +181,8 @@ const sidebarLinks: SidebarItem[] = [
     name: "PUNDIT (Ultrasonic NDT)",
     icon: Sparkles,
     subItems: [
+      { name: "Nexucon Link (Calibration)", href: "/government/dashboard/digital-eye/pundit/neural-link", icon: LinkIcon },
       { name: "Waveform Oscillograms", href: "/government/dashboard/digital-eye/pundit/waveforms", icon: Sparkles },
-      { name: "Compressive Strength (fcu)", href: "/government/dashboard/digital-eye/pundit/strength", icon: Activity },
       { name: "Data Collection & Ingestion", href: "/government/dashboard/digital-eye/pundit/data-collection", icon: UploadCloud },
       { name: "BS 1881-203 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
       { name: "UPV Test Registry", href: "/government/dashboard/digital-eye/pundit/tests", icon: FileText },

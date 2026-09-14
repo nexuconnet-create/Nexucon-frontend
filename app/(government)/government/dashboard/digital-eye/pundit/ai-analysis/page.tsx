@@ -19,7 +19,29 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
+import PunditAnalysisReviewPanel from "@/components/dashboard/digital-eye/PunditAnalysisReviewPanel";
+import {
+  ElementFolderList,
+  FolderViewToggle,
+  FloorStationTreeBody,
+  RATING_SEVERITY,
+  StationSummary,
+  useFloorStationFolders,
+} from "@/components/dashboard/digital-eye/PunditFolderTree";
 import { DigitalEyeFinding, getDigitalEyeFindings, PunditTest, getPunditTests, getPunditAIAnalyses, PunditAIAnalysis, PunditProjectAnalysis, analyzePunditProject, getBIMStructuralElements, BIMStructuralElement, formatVelocityMs } from "@/services/digitalEye";
+
+/** One element-verdict row (a test's server-computed element means). */
+interface ElementVerdict {
+  id: string;
+  reference: string;
+  element: string;
+  floor: string;
+  points: number;
+  pointLabels: string;
+  meanVelocity: number;
+  meanFcu: number | null;
+  grade: string;
+}
 
 export default function PunditAIAnalysisPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -177,15 +199,20 @@ export default function PunditAIAnalysisPage() {
         }
       : null;
 
+  // The record's real UUID — the review endpoint addresses it directly.
+  const shownAnalysisId = freshRun ? freshRun.analysis_id : (latestAnalysis?.id || null);
+
   // Per-element reading summaries: each test's velocity / E.C.S IS the
-  // element mean across its A/B/C… points when readings exist.
-  const elementSummaries = tests
+  // element mean across its A/B/C… points when readings exist. Floor and
+  // element are kept raw ('' when not recorded) — the folder grouping puts
+  // them in honest "not recorded / not named" buckets.
+  const elementSummaries: ElementVerdict[] = tests
     .filter(t => t.pulse_velocity_ms > 0)
     .map(t => ({
       id: t.id,
       reference: t.test_reference,
-      element: t.structural_element_name || t.test_location || '—',
-      floor: t.floor || '—',
+      element: (t.structural_element_name || t.test_location || '').trim(),
+      floor: (t.floor || '').trim(),
       points: t.readings.length > 0 ? t.readings.length : 1,
       pointLabels: t.readings.length > 0
         ? t.readings.map(r => r.point_label).join('/')
@@ -194,6 +221,26 @@ export default function PunditAIAnalysisPage() {
       meanFcu: t.estimated_compressive_strength_mpa,
       grade: t.concrete_quality_rating,
     }));
+
+  // Same folder structure as the UPV Test Registry: Floor -> Station (the
+  // element) -> verdicts, with the station's mean values and worst grade.
+  const verdictFloorOf = (v: ElementVerdict) => v.floor || 'Floor not recorded';
+  const verdictStationOf = (v: ElementVerdict) => v.element || 'Station not named';
+  const verdictFolders = useFloorStationFolders(elementSummaries, verdictFloorOf, verdictStationOf);
+  // Mean of the station's verdict means + worst grade across them.
+  const verdictStationSummary = (rows: ElementVerdict[]): StationSummary => {
+    const vs = rows.map(r => r.meanVelocity).filter(v => v > 0);
+    const fs = rows.map(r => r.meanFcu).filter((f): f is number => f != null);
+    return {
+      meanV: vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : null,
+      meanF: fs.length ? fs.reduce((s, f) => s + f, 0) / fs.length : null,
+      remark: rows.reduce((worst, r) => {
+        const a = RATING_SEVERITY.indexOf(r.grade);
+        const b = RATING_SEVERITY.indexOf(worst);
+        return a < b ? r.grade : worst;
+      }, 'EXCELLENT' as string),
+    };
+  };
 
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
@@ -317,6 +364,13 @@ export default function PunditAIAnalysisPage() {
               )}
             </div>
 
+            {/* Engineer review (client principle 5): the AI output is
+                decision-support — a qualified engineer corroborates it or
+                returns it for revision. Pending until a review exists. */}
+            {shownAnalysisId && (
+              <PunditAnalysisReviewPanel analysisId={shownAnalysisId} />
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -373,19 +427,28 @@ export default function PunditAIAnalysisPage() {
         )}
       </div>
 
-      {/* PER-ELEMENT READING SUMMARIES (A1) — element means across A/B/C… points */}
+      {/* PER-ELEMENT READING SUMMARIES (A1) — element means across A/B/C…
+          points, in the same Floor -> Station folder structure as the
+          registry (with a Folders / Flat list toggle). */}
       {elementSummaries.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
-              <Box className="text-amber-500" size={20} />
-              Element Verdicts (Test-Point Means)
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Each element's velocity and E.C.S are the server-computed means across its test points (A, B, C…).
-            </p>
+          <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[#022C4F] flex items-center gap-2">
+                <Box className="text-amber-500" size={20} />
+                Element Verdicts (Test-Point Means)
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Each element&apos;s velocity and E.C.S are the server-computed means across its test points (A, B, C…).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <FolderViewToggle viewMode={verdictFolders.viewMode} onChange={verdictFolders.setViewMode} />
+              <span className="text-xs text-gray-500 font-mono">{elementSummaries.length} Verdict{elementSummaries.length === 1 ? '' : 's'}</span>
+            </div>
           </div>
           <div className="overflow-x-auto">
+            {verdictFolders.viewMode === 'flat' ? (
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 text-gray-600 text-[10px] uppercase tracking-wider">
@@ -400,26 +463,39 @@ export default function PunditAIAnalysisPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {elementSummaries.map(e => (
-                  <tr key={e.id} className="hover:bg-slate-50/60">
-                    <td className="px-6 py-3 font-semibold text-gray-900">{e.element}</td>
-                    <td className="px-4 py-3 font-mono text-gray-500">{e.reference}</td>
-                    <td className="px-4 py-3 text-gray-600">{e.floor}</td>
-                    <td className="px-4 py-3 text-center font-mono text-gray-700">{e.pointLabels} <span className="text-gray-400">({e.points})</span></td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-amber-700">{formatVelocityMs(e.meanVelocity)} m/s</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-800">{e.meanFcu != null ? `${e.meanFcu.toFixed(1)} MPa` : '—'}</td>
-                    <td className="px-6 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        e.grade === 'EXCELLENT' || e.grade === 'GOOD' ? 'bg-emerald-100 text-emerald-800'
-                          : e.grade === 'PENDING' ? 'bg-gray-100 text-gray-600'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {e.grade}
-                      </span>
-                    </td>
-                  </tr>
+                  <VerdictRow key={e.id} e={e} />
                 ))}
               </tbody>
             </table>
+            ) : (
+            <FloorStationTreeBody
+              groups={verdictFolders.groups}
+              openFloors={verdictFolders.openFloors}
+              openStations={verdictFolders.openStations}
+              toggleFloor={verdictFolders.toggleFloor}
+              toggleStation={verdictFolders.toggleStation}
+              stationSummary={verdictStationSummary}
+              renderStationBody={(rows) => (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-gray-600 text-[10px] uppercase tracking-wider">
+                      <th className="text-left px-6 py-2.5 font-bold">Element</th>
+                      <th className="text-left px-4 py-2.5 font-bold">Test Reference</th>
+                      <th className="text-center px-4 py-2.5 font-bold">Points</th>
+                      <th className="text-right px-4 py-2.5 font-bold">Mean Velocity</th>
+                      <th className="text-right px-4 py-2.5 font-bold">Mean E.C.S</th>
+                      <th className="text-center px-6 py-2.5 font-bold">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rows.map(e => (
+                      <VerdictRow key={e.id} e={e} showFloor={false} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            />
+            )}
           </div>
         </div>
       )}
@@ -466,55 +542,63 @@ export default function PunditAIAnalysisPage() {
                 : 'No findings match your search.'}
             </div>
           ) : (
-          filteredFindings.map((finding) => (
-            <div
-              key={finding.id}
-              onClick={() => {
-                setSelectedFinding(finding);
-                setIsDrawerOpen(true);
-              }}
-              className="p-6 hover:bg-slate-50/70 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <AlertTriangle size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="font-mono font-bold text-xs text-gray-500">{finding.finding_reference}</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                      {finding.severity}
-                    </span>
-                    {finding.confidence_score > 0 && (
-                      <span className="text-[10px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold">
-                        Evidence Confidence: {finding.confidence_score}%
-                      </span>
-                    )}
-                    {finding.status === 'CONVERTED_TO_NCR' && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                        CONVERTED TO NCR
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-bold text-sm text-gray-900 group-hover:text-amber-700 transition-colors">{finding.title}</h3>
-                  <p className="text-xs text-gray-600 mt-1 max-w-2xl">{finding.description}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+          /* Findings carry no floor (DigitalEyeFinding has only the structural
+             element) — the honest deepest grouping is a one-level Element →
+             findings folder tree, in the same folder styling as the registry. */
+          <ElementFolderList
+            items={filteredFindings}
+            getGroup={(f) => (f.structural_element_name || '').trim() || 'Element not linked'}
+            renderItem={(finding) => (
+              <div
+                key={finding.id}
+                onClick={() => {
                   setSelectedFinding(finding);
                   setIsDrawerOpen(true);
                 }}
-                className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer shrink-0 flex items-center gap-1.5"
+                className="p-6 hover:bg-slate-50/70 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer group"
               >
-                <Sparkles size={13} className="text-amber-400" />
-                <span>Inspect UPV & NCR →</span>
-              </button>
-            </div>
-          ))
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-mono font-bold text-xs text-gray-500">{finding.finding_reference}</span>
+                      <span className="text-gray-300">•</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
+                        {finding.severity}
+                      </span>
+                      {finding.confidence_score > 0 && (
+                        <span className="text-[10px] font-mono text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold">
+                          Evidence Confidence: {finding.confidence_score}%
+                        </span>
+                      )}
+                      {finding.status === 'CONVERTED_TO_NCR' && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                          CONVERTED TO NCR
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-bold text-sm text-gray-900 group-hover:text-amber-700 transition-colors">{finding.title}</h3>
+                    <p className="text-xs text-gray-600 mt-1 max-w-2xl">{finding.description}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedFinding(finding);
+                    setIsDrawerOpen(true);
+                  }}
+                  className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer shrink-0 flex items-center gap-1.5"
+                >
+                  <Sparkles size={13} className="text-amber-400" />
+                  <span>Inspect UPV & NCR →</span>
+                </button>
+              </div>
+            )}
+            itemNoun="finding"
+          />
           )}
         </div>
       </div>
@@ -533,5 +617,29 @@ export default function PunditAIAnalysisPage() {
         defaultElementId={selectedElementId}
       />
     </div>
+  );
+}
+
+/** One element-verdict row (shared by the flat table and the folder view —
+ *  the folder's station table omits the Floor column, like the registry). */
+function VerdictRow({ e, showFloor = true }: { e: ElementVerdict; showFloor?: boolean }) {
+  return (
+    <tr className="hover:bg-slate-50/60">
+      <td className="px-6 py-3 font-semibold text-gray-900">{e.element || '—'}</td>
+      <td className="px-4 py-3 font-mono text-gray-500">{e.reference}</td>
+      {showFloor && <td className="px-4 py-3 text-gray-600">{e.floor || '—'}</td>}
+      <td className="px-4 py-3 text-center font-mono text-gray-700">{e.pointLabels} <span className="text-gray-400">({e.points})</span></td>
+      <td className="px-4 py-3 text-right font-mono font-bold text-amber-700">{formatVelocityMs(e.meanVelocity)} m/s</td>
+      <td className="px-4 py-3 text-right font-mono font-bold text-gray-800">{e.meanFcu != null ? `${e.meanFcu.toFixed(1)} MPa` : '—'}</td>
+      <td className="px-6 py-3 text-center">
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+          e.grade === 'EXCELLENT' || e.grade === 'GOOD' ? 'bg-emerald-100 text-emerald-800'
+            : e.grade === 'PENDING' ? 'bg-gray-100 text-gray-600'
+            : 'bg-rose-100 text-rose-800'
+        }`}>
+          {e.grade}
+        </span>
+      </td>
+    </tr>
   );
 }

@@ -35,7 +35,8 @@ export default function CertifyVerificationModal({
   if (!isOpen || !verification) return null;
 
   const isVarianceDetected = verification.variance_detected || (verification.variance_meters > (verification.tolerance_limit_meters || 0.05));
-  const preCertRef = verification.digital_cert_ref || `CERT-VRF-${new Date().getFullYear()}-LASBCA-${Math.floor(10000 + Math.random() * 90000)}`;
+  // Cert ref and signature hash are issued server-side on certify — nothing is pre-fabricated here
+  const preCertRef = verification.digital_cert_ref;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,10 +181,10 @@ export default function CertifyVerificationModal({
               <span className="flex items-center gap-1.5">
                 <Lock size={13} className="text-emerald-700" /> Digital Certificate Ref
               </span>
-              <span>{preCertRef}</span>
+              <span>{preCertRef || 'Pending issuance'}</span>
             </div>
             <div className="text-[10px] text-emerald-700 truncate font-mono">
-              Sig Hash: 0xLASBCA-VRF-SURV-{Math.floor(10000000 + Math.random() * 90000000).toString(16).toUpperCase()}
+              Sig Hash: {verification.signature_hash || 'Pending issuance'}
             </div>
           </div>
 

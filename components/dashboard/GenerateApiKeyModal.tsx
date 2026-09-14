@@ -31,9 +31,16 @@ export default function GenerateApiKeyModal({
     setIsSubmitting(true);
     try {
       const res = await generateApiKey({ name, app_type: appType, volume_tier: volumeTier });
-      setGeneratedKey(res.raw_key || `nx_live_${Math.random().toString(36).substring(2)}`);
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `API Key for "${name}" generated!`, type: 'success' } 
+      if (!res.raw_key) {
+        // The backend must return the one-time raw secret — never fabricate a key client-side
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: 'Backend did not return the raw API key — please contact the administrator.', type: 'error' }
+        }));
+        return;
+      }
+      setGeneratedKey(res.raw_key);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `API Key for "${name}" generated!`, type: 'success' }
       }));
       if (onSuccess) onSuccess();
     } catch (err) {

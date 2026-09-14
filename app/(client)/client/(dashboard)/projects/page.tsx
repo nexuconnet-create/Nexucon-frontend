@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Search, Bell, ArrowUpRight, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, Bell, ArrowUpRight, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import NotificationCenter from "@/components/dashboard/NotificationCenter";
 import ReviewDrawingDrawer from "@/components/dashboard/ReviewDrawingDrawer";
@@ -9,77 +9,103 @@ import FinalApprovalDrawer from "@/components/dashboard/FinalApprovalDrawer";
 import ApprovalSuccessModal from "@/components/dashboard/ApprovalSuccessModal";
 import Button from "@/components/ui/Button"
 import ProfilePill from "@/components/ui/ProfilePill";
+import { getProjects, Project } from "@/services/projects";
+import { getDocuments, getDocumentApprovals } from "@/services/documents";
+import { getBIMMilestones, BIMConstructionMilestone } from "@/services/bim";
 
 export default function MyProjectsPage() {
   const router = useRouter();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isReviewDrawerOpen, setIsReviewDrawerOpen] = useState(false);
   const [isFinalApprovalDrawerOpen, setIsFinalApprovalDrawerOpen] = useState(false);
   const [isApprovalSuccessModalOpen, setIsApprovalSuccessModalOpen] = useState(false);
 
-  const projects = [
-    {
-      id: 1,
-      name: "Lekki Commercial Plaza",
-      location: "Lekki, Lagos",
-      stage: "Tender/Procurement",
-      statusText: "In Progress",
-      progress: 72,
-      progressColor: "bg-[#7DA627]",
-      drawings: "24 Uploaded",
-      pendingReviews: "3",
-      nextMilestone: "Contract Award"
-    },
-    {
-      id: 2,
-      name: "Green Valley Apartments",
-      location: "Abuja, FCT",
-      stage: "Internal Review",
-      statusText: "In Progress",
-      progress: 95,
-      progressColor: "bg-[#7DA627]",
-      drawings: "38 Uploaded",
-      pendingReviews: "2",
-      nextMilestone: "Client Review"
-    },
-    {
-      id: 3,
-      name: "Crestview Residences",
-      location: "Port Harcourt, Rivers State",
-      stage: "Client Review",
-      statusText: "In Progress",
-      progress: 95,
-      progressColor: "bg-[#7DA627]",
-      drawings: "31 Uploaded",
-      pendingReviews: "1",
-      nextMilestone: "Approved"
-    },
-    {
-      id: 4,
-      name: "Victoria Heights",
-      location: "Victoria Island, Lagos",
-      stage: "Approved",
-      statusText: "Completed",
-      progress: 100,
-      progressColor: "bg-[#7DA627]",
-      drawings: "45 Uploaded",
-      pendingReviews: "Completed",
-      nextMilestone: "Tender/Procurement"
-    },
-    {
-      id: 5,
-      name: "Sunrise Medical Centre",
-      location: "Enugu, Enugu State",
-      stage: "Draft",
-      statusText: "In Progress",
-      progress: 42,
-      progressColor: "bg-[#FF3B30]",
-      drawings: "12 Uploaded",
-      pendingReviews: "0",
-      nextMilestone: "Structural Design Development"
-    }
+  // Real data — projects, their documents/approvals and BIM milestones. No
+  // fabricated rows: every cell below comes from the backend or renders an
+  // honest "—" when the platform has no value for it yet.
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [docCountByProject, setDocCountByProject] = useState<Record<string, number>>({});
+  const [pendingReviewsByProject, setPendingReviewsByProject] = useState<Record<string, number>>({});
+  const [nextMilestoneByProject, setNextMilestoneByProject] = useState<Record<string, string>>({});
+  const [drawingsUnderReview, setDrawingsUnderReview] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const [projectList, documents, approvals, milestones] = await Promise.all([
+          getProjects(),
+          getDocuments().catch(() => []),
+          getDocumentApprovals().catch(() => []),
+          getBIMMilestones().catch(() => [] as BIMConstructionMilestone[]),
+        ]);
+        if (cancelled) return;
+
+        setProjects(projectList);
+
+        // Per-project document counts (all documents) and pending reviews.
+        const docCounts: Record<string, number> = {};
+        const reviewCounts: Record<string, number> = {};
+        let underReview = 0;
+        documents.forEach((d) => {
+          if (!d.project) return;
+          docCounts[d.project] = (docCounts[d.project] ?? 0) + 1;
+          if (d.status === 'PENDING_REVIEW' || d.status === 'UNDER_REVIEW') {
+            reviewCounts[d.project] = (reviewCounts[d.project] ?? 0) + 1;
+            underReview += 1;
+          }
+        });
+        setDocCountByProject(docCounts);
+        setPendingReviewsByProject(reviewCounts);
+        setDrawingsUnderReview(underReview);
+        setPendingApprovals(approvals.filter((a) => a.status === 'PENDING').length);
+
+        // Next milestone per project: the earliest milestone in sequence that
+        // has not been verified yet.
+        const nextMilestones: Record<string, string> = {};
+        const byProject: Record<string, BIMConstructionMilestone[]> = {};
+        milestones.forEach((m) => {
+          if (!m.project) return;
+          (byProject[m.project] ??= []).push(m);
+        });
+        Object.entries(byProject).forEach(([projectId, ms]) => {
+          const next = [...ms]
+            .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0))
+            .find((m) => !m.actual_verified_date);
+          if (next) nextMilestones[projectId] = next.name;
+        });
+        setNextMilestoneByProject(nextMilestones);
+
+        setLoadError(null);
+      } catch (err: any) {
+        if (!cancelled) setLoadError(err?.message || 'Failed to load projects.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const readyForExecution = projects.filter(
+    (p) => p.status === 'COMPLETED' || (typeof p.progress === 'number' && p.progress >= 100)
+  ).length;
+
+  const metrics = [
+    { label: "Total Projects", value: String(projects.length) },
+    { label: "Drawings Under Review", value: String(drawingsUnderReview) },
+    { label: "Pending Approvals", value: String(pendingApprovals) },
+    { label: "Ready for Execution", value: String(readyForExecution) }
   ];
+
+  const locationOf = (p: Project): string =>
+    p.location || p.site_address || [p.lga, p.state].filter(Boolean).join(', ') || '—';
 
   return (
     <div className="space-y-10 relative pb-12 w-full animate-in fade-in duration-500">
@@ -132,12 +158,7 @@ export default function MyProjectsPage() {
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: "Total Projects", value: "12" },
-          { label: "Drawings Under Review", value: "14" },
-          { label: "Pending Approvals", value: "8" },
-          { label: "Ready for Execution", value: "3" }
-        ].map((metric, idx) => (
+        {metrics.map((metric, idx) => (
           <div key={idx} className="bg-white border border-[#022C4F] rounded-[16px] p-6 flex flex-col justify-between h-[150px] shadow-sm hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start">
               <span className="text-[13px] font-bold text-[#022C4F]">{metric.label}</span>
@@ -145,7 +166,7 @@ export default function MyProjectsPage() {
                 <ArrowUpRight size={16} />
               </div>
             </div>
-            <span className="text-[40px] font-extrabold text-[#0F181F]">{metric.value}</span>
+            <span className="text-[40px] font-extrabold text-[#0F181F]">{loading ? '—' : metric.value}</span>
           </div>
         ))}
       </div>
@@ -153,91 +174,115 @@ export default function MyProjectsPage() {
       {/* Active Projects Table Section */}
       <div className="bg-white rounded-[32px] border border-[#022C4F] p-8 mt-10">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-[18px] font-extrabold text-[#022C4F]">Active Project (3)</h2>
+          <h2 className="text-[18px] font-extrabold text-[#022C4F]">
+            {loading ? 'Projects' : `My Projects (${projects.length})`}
+          </h2>
+        </div>
 
-          {/* Pagination dots mimicking the screenshot */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1">
-            <div className="w-5 h-5 rounded-full bg-[#022C4F] flex items-center justify-center text-white text-[10px] cursor-pointer">&lt;</div>
-            <div className="w-5 h-5 rounded-full border-[1.5px] border-[#022C4F] bg-white mx-1 cursor-pointer"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mx-0.5"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mx-0.5"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mx-0.5"></div>
-            <div className="w-5 h-5 rounded-full bg-[#022C4F] flex items-center justify-center text-white text-[10px] cursor-pointer">&gt;</div>
+        {loading ? (
+          <div className="py-16 text-center text-[12px] font-medium text-gray-500">
+            Loading your projects…
           </div>
-        </div>
-
-        <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <table className="w-full min-w-[800px] border-collapse">
-            <thead>
-              <tr className="bg-[#022C4F] text-white">
-                <th className="py-4 px-4 text-left text-[9px] font-bold rounded-l-[16px] capitalize tracking-widest">Name</th>
-                <th className="py-4 px-4 text-left text-[9px] font-bold  capitalize tracking-widest">Location</th>
-                <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Current Stage</th>
-                <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Progress</th>
-                <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Drawings</th>
-                <th className="py-4 px-4 text-center text-[9px] font-bold capitalize tracking-widest">Pending Reviews</th>
-                <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Next Milestone</th>
-                <th className="py-4 px-4 text-center text-[9px] font-bold rounded-r-[16px] capitalize tracking-widest">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project, idx) => (
-                <tr key={project.id} className="border-b border-[#022C4F]/20 hover:bg-gray-50 transition-colors">
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.name}</td>
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.location}</td>
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.stage}</td>
-                  <td className="py-5 px-4 min-w-[120px] max-w-[140px]">
-                    <div className="flex flex-col gap-1 w-full">
-                      <div className="flex justify-between items-center text-[8px] font-bold text-[#8FA4B5]">
-                        <span>{project.statusText}</span>
-                        <span>{project.progress}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${project.progressColor}`}
-                          style={{ width: `${project.progress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F]">{project.drawings}</td>
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] text-center">{project.pendingReviews}</td>
-                  <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.nextMilestone}</td>
-                  <td className="py-5 px-4 text-center relative">
-                    <button
-                      onClick={() => setOpenDropdown(openDropdown === project.id ? null : project.id)}
-                      className="text-[#022C4F] hover:bg-gray-100 rounded transition-colors p-1"
-                    >
-                      <MoreHorizontal size={16} />
-                    </button>
-                    {openDropdown === project.id && (
-                      <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 py-1.5 flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <button
-                          onClick={() => { setOpenDropdown(null); router.push('/client/design-workspace'); }}
-                          className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
-                        >
-                          Go to Project Workspace
-                        </button>
-                        <button
-                          onClick={() => { setOpenDropdown(null); setIsReviewDrawerOpen(true); }}
-                          className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
-                        >
-                          Review Drawings
-                        </button>
-                        <button
-                          onClick={() => { setOpenDropdown(null); setIsFinalApprovalDrawerOpen(true); }}
-                          className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
-                        >
-                          Approve Final Design
-                        </button>
-                      </div>
-                    )}
-                  </td>
+        ) : loadError ? (
+          <div className="py-16 text-center text-[12px] font-medium text-red-600">
+            {loadError}
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="py-16 text-center">
+            <p className="text-[13px] font-bold text-[#022C4F] mb-1">No projects yet</p>
+            <p className="text-[11px] text-gray-500">
+              Projects you create will appear here with their live progress, documents and milestones.
+            </p>
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <table className="w-full min-w-[800px] border-collapse">
+              <thead>
+                <tr className="bg-[#022C4F] text-white">
+                  <th className="py-4 px-4 text-left text-[9px] font-bold rounded-l-[16px] capitalize tracking-widest">Name</th>
+                  <th className="py-4 px-4 text-left text-[9px] font-bold  capitalize tracking-widest">Location</th>
+                  <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Current Stage</th>
+                  <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Progress</th>
+                  <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Drawings</th>
+                  <th className="py-4 px-4 text-center text-[9px] font-bold capitalize tracking-widest">Pending Reviews</th>
+                  <th className="py-4 px-4 text-left text-[9px] font-bold capitalize tracking-widest">Next Milestone</th>
+                  <th className="py-4 px-4 text-center text-[9px] font-bold rounded-r-[16px] capitalize tracking-widest">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {projects.map((project) => {
+                  const progress = typeof project.progress === 'number' ? project.progress : null;
+                  const docCount = docCountByProject[project.id];
+                  const pendingReviews = pendingReviewsByProject[project.id];
+                  return (
+                    <tr key={project.id} className="border-b border-[#022C4F]/20 hover:bg-gray-50 transition-colors">
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.name}</td>
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{locationOf(project)}</td>
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">{project.status || '—'}</td>
+                      <td className="py-5 px-4 min-w-[120px] max-w-[140px]">
+                        {progress != null ? (
+                          <div className="flex flex-col gap-1 w-full">
+                            <div className="flex justify-between items-center text-[8px] font-bold text-[#8FA4B5]">
+                              <span>{project.status || 'In Progress'}</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${progress >= 100 ? 'bg-[#7DA627]' : progress < 50 ? 'bg-[#FF3B30]' : 'bg-[#7DA627]'}`}
+                                style={{ width: `${progress}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-gray-400">Not assessed</span>
+                        )}
+                      </td>
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F]">
+                        {docCount != null ? `${docCount} Document${docCount === 1 ? '' : 's'}` : '—'}
+                      </td>
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] text-center">
+                        {pendingReviews != null ? String(pendingReviews) : '—'}
+                      </td>
+                      <td className="py-5 px-4 text-[10px] font-semibold text-[#0F181F] break-words">
+                        {nextMilestoneByProject[project.id] || '—'}
+                      </td>
+                      <td className="py-5 px-4 text-center relative">
+                        <button
+                          onClick={() => setOpenDropdown(openDropdown === project.id ? null : project.id)}
+                          className="text-[#022C4F] hover:bg-gray-100 rounded transition-colors p-1"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {openDropdown === project.id && (
+                          <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 py-1.5 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                            <button
+                              onClick={() => { setOpenDropdown(null); router.push('/client/design-workspace'); }}
+                              className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
+                            >
+                              Go to Project Workspace
+                            </button>
+                            <button
+                              onClick={() => { setOpenDropdown(null); setIsReviewDrawerOpen(true); }}
+                              className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
+                            >
+                              Review Drawings
+                            </button>
+                            <button
+                              onClick={() => { setOpenDropdown(null); setIsFinalApprovalDrawerOpen(true); }}
+                              className="w-full text-left px-4 py-2.5 text-[11px] font-bold text-[#0F181F] hover:bg-gray-50 transition-colors"
+                            >
+                              Approve Final Design
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <ReviewDrawingDrawer
