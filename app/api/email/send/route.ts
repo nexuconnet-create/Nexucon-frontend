@@ -3,20 +3,34 @@ import { NextRequest, NextResponse } from 'next/server';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Nexucon Email notifications <notifications@nexucon.net>';
 
-function getRoleTemplate(role: string, name: string, department: string, inviteUrl: string, email: string, tempPassword?: string) {
+function getRoleTemplate(role: string, name: string, department: string, inviteUrl: string, email: string, tempPassword?: string, inviteCode?: string) {
   const roleLower = (role || '').toLowerCase();
   const currentYear = new Date().getFullYear();
 
-  const tempBox = tempPassword ? `
-    <div style="background-color:#F8FAFC;border:1.5px dashed #0284C7;border-radius:14px;padding:16px;margin:24px 0;text-align:center;">
-      <div style="font-size:11px;font-weight:800;color:#0369A1;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
-        Temporary Access Passcode
-      </div>
-      <div style="font-family:monospace;font-size:18px;font-weight:900;color:#022C4F;letter-spacing:2px;">
-        ${tempPassword}
-      </div>
-      <div style="font-size:11px;color:#64748B;margin-top:4px;">
-        Use this passcode to log in immediately or set your permanent password via the button below.
+  const tempBox = (tempPassword || inviteCode) ? `
+    <div style="background-color:#F8FAFC;border:1.5px dashed #0284C7;border-radius:16px;padding:20px;margin:24px 0;text-align:center;">
+      ${inviteCode ? `
+        <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px dashed #BAE6FD;">
+          <div style="font-size:11px;font-weight:800;color:#0369A1;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+            Official Verification Invite Code
+          </div>
+          <div style="font-family:monospace;font-size:22px;font-weight:900;color:#022C4F;letter-spacing:3px;">
+            ${inviteCode}
+          </div>
+        </div>
+      ` : ''}
+      ${tempPassword ? `
+        <div>
+          <div style="font-size:11px;font-weight:800;color:#0369A1;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+            Temporary Access Passcode
+          </div>
+          <div style="font-family:monospace;font-size:18px;font-weight:900;color:#022C4F;letter-spacing:2px;">
+            ${tempPassword}
+          </div>
+        </div>
+      ` : ''}
+      <div style="font-size:11px;color:#64748B;margin-top:8px;">
+        Use this verification code and passcode to sign in immediately or activate via the button below.
       </div>
     </div>
   ` : '';
@@ -123,7 +137,7 @@ function getRoleTemplate(role: string, name: string, department: string, inviteU
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { to, subject, html, text, name, role, department, invite_token, otp_code, temp_password } = body;
+    const { to, subject, html, text, name, role, department, invite_token, invite_code, otp_code, temp_password } = body;
 
     const recipientEmail = to || body.email;
     if (!recipientEmail) {
@@ -138,7 +152,11 @@ export async function POST(req: NextRequest) {
       const appBaseUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://nexucon-frontend-8x3a.vercel.app';
       const token = invite_token || Math.random().toString(36).substring(2, 15);
       const generatedTemp = temp_password || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : Math.random().toString(36).substring(2, 12));
-      const inviteUrl = `${appBaseUrl.replace(/\/$/, '')}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
+      const roleLower = (role || '').toLowerCase();
+      const isInspector = roleLower.includes('inspector') || roleLower.includes('field') || roleLower.includes('surveillance') || roleLower.includes('hse');
+      const inviteUrl = isInspector
+        ? (invite_token ? `https://inspector.nexucon.net/invite/${token}` : `https://inspector.nexucon.net/login`)
+        : `${appBaseUrl.replace(/\/$/, '')}/auth/accept-invite?token=${token}&email=${encodeURIComponent(recipientEmail)}&role=${encodeURIComponent(role || '')}&temp=${encodeURIComponent(generatedTemp)}`;
 
       if (otp_code) {
         finalSubject = finalSubject || `🔐 ${otp_code} is your Nexucon 2FA Security Passcode`;
@@ -150,7 +168,7 @@ export async function POST(req: NextRequest) {
           </div>
         </body></html>`;
       } else {
-        const generated = getRoleTemplate(role || 'Staff Member', name || recipientEmail.split('@')[0], department || 'Building Control', inviteUrl, recipientEmail, generatedTemp);
+        const generated = getRoleTemplate(role || 'Staff Member', name || recipientEmail.split('@')[0], department || 'Building Control', inviteUrl, recipientEmail, generatedTemp, invite_code);
         finalSubject = finalSubject || generated.subject;
         finalHtml = generated.html;
       }
@@ -159,10 +177,9 @@ export async function POST(req: NextRequest) {
     if (!RESEND_API_KEY) {
       console.warn('RESEND_API_KEY is not configured in environment variables');
       return NextResponse.json({
-        success: true,
-        simulated: true,
-        message: `Email dispatch simulated for ${recipientEmail} (RESEND_API_KEY unconfigured)`
-      }, { status: 200 });
+        success: false,
+        error: 'RESEND_API_KEY not configured in environment variables'
+      }, { status: 500 });
     }
 
     const res = await fetch('https://api.resend.com/emails', {
@@ -185,9 +202,9 @@ export async function POST(req: NextRequest) {
       console.warn('Resend API Error:', data);
       return NextResponse.json({
         success: false,
-        simulated: true,
-        error: data.message || 'Resend delivery failed. Fallback simulation enabled.'
-      }, { status: 200 });
+        simulated: false,
+        error: data.message || 'Resend delivery failed.'
+      }, { status: res.status || 500 });
     }
 
     return NextResponse.json({

@@ -30,12 +30,14 @@ export default function InviteUserModal({
     setIsSubmitting(true);
     try {
       const generatedTemp = `Nexucon@${Math.random().toString(36).substring(2, 6).toUpperCase()}2026!`;
+      const generatedCode = `${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       // 1. Cache temp credentials on device for resilient instant login
       if (typeof window !== 'undefined') {
         localStorage.setItem(`nexucon_user_credentials_${email.trim().toLowerCase()}`, JSON.stringify({
           email: email.trim(),
           password: generatedTemp,
+          invite_code: generatedCode,
           name: name.trim(),
           role
         }));
@@ -50,16 +52,18 @@ export default function InviteUserModal({
           name: name.trim(),
           role,
           department,
-          temp_password: generatedTemp
+          temp_password: generatedTemp,
+          invite_code: generatedCode
         })
       }).catch(e => console.warn('Email dispatch warning:', e));
 
-      // 2. Persist in database
+      // 3. Persist in database
       await inviteStaffUser({
         name,
         email,
         role,
-        department
+        department,
+        invite_code: generatedCode
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 

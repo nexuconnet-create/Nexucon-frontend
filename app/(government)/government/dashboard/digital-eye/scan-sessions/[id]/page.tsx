@@ -147,7 +147,9 @@ const ScanDetail = () => {
   useEffect(() => {
     if (!id || scan?.status !== 'processing') return;
 
-    const rawBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://api.nexucon.net').trim();
+    const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+    const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
+    const rawBaseUrl = (!envUrl || isLocalhost) ? 'https://api.nexucon.net' : envUrl;
     const origin = rawBaseUrl.replace(/\/api\/v\d+.*$/, '').replace(/\/+$/, '');
     const wsUrl = origin.replace(/^http/, 'ws') + `/ws/processing/${id}/`;
     const ws = new WebSocket(wsUrl);

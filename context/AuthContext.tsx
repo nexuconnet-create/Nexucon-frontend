@@ -23,7 +23,7 @@ interface AuthContextType {
   register: (userData: any) => Promise<boolean>;
   verifyEmail: (email: string, code: string) => Promise<boolean>;
   resendVerificationCode: (email: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => void;
+  logout: (redirectUrl?: string) => Promise<void> | void;
   hasPermission: (permission: string) => boolean;
   refreshUser: () => Promise<void>;
   completeOnboarding: (onboardingData?: any) => Promise<boolean>;
@@ -33,7 +33,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function getApiBaseUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-  const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
+  const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
+  const validEnvUrl = (envUrl.startsWith('http') && !isLocalhost) ? envUrl : '';
   const fallback = 'https://api.nexucon.net';
   let base = (validEnvUrl || fallback).replace(/\/+$/, '');
   if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
@@ -174,6 +175,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const contentType = res.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         const data = await res.json();
+        if (data && data.requires_activation) {
+          return { success: false, requiresActivation: true, inviteCode: data.invite_code, message: data.message } as any;
+        }
         if (res.ok && data.success) {
           if (data.data?.access && typeof window !== 'undefined') {
             localStorage.setItem('nexucon_access_token', data.data.access);
@@ -348,7 +352,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = async (customRedirect?: string) => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout/`, {
         method: 'POST',
@@ -359,7 +363,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.warn('Logout request completed locally:', err);
     }
     handleSetUser(null);
-    router.push('/government/login');
+
+    let redirectUrl = customRedirect;
+    if (!redirectUrl) {
+      const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      if (hostname.startsWith('inspector.') || currentPath.startsWith('/inspector')) {
+        redirectUrl = '/inspector/login';
+      } else if (currentPath.startsWith('/client')) {
+        redirectUrl = '/client/login';
+      } else if (currentPath.startsWith('/professional')) {
+        redirectUrl = '/professional/login';
+      } else {
+        redirectUrl = '/government/login';
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.href = redirectUrl;
+    } else {
+      router.push(redirectUrl);
+    }
   };
 
   const completeOnboarding = async (onboardingData: any = {}) => {

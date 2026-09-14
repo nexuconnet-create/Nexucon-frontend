@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { 
   Search, Filter, Download, UserCheck, ShieldAlert, 
   CheckCircle2, ChevronRight, Map, HardHat, Calendar, 
-  RefreshCw, Plus, MapPin 
+  RefreshCw, Plus, MapPin, Copy, Check, Clock, ShieldCheck, KeyRound
 } from "lucide-react";
 import { Inspector, StakeholderStats, getInspectors, getStakeholderStats } from "@/services/stakeholders";
 import ReassignZoneModal from "@/components/dashboard/ReassignZoneModal";
@@ -20,6 +20,7 @@ export default function InspectorsWorkload() {
   const [selectedInspector, setSelectedInspector] = useState<Inspector | null>(null);
   const [isReassignOpen, setIsReassignOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,6 +46,18 @@ export default function InspectorsWorkload() {
     fetchInspectors();
     setCurrentPage(1);
   }, [fetchInspectors]);
+
+  const handleCopyCredentials = (inspector: Inspector) => {
+    const text = `NEXUCON FIELD INSPECTOR DISPATCH\n` +
+      `Officer: ${inspector.name}\n` +
+      `Email: ${inspector.email || 'N/A'}\n` +
+      `Invite Code: ${inspector.invite_code || 'N/A'}\n` +
+      (inspector.temporary_password ? `Temporary Passcode: ${inspector.temporary_password}\n` : '') +
+      `Terminal URL: https://inspector.nexucon.net/inspector/login`;
+    navigator.clipboard.writeText(text);
+    setCopiedId(inspector.id);
+    setTimeout(() => setCopiedId(null), 3000);
+  };
 
   const paginatedInspectors = inspectors.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -144,10 +157,11 @@ export default function InspectorsWorkload() {
         className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden"
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[750px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Inspector</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Terminal Access / Code</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Assignment Zone</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Active Workload</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 text-center">Pass Rate</th>
@@ -169,7 +183,40 @@ export default function InspectorsWorkload() {
                            <span className="font-mono bg-gray-100 px-1 py-0.5 rounded border border-gray-200">{inspector.inspector_id}</span>
                            <span>{inspector.role_title}</span>
                         </div>
+                        {inspector.email && (
+                          <span className="text-[11px] text-gray-400 font-medium mt-0.5">{inspector.email}</span>
+                        )}
                       </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
+                      {inspector.invitation_status === 'Pending' ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200 text-[10px]">
+                            <Clock size={10} /> Pending Activation
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-[10px]">
+                            <ShieldCheck size={10} /> Terminal Active
+                          </span>
+                        </div>
+                      )}
+                      {inspector.invite_code && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-gray-500 font-bold uppercase">Code:</span>
+                          <span className="font-mono text-xs font-bold text-[#022C4F] bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100">
+                            {inspector.invite_code}
+                          </span>
+                        </div>
+                      )}
+                      {inspector.invitation_status === 'Pending' && inspector.temporary_password && (
+                        <div className="text-[10px] text-gray-400 font-mono">
+                          Temp: {inspector.temporary_password}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -190,16 +237,40 @@ export default function InspectorsWorkload() {
                     {inspector.ncrs_issued}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedInspector(inspector);
-                        setIsReassignOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
-                    >
-                      <Map size={12} />
-                      <span>Reassign Zone</span>
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleCopyCredentials(inspector)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer border ${
+                          copiedId === inspector.id
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                            : 'bg-white hover:bg-slate-50 border-gray-200 text-gray-700 shadow-sm'
+                        }`}
+                        title="Copy Official Dispatch Credentials"
+                      >
+                        {copiedId === inspector.id ? (
+                          <>
+                            <Check size={12} className="text-emerald-600" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy Key</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSelectedInspector(inspector);
+                          setIsReassignOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-[#022C4F] hover:text-white text-slate-700 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer shadow-sm"
+                      >
+                        <Map size={12} />
+                        <span>Reassign</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -101,6 +101,10 @@ export async function inviteStaffUser(data: {
   email: string;
   role: string;
   department: string;
+  district_id?: string;
+  agency_id?: string;
+  assigned_projects?: string[];
+  invite_code?: string;
 }): Promise<any> {
   const res: any = await api.post('/settings/users/', data);
   return res?.data || res;

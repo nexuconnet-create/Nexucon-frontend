@@ -56,6 +56,11 @@ export interface Inspector {
   active_inspections: number;
   pass_rate: string;
   ncrs_issued: number;
+  email?: string;
+  user?: string;
+  invite_code?: string;
+  temporary_password?: string;
+  invitation_status?: 'Pending' | 'Accepted' | 'Revoked' | 'Expired';
   created_at?: string;
 }
 

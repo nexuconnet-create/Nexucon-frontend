@@ -15,7 +15,8 @@ import axios, {
  */
 function resolveBaseUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-  const validEnvUrl = envUrl.startsWith('http') ? envUrl : '';
+  const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
+  const validEnvUrl = (envUrl.startsWith('http') && !isLocalhost) ? envUrl : '';
   const fallback = 'https://api.nexucon.net';
   let base = (validEnvUrl || fallback).replace(/\/+$/, '');
   if (!/\/api\/v\d+$/.test(base)) base = `${base}/api/v1`;
@@ -176,7 +177,9 @@ api.interceptors.response.use(
             const next = encodeURIComponent(
               window.location.pathname + window.location.search
             );
-            window.location.href = `/government/login?next=${next}`;
+            const isInspector = window.location.hostname.startsWith('inspector.') || window.location.pathname.startsWith('/inspector');
+            const targetLogin = isInspector ? '/inspector/login' : '/government/login';
+            window.location.href = `${targetLogin}?next=${next}`;
           }
         }
       }

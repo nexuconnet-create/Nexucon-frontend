@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const isProd = process.env.NODE_ENV === 'production';
 const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-const validEnvUrl = envUrl.startsWith('http') ? envUrl : null;
+const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
+const validEnvUrl = (envUrl.startsWith('http') && !isLocalhost) ? envUrl : null;
 const rawBackend = (validEnvUrl || 'https://api.nexucon.net').replace(/\/+$/, '');
 const BACKEND_BASE = rawBackend.replace(/\/api\/v\d+$/, '');
 
