@@ -384,34 +384,10 @@ export const getMeetingById = async (id: string): Promise<StakeholderMeeting | n
 };
 
 export const scheduleMeeting = async (data: Partial<StakeholderMeeting> & { bypass_agency_head_check?: boolean }): Promise<StakeholderMeeting> => {
-  try {
-    const response = await api.post('/stakeholders/meetings/', data);
-    return unwrapItem<StakeholderMeeting>(response);
-  } catch (err) {
-    console.warn('Backend scheduleMeeting notice, using real session payload:', err);
-    const fallbackId = `mtg-${Date.now()}`;
-    const fallbackMeeting: StakeholderMeeting = {
-      id: fallbackId,
-      room_id: fallbackId,
-      meeting_reference: `MTG-${Math.floor(1000 + Math.random() * 9000)}`,
-      title: data.title || 'Official Stakeholder Council Session',
-      agenda: data.agenda || '',
-      project_name: data.project_name || '',
-      date: data.date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time_slot: data.time_slot || '',
-      meeting_type: data.meeting_type || 'Video Call',
-      status: 'Scheduled',
-      google_meet_url: data.google_meet_url || 'https://meet.google.com/new',
-      initiator_name: data.initiator_name || 'Organizer',
-      initiator_role: data.initiator_role || 'Director / Agency Lead',
-      participants: data.participants && data.participants.length > 0
-        ? data.participants
-        : (data.initiator_name ? [{ name: data.initiator_name, role: data.initiator_role || 'Organizer', status: 'Confirmed' }] : []),
-      action_items: [],
-      created_at: new Date().toISOString()
-    };
-    return fallbackMeeting;
-  }
+  // The meeting_reference is issued server-side (StakeholderMeeting.generate_mtg_id).
+  // If scheduling fails we surface the backend error — no fabricated meeting record is returned.
+  const response = await api.post('/stakeholders/meetings/', data);
+  return unwrapItem<StakeholderMeeting>(response);
 };
 
 export const startMeeting = async (id: string): Promise<any> => {
@@ -425,28 +401,10 @@ export const startMeeting = async (id: string): Promise<any> => {
 };
 
 export const joinMeeting = async (id: string, participantData: { name: string; role?: string; email?: string }): Promise<StakeholderMeeting> => {
-  try {
-    const response = await api.post(`/stakeholders/meetings/${id}/join/`, participantData);
-    return unwrapItem<StakeholderMeeting>(response);
-  } catch (err) {
-    console.warn(`Meeting ${id} join fallback:`, err);
-    return {
-      id,
-      room_id: id,
-      meeting_reference: `MTG-${id.slice(0, 4).toUpperCase()}`,
-      title: 'Council Deliberation Session',
-      agenda: 'Inter-agency stakeholder coordination review.',
-      project_name: '',
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time_slot: '',
-      meeting_type: 'Video Call',
-      status: 'In Progress',
-      initiator_name: participantData.name || 'Participant',
-      initiator_role: participantData.role || 'Stakeholder',
-      participants: [{ name: participantData.name, role: participantData.role || 'Stakeholder', status: 'Confirmed' }],
-      created_at: new Date().toISOString()
-    };
-  }
+  // Join is a pure backend registration — if it fails, the error propagates to the caller
+  // (the meeting room already handles it) rather than fabricating a meeting record.
+  const response = await api.post(`/stakeholders/meetings/${id}/join/`, participantData);
+  return unwrapItem<StakeholderMeeting>(response);
 };
 
 export const castMeetingVote = async (id: string, voteData: { voter_name: string; voter_role?: string; vote: 'YES' | 'NO'; resolution_title?: string }): Promise<any> => {

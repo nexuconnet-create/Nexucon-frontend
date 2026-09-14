@@ -140,14 +140,15 @@ export const verifyAuditHashChain = async (): Promise<HashChainVerification> => 
     }
   }
 
-  // Authoritative fallback ensuring verification never breaks the UI
+  // Honest fallback: the chain could NOT be verified — we never fabricate a
+  // successful cryptographic verification result.
   return {
-    status: "VALID",
-    chain_integrity: "100.0% VERIFIED",
-    total_blocks_checked: 48,
+    status: "UNAVAILABLE",
+    chain_integrity: "Verification unavailable",
+    total_blocks_checked: 0,
     tampered_blocks_detected: 0,
-    root_hash: "0x8f4e2c9b1a7d3e5f",
-    latest_block_hash: "0x3a9c1d5e7f124a9b",
+    root_hash: "",
+    latest_block_hash: "",
     verified_at: new Date().toISOString()
   };
 };

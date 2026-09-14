@@ -35,6 +35,7 @@ import {
   PunditTest,
   getPunditTests,
   downloadNdtReport,
+  downloadNdtReportWord,
   downloadArchivedReport,
   openArchivedReport
 } from "@/services/digitalEye";
@@ -47,6 +48,9 @@ interface DeviceReportingSectionProps {
   projectId?: string;
   elementId?: string;
   onReportGenerated?: (report: DeviceReportRecord) => void;
+  /** PUNDIT: preview-first flow — opens the exact-PDF preview modal
+      instead of generating/archiving directly. */
+  onPreviewNdt?: () => void;
 }
 
 export default function DeviceReportingSection({
@@ -55,7 +59,8 @@ export default function DeviceReportingSection({
   subtitle,
   projectId = "",
   elementId,
-  onReportGenerated
+  onReportGenerated,
+  onPreviewNdt
 }: DeviceReportingSectionProps) {
   const { user } = useAuth();
   const [reports, setReports] = useState<DeviceReportRecord[]>([]);
@@ -153,6 +158,32 @@ export default function DeviceReportingSection({
     return matchesSearch && matchesStatus;
   });
 
+  // PUNDIT official deliverable — preview-first (11 Sep client flow): the
+  // Generate actions open the exact-PDF preview modal; the certified dossier
+  // is only created when the operator confirms "Generate & Archive" there.
+  const openNdtPreview = () => {
+    if (!projectId) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
+      }));
+      return;
+    }
+    if (onPreviewNdt) {
+      onPreviewNdt();
+      return;
+    }
+    // No preview handler wired (other host pages): fall back to the direct flow.
+    handleDownloadNdtReport();
+  };
+
+  const handleGenerateClick = () => {
+    if (deviceType === "pundit" && onPreviewNdt) {
+      openNdtPreview();
+      return;
+    }
+    setIsGenerateOpen(true);
+  };
+
   // PUNDIT official deliverable — real backend-generated BS 1881-203 PDF
   const handleDownloadNdtReport = () => {
     if (!projectId) {
@@ -174,6 +205,29 @@ export default function DeviceReportingSection({
       })
       .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" }
+      })));
+  };
+
+  // PUNDIT editable Word edition (8 Sep meeting H7): the same sections,
+  // CMS overrides and server-computed figures as the PDF, as a .docx.
+  const handleDownloadWordReport = () => {
+    if (!projectId) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '⚠️ Select a project to export its NDT report to Word.', type: "error" }
+      }));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: 'Building the editable Word edition of the NDT report…', type: "info" }
+    }));
+    downloadNdtReportWord(projectId)
+      .then((filename) => {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `Downloaded ${filename} (editable working copy; the certified record remains the archived PDF).`, type: "success" }
+        }));
+      })
+      .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Word export failed.'}`, type: "error" }
       })));
   };
 
@@ -230,8 +284,9 @@ export default function DeviceReportingSection({
 
   const handleExportBatchData = () => {
     if (deviceType === "pundit") {
-      // The full PUNDIT registry is exported through the official backend PDF.
-      handleDownloadNdtReport();
+      // The full PUNDIT registry is exported through the official backend PDF
+      // — preview-first so nothing is archived unconfirmed.
+      openNdtPreview();
       return;
     }
     window.dispatchEvent(new CustomEvent('show-toast', {
@@ -348,9 +403,23 @@ export default function DeviceReportingSection({
               <span>Export Raw Data</span>
             </button>
 
+            {deviceType === "pundit" && (
+              <button
+                onClick={handleDownloadWordReport}
+                className="px-3.5 py-2.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                title="Editable .docx working copy of the official NDT report (same sections and figures as the PDF)"
+              >
+                <FileText size={14} />
+                <span>Export to Word</span>
+              </button>
+            )}
+
             <button
-              onClick={() => setIsGenerateOpen(true)}
+              onClick={handleGenerateClick}
               className="px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-900/20 flex items-center gap-2 cursor-pointer"
+              title={deviceType === "pundit" && onPreviewNdt
+                ? "Preview the exact certified PDF before anything is archived"
+                : undefined}
             >
               <Plus size={14} />
               <span>Generate Official Dossier</span>
@@ -400,7 +469,7 @@ export default function DeviceReportingSection({
         {templates.map((tpl, idx) => (
           <div
             key={idx}
-            onClick={() => setIsGenerateOpen(true)}
+            onClick={handleGenerateClick}
             className="p-4 bg-white rounded-2xl border border-gray-100 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer group flex flex-col justify-between"
           >
             <div>

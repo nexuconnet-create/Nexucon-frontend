@@ -1,30 +1,67 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check } from 'lucide-react';
+import { X, Check, FileText, Loader2 } from 'lucide-react';
+import { getDocumentById, Document } from '@/services/documents';
 
 interface SendReminderDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  drawing: Document | null;
 }
 
-export default function SendReminderDrawer({ isOpen, onClose }: SendReminderDrawerProps) {
-  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([
-    'Michael Adeyemi - Structural Reviewer',
-    'Ibrahim Yusuf - Consultant Reviewer',
-    'Daniel Okoro - Technical Reviewer'
-  ]);
+const statusLabel: Record<Document['status'], string> = {
+  DRAFT: 'Draft',
+  PENDING_REVIEW: 'Awaiting Review',
+  UNDER_REVIEW: 'Under Review',
+  CHANGES_REQUESTED: 'Changes Requested',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  EXPIRED: 'Expired',
+  EXPIRING_SOON: 'Expiring Soon',
+  ARCHIVED: 'Archived',
+};
 
-  const recipients = [
-    'Michael Adeyemi - Structural Reviewer',
-    'Ibrahim Yusuf - Consultant Reviewer',
-    'Sarah Williams - Architectural Reviewer',
-    'Daniel Okoro - Technical Reviewer'
-  ];
+export default function SendReminderDrawer({ isOpen, onClose, drawing }: SendReminderDrawerProps) {
+  // Real reviewer names come from the document's review records — no
+  // hardcoded recipient list.
+  const [recipients, setRecipients] = useState<string[]>([]);
+  const [isLoadingReviewers, setIsLoadingReviewers] = useState(false);
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isOpen || !drawing) {
+      setRecipients([]);
+      setSelectedRecipients([]);
+      return;
+    }
+    let cancelled = false;
+    const loadReviewers = async () => {
+      setIsLoadingReviewers(true);
+      try {
+        const detail = await getDocumentById(drawing.id);
+        if (cancelled) return;
+        const names = (detail.reviews ?? [])
+          .map((r) => r.reviewer_name)
+          .filter((name): name is string => Boolean(name));
+        setRecipients(names);
+        setSelectedRecipients(names);
+      } catch (err) {
+        if (!cancelled) {
+          setRecipients([]);
+          setSelectedRecipients([]);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingReviewers(false);
+      }
+    };
+    loadReviewers();
+    return () => { cancelled = true; };
+  }, [isOpen, drawing?.id]);
 
   const toggleRecipient = (recipient: string) => {
-    setSelectedRecipients(prev => 
+    setSelectedRecipients(prev =>
       prev.includes(recipient) ? prev.filter(r => r !== recipient) : [...prev, recipient]
     );
   };
@@ -71,53 +108,68 @@ export default function SendReminderDrawer({ isOpen, onClose }: SendReminderDraw
               <div className="mb-10">
                 <h3 className="text-[18px] font-extrabold text-[#022C4F] mb-6">Review Information</h3>
 
-                <div className="grid grid-cols-2 gap-y-6 gap-x-8">
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Drawing Package</h4>
-                    <p className="text-[11px] text-[#022C4F] font-medium hover:underline cursor-pointer">Foundation Layout Package V2.0</p>
+                {!drawing ? (
+                  <div className="border border-gray-200 rounded-2xl p-8 text-center">
+                    <FileText size={28} className="mx-auto mb-2 text-[#022C4F]/40" />
+                    <p className="text-[12px] font-medium text-gray-500">No drawing selected.</p>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Victoria Heights Residential Estate</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Review Status</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">3 of 4 Reviews Completed</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Review Deadline</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">June 22, 2026</p>
-                  </div>
-                  <div className="col-span-2">
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Priority</h4>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-red-600"></div>
-                      <p className="text-[11px] text-gray-500 font-medium">High Priority</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Drawing Package</h4>
+                      <p className="text-[11px] text-[#022C4F] font-medium">{drawing.title || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.project_name || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Review Status</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{statusLabel[drawing.status] || drawing.status}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Version</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.current_version || '—'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Reference</h4>
+                      <p className="text-[11px] text-gray-500 font-medium font-mono">{drawing.document_reference || '—'}</p>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Select Recipients */}
               <div className="mb-10">
                 <h3 className="text-[13px] font-extrabold text-[#022C4F] mb-4">Select Recipients</h3>
-                <div className="flex flex-col gap-4">
-                  {recipients.map((recipient) => {
-                    const isSelected = selectedRecipients.includes(recipient);
-                    return (
-                      <div 
-                        key={recipient} 
-                        className="flex items-center gap-4 cursor-pointer group"
-                        onClick={() => toggleRecipient(recipient)}
-                      >
-                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black border-black' : 'border-gray-400 group-hover:border-black'}`}>
-                          {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
+                {isLoadingReviewers ? (
+                  <div className="flex items-center gap-2 text-[12px] font-medium text-gray-500">
+                    <Loader2 size={14} className="animate-spin" />
+                    Loading reviewers…
+                  </div>
+                ) : !drawing ? (
+                  <p className="text-[12px] font-medium text-gray-500">No drawing selected.</p>
+                ) : recipients.length === 0 ? (
+                  <p className="text-[12px] font-medium text-gray-500">No reviewers recorded yet for this drawing.</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {recipients.map((recipient) => {
+                      const isSelected = selectedRecipients.includes(recipient);
+                      return (
+                        <div
+                          key={recipient}
+                          className="flex items-center gap-4 cursor-pointer group"
+                          onClick={() => toggleRecipient(recipient)}
+                        >
+                          <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black border-black' : 'border-gray-400 group-hover:border-black'}`}>
+                            {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
+                          </div>
+                          <span className="text-[12px] font-medium text-[#0F181F]">{recipient}</span>
                         </div>
-                        <span className="text-[12px] font-medium text-[#0F181F]">{recipient}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>
@@ -126,6 +178,10 @@ export default function SendReminderDrawer({ isOpen, onClose }: SendReminderDraw
             <div className="p-10 pt-6 mt-auto shrink-0 bg-white border-t border-gray-100 flex flex-col gap-3">
               <button
                 onClick={() => {
+                  if (selectedRecipients.length === 0) {
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Select at least one recipient to send a reminder.', type: 'warning' } }));
+                    return;
+                  }
                   window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Reminders sent successfully!', type: 'success' } }));
                   onClose();
                 }}

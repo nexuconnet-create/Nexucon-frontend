@@ -10,10 +10,11 @@ import {
   Image as ImageIcon, Download, X, Volume2, FileArchive,
   Eye, CheckCircle2, CornerDownRight
 } from "lucide-react";
-import { 
-  StakeholderMessage, getMessages, sendMessage, 
-  translateMessage, MessageTranslation 
+import {
+  StakeholderMessage, getMessages, sendMessage,
+  translateMessage, MessageTranslation
 } from "@/services/stakeholders";
+import { useAuth } from "@/context/AuthContext";
 
 // Custom Voice Note Player Component
 function VoiceNotePlayer({ url, duration = 0 }: { url: string; duration?: number }) {
@@ -136,6 +137,11 @@ function VoiceNotePlayer({ url, duration = 0 }: { url: string; duration?: number
 }
 
 export default function StakeholderMessages() {
+  const { user } = useAuth();
+  // Real sender identity from the authenticated session — never a fabricated
+  // officer name.
+  const senderName = user ? `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email : '';
+  const senderRole = user?.role_name || '';
   const [messages, setMessages] = useState<StakeholderMessage[]>([]);
   const [activeChannel, setActiveChannel] = useState('General Council');
   const [inputMessage, setInputMessage] = useState('');
@@ -362,9 +368,9 @@ export default function StakeholderMessages() {
           voice_note_url: audioDataUrl,
           voice_note_duration: duration,
           is_urgent: isUrgent,
-          sender_name: 'Engr. Babatunde Sanwo',
-          sender_role: 'Agency Head / Director General',
-          project_name: 'Central Metro Transit Hub',
+          sender_name: senderName,
+          sender_role: senderRole,
+          project_name: '',
           created_at: new Date().toISOString()
         };
 
@@ -380,9 +386,9 @@ export default function StakeholderMessages() {
             voice_note_url: audioDataUrl,
             voice_note_duration: duration,
             is_urgent: optimisticMsg.is_urgent,
-            sender_name: 'Engr. Babatunde Sanwo',
-            sender_role: 'Agency Head / Director General',
-            project_name: 'Central Metro Transit Hub'
+            sender_name: senderName,
+            sender_role: senderRole,
+            project_name: ''
           });
 
           if (created && created.id) {
@@ -430,9 +436,9 @@ export default function StakeholderMessages() {
       attachment_type: attachedFile?.type,
       attachment_size: attachedFile?.size,
       is_urgent: isUrgent,
-      sender_name: 'Engr. Babatunde Sanwo',
-      sender_role: 'Agency Head / Director General',
-      project_name: 'Central Metro Transit Hub',
+      sender_name: senderName,
+      sender_role: senderRole,
+      project_name: '',
       created_at: new Date().toISOString()
     };
 
@@ -454,9 +460,9 @@ export default function StakeholderMessages() {
         attachment_type: prevAttached?.type,
         attachment_size: prevAttached?.size,
         is_urgent: prevUrgent,
-        sender_name: 'Engr. Babatunde Sanwo',
-        sender_role: 'Agency Head / Director General',
-        project_name: 'Central Metro Transit Hub'
+        sender_name: senderName,
+        sender_role: senderRole,
+        project_name: ''
       });
 
       if (created && created.id) {

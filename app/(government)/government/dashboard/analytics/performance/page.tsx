@@ -38,9 +38,17 @@ export default function ProjectPerformance() {
 
   const handleExportDashboard = async () => {
     try {
-      const ref = `REP-PERF-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Compiling Executive Performance & EVM Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Executive Project Performance & EVM Summary",
+        format: "PDF",
+        report_type: "Executive",
+        modules_included: ["Project Performance", "Construction Progress & EVM", "Financial Overview"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Compiling Executive Performance & EVM Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Executive Project Performance & EVM Summary",

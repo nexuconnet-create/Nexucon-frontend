@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, Check, ZoomIn, ZoomOut, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Check, ZoomIn, ZoomOut, Clock, FileText } from 'lucide-react';
 import { CustomSelect } from "@/components/CustomSelect";
+import { getDocuments, reviewDocument, Document } from "@/services/documents";
 
 interface ReviewDrawingDrawerProps {
   isOpen: boolean;
@@ -16,6 +17,41 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isChangeRequestModalOpen, setIsChangeRequestModalOpen] = useState(false);
   const [issueCategory, setIssueCategory] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Real drawing submissions awaiting review — nothing is fabricated here.
+  const [drawings, setDrawings] = useState<Document[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const docs = await getDocuments();
+        if (cancelled) return;
+        const pending = docs.filter((d) =>
+          (d.document_type === 'SUBMITTED_DRAWING' || d.document_type === 'DRAWING') &&
+          (d.status === 'PENDING_REVIEW' || d.status === 'UNDER_REVIEW')
+        );
+        setDrawings(pending);
+        setSelectedId(pending[0]?.id ?? "");
+      } catch (err) {
+        if (!cancelled) setError("Drawing submissions could not be loaded.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  const selected = drawings.find((d) => d.id === selectedId) ?? null;
 
   const categoryOptions = [
     { value: "architectural", label: "Architectural & Layout" },
@@ -45,6 +81,20 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
     setIsDragging(false);
   };
 
+  const submitDecision = async (status: 'APPROVED' | 'CHANGES_REQUESTED', comments?: string) => {
+    if (!selected) return;
+    setIsSubmitting(true);
+    try {
+      await reviewDocument(selected.id, { status, comments });
+      setIsSuccessModalOpen(true);
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Your review could not be submitted. Please try again.', type: 'error' } }));
+    } finally {
+      setIsSubmitting(false);
+      setIsChangeRequestModalOpen(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex justify-end">
       {/* Overlay */}
@@ -63,89 +113,122 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
           <X size={16} />
         </button>
 
-        <div className="flex-1 overflow-hidden flex flex-col p-6 lg:p-8">
+        <div className="flex-1 overflow-y-auto flex flex-col p-6 lg:p-8">
           <h2 className="text-[20px] font-extrabold text-[#022C4F] mb-2 pr-8 shrink-0">Review Drawing Submission</h2>
           <p className="text-[11px] text-gray-500 font-medium leading-relaxed mb-4 shrink-0">
             Review project drawings, add comments, annotate design elements, approve revisions, or request changes before the project progresses to the next stage.
           </p>
 
-          <h3 className="text-[13px] font-extrabold text-[#022C4F] mb-3 shrink-0">Drawing Information</h3>
+          {isLoading && (
+            <div className="flex-1 flex items-center justify-center text-[12px] font-medium text-gray-500 py-12">
+              Loading drawing submissions…
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-y-4 gap-x-4 mb-5 shrink-0">
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Drawing Name</p>
-              <p className="text-[11px] text-gray-600 font-medium">Structural Foundation Layout - Revision 03</p>
+          {!isLoading && error && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
+              <p className="text-[13px] font-bold text-rose-700 mb-2">{error}</p>
+              <button onClick={onClose} className="px-4 py-2 bg-[#022C4F] text-white rounded-xl text-[11px] font-bold">Close</button>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Discipline</p>
-              <p className="text-[11px] text-gray-600 font-medium">Structural Engineering</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Project</p>
-              <p className="text-[11px] text-gray-600 font-medium">Victoria Heights Residential Estate</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Submitted by</p>
-              <p className="text-[11px] text-gray-600 font-medium">Sarah Okafor — Civil Engineer</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Submission Date</p>
-              <p className="text-[11px] text-gray-600 font-medium">June 17, 2026 • 10:42 AM</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Version</p>
-              <p className="text-[11px] text-gray-600 font-medium">V3.0</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Status</p>
-              <p className="text-[11px] text-gray-600 font-medium">Awaiting Client Review</p>
-            </div>
-          </div>
+          )}
 
-          {/* New Approval Deadline Block */}
-          <div className="mb-5 bg-orange-50 border border-orange-200 rounded-xl p-4 shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock size={14} className="text-orange-600" />
-              <h4 className="text-[12px] font-extrabold text-orange-900">Approval Deadline</h4>
+          {!isLoading && !error && drawings.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
+              <FileText size={36} className="text-[#022C4F]/30 mb-4" />
+              <p className="text-[14px] font-bold text-[#022C4F] mb-1">No drawings awaiting your review.</p>
+              <p className="text-[11px] text-gray-500">Drawing submissions will appear here as soon as they are submitted for review.</p>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-[10px] font-bold text-orange-800/70 mb-1">Review Due By</p>
-                <p className="text-[12px] font-bold text-orange-900">June 25, 2026</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-orange-800/70 mb-1">Days Remaining</p>
-                <p className="text-[12px] font-bold text-orange-900">3 Days</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-orange-800/70 mb-1">Schedule Impact if Delayed</p>
-                <p className="text-[12px] font-bold text-red-600">+14 Days</p>
-              </div>
-            </div>
-          </div>
+          )}
 
-          <div className="flex-1 mt-auto flex flex-col justify-end">
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setIsPreviewModalOpen(true)}
-                className="w-full py-3.5 bg-[#022C4F] text-white text-[12px] font-bold rounded-xl hover:bg-[#033A6B] transition-colors shadow-md"
-              >
-                Preview Drawings
-              </button>
-              <button
-                onClick={() => setIsSuccessModalOpen(true)}
-                className="w-full py-3.5 bg-green-600 text-white text-[12px] font-bold rounded-xl hover:bg-green-700 transition-colors shadow-md"
-              >
-                Approve Submission
-              </button>
-              <button
-                onClick={() => setIsChangeRequestModalOpen(true)}
-                className="w-full py-3.5 bg-red-50 text-red-600 border border-red-200 text-[12px] font-bold rounded-xl hover:bg-red-100 transition-colors shadow-sm"
-              >
-                Request Changes
-              </button>
-            </div>
-          </div>
+          {!isLoading && !error && drawings.length > 0 && selected && (
+            <>
+              {drawings.length > 1 && (
+                <div className="mb-5 shrink-0">
+                  <label className="block text-[11px] font-bold text-[#0F181F] mb-2">Drawing Submission</label>
+                  <CustomSelect
+                    options={drawings.map((d) => ({ value: d.id, label: d.title }))}
+                    value={selectedId}
+                    onChange={setSelectedId}
+                    placeholder="Select a drawing"
+                  />
+                </div>
+              )}
+
+              <h3 className="text-[13px] font-extrabold text-[#022C4F] mb-3 shrink-0">Drawing Information</h3>
+
+              <div className="grid grid-cols-2 gap-y-4 gap-x-4 mb-5 shrink-0">
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Drawing Name</p>
+                  <p className="text-[11px] text-gray-600 font-medium">{selected.title}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Discipline</p>
+                  <p className="text-[11px] text-gray-600 font-medium">{selected.discipline}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Project</p>
+                  <p className="text-[11px] text-gray-600 font-medium">{selected.project_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Submitted by</p>
+                  <p className="text-[11px] text-gray-600 font-medium">{selected.uploader_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Submission Date</p>
+                  <p className="text-[11px] text-gray-600 font-medium">
+                    {selected.created_at ? new Date(selected.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Version</p>
+                  <p className="text-[11px] text-gray-600 font-medium">{selected.current_version}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Status</p>
+                  <p className="text-[11px] text-gray-600 font-medium">
+                    {selected.status === 'UNDER_REVIEW' ? 'Under Review' : 'Awaiting Review'}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] font-bold text-[#0F181F] mb-0.5">Reference</p>
+                  <p className="text-[11px] text-gray-600 font-medium font-mono">{selected.document_reference}</p>
+                </div>
+              </div>
+
+              <div className="mb-5 bg-gray-50 border border-gray-200 rounded-xl p-4 shrink-0 flex items-start gap-2">
+                <Clock size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
+                  No approval deadline has been recorded for this submission. Approve or request changes when your review is complete.
+                </p>
+              </div>
+
+              <div className="flex-1 mt-auto flex flex-col justify-end">
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => setIsPreviewModalOpen(true)}
+                    disabled={!selected.file_url}
+                    className="w-full py-3.5 bg-[#022C4F] text-white text-[12px] font-bold rounded-xl hover:bg-[#033A6B] transition-colors shadow-md disabled:opacity-50"
+                  >
+                    Preview Drawing
+                  </button>
+                  <button
+                    onClick={() => submitDecision('APPROVED')}
+                    disabled={isSubmitting}
+                    className="w-full py-3.5 bg-green-600 text-white text-[12px] font-bold rounded-xl hover:bg-green-700 transition-colors shadow-md disabled:opacity-75"
+                  >
+                    {isSubmitting ? 'Submitting…' : 'Approve Submission'}
+                  </button>
+                  <button
+                    onClick={() => setIsChangeRequestModalOpen(true)}
+                    disabled={isSubmitting}
+                    className="w-full py-3.5 bg-red-50 text-red-600 border border-red-200 text-[12px] font-bold rounded-xl hover:bg-red-100 transition-colors shadow-sm disabled:opacity-75"
+                  >
+                    Request Changes
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -174,7 +257,7 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
       )}
 
       {/* Preview Modal Overlay */}
-      {isPreviewModalOpen && (
+      {isPreviewModalOpen && selected?.file_url && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#022C4F]/60 backdrop-blur-sm animate-in fade-in duration-300">
           <button
             onClick={() => {
@@ -199,9 +282,10 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
               >
+                {/* The real uploaded drawing file — no stock placeholder images. */}
                 <img
-                  src="https://res.cloudinary.com/depeqzb6z/image/upload/v1784473289/image_1_lnspma.png"
-                  alt="Drawing Preview"
+                  src={selected.file_url}
+                  alt={selected.title}
                   className="object-contain w-full h-full"
                   style={{
                     transform: `translate(${position.x}px, ${position.y}px) scale(${zoomScale})`,
@@ -215,8 +299,8 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
             {/* Bottom: Details & Controls */}
             <div className="p-8 flex items-center justify-between">
               <div>
-                <h2 className="text-white text-lg font-bold mb-1">Structural Foundation Layout – Revision 03</h2>
-                <p className="text-gray-400 text-sm">Victoria Heights Residential Estate</p>
+                <h2 className="text-white text-lg font-bold mb-1">{selected.title}</h2>
+                <p className="text-gray-400 text-sm">{selected.project_name || '—'}</p>
               </div>
 
               <div className="flex bg-[#022C4F] rounded-lg overflow-hidden border border-white/5 shadow-inner">
@@ -271,17 +355,10 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-[#0F181F] mb-2">Drawing Annotation / Element Reference</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Grid line A4, Section view 3"
-                  className="w-full p-3.5 rounded-xl border border-gray-300 text-[12px] focus:outline-none focus:border-[#022C4F] placeholder:text-gray-400"
-                />
-              </div>
-
-              <div>
                 <label className="block text-[11px] font-bold text-[#0F181F] mb-2">Detailed Feedback</label>
                 <textarea
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
                   placeholder="Describe the required changes specifically..."
                   className="w-full h-32 rounded-xl border border-gray-300 p-4 text-[12px] focus:outline-none focus:border-[#022C4F] resize-none placeholder:text-gray-400"
                 ></textarea>
@@ -289,12 +366,16 @@ export default function ReviewDrawingDrawer({ isOpen, onClose }: ReviewDrawingDr
 
               <button
                 onClick={() => {
-                  setIsChangeRequestModalOpen(false);
-                  setIsSuccessModalOpen(true);
+                  const comments = [
+                    issueCategory ? `Category: ${categoryOptions.find(c => c.value === issueCategory)?.label ?? issueCategory}` : null,
+                    feedback.trim() || null,
+                  ].filter(Boolean).join('\n\n') || undefined;
+                  submitDecision('CHANGES_REQUESTED', comments);
                 }}
-                className="w-full py-4 bg-black text-white text-[13px] font-bold rounded-xl hover:bg-gray-900 transition-colors shadow-md mt-2"
+                disabled={isSubmitting || !feedback.trim()}
+                className="w-full py-4 bg-black text-white text-[13px] font-bold rounded-xl hover:bg-gray-900 transition-colors shadow-md mt-2 disabled:opacity-50"
               >
-                Submit Change Request
+                {isSubmitting ? 'Submitting…' : 'Submit Change Request'}
               </button>
             </div>
           </div>

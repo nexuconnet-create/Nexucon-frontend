@@ -48,9 +48,17 @@ export default function StructuralRiskIndex() {
 
   const handleExportRiskReport = async () => {
     try {
-      const ref = `REP-RISK-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Generating Structural Risk Audit Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statutory Structural Risk Index & Critical Hotspots Audit",
+        format: "PDF",
+        report_type: "Custom",
+        modules_included: ["Structural Risk Assessment", "Inspection Analytics"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Generating Structural Risk Audit Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statutory Structural Risk Index & Critical Hotspots Audit",

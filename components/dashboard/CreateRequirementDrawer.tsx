@@ -37,9 +37,6 @@ export default function CreateRequirementDrawer({
         if (list.length > 0) setSelectedProjectId(list[0].id);
       })
       .catch(err => console.error("Failed to load projects", err));
-
-    const randNum = Math.floor(100 + Math.random() * 900);
-    setRequirementReference(`REQ-STAT-${randNum}`);
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -48,8 +45,9 @@ export default function CreateRequirementDrawer({
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      // The statutory requirement code is a real-world clause reference typed by the operator — never generated client-side
       await createRequirement({
-        requirement_reference: requirementReference || `REQ-STAT-${Date.now().toString().slice(-4)}`,
+        requirement_reference: requirementReference.trim(),
         project: selectedProjectId || undefined,
         category: category,
         title: title || 'Statutory Code Conformance',

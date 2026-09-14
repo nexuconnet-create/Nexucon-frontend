@@ -1,24 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowUpRight, Search, Bell, Filter, ChevronLeft, ChevronRight, MoreHorizontal, Asterisk } from "lucide-react";
+import { ArrowUpRight, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import CreateTaskSideDrawer from "@/components/dashboard/CreateTaskSideDrawer";
 import TaskTemplatesModal from "@/components/dashboard/TaskTemplatesModal";
 import TopRightControls from "@/components/dashboard/TopRightControls";
 import Link from "next/link";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function TasksDashboard() {
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
   const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
 
-  const taskProgressData = [
-    { week: "Week 1", completed: 30, expected: 50 },
-    { week: "Week 2", completed: 45, expected: 65 },
-    { week: "Week 3", completed: 70, expected: 80 },
-    { week: "Week 4", completed: 95, expected: 100 },
-    { week: "Week 5", completed: 120, expected: 120 },
-  ];
+  // No Task model/API exists on the backend yet, so no task counts, lists,
+  // progress curves, or deadlines can be shown. Every section below renders
+  // an honest empty state instead of fabricated task data.
 
   return (
     <>
@@ -68,7 +63,7 @@ export default function TasksDashboard() {
                 <ArrowUpRight size={14} className="text-[#022C4F]" />
               </div>
             </div>
-            <span className="text-[36px] font-extrabold text-[#022C4F]">148</span>
+            <span className="text-[36px] font-extrabold text-[#022C4F]">—</span>
           </div>
           <div className="bg-white rounded-xl p-6 flex flex-col gap-6 border border-[#022C4F]/20 shadow-sm">
             <div className="flex justify-between items-center">
@@ -77,7 +72,7 @@ export default function TasksDashboard() {
                 <ArrowUpRight size={14} className="text-[#022C4F]" />
               </div>
             </div>
-            <span className="text-[36px] font-extrabold text-[#022C4F]">89</span>
+            <span className="text-[36px] font-extrabold text-[#022C4F]">—</span>
           </div>
           <div className="bg-white rounded-xl p-6 flex flex-col gap-6 border border-[#022C4F]/20 shadow-sm">
             <div className="flex justify-between items-center">
@@ -86,7 +81,7 @@ export default function TasksDashboard() {
                 <ArrowUpRight size={14} className="text-[#022C4F]" />
               </div>
             </div>
-            <span className="text-[36px] font-extrabold text-[#022C4F]">39</span>
+            <span className="text-[36px] font-extrabold text-[#022C4F]">—</span>
           </div>
           <div className="bg-white rounded-xl p-6 flex flex-col gap-6 border border-[#022C4F]/20 shadow-sm">
             <div className="flex justify-between items-center">
@@ -95,7 +90,7 @@ export default function TasksDashboard() {
                 <ArrowUpRight size={14} className="text-[#022C4F]" />
               </div>
             </div>
-            <span className="text-[36px] font-extrabold text-[#022C4F]">5</span>
+            <span className="text-[36px] font-extrabold text-[#022C4F]">—</span>
           </div>
         </div>
 
@@ -119,129 +114,18 @@ export default function TasksDashboard() {
         <div className="flex flex-col gap-6">
           <h2 className="text-[16px] font-extrabold text-[#022C4F]">My Assigned Tasks</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-            {/* Task Card 1 */}
-            <div className="bg-white border border-[#022C4F]/20 rounded-2xl p-6 flex flex-col gap-6 shadow-sm">
-              <h3 className="text-[14px] font-extrabold text-[#022C4F]">Review Architectural Floor Plans</h3>
-              <div className="grid grid-cols-2 gap-y-6">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Task ID</span>
-                  <span className="text-[11px] text-gray-500 font-medium">TSK-1042</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Due Date</span>
-                  <span className="text-[11px] text-gray-500 font-medium">July 10, 2026</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Assigned By</span>
-                  <span className="text-[11px] text-gray-500 font-medium">Project Manager</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Progress</span>
-                  <span className="text-[11px] text-gray-500 font-medium">75%</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Priority</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    <span className="text-[11px] text-gray-500 font-medium">High</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Status</span>
-                  <span className="text-[11px] text-gray-500 font-medium">In Progress</span>
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  View Task
-                </button>
-                <button className="flex-1 bg-[#022C4F] text-white hover:bg-[#033A6B] py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  Mark Complete
-                </button>
-                <button className="flex-1 bg-[#0F181F] text-white hover:bg-black py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  Comment
-                </button>
-              </div>
+            <div className="bg-white border border-[#022C4F]/20 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-4 shadow-sm min-h-[280px] col-span-1 md:col-span-2 lg:col-span-3">
+              <p className="text-[13px] font-extrabold text-[#022C4F]">No tasks recorded yet</p>
+              <p className="text-[11px] text-gray-500 font-medium max-w-[380px] leading-relaxed">
+                Tasks assigned to you will appear here once tasks have been created for your projects.
+              </p>
+              <button
+                onClick={() => setIsCreateDrawerOpen(true)}
+                className="mt-2 bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 px-8 py-3 rounded-full font-bold transition-colors shadow-sm text-[12px]"
+              >
+                Create New Task
+              </button>
             </div>
-
-            {/* Task Card 2 */}
-            <div className="bg-white border border-[#022C4F]/20 rounded-2xl p-6 flex flex-col gap-6 shadow-sm">
-              <h3 className="text-[14px] font-extrabold text-[#022C4F]">Resolve Structural Beam Coordination</h3>
-              <div className="grid grid-cols-2 gap-y-6">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Task ID</span>
-                  <span className="text-[11px] text-gray-500 font-medium">TSK-1038</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Due Date</span>
-                  <span className="text-[11px] text-gray-500 font-medium">Tomorrow</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Assigned By</span>
-                  <span className="text-[11px] text-gray-500 font-medium">Lead Structural Engineer</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Progress</span>
-                  <span className="text-[11px] text-gray-500 font-medium">75%</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Priority</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
-                    <span className="text-[11px] text-gray-500 font-medium">High</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Status</span>
-                  <span className="text-[11px] text-gray-500 font-medium">In Progress</span>
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  View Task
-                </button>
-                <button className="flex-1 bg-[#022C4F] text-white hover:bg-[#033A6B] py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  Update Progress
-                </button>
-              </div>
-            </div>
-
-            {/* Task Card 3 */}
-            <div className="bg-white border border-[#022C4F]/20 rounded-2xl p-6 flex flex-col gap-6 shadow-sm">
-              <h3 className="text-[14px] font-extrabold text-[#022C4F]">Verify Electrical Panel Layout</h3>
-              <div className="grid grid-cols-2 gap-y-6">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Task ID</span>
-                  <span className="text-[11px] text-gray-500 font-medium">TSK-1032</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Due Date</span>
-                  <span className="text-[11px] text-gray-500 font-medium">July 12, 2026</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Assigned By</span>
-                  <span className="text-[11px] text-gray-500 font-medium">Project Manager</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Status</span>
-                  <span className="text-[11px] text-gray-500 font-medium">Not Started</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-[#022C4F]">Priority</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-                    <span className="text-[11px] text-gray-500 font-medium">Medium</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-auto">
-                <button className="flex-1 bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 py-2.5 rounded-md text-[9px] font-extrabold transition-colors">
-                  Start Task
-                </button>
-              </div>
-            </div>
-
           </div>
         </div>
 
@@ -279,40 +163,10 @@ export default function TasksDashboard() {
                   </tr>
                 </thead>
                 <tbody className="text-[10px] text-[#022C4F] font-bold">
-                  <tr className="border-b border-gray-200">
-                    <td className="py-5 px-6">Architectural Coordination</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Olivia Thompson</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Architecture</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">High</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Jul 09</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-5 px-6">Foundation Review</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Michael Adeyemi</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Structural</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">High</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Jul 11</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-5 px-6">HVAC Coordination</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Daniel Okoro</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Mechanical</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Medium</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Jul 12</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-5 px-6">Electrical Design Check</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">James Ibrahim</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Electrical</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Medium</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Jul 13</td>
-                  </tr>
                   <tr>
-                    <td className="py-5 px-6">BOQ Verification</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Samuel Bello</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Quantity Surveying</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">High</td>
-                    <td className="py-5 px-6 text-center text-gray-500 font-medium">Jul 14</td>
+                    <td colSpan={5} className="py-12 px-6 text-center text-gray-500 font-medium">
+                      No tasks recorded yet
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -325,58 +179,16 @@ export default function TasksDashboard() {
               <h2 className="text-[16px] font-extrabold text-[#022C4F] text-center">Task Progress</h2>
 
               {/* Area Chart Area */}
-              <div className="w-full h-[200px] mt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={taskProgressData}
-                    margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#F472B6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#F472B6" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                    <XAxis 
-                      dataKey="week" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#9CA3AF', fontWeight: 'bold' }} 
-                      dy={10}
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fontSize: 10, fill: '#9CA3AF', fontWeight: 'bold' }} 
-                    />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      labelStyle={{ fontWeight: 'bold', color: '#022C4F', marginBottom: '4px' }}
-                    />
-                    <Area type="monotone" dataKey="expected" stroke="#F472B6" strokeWidth={2} fillOpacity={1} fill="url(#colorExpected)" />
-                    <Area type="monotone" dataKey="completed" stroke="#8B5CF6" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="w-full h-[200px] mt-2 flex flex-col items-center justify-center text-center gap-2">
+                <p className="text-[12px] font-extrabold text-[#022C4F]">No task progress recorded yet</p>
+                <p className="text-[10px] text-gray-500 font-medium max-w-[240px] leading-relaxed">
+                  Progress against expected completion will be charted here once tasks are recorded.
+                </p>
               </div>
 
               <div className="mt-8">
                 <h3 className="text-[14px] font-extrabold text-[#022C4F] mb-4">Upcoming Deadlines</h3>
-                <h4 className="text-[12px] font-extrabold text-[#0F181F] mb-3">Today</h4>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3">
-                    <Asterisk size={12} className="text-[#022C4F]" />
-                    <span className="text-[10px] text-gray-600 font-medium">Submit Architectural Review</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Asterisk size={12} className="text-[#022C4F]" />
-                    <span className="text-[10px] text-gray-600 font-medium">Resolve Drawing Annotation #24</span>
-                  </div>
-                </div>
+                <p className="text-[10px] text-gray-500 font-medium">No upcoming deadlines recorded</p>
               </div>
             </div>
           </div>

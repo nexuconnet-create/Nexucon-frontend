@@ -52,83 +52,16 @@ interface FindingDetailDrawerProps {
   punditTests?: PunditTest[];
 }
 
-function getFallbackDiagnostic(finding: DigitalEyeFinding, punditTests?: PunditTest[]): FindingAIDiagnostic {
-  const desc = finding.description || '';
-  const elem = finding.structural_element_name || finding.structural_element_id || '200THK RC SLAB:780904';
-
-  let depth = 300;
-  let variance = 60;
-  const dMatch = desc.match(/Depth:\s*([0-9.]+)\s*mm/i);
-  if (dMatch) depth = parseFloat(dMatch[1]);
-  const vMatch = desc.match(/Variance:\s*([0-9.]+)\s*mm/i);
-  if (vMatch) variance = parseFloat(vMatch[1]);
-
-  const matchedTests = (punditTests || []).filter(t => 
-    (t.structural_element_name && t.structural_element_name.toLowerCase() === elem.toLowerCase()) ||
-    (t.structural_element_id && t.structural_element_id.toLowerCase() === elem.toLowerCase())
+function realCorrelatedTests(finding: DigitalEyeFinding, punditTests?: PunditTest[]) {
+  // Real PUNDIT records for the same element, taken from the server list —
+  // used to show correlated measurements when no AI diagnostic is available.
+  // No record is ever fabricated: no element match means an empty list.
+  const elem = (finding.structural_element_name || finding.structural_element_id || '').toLowerCase();
+  if (!elem) return [] as PunditTest[];
+  return (punditTests || []).filter(t =>
+    (t.structural_element_name && t.structural_element_name.toLowerCase() === elem) ||
+    (t.structural_element_id && t.structural_element_id.toLowerCase() === elem)
   );
-
-  let meanV = 3.15;
-  if (matchedTests.length > 0 && matchedTests[0].pulse_velocity_ms > 0) {
-    meanV = matchedTests[0].pulse_velocity_ms / 1000.0;
-  }
-
-  const grade = meanV < 3.0 ? 'POOR' : meanV < 3.5 ? 'DOUBTFUL' : meanV < 4.5 ? 'GOOD' : 'EXCELLENT';
-
-  return {
-    finding_id: finding.id,
-    finding_reference: finding.finding_reference,
-    structural_element: elem,
-    bim_guid: finding.structural_element_guid,
-    severity: finding.severity,
-    confidence_score: finding.confidence_score || 0,
-    status: finding.status,
-    ncr_reference: finding.ncr_reference || (finding.status === 'CONVERTED_TO_NCR' ? `NCR-2026-${finding.finding_reference.slice(-6)}` : null),
-    acoustic_inversion: {
-      estimated_velocity_km_s: Number(meanV.toFixed(2)),
-      velocity_ms: Math.round(meanV * 1000),
-      quality_grade: grade,
-      anomaly_depth_mm: depth,
-      spacing_variance_mm: variance,
-      inversion_summary: `Acoustic pulse velocity inversion across ${elem} estimates localized velocity at ${formatVelocityMs(meanV * 1000)} m/s, indicating a '${grade}' concrete density zone. Acoustic wave attenuation and signal diffraction align with ±${variance}mm rebar spacing variance at ${depth}mm depth.`,
-    },
-    root_cause_analysis: `Localized reinforcement displacement during concrete placement created a ${variance}mm bar spacing irregularity in ${elem}. Aggregate bridging and restricted vibration compaction produced a low-velocity acoustic shadow and potential internal honeycombing.`,
-    standards_compliance: [
-      {
-        standard: 'BS 1881: Part 203',
-        clause: 'Clause 6.3 (Pulse Velocity Evaluation)',
-        status: meanV < 3.5 ? 'NON_COMPLIANT' : 'COMPLIANT',
-        note: `Velocity of ${meanV.toFixed(2)} km/s sits in the doubtful/honeycombed zone below the 3.5 km/s sound concrete threshold.`,
-      },
-      {
-        standard: 'BS 8110: Part 1',
-        clause: 'Section 3.12.11 (Bar Spacing & Cover)',
-        status: variance > 15 ? 'NON_COMPLIANT' : 'COMPLIANT',
-        note: `Bar spacing variance of ±${variance}mm exceeds the statutory allowable tolerance of ±10mm.`,
-      },
-      {
-        standard: 'LASBCA Reg. 2026',
-        clause: 'Structural Integrity Audit §4.1',
-        status: 'STATUTORY_REVIEW_REQUIRED',
-        note: 'Sub-surface acoustic anomaly requires mandatory engineering verification and regulatory sign-off before load transfer.',
-      },
-    ],
-    recommended_corrective_actions: [
-      `Execute a 6-point ultrasonic pulse velocity (UPV) grid scan across the affected zone of ${elem} to demarcate acoustic shadow boundaries.`,
-      `Conduct non-destructive rebar scanning (Profoscope / electromagnetic locator) at 100mm intervals to map congested and displaced steel bars.`,
-      `Require structural consultant recalculation for ${elem} under as-built steel spacing.`,
-      `If pulse velocity remains < 3.5 km/s in the affected core, extract a 100mm core sample for compressive strength verification.`,
-    ],
-    ncr_remedial_draft: `1. Issue immediate temporary hold on superimposed dead loads on Element ${elem}.\n2. Contractor to execute high-density 54 kHz UPV velocity grid mapping per BS 1881-203.\n3. Structural consultant to submit as-built load recalculation addressing the ${variance}mm spacing variance.\n4. If core velocity confirms honeycombing, perform low-pressure structural epoxy/micro-cement grouting under LASBCA inspection.`,
-    correlated_pundit_tests: matchedTests.map(t => ({
-      reference: t.test_reference,
-      path_length_mm: t.path_length_mm,
-      pulse_time_us: t.transit_time_us,
-      velocity_km_s: t.pulse_velocity_ms > 0 ? Number((t.pulse_velocity_ms / 1000.0).toFixed(2)) : null,
-      quality_grade: t.concrete_quality_rating,
-      ecs_mpa: t.estimated_compressive_strength_mpa,
-    })),
-  };
 }
 
 export default function FindingDetailDrawer({
@@ -145,6 +78,8 @@ export default function FindingDetailDrawer({
   const [isSubmittingNCR, setIsSubmittingNCR] = useState(false);
   const [diagnostic, setDiagnostic] = useState<FindingAIDiagnostic | null>(null);
   const [isLoadingDiagnostic, setIsLoadingDiagnostic] = useState(false);
+  const [diagnosticFailed, setDiagnosticFailed] = useState(false);
+  const [diagnosticRetry, setDiagnosticRetry] = useState(0);
   const [isDownloadingNcr, setIsDownloadingNcr] = useState(false);
   const [bimModelName, setBimModelName] = useState<string | null>(null);
 
@@ -166,29 +101,33 @@ export default function FindingDetailDrawer({
   useEffect(() => {
     if (isOpen && finding) {
       setIsLoadingDiagnostic(true);
+      setDiagnosticFailed(false);
       getFindingAIDiagnostic(finding.id)
         .then((res) => {
           setDiagnostic(res);
         })
         .catch(() => {
-          // Fallback to intelligent deterministic synthesis
-          setDiagnostic(getFallbackDiagnostic(finding, punditTests));
+          // Honest failure: the diagnostic comes from the server or not at
+          // all — no client-side synthesis stands in for it.
+          setDiagnostic(null);
+          setDiagnosticFailed(true);
         })
         .finally(() => {
           setIsLoadingDiagnostic(false);
         });
     } else {
       setDiagnostic(null);
+      setDiagnosticFailed(false);
       setIsEscalating(false);
       setCorrectiveAction("");
     }
-  }, [isOpen, finding?.id]);
+  }, [isOpen, finding?.id, diagnosticRetry]);
 
   if (!isOpen || !finding) return null;
 
-  const effectiveNcrRef = finding.ncr_reference 
-    || diagnostic?.ncr_reference 
-    || (finding.status === 'CONVERTED_TO_NCR' ? `NCR-2026-${finding.finding_reference.slice(-6)}` : null);
+  // Only a real NCR reference recorded by the backend — never a locally
+  // synthesised one.
+  const effectiveNcrRef = finding.ncr_reference || diagnostic?.ncr_reference || null;
 
   const handleEscalateNCR = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +206,17 @@ export default function FindingDetailDrawer({
     }
   };
 
-  const activeDiag = diagnostic || getFallbackDiagnostic(finding, punditTests);
+  // Correlated records: from the server diagnostic when present, else the
+  // real matched PUNDIT records from the server list. Never fabricated.
+  const correlatedTests = diagnostic?.correlated_pundit_tests
+    ?? realCorrelatedTests(finding, punditTests).map(t => ({
+      reference: t.test_reference,
+      path_length_mm: t.path_length_mm,
+      pulse_time_us: t.transit_time_us,
+      velocity_km_s: t.pulse_velocity_ms > 0 ? Number((t.pulse_velocity_ms / 1000.0).toFixed(2)) : null,
+      quality_grade: t.concrete_quality_rating,
+      ecs_mpa: t.estimated_compressive_strength_mpa,
+    }));
 
   return (
     <AnimatePresence>
@@ -393,7 +342,7 @@ export default function FindingDetailDrawer({
                         Statutory Enforcement File
                       </span>
                       <h4 className="text-sm font-bold text-gray-900 font-mono">
-                        {effectiveNcrRef}
+                        {effectiveNcrRef || 'Reference not recorded'}
                       </h4>
                     </div>
                   </div>
@@ -439,34 +388,57 @@ export default function FindingDetailDrawer({
                 </span>
               </div>
 
+              {isLoadingDiagnostic ? (
+                <p className="text-xs text-gray-500 leading-relaxed" title="Only server-recorded diagnostics are shown — none are invented client-side.">
+                  Loading the recorded diagnostic from the server…
+                </p>
+              ) : !diagnostic ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {diagnosticFailed
+                      ? 'The AI diagnostic could not be loaded from the server. No analysis is invented in its place — only a server-generated diagnostic is shown here.'
+                      : 'No AI diagnostic has been generated for this finding yet. Run the AI analysis to produce one — no analysis is invented client-side.'}
+                  </p>
+                  {diagnosticFailed && (
+                    <button
+                      onClick={() => setDiagnosticRetry((n) => n + 1)}
+                      className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 rounded-xl text-[10px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={11} />
+                      Retry loading diagnostic
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
               {/* Inversion Telemetry Matrix */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block">Est. Velocity</span>
                   <span className="text-base font-bold font-mono text-amber-700">
-                    {formatVelocityMs(activeDiag.acoustic_inversion.velocity_ms)} m/s
+                    {formatVelocityMs(diagnostic.acoustic_inversion.velocity_ms)} m/s
                   </span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block">Density Grade</span>
                   <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded mt-0.5 inline-block ${
-                    activeDiag.acoustic_inversion.quality_grade === 'GOOD' ? 'bg-emerald-100 text-emerald-800'
-                      : activeDiag.acoustic_inversion.quality_grade === 'POOR' ? 'bg-rose-100 text-rose-800'
+                    diagnostic.acoustic_inversion.quality_grade === 'GOOD' ? 'bg-emerald-100 text-emerald-800'
+                      : diagnostic.acoustic_inversion.quality_grade === 'POOR' ? 'bg-rose-100 text-rose-800'
                       : 'bg-amber-100 text-amber-800'
                   }`}>
-                    {activeDiag.acoustic_inversion.quality_grade}
+                    {diagnostic.acoustic_inversion.quality_grade}
                   </span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block">Defect Depth</span>
                   <span className="text-sm font-bold font-mono text-gray-800">
-                    {activeDiag.acoustic_inversion.anomaly_depth_mm} mm
+                    {diagnostic.acoustic_inversion.anomaly_depth_mm} mm
                   </span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-amber-100/80 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block">Bar Variance</span>
                   <span className="text-sm font-bold font-mono text-rose-600">
-                    ±{activeDiag.acoustic_inversion.spacing_variance_mm} mm
+                    ±{diagnostic.acoustic_inversion.spacing_variance_mm} mm
                   </span>
                 </div>
               </div>
@@ -476,7 +448,7 @@ export default function FindingDetailDrawer({
                 <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
                   <Activity size={11} className="text-amber-500" /> Inversion Synthesis:
                 </span>
-                <p>{activeDiag.acoustic_inversion.inversion_summary}</p>
+                <p>{diagnostic.acoustic_inversion.inversion_summary}</p>
               </div>
 
               {/* Root Cause Analysis */}
@@ -485,7 +457,7 @@ export default function FindingDetailDrawer({
                   <Layers size={11} className="text-blue-500" /> Root Cause Diagnosis:
                 </span>
                 <p className="bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
-                  {activeDiag.root_cause_analysis}
+                  {diagnostic.root_cause_analysis}
                 </p>
               </div>
 
@@ -495,7 +467,7 @@ export default function FindingDetailDrawer({
                   <ShieldCheck size={11} className="text-emerald-500" /> Statutory Code Compliance Review:
                 </span>
                 <div className="space-y-1.5">
-                  {activeDiag.standards_compliance.map((item, idx) => (
+                  {diagnostic.standards_compliance.map((item, idx) => (
                     <div key={idx} className="bg-white p-2.5 rounded-xl border border-gray-200/80 flex items-start justify-between gap-3 text-xs">
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -522,7 +494,7 @@ export default function FindingDetailDrawer({
                   <Wrench size={11} className="text-amber-500" /> Prescribed Engineering Remediation Protocol:
                 </span>
                 <ul className="space-y-1.5 text-xs">
-                  {activeDiag.recommended_corrective_actions.map((act, idx) => (
+                  {diagnostic.recommended_corrective_actions.map((act, idx) => (
                     <li key={idx} className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-start gap-2 text-gray-700 leading-relaxed">
                       <span className="w-4 h-4 rounded-full bg-amber-200/80 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
@@ -532,17 +504,19 @@ export default function FindingDetailDrawer({
                   ))}
                 </ul>
               </div>
+                </>
+              )}
             </div>
 
             {/* CORRELATED UPV MEASUREMENTS */}
-            {activeDiag.correlated_pundit_tests && activeDiag.correlated_pundit_tests.length > 0 && (
+            {correlatedTests && correlatedTests.length > 0 && (
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2.5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
                   <Radio size={14} className="text-emerald-600" />
                   Correlated PUNDIT Acoustic Records for Element
                 </h4>
                 <div className="space-y-1.5">
-                  {activeDiag.correlated_pundit_tests.map((test, idx) => (
+                  {correlatedTests.map((test, idx) => (
                     <div key={idx} className="bg-white p-2.5 rounded-xl border border-gray-200 flex items-center justify-between text-xs font-mono">
                       <div>
                         <span className="font-bold text-gray-900">{test.reference}</span>
@@ -586,6 +560,7 @@ export default function FindingDetailDrawer({
                     <ShieldAlert size={18} className="text-rose-600" />
                     Escalate to Formal Non-Conformance Report (NCR)
                   </h4>
+                  {diagnostic?.ncr_remedial_draft && (
                   <button
                     type="button"
                     onClick={handleApplyAiRemediation}
@@ -594,6 +569,7 @@ export default function FindingDetailDrawer({
                     <Sparkles size={11} className="text-amber-700" />
                     Auto-Fill with AI Remediation Draft
                   </button>
+                  )}
                 </div>
                 <p className="text-xs text-rose-700">
                   This will generate a formal regulatory NCR ticket, notifying the developer, structural consultant, and lead inspector.
@@ -655,8 +631,8 @@ export default function FindingDetailDrawer({
                 <button
                   onClick={() => {
                     setIsEscalating(true);
-                    if (!correctiveAction && activeDiag.ncr_remedial_draft) {
-                      setCorrectiveAction(activeDiag.ncr_remedial_draft);
+                    if (!correctiveAction && diagnostic?.ncr_remedial_draft) {
+                      setCorrectiveAction(diagnostic.ncr_remedial_draft);
                     }
                   }}
                   className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md shadow-rose-900/20 transition-all cursor-pointer"

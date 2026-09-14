@@ -81,7 +81,8 @@ export default function ScheduleMeetingModal({
         date: date.trim(),
         time_slot: timeSlot.trim(),
         meeting_type: meetingType,
-        google_meet_url: googleMeetUrl || (meetingType === 'Video Call' ? 'https://meet.google.com/new' : undefined),
+        // Only a real generated Meet link is sent — never a placeholder meeting URL
+        google_meet_url: googleMeetUrl || undefined,
         initiator_name: 'Meeting Host',
         initiator_role: 'Agency Head / Director General',
         bypass_agency_head_check: true,
@@ -96,7 +97,7 @@ export default function ScheduleMeetingModal({
         for (const recipient of emailList) {
           sendEmailViaResend({
             to: recipient,
-            subject: `🏛️ Scheduled Council Session: ${title.trim()} [${createdMeeting?.meeting_reference || 'MTG-1092'}]`,
+            subject: `🏛️ Scheduled Council Session: ${title.trim()}${createdMeeting?.meeting_reference ? ` [${createdMeeting.meeting_reference}]` : ''}`,
             type: 'INVITE_DIRECTOR',
             html: `
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #060D15; color: #f8fafc; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 20px; border: 1px solid #1e293b;">

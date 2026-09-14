@@ -266,19 +266,37 @@ export function generateCSVReport(config: ReportConfig, data: Record<string, any
 }
 
 /**
+ * Compute a real SHA-256 digest over the report content using the Web Crypto API.
+ * Returns null when a secure context (HTTPS / localhost) is unavailable — in that
+ * case the digest line is simply omitted rather than replaced with a fake value.
+ */
+async function computeSha256Hex(content: string): Promise<string | null> {
+  try {
+    if (typeof window === 'undefined' || !window.crypto?.subtle) return null;
+    const encoder = new TextEncoder();
+    const digest = await window.crypto.subtle.digest('SHA-256', encoder.encode(content));
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn('SHA-256 digest unavailable:', err);
+    return null;
+  }
+}
+
+/**
  * Generate PDF / Printable HTML Document supporting all Nine (9) Distinct Report Types,
  * comprehensive multi-material Nigerian Industrial Standards (NIS 87 Sandcrete Blocks,
  * NIS 11 Cement, NIS 117 Steel Rebar, NIS 156 Concrete, NIS 74 Electrical, NIS 384 Plumbing, NBC & LASBCA),
  * Inspector Analytics field rosters, and non-engineer executive footers.
  */
-export function generatePDFReport(
-  config: ReportConfig, 
-  data: Record<string, any>, 
+export async function generatePDFReport(
+  config: ReportConfig,
+  data: Record<string, any>,
   template?: ReportTemplate | null
-): GeneratedDocumentResult {
+): Promise<GeneratedDocumentResult> {
   const repType = inferReportType(config);
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const shaHash = `SHA256:${Math.random().toString(36).substring(2, 10).toUpperCase()}${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  // Real SHA-256 computed over the report content — not a fabricated hash string
+  const shaHash = await computeSha256Hex(`${config.title}|${config.reportReference}|${dateStr}|${JSON.stringify(data)}`);
 
   const headerColor = template?.header_color || '#022C4F';
   const accentColor = template?.accent_color || '#2563EB';
@@ -908,7 +926,7 @@ export function generatePDFReport(
       <div class="project-meta-box">
         <div><strong>Client / Contracting Authority:</strong> ${config.clientName || 'Lagos State Ministry of Physical Planning & Urban Development'}</div>
         <div><strong>Project / Sector Scope:</strong> ${config.projectName || 'State Infrastructure Master Plan & Development Control'} (${config.lgaZone || 'Lagos Central Zone'})</div>
-        <div><strong>Audit Authentication Hash:</strong> <code>${shaHash}</code></div>
+        ${shaHash ? `<div><strong>Content Integrity Digest (SHA-256):</strong> <code>sha256:${shaHash}</code></div>` : ''}
       </div>
       <div class="signature-box">
         <div class="sig-title">Certified Government Officer</div>
@@ -969,7 +987,7 @@ export async function generateAndDownloadDocument(config: ReportConfig): Promise
       fileSize: `${(blob.size / 1024).toFixed(1)} KB`
     };
   } else {
-    docResult = generatePDFReport(config, data, activeTemplate);
+    docResult = await generatePDFReport(config, data, activeTemplate);
   }
 
   // Trigger browser download

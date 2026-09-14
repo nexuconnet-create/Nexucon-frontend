@@ -108,14 +108,22 @@ export default function TrimbleViewerPage() {
                       <td className="py-3 px-3 text-gray-600">{elem.grid_location}</td>
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          elem.gpr_clearance_status === "VERIFIED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                          elem.gpr_clearance_status === "VERIFIED"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : elem.gpr_clearance_status === "PENDING" || elem.gpr_clearance_status === "NOT_APPLICABLE"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-rose-100 text-rose-700"
                         }`}>
                           {elem.gpr_clearance_status}
                         </span>
                       </td>
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          elem.pundit_clearance_status === "VERIFIED" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                          elem.pundit_clearance_status === "VERIFIED"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : elem.pundit_clearance_status === "PENDING" || elem.pundit_clearance_status === "NOT_APPLICABLE"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-rose-100 text-rose-700"
                         }`}>
                           {elem.pundit_clearance_status}
                         </span>

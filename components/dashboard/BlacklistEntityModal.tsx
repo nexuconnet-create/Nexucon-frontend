@@ -26,8 +26,8 @@ export default function BlacklistEntityModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!entityName.trim() || !reason.trim()) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Entity name and violation reason are required', type: 'error' } }));
+    if (!entityName.trim() || !reason.trim() || !entityId.trim()) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Entity name, regulatory reference ID, and violation reason are required', type: 'error' } }));
       return;
     }
 
@@ -35,7 +35,7 @@ export default function BlacklistEntityModal({
     try {
       await toggleBlacklist({
         entity_type: entityType,
-        entity_id: entityId || `ENT-${Math.floor(100 + Math.random() * 900)}`,
+        entity_id: entityId.trim(),
         entity_name: entityName,
         reason,
         status: statusVal
@@ -137,10 +137,11 @@ export default function BlacklistEntityModal({
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
-                    Regulatory Reference ID
+                    Regulatory Reference ID <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
+                    required
                     value={entityId}
                     onChange={(e) => setEntityId(e.target.value)}
                     placeholder="e.g. CONTR-9021"

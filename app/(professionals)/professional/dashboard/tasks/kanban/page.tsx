@@ -136,134 +136,22 @@ export default function KanbanBoard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const initialColumns: Record<string, Task[]> = {
-    "To Do": [
-      {
-        id: "TSK-005",
-        priority: "Low",
-        priorityColor: "bg-green-50 text-green-500",
-        title: "Review Initial Schematics",
-        description: "First pass on the structural schematics before sending to client.",
-        comments: "2",
-        checks: "0",
-        progress: 0,
-        dueDate: "Jul 30, 2026",
-      }
-    ],
-    "In Progress": [
-      {
-        id: "TSK-001",
-        priority: "Medium",
-        priorityColor: "bg-blue-50 text-blue-600",
-        title: "Architectural Floor Plan Revision",
-        description: "Updating the ground floor layout to incorporate the latest client feedback, accessibility improvements, and revised room configurations before peer review.",
-        comments: "11",
-        checks: "187",
-        progress: 65,
-        dueDate: "Jul 25, 2026",
-        timeLogged: "4h 30m"
-      },
-      {
-        id: "TSK-002",
-        priority: "Medium",
-        priorityColor: "bg-blue-50 text-blue-600",
-        title: "Structural Beam Coordination",
-        description: "Reviewing beam placements and reinforcement details to resolve coordination conflicts identified during the BIM clash detection process.",
-        comments: "32",
-        checks: "115",
-        progress: 40,
-        dueDate: "Jul 22, 2026",
-      },
-      {
-        id: "TSK-003",
-        priority: "High",
-        priorityColor: "bg-orange-50 text-orange-500",
-        title: "MEP Services Coordination",
-        description: "Aligning mechanical, electrical, and plumbing layouts with the approved architectural model to eliminate routing conflicts and optimize service distribution.",
-        comments: "987",
-        checks: "21.8k",
-        progress: 85,
-        dueDate: "Jul 21, 2026",
-      },
-      {
-        id: "TSK-004",
-        priority: "Critical",
-        priorityColor: "bg-red-50 text-red-500",
-        title: "Bill of Quantities Verification",
-        description: "Validating material quantities, cost estimates, and measurement schedules to ensure consistency with the latest approved design package.",
-        comments: "5",
-        checks: "11",
-        progress: 20,
-        dueDate: "Jul 20, 2026",
-      }
-    ],
-    "Under Review": [
-      {
-        id: "TSK-006",
-        priority: "Medium",
-        priorityColor: "bg-blue-50 text-blue-600",
-        title: "Final Architectural Design Package",
-        description: "The complete architectural drawing set is undergoing multidisciplinary peer review to verify compliance with project standards and design requirements.",
-        comments: "8",
-        checks: "112",
-        progress: 100,
-        dueDate: "Jul 15, 2026",
-      },
-      {
-        id: "TSK-007",
-        priority: "Medium",
-        priorityColor: "bg-blue-50 text-blue-600",
-        title: "Structural Foundation Design",
-        description: "Foundation layouts, reinforcement schedules, and structural calculations are currently being reviewed for technical accuracy before final approval.",
-        comments: "221",
-        checks: "87.2k",
-        progress: 100,
-        dueDate: "Jul 18, 2026",
-      }
-    ],
-    "Completed": [
-      {
-        id: "TSK-008",
-        priority: "Critical",
-        priorityColor: "bg-red-50 text-red-500",
-        title: "Site Survey Documentation",
-        description: "Completed the site survey report, including topographical data, boundary verification, and existing site conditions for design reference.",
-        comments: "108k",
-        checks: "997",
-        progress: 100,
-        dueDate: "Jun 30, 2026",
-      },
-      {
-        id: "TSK-009",
-        priority: "Low",
-        priorityColor: "bg-green-50 text-green-500",
-        title: "Concept Design Approval",
-        description: "Lorem ipsum dolor sit amet, libre unst consectetur adispicing elit.",
-        comments: "17",
-        checks: "0",
-        progress: 100,
-      },
-      {
-        id: "TSK-010",
-        priority: "High",
-        priorityColor: "bg-orange-50 text-orange-500",
-        title: "BIM Model Setup",
-        description: "Established the project's federated BIM model with architectural, structural, and MEP disciplines configured for collaborative coordination.",
-        comments: "888",
-        checks: "12",
-        progress: 100,
-      }
-    ]
-  };
-
-  const [columns, setColumns] = useState(initialColumns);
+  // No backend tasks API exists yet — the board starts honestly empty and
+  // every column shows an empty state until real task records exist.
+  const [columns, setColumns] = useState<Record<string, Task[]>>({
+    "To Do": [],
+    "In Progress": [],
+    "Under Review": [],
+    "Completed": []
+  });
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
+
+  const totalTasks = Object.values(columns).reduce((sum, col) => sum + col.length, 0);
   const [activeTab, setActiveTab] = useState("By Total Tasks");
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -456,7 +344,7 @@ export default function KanbanBoard() {
             >
               {tab}
               {tab === "By Total Tasks" && activeTab === "By Total Tasks" && (
-                <span className="bg-[#EEF2F6] text-[#022C4F] text-[10px] px-2 py-0.5 rounded-full">12</span>
+                <span className="bg-[#EEF2F6] text-[#022C4F] text-[10px] px-2 py-0.5 rounded-full">{totalTasks}</span>
               )}
             </button>
           ))}
@@ -513,15 +401,22 @@ export default function KanbanBoard() {
 
                 {/* Sortable Area */}
                 <div className="flex flex-col gap-4 flex-1 overflow-y-auto rounded-3xl p-1 hide-scrollbar pb-10">
-                  <SortableContext 
-                    id={colId} 
-                    items={columns[colId].map(t => t.id)} 
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {columns[colId].map(task => (
-                      <SortableTaskCard key={task.id} id={task.id} task={task} onClick={() => handleTaskClick(task)} />
-                    ))}
-                  </SortableContext>
+                  {columns[colId].length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-gray-200 bg-white/60 py-10 text-center">
+                      <p className="text-[12px] font-bold text-gray-400">No tasks recorded</p>
+                      <p className="text-[10px] text-gray-300 mt-1">Tasks added to this board will appear here.</p>
+                    </div>
+                  ) : (
+                    <SortableContext
+                      id={colId}
+                      items={columns[colId].map(t => t.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {columns[colId].map(task => (
+                        <SortableTaskCard key={task.id} id={task.id} task={task} onClick={() => handleTaskClick(task)} />
+                      ))}
+                    </SortableContext>
+                  )}
                 </div>
               </div>
             ))}

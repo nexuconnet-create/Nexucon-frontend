@@ -178,7 +178,7 @@ export default function BIMMilestoneDetailDrawer({
               </span>
             </div>
             <p className="text-xs text-slate-600">
-              {milestone.gpr_evidence_notes || 'Subsurface utilities and slab rebar clearance recorded prior to penetration work.'}
+              {milestone.gpr_evidence_notes || 'No subsurface clearance notes recorded for this milestone.'}
             </p>
           </div>
 

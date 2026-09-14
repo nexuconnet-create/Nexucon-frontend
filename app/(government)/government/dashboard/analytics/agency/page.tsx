@@ -6,7 +6,7 @@ import {
   Building, Clock, Users, Activity, TrendingDown, 
   CheckCircle2, MoreHorizontal, RefreshCw, ShieldCheck, Download 
 } from "lucide-react";
-import { AgencyAnalyticsData, getAgencyPerformance } from "@/services/analytics";
+import { AgencyAnalyticsData, getAgencyPerformance, createGeneratedReport } from "@/services/analytics";
 import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function AgencyPerformance() {
@@ -31,9 +31,17 @@ export default function AgencyPerformance() {
 
   const handleExportAgency = async () => {
     try {
-      const ref = `REP-SLA-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Generating Agency SLA & Operational Review Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statutory Agency Operational SLA & Workload Throughput Audit",
+        format: "PDF",
+        report_type: "Performance",
+        modules_included: ["Agency Performance SLAs", "Project Performance"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Generating Agency SLA & Operational Review Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statutory Agency Operational SLA & Workload Throughput Audit",

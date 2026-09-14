@@ -272,7 +272,7 @@ export default function QAQCInsights() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Mock Chart Area */}
+        {/* RTK Fix Quality Trend (live telemetry) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-gray-900">RTK Fix Quality Trend</h3>

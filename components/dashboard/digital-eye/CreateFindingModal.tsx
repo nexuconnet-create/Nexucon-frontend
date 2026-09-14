@@ -204,8 +204,12 @@ export default function CreateFindingModal({
                   <option value="REBAR_SPACING_DEFICIENCY">Rebar Spacing Deficiency</option>
                   <option value="INSUFFICIENT_CONCRETE_COVER">Insufficient Concrete Cover</option>
                   <option value="SUBSURFACE_VOID">Subsurface Void (Honeycomb)</option>
+                  <option value="CONCRETE_HONEYCOMBING">Concrete Honeycombing</option>
+                  <option value="CRACK_DEPTH_ANOMALY">Crack Depth Anomaly</option>
                   <option value="INTER_LAYER_DELAMINATION">Inter-Layer Delamination</option>
                   <option value="LOW_PULSE_VELOCITY_ZONE">Low Pulse Velocity (UPV)</option>
+                  <option value="THERMAL_VARIANCE_ANOMALY">Thermal Variance Anomaly</option>
+                  <option value="UNMAPPED_UTILITY_CONDUIT">Unmapped Utility Conduit</option>
                   <option value="BIM_GEOMETRIC_DEVIATION">BIM Geometric Deviation</option>
                 </select>
               </div>

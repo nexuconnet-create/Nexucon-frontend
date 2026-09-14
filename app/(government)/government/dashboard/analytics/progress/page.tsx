@@ -7,7 +7,7 @@ import {
   Flag, Calendar, Target, MoveRight, RefreshCw, ShieldCheck, 
   AlertTriangle, Clock, Layers, Download 
 } from "lucide-react";
-import { ProgressAnalyticsData, getProgressAnalytics } from "@/services/analytics";
+import { ProgressAnalyticsData, getProgressAnalytics, createGeneratedReport } from "@/services/analytics";
 import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function ConstructionProgress() {
@@ -32,9 +32,17 @@ export default function ConstructionProgress() {
 
   const handleExportProgress = async () => {
     try {
-      const ref = `REP-EVM-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Compiling Construction Progress & EVM Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Construction Milestone Verification & Earned Value Report",
+        format: "PDF",
+        report_type: "Project",
+        modules_included: ["Construction Progress & EVM", "Project Performance"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Compiling Construction Progress & EVM Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Construction Milestone Verification & Earned Value Report",

@@ -7,7 +7,7 @@ import {
   AlertOctagon, Activity, ChevronRight, RefreshCw, 
   CheckCircle2, XCircle, Award, User, Clock, Download 
 } from "lucide-react";
-import { InspectionAnalyticsData, getInspectionAnalytics } from "@/services/analytics";
+import { InspectionAnalyticsData, getInspectionAnalytics, createGeneratedReport } from "@/services/analytics";
 import { generateAndDownloadDocument } from "@/utils/documentGenerator";
 
 export default function InspectionAnalytics() {
@@ -33,9 +33,17 @@ export default function InspectionAnalytics() {
 
   const handleExportInspections = async () => {
     try {
-      const ref = `REP-INSP-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Generating Field Inspection & Defect Audit Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statutory Field Inspection Quality & Defect Classification Report",
+        format: "PDF",
+        report_type: "Inspection",
+        modules_included: ["Inspection Analytics", "Structural Risk Assessment"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Generating Field Inspection & Defect Audit Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statutory Field Inspection Quality & Defect Classification Report",

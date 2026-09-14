@@ -1,14 +1,53 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
   ChevronLeft, Layers, Camera, AlertTriangle, MessageSquare,
   MapPin, CheckCircle, SlidersHorizontal, Settings, Users, ArrowRight, Save
 } from "lucide-react";
+import { getDigitalEyeFindings, DigitalEyeFinding } from "@/services/digitalEye";
+import { getProjects, Project } from "@/services/projects";
+import { getDocuments, Document } from "@/services/documents";
+import { getBIMModels, BIMModel } from "@/services/bim";
+import { getProjectTeams } from "@/services/stakeholders";
+import { useAuth } from "@/context/AuthContext";
+
+// One entry in the alignment history, derived from a real Digital Eye finding.
+interface HistoryItem {
+  id: string;
+  type: 'deviation' | 'annotation' | 'field-note';
+  title: string;
+  location: string;
+  status: string;
+  time: string;
+  deviationMm?: number | null;
+}
+
+// Map a real finding status onto the badge styles the panel renders.
+const mapFindingStatus = (status: DigitalEyeFinding['status']): string => {
+  if (status === 'RESOLVED' || status === 'VERIFIED') return 'Resolved';
+  if (status === 'CONVERTED_TO_NCR') return 'Escalated';
+  return 'Open'; // OPEN / INVESTIGATING
+};
+
+const formatRelativeTime = (iso?: string): string => {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} mins ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  return `${days} days ago`;
+};
 
 export default function SiteAlignmentWorkspace() {
+  const { user } = useAuth();
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -20,6 +59,107 @@ export default function SiteAlignmentWorkspace() {
   const [isFieldNoteDrawerOpen, setIsFieldNoteDrawerOpen] = useState(false);
   const [newFieldNoteTitle, setNewFieldNoteTitle] = useState('');
   const [newFieldNoteDesc, setNewFieldNoteDesc] = useState('');
+
+  // Alignment history: real Digital Eye findings, plus field notes the user
+  // records in this session. Nothing is pre-populated or fabricated.
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    getDigitalEyeFindings()
+      .then((findings) => {
+        if (cancelled) return;
+        setHistory(findings.map(f => ({
+          id: f.id,
+          type: (f.deviation_mm != null || f.taxonomy === 'BIM_GEOMETRIC_DEVIATION') ? 'deviation' : 'annotation',
+          title: f.title,
+          location: f.structural_element_name || 'Location not specified',
+          status: mapFindingStatus(f.status),
+          time: formatRelativeTime(f.created_at),
+          deviationMm: f.deviation_mm ?? null,
+        })));
+      })
+      .catch((err) => {
+        console.error("Failed to load alignment findings", err);
+        if (!cancelled) setHistoryError("Alignment records could not be loaded.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHistory(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Real context for the comparison view: the professional's latest project,
+  // the latest real site photo on record, and the registered BIM model. No
+  // stock placeholder photography.
+  const [projectName, setProjectName] = useState<string | null>(null);
+  const [sitePhoto, setSitePhoto] = useState<Document | null>(null);
+  const [bimModel, setBimModel] = useState<BIMModel | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getProjects().catch(() => [] as Project[]),
+      getDocuments().catch(() => [] as Document[]),
+      getBIMModels().catch(() => [] as BIMModel[]),
+    ]).then(([projects, docs, models]) => {
+      if (cancelled) return;
+      const latest = [...projects].sort(
+        (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      )[0];
+      setProjectName(latest?.name ?? null);
+      const photos = docs
+        .filter((d) => d.document_type === 'SITE_PHOTO' && d.file_url)
+        .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+      setSitePhoto(photos[0] ?? null);
+      setBimModel(models.find((m) => m.status === 'Active') ?? models[0] ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Real assignable people: project stakeholder team members recorded on the
+  // backend, plus the signed-in user. No fabricated names.
+  const [teamMembers, setTeamMembers] = useState<Array<{ name: string; role: string }>>([]);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingTeam(true);
+    getProjectTeams()
+      .then((teams) => {
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const members: Array<{ name: string; role: string }> = [];
+        teams.forEach((team) => {
+          Object.values(team.team_data || {}).forEach((member) => {
+            if (member?.name && !seen.has(member.name)) {
+              seen.add(member.name);
+              members.push({ name: member.name, role: member.role || "" });
+            }
+          });
+        });
+        setTeamMembers(members);
+      })
+      .catch((err) => {
+        console.error("Failed to load project teams", err);
+        if (!cancelled) setTeamMembers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTeam(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // The signed-in user is always an honest assignee option.
+  const currentUserName = user ? `${user.first_name} ${user.last_name}`.trim() : "";
+  const assignableMembers = [...teamMembers];
+  if (currentUserName && !assignableMembers.some((m) => m.name === currentUserName)) {
+    assignableMembers.push({ name: currentUserName, role: user?.role_name || "" });
+  }
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -34,13 +174,6 @@ export default function SiteAlignmentWorkspace() {
     { id: 'deviation', icon: AlertTriangle, label: 'Identify Deviation' },
     { id: 'annotate', icon: MapPin, label: 'Add Annotation' },
   ];
-
-  // Dummy alignment history / issues
-  const [history, setHistory] = useState([
-    { id: 1, type: 'deviation', title: 'HVAC Duct Clash', location: 'Level 2, Zone B', status: 'Open', time: '10 mins ago' },
-    { id: 2, type: 'annotation', title: 'Verify Column Plumbness', location: 'Grid C-4', status: 'Resolved', time: '2 hours ago' },
-    { id: 3, type: 'photo', title: 'Site Progress Photo', location: 'North Elevation', status: 'Logged', time: 'Yesterday' }
-  ]);
 
   const handleSliderMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging || !sliderRef.current) return;
@@ -76,7 +209,7 @@ export default function SiteAlignmentWorkspace() {
             <h1 className="text-[16px] font-extrabold text-[#022C4F] leading-tight">
               Site Alignment Workspace
             </h1>
-            <span className="text-[11px] text-gray-500 font-medium">Victoria Heights Commercial Complex</span>
+            <span className="text-[11px] text-gray-500 font-medium">{projectName || 'No project recorded'}</span>
           </div>
         </div>
 
@@ -134,33 +267,53 @@ export default function SiteAlignmentWorkspace() {
           onMouseMove={handleSliderMove}
           onTouchMove={handleSliderMove}
         >
-          {/* Site Photo View (Background) */}
+          {/* Site Photo View (Background) — the latest real site photo on record. */}
           <div className="absolute inset-0">
-            <img
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1784703935/Building_Construction_fuk4mw.jpg"
-              alt="Site Condition"
-              className="w-full h-full object-cover opacity-80"
-              draggable={false}
-            />
+            {sitePhoto?.file_url ? (
+              <img
+                src={sitePhoto.file_url}
+                alt={sitePhoto.title || 'Site Condition'}
+                className="w-full h-full object-cover opacity-80"
+                draggable={false}
+              />
+            ) : (
+              <div className="w-full h-full bg-[#0F181F] flex flex-col items-center justify-center text-center px-8">
+                <Camera size={32} className="text-white/30 mb-3" />
+                <p className="text-[13px] font-bold text-white/70">No site photo recorded yet.</p>
+                <p className="text-[11px] text-white/40 mt-1">Uploaded site photos will appear here for comparison against the BIM model.</p>
+              </div>
+            )}
             <div className="absolute top-6 right-6 bg-black/60 text-white px-4 py-2 rounded-lg text-[12px] font-bold backdrop-blur-sm border border-white/20">
               Actual Site Condition
             </div>
           </div>
 
-          {/* BIM Model View (Clipped foreground) */}
+          {/* BIM Model View (Clipped foreground) — the registered model. The
+              IFC file itself is not an image, so no snapshot is invented. */}
           <div
             className="absolute inset-0 border-r-[3px] border-white cursor-ew-resize overflow-hidden shadow-[2px_0_15px_rgba(0,0,0,0.5)]"
             style={{ width: `${sliderPosition}%` }}
           >
-            <img
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1784703934/Chapman_Taylor___Why_BIM_matters_gnfw89.jpg"
-              alt="BIM Model"
-              className="absolute top-0 left-0 h-full object-cover opacity-90"
-              style={{ width: sliderRef.current?.clientWidth ? `${sliderRef.current.clientWidth}px` : '100vw', maxWidth: 'none' }}
-              draggable={false}
-            />
+            {bimModel ? (
+              <div className="absolute inset-0 bg-[#022C4F] flex flex-col items-center justify-center text-center px-8">
+                <Layers size={32} className="text-white/40 mb-3" />
+                <p className="text-[13px] font-bold text-white/90">{bimModel.name}</p>
+                <p className="text-[11px] text-white/50 mt-1">
+                  {bimModel.discipline} • Version {bimModel.current_version} • {bimModel.format}
+                </p>
+                <p className="text-[10px] text-white/30 mt-3">
+                  {bimModel.element_count} elements registered — 3D model file; snapshot rendering not available
+                </p>
+              </div>
+            ) : (
+              <div className="absolute inset-0 bg-[#022C4F] flex flex-col items-center justify-center text-center px-8">
+                <Layers size={32} className="text-white/30 mb-3" />
+                <p className="text-[13px] font-bold text-white/70">No BIM model registered yet.</p>
+                <p className="text-[11px] text-white/40 mt-1">The registered BIM model will appear here once uploaded.</p>
+              </div>
+            )}
             <div className="absolute top-6 left-6 bg-[#022C4F]/90 text-white px-4 py-2 rounded-lg text-[12px] font-bold backdrop-blur-sm border border-white/20">
-              BIM Model (V4.0)
+              BIM Model{bimModel ? ` (V${bimModel.current_version})` : ''}
             </div>
 
             {/* Slider Handle */}
@@ -176,21 +329,13 @@ export default function SiteAlignmentWorkspace() {
             </div>
           </div>
 
-          {/* Overlay Annotations Demo */}
+          {/* Overlay: log a deviation via a field note the user fills in —
+              no deviation value or location is fabricated. */}
           {activeTool === 'deviation' && (
-            <div 
+            <div
               className="absolute top-[40%] left-[60%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center cursor-pointer animate-pulse z-20 hover:scale-105 transition-transform"
               onClick={() => {
-                const newNote = {
-                  id: Date.now(),
-                  type: 'deviation',
-                  title: 'New Deviation Logged',
-                  location: 'Level 2, Zone B',
-                  status: 'Open',
-                  time: 'Just now'
-                };
-                setHistory([newNote, ...history]);
-                showToast("Deviation logged successfully");
+                setIsFieldNoteDrawerOpen(true);
                 setActiveTool(null);
               }}
             >
@@ -198,7 +343,7 @@ export default function SiteAlignmentWorkspace() {
                 <AlertTriangle size={16} className="text-white" />
               </div>
               <div className="bg-white px-3 py-1.5 rounded-lg shadow-lg text-[11px] font-bold text-red-600 border border-red-100 whitespace-nowrap">
-                Click to log deviation
+                Click to record a field note
               </div>
             </div>
           )}
@@ -213,27 +358,53 @@ export default function SiteAlignmentWorkspace() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-              {history.map((item) => (
-                <div key={item.id} className="p-4 rounded-xl border border-gray-100 hover:border-[#022C4F]/30 hover:shadow-sm transition-all cursor-pointer bg-white group">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[12px] font-extrabold text-[#0F181F] group-hover:text-[#022C4F] transition-colors">{item.title}</span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${item.status === 'Open' ? 'bg-red-50 text-red-600' :
-                      item.status === 'Resolved' ? 'bg-green-50 text-green-600' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                      {item.status}
-                    </span>
+              {isLoadingHistory ? (
+                <div className="py-12 text-center text-[12px] text-gray-400 font-medium">Loading alignment records...</div>
+              ) : historyError ? (
+                <div className="py-12 text-center text-[12px] text-red-500 font-medium">{historyError}</div>
+              ) : history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center gap-2 py-12 px-4">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                    <AlertTriangle size={18} />
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-500 mb-3">
-                    <MapPin size={12} />
-                    <span className="text-[11px]">{item.location}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-gray-400">
-                    <span className="text-[10px]">{item.time}</span>
-                    <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#022C4F]" />
-                  </div>
+                  <p className="text-[12px] font-bold text-gray-500">No alignment records yet</p>
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
+                    Deviations and findings recorded through Digital Eye scan sessions will appear here.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                history.map((item) => (
+                  <div key={item.id} className="p-4 rounded-xl border border-gray-100 hover:border-[#022C4F]/30 hover:shadow-sm transition-all cursor-pointer bg-white group">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-[12px] font-extrabold text-[#0F181F] group-hover:text-[#022C4F] transition-colors flex items-center gap-1.5">
+                        {item.type === 'deviation' && <AlertTriangle size={12} className="text-red-500 shrink-0" />}
+                        {item.type === 'annotation' && <MessageSquare size={12} className="text-gray-400 shrink-0" />}
+                        {item.title}
+                      </span>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${item.status === 'Open' ? 'bg-red-50 text-red-600' :
+                        item.status === 'Resolved' ? 'bg-green-50 text-green-600' :
+                          'bg-gray-100 text-gray-600'
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-500 mb-2">
+                      <MapPin size={12} />
+                      <span className="text-[11px]">{item.location}</span>
+                    </div>
+                    {item.deviationMm != null && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#022C4F] mb-2">
+                        <SlidersHorizontal size={11} />
+                        <span>Recorded deviation: {item.deviationMm} mm</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-gray-400">
+                      <span className="text-[10px]">{item.time}</span>
+                      <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#022C4F]" />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="p-4 border-t border-gray-100 bg-[#FAFAFA]">
@@ -260,12 +431,29 @@ export default function SiteAlignmentWorkspace() {
               </div>
               <div>
                 <label className="text-[12px] font-bold text-gray-700 block mb-1.5">Assign To</label>
-                <select className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[13px] outline-none focus:border-[#022C4F] transition-colors appearance-none bg-white">
-                  <option value="">Select team member...</option>
-                  <option value="olivia">Olivia Thompson (Lead Architect)</option>
-                  <option value="michael">Engr. Michael Adeyemi (Structural Engineer)</option>
-                  <option value="ahmed">Ahmed Musa (BIM Coordinator)</option>
-                </select>
+                {isLoadingTeam ? (
+                  <div className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[13px] text-gray-400">
+                    Loading team members...
+                  </div>
+                ) : assignableMembers.length === 0 ? (
+                  <>
+                    <select disabled className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[13px] outline-none bg-white text-gray-400 appearance-none cursor-not-allowed">
+                      <option value="">No team members recorded</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      Team members will appear here once they are added to a project stakeholder team.
+                    </p>
+                  </>
+                ) : (
+                  <select className="w-full border border-gray-300 rounded-xl px-4 py-3 text-[13px] outline-none focus:border-[#022C4F] transition-colors appearance-none bg-white">
+                    <option value="">Select team member...</option>
+                    {assignableMembers.map((member) => (
+                      <option key={member.name} value={member.name}>
+                        {member.role ? `${member.name} (${member.role})` : member.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-[12px] font-bold text-gray-700 block mb-1.5">Priority</label>
@@ -416,13 +604,14 @@ export default function SiteAlignmentWorkspace() {
               <button 
                 onClick={() => {
                   if (!newFieldNoteTitle.trim()) return;
-                  const newNote = {
-                    id: Date.now(),
-                    type: 'annotation',
+                  const newNote: HistoryItem = {
+                    id: `field-note-${Date.now()}`,
+                    type: 'field-note',
                     title: newFieldNoteTitle,
-                    location: 'Current View',
+                    location: 'Location not specified',
                     status: 'Open',
-                    time: 'Just now'
+                    time: 'Just now',
+                    deviationMm: null,
                   };
                   setHistory([newNote, ...history]);
                   setIsFieldNoteDrawerOpen(false);

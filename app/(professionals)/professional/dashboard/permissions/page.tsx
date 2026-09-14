@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import TopRightControls from "@/components/dashboard/TopRightControls";
 import { CheckSquare, Square, CheckCircle2 } from "lucide-react";
 import EditProjectSettingsModal, { ProjectInfo, GeneralSettings } from "@/components/dashboard/EditProjectSettingsModal";
+import { getProjects } from "@/services/projects";
 
 export default function PermissionsPage() {
   const activeTab: string = "Permission Overview";
@@ -20,16 +21,43 @@ export default function PermissionsPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Project Info State
+  // Project Info State — seeded blank and populated from the latest real
+  // project; no fabricated project identity.
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
-    name: "Victoria Heights Commercial Development",
-    id: "NXC-PRJ-2026-001",
-    type: "Mixed-Use Commercial Development",
-    phase: "Design Development",
-    location: "Victoria Island, Lagos, Nigeria",
-    manager: "Olivia Thompson",
-    status: "Active",
+    name: "",
+    id: "",
+    type: "",
+    phase: "",
+    location: "",
+    manager: "",
+    status: "",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    getProjects()
+      .then((projects) => {
+        if (cancelled || projects.length === 0) return;
+        const latest = [...projects].sort(
+          (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+        )[0];
+        const manager = latest.professionals?.find((p) => /manager|lead|director/i.test(p.role))?.name ?? "";
+        setProjectInfo({
+          name: latest.name,
+          id: latest.reference_number || latest.id,
+          type: latest.project_type || "",
+          phase: latest.status,
+          location: latest.location || latest.site_address || [latest.lga, latest.state].filter(Boolean).join(", "),
+          manager,
+          status: latest.status,
+        });
+      })
+      .catch(() => {
+        // Leave blank — the page renders honest empty values instead of
+        // fabricated project details.
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // General Settings State
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>({
@@ -288,39 +316,39 @@ export default function PermissionsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 gap-x-12">
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project Name</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.name}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.name || '—'}</span>
                 </div>
                 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project ID</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.id}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.id || '—'}</span>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project Type</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.type}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.type || '—'}</span>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project Phase</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.phase}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.phase || '—'}</span>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Location</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.location}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.location || '—'}</span>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project Manager</span>
-                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.manager}</span>
+                  <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.manager || '—'}</span>
                 </div>
 
                 <div className="flex flex-col gap-4">
                   <span className="text-[14px] font-extrabold text-[#022C4F]">Project Status</span>
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${projectInfo.status === 'Active' ? 'bg-[#00D000]' : projectInfo.status === 'On Hold' ? 'bg-orange-500' : 'bg-gray-500'}`} />
-                    <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.status}</span>
+                    <span className="text-[12px] text-[#0F181F] font-medium">{projectInfo.status || '—'}</span>
                   </div>
                 </div>
               </div>

@@ -2,20 +2,33 @@
 
 import React from 'react';
 import { MoreHorizontal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Document } from '@/services/documents';
 
 interface ActiveReviewsTableProps {
-  onOpenDrawer: () => void;
+  documents: Document[];
+  onOpenDrawer: (doc: Document) => void;
 }
 
-export default function ActiveReviewsTable({ onOpenDrawer }: ActiveReviewsTableProps) {
-  const reviews = [
-    { id: 1, drawing: 'Foundation Layout.pdf', discipline: 'Structural', reviewer: 'Michael Adeyemi', status: 'In Review', date: 'Jun 22' },
-    { id: 2, drawing: 'Building Elevations.pdf', discipline: 'Architectural', reviewer: 'Sarah Williams', status: 'In Review', date: 'Jun 21' },
-    { id: 3, drawing: 'Electrical layout.pdf', discipline: 'Electrical', reviewer: 'James Ibrahim', status: 'Awaiting Feedback', date: 'Jun 23' },
-    { id: 4, drawing: 'HVAC Layout.pdf', discipline: 'Mechanical', reviewer: 'Daniel Okoro', status: 'Under Review', date: 'Jun 24' },
-    { id: 5, drawing: 'Drainage Layout.pdf', discipline: 'Plumbing', reviewer: 'Samuel Bello', status: 'In Review', date: 'Jun 22' },
-  ];
+const statusLabel: Record<Document['status'], string> = {
+  DRAFT: 'Draft',
+  PENDING_REVIEW: 'Awaiting Review',
+  UNDER_REVIEW: 'Under Review',
+  CHANGES_REQUESTED: 'Changes Requested',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  EXPIRED: 'Expired',
+  EXPIRING_SOON: 'Expiring Soon',
+  ARCHIVED: 'Archived',
+};
 
+const formatDate = (iso?: string): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+export default function ActiveReviewsTable({ documents, onOpenDrawer }: ActiveReviewsTableProps) {
   return (
     <div className="bg-white rounded-[32px] border border-[#022C4F] p-8 shadow-sm flex flex-col h-full">
       <div className="flex items-center justify-between mb-8">
@@ -44,26 +57,37 @@ export default function ActiveReviewsTable({ onOpenDrawer }: ActiveReviewsTableP
             <tr className="bg-[#022C4F] text-white">
               <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider rounded-l-full">Drawing</th>
               <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider">Discipline</th>
-              <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider">Reviewer</th>
+              <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider">Submitted By</th>
               <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider">Status</th>
               <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider">Date</th>
               <th className="py-4 px-6 text-[10px] font-bold capitalize tracking-wider rounded-r-full">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {reviews.map((review, index) => (
+            {documents.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-10 px-6 text-center text-[12px] font-medium text-gray-500">
+                  No drawings are currently in review.
+                </td>
+              </tr>
+            )}
+            {documents.map((doc) => (
               <tr
-                key={review.id}
-                onClick={onOpenDrawer}
+                key={doc.id}
+                onClick={() => onOpenDrawer(doc)}
                 className="border-b border-gray-100 hover:bg-gray-50 transition-colors group cursor-pointer"
               >
-                <td className="py-5 px-6 text-[11px] font-bold text-[#0F181F]">{review.drawing}</td>
-                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{review.discipline}</td>
-                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{review.reviewer}</td>
-                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{review.status}</td>
-                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{review.date}</td>
+                <td className="py-5 px-6 text-[11px] font-bold text-[#0F181F]">{doc.title || '—'}</td>
+                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{doc.discipline || '—'}</td>
+                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{doc.uploader_name || '—'}</td>
+                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{statusLabel[doc.status] || doc.status}</td>
+                <td className="py-5 px-6 text-[11px] font-medium text-gray-700">{formatDate(doc.created_at)}</td>
                 <td className="py-5 px-6">
-                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Menu executed successfully!', type: 'success' } })); }} className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C4F] hover:bg-[#022C4F]/10 transition-colors ml-auto">
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenDrawer(doc); }}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C4F] hover:bg-[#022C4F]/10 transition-colors ml-auto"
+                    title={`Open ${doc.title || 'drawing'}`}
+                  >
                     <MoreHorizontal size={18} />
                   </button>
                 </td>

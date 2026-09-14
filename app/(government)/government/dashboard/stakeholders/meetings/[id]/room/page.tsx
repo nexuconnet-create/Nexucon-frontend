@@ -19,6 +19,7 @@ import {
   addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote 
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
+import { useAuth } from "@/context/AuthContext";
 
 interface ConnectedParticipant {
   id: string;
@@ -53,12 +54,29 @@ export default function MeetingRoomPage() {
   const [meeting, setMeeting] = useState<StakeholderMeeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Local User Identity in this Meeting Session
+  // Local User Identity in this Meeting Session — the authenticated user
+  // (guest links may override name/role/email via query params). Never a
+  // fabricated officer identity.
+  const { user } = useAuth();
   const [currentUser, setCurrentUser] = useState<{ name: string; role: string; email: string }>({
-    name: searchParams?.get('guest_name') || 'Engr. Babatunde Sanwo',
-    role: searchParams?.get('role') || 'Agency Head / Director General',
-    email: searchParams?.get('email') || 'head@regulator.gov.ng'
+    name: searchParams?.get('guest_name') || 'Guest',
+    role: searchParams?.get('role') || 'Guest',
+    email: searchParams?.get('email') || ''
   });
+
+  // Once the auth session resolves, use the real signed-in identity unless
+  // this is an explicit guest link.
+  useEffect(() => {
+    if (!user) return;
+    setCurrentUser((prev) => {
+      if (searchParams?.get('guest_name')) return prev;
+      return {
+        name: `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email,
+        role: user.role_name || 'Officer',
+        email: user.email
+      };
+    });
+  }, [user, searchParams]);
 
   // Audio/Video Local Stream & Controls
   const [isMicOn, setIsMicOn] = useState(true);
@@ -856,16 +874,16 @@ export default function MeetingRoomPage() {
           <div style="font-size: 11px; font-weight: 700; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
             Statutory Council Session
           </div>
-          <h2 style="color: #ffffff; font-size: 18px; font-weight: 800; margin: 0 0 16px 0;">${meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</h2>
-          
+          <h2 style="color: #ffffff; font-size: 18px; font-weight: 800; margin: 0 0 16px 0;">${meeting?.title || 'Meeting'}</h2>
+
           <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
             <tr>
               <td style="padding: 6px 0; color: #94a3b8; width: 140px;">Meeting Ref:</td>
-              <td style="padding: 6px 0; font-family: monospace; font-weight: 800; color: #60a5fa;">${meeting?.meeting_reference || 'MTG-1092'}</td>
+              <td style="padding: 6px 0; font-family: monospace; font-weight: 800; color: #60a5fa;">${meeting?.meeting_reference || '—'}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #94a3b8;">Project:</td>
-              <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${meeting?.project_name || 'Central Metro Transit Hub'}</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${meeting?.project_name || '—'}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #94a3b8;">Invited Role:</td>
@@ -873,7 +891,7 @@ export default function MeetingRoomPage() {
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #94a3b8;">Convened By:</td>
-              <td style="padding: 6px 0; color: #ffffff; font-weight: 600;">Engr. Babatunde Sanwo (Agency Head)</td>
+              <td style="padding: 6px 0; color: #ffffff; font-weight: 600;">${currentUser.name}${currentUser.role ? ` (${currentUser.role})` : ''}</td>
             </tr>
           </table>
 
@@ -1924,10 +1942,18 @@ export default function MeetingRoomPage() {
                           onChange={(e) => setNewActionAssignee(e.target.value)}
                           className="flex-1 p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-300 focus:outline-none"
                         >
-                          <option value="Engr. Babatunde Sanwo">Engr. Babatunde Sanwo (Agency Head)</option>
-                          <option value="Michael Thorne (Nexucon)">Michael Thorne (Master Developer)</option>
-                          <option value="Marcus Chen (Inspector)">Marcus Chen (Inspector)</option>
-                          <option value="David Rivera (Apex)">David Rivera (Contractor)</option>
+                          {/* Real assignees only: this session's user and the
+                              meeting's registered participants. */}
+                          <option value={currentUser.name}>
+                            {currentUser.name}{currentUser.role ? ` (${currentUser.role})` : ''}
+                          </option>
+                          {(meeting?.participants ?? [])
+                            .filter((p) => p.name && p.name !== currentUser.name)
+                            .map((p) => (
+                              <option key={p.name} value={p.name}>
+                                {p.name}{p.role ? ` (${p.role})` : ''}
+                              </option>
+                            ))}
                         </select>
                         <button
                           type="submit"

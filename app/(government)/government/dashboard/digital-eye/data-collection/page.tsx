@@ -37,6 +37,14 @@ import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWavef
 import BIMModelPreview from "@/components/dashboard/digital-eye/BIMModelPreview";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import {
+  FolderViewToggle,
+  FloorStationTreeBody,
+  punditFloorOf,
+  punditStationOf,
+  punditStationSummary,
+  useFloorStationFolders,
+} from "@/components/dashboard/digital-eye/PunditFolderTree";
+import {
   PunditTest,
   getPunditTests,
   createPunditTest,
@@ -56,18 +64,14 @@ import {
   formatVelocityMs,
   PunditImportError,
   PunditImportResult,
+  CurveSnapshot,
+  BUILTIN_CURVE_SNAPSHOT,
+  evalCurveSnapshot,
+  ActiveCurveResponse,
+  getActiveCurve,
 } from "@/services/digitalEye";
 
 const CRITICAL_STRENGTH_THRESHOLD_MPA = 25.0; // 25 MPa Statutory Concrete Acceptance Rule
-// E.C.S calibration curve — identical to the backend engine
-// (apps/reports/ndt_reports.py): fcu = 8.961·V − 7.97 N/mm², valid 2.0–5.0 km/s.
-const ECS_SLOPE = 8.961;
-const ECS_INTERCEPT = -7.97;
-const ecsFromVelocityMs = (velocityMs: number): number | null => {
-  const vKmS = velocityMs / 1000;
-  if (vKmS < 2.0 || vKmS > 5.0) return null;
-  return Number((ECS_SLOPE * vKmS + ECS_INTERCEPT).toFixed(1));
-};
 
 export default function DataCollectionPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -87,6 +91,10 @@ export default function DataCollectionPage() {
   const [isSyncingDevice, setIsSyncingDevice] = useState<boolean>(false);
   const [isSubmittingManual, setIsSubmittingManual] = useState<boolean>(false);
   const [isCreateFindingOpen, setIsCreateFindingOpen] = useState<boolean>(false);
+
+  // Active Nexucon Link calibration curve for the selected project — the same
+  // curve the server applies when a recorded reading is actually stored.
+  const [activeCurveInfo, setActiveCurveInfo] = useState<ActiveCurveResponse | null>(null);
 
   // BIM model import (real structural elements from the project's IFC file)
   const [ifcFile, setIfcFile] = useState<File | null>(null);
@@ -142,6 +150,7 @@ export default function DataCollectionPage() {
   const [formCrackPoints, setFormCrackPoints] = useState<{ cracked: number; uncracked: number }[]>([{ cracked: 0, uncracked: 0 }]);
   const [formSurfacePoints, setFormSurfacePoints] = useState<string[]>([""]);
   const [formSurfaceTemperatureC, setFormSurfaceTemperatureC] = useState<number>(0);
+  const [formReboundNumber, setFormReboundNumber] = useState<number | ''>('');
   // Operator-recorded report context (weather / floor) — never auto-generated.
   const [formFloor, setFormFloor] = useState<string>("");
   const [formWeatherCondition, setFormWeatherCondition] = useState<string>("");
@@ -154,6 +163,11 @@ export default function DataCollectionPage() {
   const [registrySearch, setRegistrySearch] = useState<string>("");
   const [registryTypeFilter, setRegistryTypeFilter] = useState<string>("");
   const [registryGradeFilter, setRegistryGradeFilter] = useState<string>("");
+  // Same folder structure as the UPV Test Registry: Floor folder -> Station
+  // sub-menu -> this station's ingested records, with per-station means. The
+  // search / type / grade filters stay server-side — the tree simply groups
+  // whatever the filtered query returns.
+  const folders = useFloorStationFolders(tests, punditFloorOf, punditStationOf);
 
   // ---- Record correction (edit) modal state ----
   // Editing re-sends the recorded field measurements via PATCH; the analysis
@@ -173,6 +187,7 @@ export default function DataCollectionPage() {
     uncracked_pulse_time_us: string;
     surface_condition: string;
     surface_temperature_c: string;
+    rebound_number: string;
     transducer_frequency_khz: string;
     transducer_type: 'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT' | '';
     operator_name: string;
@@ -189,6 +204,7 @@ export default function DataCollectionPage() {
     uncracked_pulse_time_us: '',
     surface_condition: '',
     surface_temperature_c: '',
+    rebound_number: '',
     transducer_frequency_khz: '',
     transducer_type: '',
     operator_name: '',
@@ -209,6 +225,7 @@ export default function DataCollectionPage() {
       uncracked_pulse_time_us: t.uncracked_pulse_time_us ? String(t.uncracked_pulse_time_us) : '',
       surface_condition: t.surface_condition || '',
       surface_temperature_c: t.surface_temperature_c != null ? String(t.surface_temperature_c) : '',
+      rebound_number: t.rebound_number != null ? String(t.rebound_number) : '',
       transducer_frequency_khz: t.transducer_frequency_khz ? String(t.transducer_frequency_khz) : '',
       transducer_type: t.transducer_type || '',
       operator_name: t.operator_name || '',
@@ -242,6 +259,7 @@ export default function DataCollectionPage() {
         uncracked_pulse_time_us: num(editForm.uncracked_pulse_time_us),
         surface_condition: editForm.surface_condition.trim() || undefined,
         surface_temperature_c: num(editForm.surface_temperature_c),
+        rebound_number: num(editForm.rebound_number),
         operator_name: editForm.operator_name.trim() || undefined,
         notes: editForm.notes.trim() || undefined,
       };
@@ -260,6 +278,13 @@ export default function DataCollectionPage() {
     } finally {
       setIsSavingEdit(false);
     }
+  };
+
+  // Loads a record into the waveform viewer and scrolls it into view — the
+  // viewer renders above the registry table.
+  const openViewerFor = (t: PunditTest) => {
+    setActiveTest(t);
+    setTimeout(() => viewerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
   const selectedElement = elements.find(el => el.id === selectedElementId) || null;
@@ -293,6 +318,25 @@ export default function DataCollectionPage() {
     }
   };
 
+  // A5 (4 Sep meeting): apply a real dimension of the selected element's
+  // tessellated BIM mesh as the transducer path length. The value comes from
+  // the imported model geometry — never a guess — and the operator is told to
+  // verify it against the actual on-site transducer arrangement.
+  const handleApplyPathLength = (lengthMm: number, axis: 'X' | 'Y' | 'Z') => {
+    if (lengthMm <= 0) return;
+    if (formTestType === 'crack_depth') {
+      setFormCrackPathLengthMm(lengthMm);
+    } else {
+      setFormPathLengthMm(lengthMm);
+    }
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: {
+        message: `📐 Path length set to ${lengthMm} mm — the selected element's ${axis}-axis dimension from the BIM model. Verify it matches the transducer arrangement on site.`,
+        type: "success",
+      },
+    }));
+  };
+
   // Presets: member-type starting points for the instrument configuration and
   // a typical path-length range ONLY. The transit time is a MEASUREMENT — it is
   // never preset, and the test location must be entered by the operator.
@@ -309,10 +353,10 @@ export default function DataCollectionPage() {
     setFormSurfacePoints(prev => prev.map(() => ""));
   };
 
-  // Locked Server-Engine Computed Physics (V = L / t; E.C.S via the platform calibration curve).
-  // In the manual multi-point form the element verdict is the MEAN velocity
-  // across its test points (mirrors the server's readings-mean rule); the
-  // cloud-receiver tab keeps the single-reading scalar.
+  // Locked Server-Engine Computed Physics (V = L / t; fcu via the project's
+  // active calibration curve). In the manual multi-point form the element
+  // verdict is the MEAN velocity across its test points (mirrors the server's
+  // readings-mean rule); the cloud-receiver tab keeps the single-reading scalar.
   const manualPointVelocities = formPathLengthMm > 0
     ? formReadingTimes.filter(t => t > 0).map(t => Math.round(formPathLengthMm / (t / 1000)))
     : [];
@@ -322,7 +366,13 @@ export default function DataCollectionPage() {
           ? Math.round(manualPointVelocities.reduce((a, b) => a + b, 0) / manualPointVelocities.length)
           : 0)
       : (formTransitTimeUs > 0 ? Math.round(formPathLengthMm / (formTransitTimeUs / 1000)) : 0); // m/s
-  const computedFcu = ecsFromVelocityMs(computedVelocity);
+  // Live fcu preview through the project's ACTIVE calibration curve — the
+  // same curve (and honest range gating) the server engine applies on save.
+  // Built-in BS 1881-203 laboratory fallback until one resolves.
+  const liveCurve: CurveSnapshot = activeCurveInfo?.curve_snapshot ?? BUILTIN_CURVE_SNAPSHOT;
+  const [liveRangeLo, liveRangeHi] = liveCurve.valid_range_ms ?? [2000, 5000];
+  const computedFcuRaw = evalCurveSnapshot(liveCurve, computedVelocity, null);
+  const computedFcu = computedFcuRaw != null ? Number(computedFcuRaw.toFixed(1)) : null;
   const isStrengthCompliant = computedFcu != null && computedFcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
 
   // Crack-depth preview (BS 1881-203 time-difference method) — mirrors the
@@ -377,6 +427,38 @@ export default function DataCollectionPage() {
     refreshRegistry();
   }, [selectedProjectId, selectedElementId, registrySearch, registryTypeFilter, registryGradeFilter]);
 
+  // E4 (8 Sep meeting): another user's upload must propagate to this view.
+  // When the tab becomes visible again (demo with several participants, each
+  // on their own screen), re-fetch the registry and the BIM geometry so a
+  // colleague's upload appears without anyone clicking Refresh.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshRegistry();
+        setPreviewRefreshKey(k => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [selectedProjectId, registrySearch, registryTypeFilter, registryGradeFilter]);
+
+  // Active calibration curve for the live fcu preview — resolved whenever the
+  // selected project changes (honest fallback to the built-in laboratory
+  // curve until the project has one).
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setActiveCurveInfo(null);
+      return;
+    }
+    let cancelled = false;
+    getActiveCurve(selectedProjectId)
+      .then((info) => { if (!cancelled) setActiveCurveInfo(info); })
+      .catch(() => { if (!cancelled) setActiveCurveInfo(null); });
+    return () => { cancelled = true; };
+  }, [selectedProjectId]);
+
   // Import-card status (B5/B6): the currently-imported model's genuine file
   // name, plus the model files kept on the platform for the file picker.
   // Re-fetched whenever a model is imported (previewRefreshKey bumps).
@@ -427,7 +509,7 @@ export default function DataCollectionPage() {
     window.dispatchEvent(new CustomEvent('show-toast', {
       detail: {
         message: (!res || res.elements_extracted === 0)
-          ? `⚠️ No structural elements (columns, slabs, walls…) were found in ${displayName}. Check that this is the structural IFC model.`
+          ? `⚠️ No structural elements (columns, slabs, walls…) were found in ${displayName}. Check that this is the structural design model${res?.translated_from_rvt ? ' — Autodesk may have translated it without its structural contents; exporting an IFC directly from Revit (File → Export → IFC) usually fixes this' : ''}.`
           : `🏗️ BIM import complete: ${summary}`,
         type: (!res || res.elements_extracted === 0) ? "error" : "success"
       }
@@ -938,6 +1020,7 @@ export default function DataCollectionPage() {
           refreshKey={previewRefreshKey}
           linkedElementCount={elements.length}
           structuralElements={elements}
+          onApplyPathLength={handleApplyPathLength}
         />
       )}
 
@@ -1560,6 +1643,18 @@ export default function DataCollectionPage() {
                         className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
                       />
                     </div>
+                    <div>
+                      <label className="block text-gray-700 font-semibold mb-1">Rebound Number (SonReb only)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="e.g. 42.5"
+                        value={formReboundNumber}
+                        onChange={(e) => setFormReboundNumber(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -1972,7 +2067,11 @@ export default function DataCollectionPage() {
                 ) : computedFcu == null ? (
                   <>
                     <AlertTriangle size={15} className="text-amber-400" />
-                    <span>VELOCITY OUTSIDE E.C.S CALIBRATION RANGE (2.0–5.0 KM/S)</span>
+                    {liveCurve.curve_type === 'sonreb' ? (
+                      <span>SONREB CURVE — REBOUND NUMBER REQUIRED (NOT RECORDED)</span>
+                    ) : (
+                      <span>VELOCITY OUTSIDE CALIBRATION RANGE ({formatVelocityMs(liveRangeLo)}–{formatVelocityMs(liveRangeHi)} M/S)</span>
+                    )}
                   </>
                 ) : isStrengthCompliant ? (
                   <>
@@ -1989,7 +2088,8 @@ export default function DataCollectionPage() {
             </div>
 
             <p className="text-[11px] text-slate-400 leading-tight">
-              Formula: V = L / t; fcu ≈ 8.961·V − 7.97 N/mm² (E.C.S calibration curve, valid 2.0–5.0 km/s). Evaluated under BS 1881-203.
+              Formula: V = L / t; fcu via the project&apos;s active Nexucon Link calibration — <span className="font-mono">{liveCurve.formula}</span>
+              {liveCurve.valid_range_ms ? ` · valid ${formatVelocityMs(liveCurve.valid_range_ms[0])}–${formatVelocityMs(liveCurve.valid_range_ms[1])} m/s` : ''}. Evaluated under BS 1881-203.
             </p>
             {/* Live derivation (7 Sep meeting: every figure recomputable by
                 hand) — the exact chain the server runs, with the numbers
@@ -2004,7 +2104,7 @@ export default function DataCollectionPage() {
                   ? ` · V(element) = mean of ${manualPointVelocities.length} points = ${formatVelocityMs(computedVelocity)} m/s`
                   : ''}
                 {computedFcu != null
-                  ? ` · fcu = 8.961 × ${(computedVelocity / 1000).toFixed(3)} − 7.97 = ${computedFcu} MPa`
+                  ? ` · fcu = ${liveCurve.formula.replace('f_cu = ', '')} at V = ${formatVelocityMs(computedVelocity)} m/s → ${computedFcu} MPa (curve: ${liveCurve.name})`
                   : ''}
               </p>
             )}
@@ -2047,6 +2147,7 @@ export default function DataCollectionPage() {
 
           <PunditWaveformViewer
             test={activeTest}
+            onClose={() => setActiveTest(null)}
             onLinkToBIM={() => {
               if (!selectedElement) {
                 window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ Select a BIM element in the header before linking.', type: "error" } }));
@@ -2071,9 +2172,12 @@ export default function DataCollectionPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-[#022C4F]">Live Ingested Telemetry Registry</h2>
-              <p className="text-xs text-gray-500">Real-time audit log of automated cloud streams and anti-doctoring manual entries</p>
+              <p className="text-xs text-gray-500">Real-time audit log of automated cloud streams and anti-doctoring manual entries — folder structure per floor and station</p>
             </div>
-            <span className="text-xs text-gray-500 font-mono">{tests.length} Records Ingested</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <FolderViewToggle viewMode={folders.viewMode} onChange={folders.setViewMode} />
+              <span className="text-xs text-gray-500 font-mono">{tests.length} Records Ingested</span>
+            </div>
           </div>
 
           {/* Server-side search + filters — hits the ?search= / ?test_type= / ?quality_grade= params on /digital-eye/pundit-tests/ */}
@@ -2152,7 +2256,7 @@ export default function DataCollectionPage() {
             <div className="py-12 text-center text-xs text-gray-500">
               No PUNDIT telemetry ingested for this project yet. Records will appear here once ingested above.
             </div>
-          ) : (
+          ) : folders.viewMode === 'flat' ? (
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
@@ -2168,125 +2272,42 @@ export default function DataCollectionPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tests.map((t) => {
-                const fcu = t.estimated_compressive_strength_mpa;
-                const isPassed = fcu != null && fcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
-                const isAssessed = fcu != null;
-                const isCrack = t.test_type === 'crack_depth';
-                const isSurface = t.test_type === 'surface_quality';
-                const crackDepth = t.estimated_crack_depth_mm;
-                return (
-                  <tr
-                    key={t.id}
-                    onClick={() => {
-                      setActiveTest(t);
-                      setTimeout(() => viewerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-                    }}
-                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${activeTest?.id === t.id ? 'bg-amber-50/40' : ''}`}
-                  >
-                    <td className="py-3.5 px-5 font-mono font-bold text-gray-900">
-                      <span className="flex items-center gap-1.5">
-                        {t.test_reference}
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          isCrack ? 'bg-orange-100 text-orange-800' : isSurface ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {isCrack ? 'CRACK' : isSurface ? 'SURFACE' : 'PV'}
-                        </span>
-                        {t.file_count > 0 && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-500 inline-flex items-center gap-0.5">
-                            <FileText size={9} />{t.file_count}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5 text-gray-700">
-                      {t.structural_element_name || t.test_location || '—'}
-                      {isSurface && (t.surface_condition || t.surface_temperature_c != null) && (
-                        <span className="block text-[10px] text-gray-400 mt-0.5">
-                          {t.surface_condition || 'Condition not recorded'}{t.surface_temperature_c != null ? ` · ${t.surface_temperature_c}°C` : ''}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">{t.transducer_type ? `${t.transducer_type} (${t.transducer_frequency_khz || '—'}kHz)` : `${t.transducer_frequency_khz || '—'} kHz`}</td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">
-                      {isCrack
-                        ? (t.crack_path_length_mm > 0 ? `${t.crack_path_length_mm} mm` : '—')
-                        : `${t.path_length_mm} mm`}
-                    </td>
-                    <td className="py-3.5 px-5 font-mono text-gray-600">
-                      {isCrack
-                        ? (t.crack_pulse_time_us > 0 && t.uncracked_pulse_time_us > 0
-                            ? `${t.crack_pulse_time_us}/${t.uncracked_pulse_time_us} µs`
-                            : '—')
-                        : isSurface ? '—' : `${t.transit_time_us} µs`}
-                    </td>
-                    <td className="py-3.5 px-5 font-mono font-bold text-amber-700">
-                      {isCrack || isSurface ? '—' : t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}
-                    </td>
-                    <td className="py-3.5 px-5 font-mono font-black">
-                      <span className={isPassed ? 'text-emerald-600' : isAssessed ? 'text-rose-600' : 'text-gray-400'}>
-                        {isCrack || isSurface ? '—' : fcu != null ? `${fcu.toFixed(1)} MPa` : '—'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      {isCrack ? (
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
-                          crackDepth == null
-                            ? 'bg-gray-100 text-gray-500 border border-gray-200'
-                            : crackDepth > 25
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
-                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        }`}>
-                          {crackDepth == null ? <Info size={11} /> : crackDepth > 25 ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
-                          <span>{crackDepth == null ? 'NOT ASSESSED' : `d=${crackDepth.toFixed(1)}mm ${crackDepth > 25 ? '· REVIEW' : '· WITHIN LIMIT'}`}</span>
-                        </span>
-                      ) : isSurface ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 bg-cyan-50 text-cyan-800 border border-cyan-200">
-                          <Eye size={11} />
-                          <span>VISUAL RECORD</span>
-                        </span>
-                      ) : (
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
-                          !isAssessed
-                            ? 'bg-gray-100 text-gray-500 border border-gray-200'
-                            : isPassed
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
-                        }`}>
-                          {!isAssessed ? <Info size={11} /> : isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
-                          <span>{!isAssessed ? 'NOT ASSESSED' : isPassed ? 'GREEN PASS (≥25)' : 'DEFICIENT (<25)'}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-5 text-right flex items-center justify-end gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveTest(t);
-                          // The viewer renders/updates above the table — bring it
-                          // into view so the click visibly does something.
-                          setTimeout(() => viewerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-                        }}
-                        className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold"
-                      >
-                        Oscillogram
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(t);
-                        }}
-                        className="px-2.5 py-1 bg-white border border-gray-200 hover:border-amber-400 text-amber-700 rounded-lg text-xs font-bold"
-                        title="Correct the recorded field measurements"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {tests.map((t) => (
+                <RegistryRow key={t.id} t={t} isActive={activeTest?.id === t.id} onOpenViewer={openViewerFor} onEdit={openEditModal} />
+              ))}
             </tbody>
           </table>
+          ) : (
+            <FloorStationTreeBody
+              groups={folders.groups}
+              openFloors={folders.openFloors}
+              openStations={folders.openStations}
+              toggleFloor={folders.toggleFloor}
+              toggleStation={folders.toggleStation}
+              stationSummary={punditStationSummary}
+              renderStationBody={(rows) => (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
+                      <th className="py-2.5 px-5">Station Ref</th>
+                      <th className="py-2.5 px-5">Target Element</th>
+                      <th className="py-2.5 px-5">Transducer</th>
+                      <th className="py-2.5 px-5">Path (L)</th>
+                      <th className="py-2.5 px-5">Transit (t)</th>
+                      <th className="py-2.5 px-5">Velocity (V)</th>
+                      <th className="py-2.5 px-5">Strength (fcu)</th>
+                      <th className="py-2.5 px-5">25 MPa Rule</th>
+                      <th className="py-2.5 px-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rows.map((t) => (
+                      <RegistryRow key={t.id} t={t} isActive={activeTest?.id === t.id} onOpenViewer={openViewerFor} onEdit={openEditModal} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            />
           )}
         </div>
       </div>
@@ -2508,5 +2529,128 @@ export default function DataCollectionPage() {
         defaultElementId={selectedElementId}
       />
     </div>
+  );
+}
+
+/** One ingested telemetry registry row (shared by the flat table and the
+ *  folder view) — click loads the record into the waveform viewer. */
+function RegistryRow({
+  t,
+  isActive,
+  onOpenViewer,
+  onEdit,
+}: {
+  t: PunditTest;
+  isActive: boolean;
+  onOpenViewer: (t: PunditTest) => void;
+  onEdit: (t: PunditTest) => void;
+}) {
+  const fcu = t.estimated_compressive_strength_mpa;
+  const isPassed = fcu != null && fcu >= CRITICAL_STRENGTH_THRESHOLD_MPA;
+  const isAssessed = fcu != null;
+  const isCrack = t.test_type === 'crack_depth';
+  const isSurface = t.test_type === 'surface_quality';
+  const crackDepth = t.estimated_crack_depth_mm;
+  return (
+    <tr
+      onClick={() => onOpenViewer(t)}
+      className={`hover:bg-slate-50 transition-colors cursor-pointer ${isActive ? 'bg-amber-50/40' : ''}`}
+    >
+      <td className="py-3.5 px-5 font-mono font-bold text-gray-900">
+        <span className="flex items-center gap-1.5">
+          {t.test_reference}
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+            isCrack ? 'bg-orange-100 text-orange-800' : isSurface ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {isCrack ? 'CRACK' : isSurface ? 'SURFACE' : 'PV'}
+          </span>
+          {t.file_count > 0 && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-500 inline-flex items-center gap-0.5">
+              <FileText size={9} />{t.file_count}
+            </span>
+          )}
+        </span>
+      </td>
+      <td className="py-3.5 px-5 text-gray-700">
+        {t.structural_element_name || t.test_location || '—'}
+        {isSurface && (t.surface_condition || t.surface_temperature_c != null) && (
+          <span className="block text-[10px] text-gray-400 mt-0.5">
+            {t.surface_condition || 'Condition not recorded'}{t.surface_temperature_c != null ? ` · ${t.surface_temperature_c}°C` : ''}
+          </span>
+        )}
+      </td>
+      <td className="py-3.5 px-5 font-mono text-gray-600">{t.transducer_type ? `${t.transducer_type} (${t.transducer_frequency_khz || '—'}kHz)` : `${t.transducer_frequency_khz || '—'} kHz`}</td>
+      <td className="py-3.5 px-5 font-mono text-gray-600">
+        {isCrack
+          ? (t.crack_path_length_mm > 0 ? `${t.crack_path_length_mm} mm` : '—')
+          : `${t.path_length_mm} mm`}
+      </td>
+      <td className="py-3.5 px-5 font-mono text-gray-600">
+        {isCrack
+          ? (t.crack_pulse_time_us > 0 && t.uncracked_pulse_time_us > 0
+              ? `${t.crack_pulse_time_us}/${t.uncracked_pulse_time_us} µs`
+              : '—')
+          : isSurface ? '—' : `${t.transit_time_us} µs`}
+      </td>
+      <td className="py-3.5 px-5 font-mono font-bold text-amber-700">
+        {isCrack || isSurface ? '—' : t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}
+      </td>
+      <td className="py-3.5 px-5 font-mono font-black">
+        <span className={isPassed ? 'text-emerald-600' : isAssessed ? 'text-rose-600' : 'text-gray-400'}>
+          {isCrack || isSurface ? '—' : fcu != null ? `${fcu.toFixed(1)} MPa` : '—'}
+        </span>
+      </td>
+      <td className="py-3.5 px-5">
+        {isCrack ? (
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+            crackDepth == null
+              ? 'bg-gray-100 text-gray-500 border border-gray-200'
+              : crackDepth > 25
+                ? 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+          }`}>
+            {crackDepth == null ? <Info size={11} /> : crackDepth > 25 ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+            <span>{crackDepth == null ? 'NOT ASSESSED' : `d=${crackDepth.toFixed(1)}mm ${crackDepth > 25 ? '· REVIEW' : '· WITHIN LIMIT'}`}</span>
+          </span>
+        ) : isSurface ? (
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 bg-cyan-50 text-cyan-800 border border-cyan-200">
+            <Eye size={11} />
+            <span>VISUAL RECORD</span>
+          </span>
+        ) : (
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+            !isAssessed
+              ? 'bg-gray-100 text-gray-500 border border-gray-200'
+              : isPassed
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+          }`}>
+            {!isAssessed ? <Info size={11} /> : isPassed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+            <span>{!isAssessed ? 'NOT ASSESSED' : isPassed ? 'GREEN PASS (≥25)' : 'DEFICIENT (<25)'}</span>
+          </span>
+        )}
+      </td>
+      <td className="py-3.5 px-5 text-right flex items-center justify-end gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenViewer(t);
+          }}
+          className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold"
+        >
+          Oscillogram
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(t);
+          }}
+          className="px-2.5 py-1 bg-white border border-gray-200 hover:border-amber-400 text-amber-700 rounded-lg text-xs font-bold"
+          title="Correct the recorded field measurements"
+        >
+          Edit
+        </button>
+      </td>
+    </tr>
   );
 }

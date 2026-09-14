@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, UploadCloud, FolderUp, File } from 'lucide-react';
 import Button from '@/components/ui/Button';
@@ -10,9 +10,33 @@ interface UploadFolderModalProps {
   onClose: () => void;
 }
 
+const formatFileSize = (bytes: number): string => {
+  if (!bytes || bytes <= 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Folder name from the real selection: the first path segment of the first
+// file's relative path when a folder was picked, otherwise a neutral label.
+const getFolderName = (files: File[]): string => {
+  const first = files[0] as (File & { webkitRelativePath?: string }) | undefined;
+  const rel = first?.webkitRelativePath;
+  if (rel && rel.includes('/')) return rel.split('/')[0];
+  return 'Selected Files';
+};
+
 export default function UploadFolderModal({ isOpen, onClose }: UploadFolderModalProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  // Enable native folder picking on the hidden input.
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute('webkitdirectory', '');
+    }
+  }, [isOpen]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -26,8 +50,19 @@ export default function UploadFolderModal({ isOpen, onClose }: UploadFolderModal
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    setSelectedFolder('Architecture_Drawings_V3');
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length > 0) setSelectedFiles(files);
   };
+
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) setSelectedFiles(files);
+    e.target.value = '';
+  };
+
+  const folderName = selectedFiles.length > 0 ? getFolderName(selectedFiles) : null;
+  const visibleFiles = selectedFiles.slice(0, 8);
+  const remainingCount = selectedFiles.length - visibleFiles.length;
 
   return (
     <AnimatePresence>
@@ -56,7 +91,7 @@ export default function UploadFolderModal({ isOpen, onClose }: UploadFolderModal
                 <h2 className="text-[24px] font-extrabold text-[#022C4F]">Upload Folder</h2>
                 <p className="text-[12px] text-gray-500 font-medium mt-1">Upload a complete folder structure into the repository.</p>
               </div>
-              <button 
+              <button
                 onClick={onClose}
                 className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors shrink-0"
               >
@@ -66,9 +101,9 @@ export default function UploadFolderModal({ isOpen, onClose }: UploadFolderModal
 
             {/* Scrollable Body */}
             <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
-              
+
               {/* Drag and Drop Zone */}
-              <div 
+              <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -78,70 +113,86 @@ export default function UploadFolderModal({ isOpen, onClose }: UploadFolderModal
                   <UploadCloud size={28} className="text-[#022C4F]" />
                 </div>
                 <h3 className="text-[16px] font-bold text-[#0F181F] mb-2">Drag and Drop Folder Here</h3>
-                <p className="text-[12px] text-gray-500 font-medium mb-6">or select a folder from your computer</p>
-                <button 
-                  onClick={() => setSelectedFolder('Architecture_Drawings_V3')}
+                <p className="text-[12px] text-gray-500 font-medium mb-6">
+                  {selectedFiles.length > 0
+                    ? `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected`
+                    : 'or select a folder from your computer'}
+                </p>
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFolderSelect}
+                />
+                <button
+                  onClick={() => folderInputRef.current?.click()}
                   className="py-2.5 px-6 rounded-full border border-[#022C4F] text-[#022C4F] text-[12px] font-bold hover:bg-[#022C4F] hover:text-white transition-colors"
                 >
                   Browse Computer
                 </button>
               </div>
 
-              {/* Selected Folder Preview */}
-              {selectedFolder && (
+              {/* Selected Folder Preview — the user's actual selection */}
+              {folderName && (
                 <div className="bg-[#f8f9fa] rounded-2xl p-6 border border-gray-100">
                   <div className="flex items-center gap-4 mb-4">
                     <div className="w-10 h-10 rounded-full bg-[#022C4F]/10 flex items-center justify-center text-[#022C4F]">
                       <FolderUp size={20} />
                     </div>
                     <div>
-                      <h4 className="text-[14px] font-bold text-[#0F181F]">{selectedFolder}</h4>
-                      <p className="text-[11px] text-gray-500 font-medium">Ready to upload • 12 files</p>
+                      <h4 className="text-[14px] font-bold text-[#0F181F]">{folderName}</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        Ready to upload • {selectedFiles.length} file{selectedFiles.length === 1 ? '' : 's'}
+                      </p>
                     </div>
-                    <button 
-                      onClick={() => setSelectedFolder(null)}
+                    <button
+                      onClick={() => setSelectedFiles([])}
                       className="ml-auto text-[11px] font-bold text-red-600 hover:underline"
                     >
                       Remove
                     </button>
                   </div>
 
-                  {/* Dummy file list */}
+                  {/* Real file list from the selection */}
                   <div className="flex flex-col gap-2 pl-14">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="flex items-center gap-3">
-                        <File size={14} className="text-gray-400" />
-                        <span className="text-[11px] text-gray-600 font-medium">Drawing_Sheet_0{i}.pdf</span>
+                    {visibleFiles.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="flex items-center gap-3">
+                        <File size={14} className="text-gray-400 shrink-0" />
+                        <span className="text-[11px] text-gray-600 font-medium truncate">{file.name}</span>
+                        <span className="text-[10px] text-gray-400 font-medium shrink-0">{formatFileSize(file.size)}</span>
                       </div>
                     ))}
-                    <div className="text-[11px] text-gray-400 font-medium italic mt-1">+ 9 more files</div>
+                    {remainingCount > 0 && (
+                      <div className="text-[11px] text-gray-400 font-medium italic mt-1">+ {remainingCount} more file{remainingCount === 1 ? '' : 's'}</div>
+                    )}
                   </div>
                 </div>
               )}
-              
+
             </div>
 
             {/* Footer */}
             <div className="p-8 pt-6 border-t border-gray-100 flex justify-end gap-4 shrink-0 bg-white">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={onClose}
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 variant="primary"
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Folder uploaded successfully!', type: 'success' } }));
                   onClose();
-                  setSelectedFolder(null);
+                  setSelectedFiles([]);
                 }}
-                disabled={!selectedFolder}
+                disabled={selectedFiles.length === 0}
               >
                 Upload Folder
               </Button>
             </div>
-            
+
           </motion.div>
         </div>
       )}

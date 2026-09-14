@@ -204,17 +204,21 @@ export const issueStopWorkOrder = async (
       severity: 'CRITICAL',
       enforce_stop_work: true
     });
+    if (!issueRes?.id) {
+      throw new Error('Stop-work enforcement failed on both the inspection and site-issue endpoints.');
+    }
+    // The order reference is the server-generated reference of the enforcement record — never fabricated client-side
     return {
-      id: issueRes?.id || `swo-${Date.now()}`,
-      order_number: `SWO-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      id: issueRes.id,
+      order_number: issueRes.issue_reference || 'Not recorded',
       project: targetProject,
-      project_name: issueRes?.project_name || 'Suspended Project',
-      project_reference: issueRes?.project_reference || 'PRJ-SUSPENDED',
+      project_name: issueRes.project_name || '—',
+      project_reference: issueRes.project_reference || '—',
       reason: payload.reason,
       severity: 'CRITICAL',
-      issued_by_name: 'Building Control Authority',
-      issued_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      issued_by_name: issueRes.reported_by_name || 'Not recorded',
+      issued_at: issueRes.created_at || new Date().toISOString(),
+      created_at: issueRes.created_at || new Date().toISOString(),
       status: 'ACTIVE'
     };
   }
@@ -239,17 +243,21 @@ export const createStopWorkOrder = async (payload: {
       severity: 'CRITICAL',
       enforce_stop_work: true
     });
+    if (!issueRes?.id) {
+      throw new Error('Stop-work enforcement failed on both the stop-work and site-issue endpoints.');
+    }
+    // The order reference is the server-generated reference of the enforcement record — never fabricated client-side
     return {
-      id: issueRes?.id || `swo-${Date.now()}`,
-      order_number: `SWO-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      id: issueRes.id,
+      order_number: issueRes.issue_reference || 'Not recorded',
       project: payload.project,
-      project_name: issueRes?.project_name || 'Suspended Project',
-      project_reference: issueRes?.project_reference || 'PRJ-SUSPENDED',
+      project_name: issueRes.project_name || '—',
+      project_reference: issueRes.project_reference || '—',
       reason: payload.reason,
       severity: 'CRITICAL',
-      issued_by_name: 'Building Control Directorate',
-      issued_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      issued_by_name: issueRes.reported_by_name || 'Not recorded',
+      issued_at: issueRes.created_at || new Date().toISOString(),
+      created_at: issueRes.created_at || new Date().toISOString(),
       status: 'ACTIVE'
     };
   }

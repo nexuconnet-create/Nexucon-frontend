@@ -41,27 +41,27 @@ export default function RecordSiteVerificationModal({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || '');
   const [method, setMethod] = useState('GNSS_RTK_SURVEY');
-  const [deviceIdentifier, setDeviceIdentifier] = useState('Tersus Oscar GNSS RTK #042');
+  const [deviceIdentifier, setDeviceIdentifier] = useState('');
   const [surveyorName, setSurveyorName] = useState('');
   const [surveyorRole, setSurveyorRole] = useState('Directorate of Cadastral & Structural Survey');
-  
-  // Coordinates
-  const [approvedLat, setApprovedLat] = useState('6.425310');
-  const [approvedLng, setApprovedLng] = useState('3.421920');
-  const [approvedElev, setApprovedElev] = useState('4.15');
 
-  const [capturedLat, setCapturedLat] = useState('6.425318');
-  const [capturedLng, setCapturedLng] = useState('3.421924');
-  const [capturedElev, setCapturedElev] = useState('4.16');
-  const [accuracyMm, setAccuracyMm] = useState('7.5');
+  // Coordinates — operator-entered or captured from real device geolocation; never pre-filled
+  const [approvedLat, setApprovedLat] = useState('');
+  const [approvedLng, setApprovedLng] = useState('');
+  const [approvedElev, setApprovedElev] = useState('');
+
+  const [capturedLat, setCapturedLat] = useState('');
+  const [capturedLng, setCapturedLng] = useState('');
+  const [capturedElev, setCapturedElev] = useState('');
+  const [accuracyMm, setAccuracyMm] = useState('');
 
   const [toleranceLimit, setToleranceLimit] = useState('0.05');
-  const [calculatedVariance, setCalculatedVariance] = useState(0.015);
+  const [calculatedVariance, setCalculatedVariance] = useState<number | null>(null);
   const [beaconInput, setBeaconInput] = useState('');
-  const [beacons, setBeacons] = useState<string[]>(['BC-LA-2026/089', 'BC-LA-2026/090']);
-  
+  const [beacons, setBeacons] = useState<string[]>([]);
+
   const [notes, setNotes] = useState('');
-  const [isSimulatingRover, setIsSimulatingRover] = useState(false);
+  const [isAcquiringFix, setIsAcquiringFix] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -88,40 +88,67 @@ export default function RecordSiteVerificationModal({
     }
   }, [isOpen, defaultProjectId, selectedProjectId]);
 
-  // Recalculate variance whenever coordinates change
+  // Recalculate variance whenever coordinates change (null until both coordinate pairs are entered)
   useEffect(() => {
-    const lat1 = parseFloat(capturedLat) || 0;
-    const lng1 = parseFloat(capturedLng) || 0;
-    const lat2 = parseFloat(approvedLat) || 0;
-    const lng2 = parseFloat(approvedLng) || 0;
+    const lat1 = parseFloat(capturedLat);
+    const lng1 = parseFloat(capturedLng);
+    const lat2 = parseFloat(approvedLat);
+    const lng2 = parseFloat(approvedLng);
 
-    if (lat1 && lng1 && lat2 && lng2) {
+    const allEntered = [capturedLat, capturedLng, approvedLat, approvedLng].every(v => v.trim() !== '');
+    const allFinite = [lat1, lng1, lat2, lng2].every(Number.isFinite);
+
+    if (allEntered && allFinite) {
       const dLat = (lat1 - lat2) * 111139.0;
       const dLng = (lng1 - lng2) * 111139.0 * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
       const variance = Math.round(Math.sqrt(dLat * dLat + dLng * dLng) * 1000) / 1000;
       setCalculatedVariance(variance);
+    } else {
+      setCalculatedVariance(null);
     }
   }, [capturedLat, capturedLng, approvedLat, approvedLng]);
 
   if (!isOpen) return null;
 
-  const handleSimulateRoverCapture = () => {
-    setIsSimulatingRover(true);
-    setTimeout(() => {
-      const baseLat = parseFloat(approvedLat) || 6.425310;
-      const baseLng = parseFloat(approvedLng) || 3.421920;
-      const jitterLat = (Math.random() - 0.5) * 0.00015;
-      const jitterLng = (Math.random() - 0.5) * 0.00015;
-      
-      setCapturedLat((baseLat + jitterLat).toFixed(6));
-      setCapturedLng((baseLng + jitterLng).toFixed(6));
-      setAccuracyMm((5 + Math.random() * 8).toFixed(1));
-      setIsSimulatingRover(false);
-      
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'RTK Fixed telemetry successfully acquired from Tersus Oscar Rover!', type: 'success' } 
+  // Real device GNSS capture via the Geolocation API — coordinates and accuracy come from the
+  // device position fix only; nothing is randomized or invented client-side.
+  const handleCaptureGnssFix = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Device geolocation unavailable — enter the field-measured coordinates manually.', type: 'error' }
       }));
-    }, 650);
+      return;
+    }
+
+    setIsAcquiringFix(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy, altitude } = position.coords;
+        setCapturedLat(latitude.toFixed(6));
+        setCapturedLng(longitude.toFixed(6));
+        if (altitude !== null && Number.isFinite(altitude)) {
+          setCapturedElev(altitude.toFixed(2));
+        }
+        if (Number.isFinite(accuracy)) {
+          setAccuracyMm((accuracy * 1000).toFixed(1));
+        }
+        setIsAcquiringFix(false);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: {
+            message: `GNSS fix acquired: ${latitude.toFixed(6)}°, ${longitude.toFixed(6)}° (±${Number.isFinite(accuracy) ? accuracy.toFixed(1) : '—'}m)`,
+            type: 'success'
+          }
+        }));
+      },
+      (error) => {
+        console.warn('Geolocation error:', error.message);
+        setIsAcquiringFix(false);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: 'GNSS fix could not be acquired — enter the field-measured coordinates manually.', type: 'error' }
+        }));
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
   };
 
   const handleAddBeacon = () => {
@@ -138,8 +165,20 @@ export default function RecordSiteVerificationModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProjectId) {
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: 'Please select a construction project.', type: 'error' } 
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Please select a construction project.', type: 'error' }
+      }));
+      return;
+    }
+    if (!deviceIdentifier.trim()) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Please enter the survey device / instrument identifier.', type: 'error' }
+      }));
+      return;
+    }
+    if (calculatedVariance === null) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Both the approved benchmark and field-measured coordinates (latitude & longitude) are required.', type: 'error' }
       }));
       return;
     }
@@ -152,21 +191,23 @@ export default function RecordSiteVerificationModal({
       const payload: Partial<SiteVerification> = {
         project: selectedProjectId,
         method,
-        device_identifier: deviceIdentifier.trim() || 'Tersus Oscar GNSS RTK #042',
+        device_identifier: deviceIdentifier.trim(),
         cadastral_beacon_numbers: beacons,
         approved_coordinates: {
-          lat: parseFloat(approvedLat) || 6.425310,
-          lng: parseFloat(approvedLng) || 3.421920,
-          elevation: parseFloat(approvedElev) || 4.15
+          lat: parseFloat(approvedLat),
+          lng: parseFloat(approvedLng),
+          elevation: approvedElev.trim() ? parseFloat(approvedElev) : undefined
         },
         captured_coordinates: {
-          lat: parseFloat(capturedLat) || 6.425318,
-          lng: parseFloat(capturedLng) || 3.421924,
-          elevation: parseFloat(capturedElev) || 4.16,
-          accuracy_horizontal_mm: parseFloat(accuracyMm) || 7.5
+          lat: parseFloat(capturedLat),
+          lng: parseFloat(capturedLng),
+          elevation: capturedElev.trim() ? parseFloat(capturedElev) : undefined,
+          accuracy_horizontal_mm: accuracyMm.trim() ? parseFloat(accuracyMm) : undefined
         },
         variance_meters: calculatedVariance,
-        elevation_variance_meters: Math.abs((parseFloat(capturedElev) || 0) - (parseFloat(approvedElev) || 0)),
+        elevation_variance_meters: (capturedElev.trim() && approvedElev.trim())
+          ? Math.abs(parseFloat(capturedElev) - parseFloat(approvedElev))
+          : undefined,
         tolerance_limit_meters: limit,
         variance_detected: varianceDetected,
         status: varianceDetected ? 'VARIANCE_DETECTED' : 'PENDING_VERIFICATION',
@@ -193,7 +234,7 @@ export default function RecordSiteVerificationModal({
     }
   };
 
-  const isCompliant = calculatedVariance <= (parseFloat(toleranceLimit) || 0.05);
+  const isCompliant = calculatedVariance !== null && calculatedVariance <= (parseFloat(toleranceLimit) || 0.05);
 
   return (
     <div className="fixed inset-0 bg-[#0F181F]/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 overflow-y-auto">
@@ -256,7 +297,7 @@ export default function RecordSiteVerificationModal({
                   if (e.target.value === 'DRONE_PHOTOGRAMMETRY') setDeviceIdentifier('DJI Matrice 350 RTK + Zenmuse L2');
                   else if (e.target.value === 'GPR_SCAN') setDeviceIdentifier('Proceq GS8000 GPR Radar');
                   else if (e.target.value === 'TOTAL_STATION') setDeviceIdentifier('Leica TS16 Total Station');
-                  else setDeviceIdentifier('Tersus Oscar GNSS RTK #042');
+                  else setDeviceIdentifier('Tersus Oscar GNSS RTK Rover');
                 }}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
               >
@@ -273,9 +314,10 @@ export default function RecordSiteVerificationModal({
               <label className="text-xs font-bold text-slate-700">Device Identifier / Instrument Model</label>
               <input
                 type="text"
+                required
                 value={deviceIdentifier}
                 onChange={(e) => setDeviceIdentifier(e.target.value)}
-                placeholder="e.g. Tersus Oscar GNSS RTK #042"
+                placeholder="e.g. Tersus Oscar GNSS RTK Rover (serial no.)"
                 className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               />
             </div>
@@ -335,12 +377,12 @@ export default function RecordSiteVerificationModal({
               </span>
               <button
                 type="button"
-                onClick={handleSimulateRoverCapture}
-                disabled={isSimulatingRover}
+                onClick={handleCaptureGnssFix}
+                disabled={isAcquiringFix}
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                <Activity size={13} className={isSimulatingRover ? 'animate-spin' : ''} />
-                {isSimulatingRover ? 'Acquiring RTK Fix...' : '🎯 Capture from RTK Rover'}
+                <Activity size={13} className={isAcquiringFix ? 'animate-spin' : ''} />
+                {isAcquiringFix ? 'Acquiring GNSS Fix...' : '🎯 Capture Device GNSS Fix'}
               </button>
             </div>
 
@@ -384,7 +426,7 @@ export default function RecordSiteVerificationModal({
                 <div className="flex justify-between items-center">
                   <p className="text-[11px] font-black text-slate-700 uppercase">2. Field Measured RTK Fix</p>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                    Accuracy: ±{accuracyMm}mm
+                    Accuracy: ±{accuracyMm || '—'}mm
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
@@ -427,10 +469,10 @@ export default function RecordSiteVerificationModal({
                 {isCompliant ? <CheckCircle size={20} className="text-emerald-600" /> : <AlertTriangle size={20} className="text-rose-600" />}
                 <div>
                   <div className="text-xs font-black">
-                    Calculated Spatial Variance: <span className="font-mono text-sm">{calculatedVariance}m</span> ({Math.round(calculatedVariance * 1000)}mm)
+                    Calculated Spatial Variance: <span className="font-mono text-sm">{calculatedVariance !== null ? `${calculatedVariance}m` : '—'}</span> ({calculatedVariance !== null ? `${Math.round(calculatedVariance * 1000)}mm` : 'coordinates pending'})
                   </div>
                   <div className="text-[11px] font-medium opacity-80">
-                    Regulatory Tolerance Limit: ≤ {toleranceLimit}m (50mm). Status: <strong>{isCompliant ? 'COMPLIANT (Within Tolerance)' : 'VARIANCE / ENCROACHMENT DETECTED'}</strong>
+                    Regulatory Tolerance Limit: ≤ {toleranceLimit}m (50mm). Status: <strong>{calculatedVariance === null ? 'AWAITING COORDINATES' : isCompliant ? 'COMPLIANT (Within Tolerance)' : 'VARIANCE / ENCROACHMENT DETECTED'}</strong>
                   </div>
                 </div>
               </div>
@@ -439,7 +481,7 @@ export default function RecordSiteVerificationModal({
                 <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase ${
                   isCompliant ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
                 }`}>
-                  {isCompliant ? 'PASS' : 'EXCEEDS LIMIT'}
+                  {calculatedVariance === null ? 'PENDING' : isCompliant ? 'PASS' : 'EXCEEDS LIMIT'}
                 </span>
               </div>
             </div>
