@@ -2,19 +2,44 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { AlertOctagon, UserX, ShieldCheck, History, Clock, Plus, RefreshCw } from "lucide-react";
-import { BlacklistRecord, getBlacklistRecords } from "@/services/stakeholders";
+import { BlacklistRecord, getBlacklistRecords, getLicensedProfessionals, LicensedProfessional } from "@/services/stakeholders";
 import BlacklistEntityModal from "@/components/dashboard/BlacklistEntityModal";
+
+// License expiry state derived from the real expiry date — no hardcoded
+// "expired"/"valid" claims.
+const licenseExpiryState = (expiryDate: string): 'expired' | 'expiring' | 'valid' | 'unknown' => {
+  if (!expiryDate) return 'unknown';
+  const expiry = new Date(expiryDate).getTime();
+  if (Number.isNaN(expiry)) return 'unknown';
+  const now = Date.now();
+  if (expiry < now) return 'expired';
+  if (expiry - now <= 30 * 24 * 60 * 60 * 1000) return 'expiring';
+  return 'valid';
+};
 
 export default function RecurringOffenders() {
   const [records, setRecords] = useState<BlacklistRecord[]>([]);
+  const [professionals, setProfessionals] = useState<LicensedProfessional[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBlacklistModalOpen, setIsBlacklistModalOpen] = useState(false);
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getBlacklistRecords();
-      setRecords(data);
+      const [blacklist, licensed] = await Promise.all([
+        getBlacklistRecords(),
+        getLicensedProfessionals().catch(() => [] as LicensedProfessional[]),
+      ]);
+      setRecords(blacklist);
+      // Soonest-expiring licenses first so the tracking column surfaces real
+      // risks at the top.
+      setProfessionals(
+        [...licensed].sort((a, b) => {
+          const da = a.expiry_date ? new Date(a.expiry_date).getTime() : Number.POSITIVE_INFINITY;
+          const db = b.expiry_date ? new Date(b.expiry_date).getTime() : Number.POSITIVE_INFINITY;
+          return da - db;
+        })
+      );
     } catch (err) {
       console.error("Failed to load blacklist records", err);
     } finally {
@@ -99,33 +124,40 @@ export default function RecurringOffenders() {
             <Clock className="text-amber-500" size={18} /> Real-Time License Expiry Tracking
           </h3>
           <div className="space-y-3">
-            <div className="p-4 border border-gray-100 hover:bg-slate-50 transition-colors rounded-2xl flex justify-between items-center">
-              <div>
-                <h4 className="font-bold text-gray-900 text-xs">Engr. David Rossi</h4>
-                <p className="text-[11px] text-gray-500">COREN License • ID: CRN-99234</p>
+            {professionals.map((pro) => {
+              const state = licenseExpiryState(pro.expiry_date);
+              return (
+                <div key={pro.id} className="p-4 border border-gray-100 hover:bg-slate-50 transition-colors rounded-2xl flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">{pro.name}</h4>
+                    <p className="text-[11px] text-gray-500">{pro.license_authority || 'License'} • ID: {pro.license_id || '—'}</p>
+                  </div>
+                  {state === 'expired' ? (
+                    <span className="text-rose-600 font-bold text-xs bg-rose-50 px-3 py-1 rounded-xl border border-rose-200">
+                      Expired {pro.expiry_date ? new Date(pro.expiry_date).toLocaleDateString() : ''}
+                    </span>
+                  ) : state === 'expiring' ? (
+                    <span className="text-amber-700 font-bold text-xs bg-amber-50 px-3 py-1 rounded-xl border border-amber-200">
+                      Expires {pro.expiry_date ? new Date(pro.expiry_date).toLocaleDateString() : 'soon'}
+                    </span>
+                  ) : state === 'valid' ? (
+                    <span className="text-emerald-600 font-bold text-xs bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-200">
+                      <ShieldCheck size={12}/> Valid
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 font-bold text-xs bg-gray-50 px-3 py-1 rounded-xl border border-gray-200">
+                      No expiry recorded
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            {professionals.length === 0 && !isLoading && (
+              <div className="p-8 text-center text-xs text-gray-400">
+                No licensed professionals on record yet.
               </div>
-              <span className="text-rose-600 font-bold text-xs bg-rose-50 px-3 py-1 rounded-xl border border-rose-200">
-                Expired 2 days ago
-              </span>
-            </div>
-            <div className="p-4 border border-gray-100 hover:bg-slate-50 transition-colors rounded-2xl flex justify-between items-center">
-              <div>
-                <h4 className="font-bold text-gray-900 text-xs">BuildMax Corp</h4>
-                <p className="text-[11px] text-gray-500">CAC Registration • RC-102934</p>
-              </div>
-              <span className="text-emerald-600 font-bold text-xs bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-200">
-                <ShieldCheck size={12}/> Valid via API
-              </span>
-            </div>
-            <div className="p-4 border border-gray-100 hover:bg-slate-50 transition-colors rounded-2xl flex justify-between items-center">
-              <div>
-                <h4 className="font-bold text-gray-900 text-xs">Vertex MEP Solutions</h4>
-                <p className="text-[11px] text-gray-500">COREN Electrical Sub-License • CRN-44912</p>
-              </div>
-              <span className="text-amber-700 font-bold text-xs bg-amber-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-amber-200">
-                Expiring in 14 days
-              </span>
-            </div>
+            )}
           </div>
         </div>
       </div>

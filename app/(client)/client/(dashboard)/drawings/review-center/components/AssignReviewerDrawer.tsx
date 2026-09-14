@@ -2,14 +2,16 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check } from 'lucide-react';
+import { X, Check, FileText } from 'lucide-react';
+import { Document } from '@/services/documents';
 
 interface AssignReviewerDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  drawing: Document | null;
 }
 
-export default function AssignReviewerDrawer({ isOpen, onClose }: AssignReviewerDrawerProps) {
+export default function AssignReviewerDrawer({ isOpen, onClose, drawing }: AssignReviewerDrawerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
@@ -22,10 +24,12 @@ export default function AssignReviewerDrawer({ isOpen, onClose }: AssignReviewer
   ];
 
   const toggleType = (type: string) => {
-    setSelectedTypes(prev => 
+    setSelectedTypes(prev =>
       prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
     );
   };
+
+  const reviews = drawing?.reviews ?? [];
 
   return (
     <AnimatePresence>
@@ -69,28 +73,37 @@ export default function AssignReviewerDrawer({ isOpen, onClose }: AssignReviewer
               <div className="mb-10">
                 <h3 className="text-[18px] font-extrabold text-[#022C4F] mb-6">Review Information</h3>
 
-                <div className="grid grid-cols-2 gap-y-6 gap-x-8">
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Review Item</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Structural Foundation Layout - Revision 03</p>
+                {!drawing ? (
+                  <div className="border border-gray-200 rounded-2xl p-8 text-center">
+                    <FileText size={28} className="mx-auto mb-2 text-[#022C4F]/40" />
+                    <p className="text-[12px] font-medium text-gray-500">No drawing selected.</p>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Discipline</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Structural Engineering</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Review Item</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.title || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Discipline</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.discipline || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.project_name || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Current Reviewers</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        {reviews.length > 0 ? `${reviews.length} Assigned` : 'None recorded yet'}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Reference</h4>
+                      <p className="text-[11px] text-gray-500 font-medium font-mono">{drawing.document_reference || '—'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Victoria Heights Residential Estate</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Current Reviewers</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">3 Assigned</p>
-                  </div>
-                  <div className="col-span-2">
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Required Reviewers</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">4 Reviewers</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Search Reviewer */}
@@ -112,8 +125,8 @@ export default function AssignReviewerDrawer({ isOpen, onClose }: AssignReviewer
                   {reviewerTypes.map((type) => {
                     const isSelected = selectedTypes.includes(type);
                     return (
-                      <div 
-                        key={type} 
+                      <div
+                        key={type}
                         className="flex items-center gap-4 cursor-pointer group"
                         onClick={() => toggleType(type)}
                       >

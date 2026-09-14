@@ -19,7 +19,6 @@ export default function CertifyBIMModelModal({
 }: CertifyBIMModelModalProps) {
   const [actionType, setActionType] = useState<'CERTIFY' | 'REQUEST_CHANGES'>('CERTIFY');
   const [reason, setReason] = useState('');
-  const [hashSignature, setHashSignature] = useState(`0x3f8a${Math.random().toString(16).substring(2, 8)}c91`);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen || !model) return null;
@@ -29,9 +28,10 @@ export default function CertifyBIMModelModal({
     setIsSubmitting(true);
     try {
       if (actionType === 'CERTIFY') {
-        await certifyBIMModel(model.id, { hash_signature: hashSignature });
-        window.dispatchEvent(new CustomEvent('show-toast', { 
-          detail: { message: `BIM Model "${model.name}" officially certified & stamped!`, type: 'success' } 
+        // No hash_signature sent: the backend computes a real SHA-256 seal server-side (bim/services.py stamp_and_certify)
+        const certified = await certifyBIMModel(model.id);
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `BIM Model "${model.name}" officially certified & stamped (Seal: ${certified?.hash_signature || 'issued'})!`, type: 'success' }
         }));
       } else {
         await requestBIMChanges(model.id, { reason: reason || 'Modifications requested by reviewing desk.' });
@@ -102,13 +102,17 @@ export default function CertifyBIMModelModal({
           {actionType === 'CERTIFY' ? (
             <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Cryptographic Hash Seal</label>
-              <input
-                type="text"
-                value={hashSignature}
-                onChange={(e) => setHashSignature(e.target.value)}
-                required
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-600 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] text-slate-500 leading-relaxed">
+                The SHA-256 digital stamp is computed and issued by the government certification
+                service when the seal is applied — no value is entered or generated on this device.
+                {model.hash_signature ? (
+                  <span className="block mt-1 font-mono font-bold text-blue-600 break-all">
+                    Current seal: {model.hash_signature}
+                  </span>
+                ) : (
+                  <span className="block mt-1 font-bold text-slate-400">Seal: Pending issuance</span>
+                )}
+              </div>
               <p className="text-[10px] text-slate-400">Lock model into immutable certified record with official agency timestamp.</p>
             </div>
           ) : (

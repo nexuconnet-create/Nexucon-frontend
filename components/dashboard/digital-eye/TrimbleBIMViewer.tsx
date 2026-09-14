@@ -254,7 +254,11 @@ export default function TrimbleBIMViewer({
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
                     <span className="text-slate-300 font-medium">GPR Radar:</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      selectedElement.gpr_clearance_status === "VERIFIED" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                      selectedElement.gpr_clearance_status === "VERIFIED"
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : selectedElement.gpr_clearance_status === "PENDING" || selectedElement.gpr_clearance_status === "NOT_APPLICABLE"
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-rose-500/20 text-rose-400"
                     }`}>
                       {selectedElement.gpr_clearance_status}
                     </span>
@@ -263,7 +267,11 @@ export default function TrimbleBIMViewer({
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
                     <span className="text-slate-300 font-medium">PUNDIT UPV:</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      selectedElement.pundit_clearance_status === "VERIFIED" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                      selectedElement.pundit_clearance_status === "VERIFIED"
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : selectedElement.pundit_clearance_status === "PENDING" || selectedElement.pundit_clearance_status === "NOT_APPLICABLE"
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-rose-500/20 text-rose-400"
                     }`}>
                       {selectedElement.pundit_clearance_status}
                     </span>

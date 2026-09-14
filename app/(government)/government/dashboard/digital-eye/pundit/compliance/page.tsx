@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Sparkles, ShieldCheck, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
+import { ElementFolderList } from "@/components/dashboard/digital-eye/PunditFolderTree";
 import { DigitalEyeFinding, getDigitalEyeFindings } from "@/services/digitalEye";
 
 export default function PunditCompliancePage() {
@@ -94,12 +95,19 @@ export default function PunditCompliancePage() {
           </p>
         </div>
       ) : (
-      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-6">
-        <h3 className="text-sm font-bold text-rose-700 mb-3 flex items-center gap-2">
-          <AlertTriangle size={16} /> Flagged Low-Velocity Structural Elements (Action Required)
-        </h3>
-        <div className="space-y-3">
-          {findings.map((f) => (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden">
+        <div className="px-6 pt-6">
+          <h3 className="text-sm font-bold text-rose-700 mb-3 flex items-center gap-2">
+            <AlertTriangle size={16} /> Flagged Low-Velocity Structural Elements (Action Required)
+          </h3>
+        </div>
+        {/* Findings carry no floor (DigitalEyeFinding has only the structural
+            element) — the honest deepest grouping is a one-level Element →
+            findings folder tree, in the same folder styling as the registry. */}
+        <ElementFolderList
+          items={findings}
+          getGroup={(f) => (f.structural_element_name || '').trim() || 'Element not linked'}
+          renderItem={(f) => (
               <div
                 key={f.id}
                 onClick={() => {
@@ -114,11 +122,13 @@ export default function PunditCompliancePage() {
                   <p className="text-xs text-gray-600">{f.description}</p>
                 </div>
                 <button className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold shadow-sm">
-                  Review & Issue NCR
+                  Review &amp; Issue NCR
                 </button>
               </div>
-            ))}
-        </div>
+            )}
+          itemNoun="finding"
+          bodyClassName="space-y-3 p-6 pt-3"
+        />
       </div>
       )}
 

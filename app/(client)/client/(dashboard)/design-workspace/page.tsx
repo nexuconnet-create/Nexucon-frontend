@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Search, Bell, MoreHorizontal, CheckCircle, Hourglass, FileText, Upload, X, ChevronLeft, ChevronRight, Calendar, Clock, MapPin } from "lucide-react";
 import OverviewTab from "./components/OverviewTab";
 import DrawingsTab from "./components/DrawingsTab";
@@ -15,21 +15,66 @@ import NotificationCenter from "@/components/dashboard/NotificationCenter";
 import DrawingPreviewModal from "@/components/dashboard/DrawingPreviewModal";
 import DocumentPreviewModal from "@/components/dashboard/DocumentPreviewModal";
 import ProfilePill from "@/components/ui/ProfilePill";
-
-const DRAWINGS = [
-  { id: 1, title: "TYPICAL FLOOR PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784489051/3_Bedroom_House_Plan_-_ID_13501_-_CAD_PDF___Architectural_Drawings_1_kk7vmz.png" },
-  { id: 2, title: "GROUND FLOOR PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784489053/9x10m_house_plan_is_given_in_this_Autocad_drawing_file__1_itp4pu.png" },
-  { id: 3, title: "ROOF PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784499060/Residential_Electrical_Layout_DWG_with_Lighting_Points_1_ynofyf.png" },
-  { id: 4, title: "ELECTRICAL LAYOUT PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784489052/__16_1_dgy7qg.png" },
-  { id: 5, title: "PLUMBING LAYOUT PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784489051/__17_1_gjc6ii.png" },
-  { id: 6, title: "HVAC LAYOUT PLAN", imageUrl: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784489052/__18_1_qmkang.png" }
-];
+import { getProjects, Project } from "@/services/projects";
+import { getDocuments, Document } from "@/services/documents";
 
 export default function DesignWorkspacePage() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("Documents");
   const [previewDrawing, setPreviewDrawing] = useState<{ title: string, imageUrl: string } | null>(null);
   const [previewDocument, setPreviewDocument] = useState<File | null>(null);
+
+  // Real workspace data — the client's most recent project, its documents and
+  // uploaded drawings. No fabricated project details or stock drawing images.
+  const [project, setProject] = useState<Project | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [projects, docs] = await Promise.all([
+          getProjects(),
+          getDocuments().catch(() => [] as Document[]),
+        ]);
+        if (cancelled) return;
+        const latest = [...projects].sort(
+          (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+        )[0] ?? null;
+        setProject(latest);
+        // Real uploaded drawings only (drawing-type documents with a file).
+        setDocuments(docs.filter((d) => d.file_url));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const DRAWINGS = documents
+    .filter((d) => d.document_type === 'SUBMITTED_DRAWING' || d.document_type === 'DRAWING')
+    .map((d) => ({ id: d.id, title: d.title, imageUrl: d.file_url }));
+
+  const projectDocuments = project ? documents.filter((d) => d.project === project.id) : [];
+  const pendingReviews = projectDocuments.filter((d) => d.status === 'PENDING_REVIEW' || d.status === 'UNDER_REVIEW');
+  const approved = projectDocuments.filter((d) => d.status === 'APPROVED');
+
+  // Discipline status derived from the project's real documents: complete when
+  // every document of that discipline is approved, under review while any is
+  // in review, pending when none are recorded yet.
+  const disciplineStatus = (discipline: Document['discipline']): 'complete' | 'under_review' | 'pending' => {
+    const docs = projectDocuments.filter((d) => d.discipline === discipline);
+    if (docs.length === 0) return 'pending';
+    if (docs.some((d) => d.status === 'PENDING_REVIEW' || d.status === 'UNDER_REVIEW' || d.status === 'CHANGES_REQUESTED')) return 'under_review';
+    if (docs.every((d) => d.status === 'APPROVED')) return 'complete';
+    return 'under_review';
+  };
+
+  const locationText = project
+    ? project.location || project.site_address || [project.lga, project.state].filter(Boolean).join(', ') || '—'
+    : '—';
 
   // Document Upload State
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -96,7 +141,9 @@ export default function DesignWorkspacePage() {
 
       {/* Hero Banner */}
       <div className="bg-[#022C4F] rounded-[32px] p-8 md:p-10 flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100 ease-out fill-mode-both">
-        <h2 className="text-white text-2xl md:text-[28px] font-bold tracking-wide">Victoria Heights Residential Estate</h2>
+        <h2 className="text-white text-2xl md:text-[28px] font-bold tracking-wide">
+          {isLoading ? 'Loading project…' : project?.name || 'No project yet'}
+        </h2>
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Action executed successfully!', type: 'success' } })); }} className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-[#022C4F] hover:bg-gray-100 transition-colors shrink-0">
           <MoreHorizontal size={24} />
         </button>
@@ -111,23 +158,23 @@ export default function DesignWorkspacePage() {
           <h4 className="text-[13px] font-bold text-[#022C4F] mb-6">Project Information</h4>
 
           <div className="flex flex-col gap-5">
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Project Status:</span> <span className="text-gray-600 font-medium">Structural Design Review</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Location:</span> <span className="text-gray-600 font-medium">Lekki, Lagos, Nigeria</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Team Members:</span> <span className="text-gray-600 font-medium">12 Professionals</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Review Sessions:</span> <span className="text-gray-600 font-medium">3 Upcoming</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Document Count:</span> <span className="text-gray-600 font-medium">48 Documents</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Start Date:</span> <span className="text-gray-600 font-medium">January 15, 2026</span></p>
-            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Current Phase:</span> <span className="text-gray-600 font-medium">Foundation & Structural Works</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Project Status:</span> <span className="text-gray-600 font-medium">{project?.status || '—'}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Location:</span> <span className="text-gray-600 font-medium">{locationText}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Team Members:</span> <span className="text-gray-600 font-medium">{project?.professionals?.length ? `${project.professionals.length} Professionals` : '—'}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Documents In Review:</span> <span className="text-gray-600 font-medium">{pendingReviews.length || '—'}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Document Count:</span> <span className="text-gray-600 font-medium">{projectDocuments.length ? `${projectDocuments.length} Documents` : '—'}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Start Date:</span> <span className="text-gray-600 font-medium">{project?.start_date ? new Date(project.start_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</span></p>
+            <p className="text-[12px]"><span className="font-bold text-[#0F181F] w-32 inline-block">Current Phase:</span> <span className="text-gray-600 font-medium">{project?.status || '—'}</span></p>
 
             <div className="flex items-center gap-4 mt-2">
               <span className="font-bold text-[#0F181F] text-[12px] w-32 shrink-0">Overall Progress:</span>
               <div className="flex-1 max-w-[220px]">
                 <div className="flex justify-between text-[9px] font-bold text-gray-500 mb-1.5">
-                  <span>In Progress</span>
-                  <span>30%</span>
+                  <span>{project?.status || 'Not assessed'}</span>
+                  <span>{typeof project?.progress === 'number' ? `${project.progress}%` : '—'}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-[#6A994E] h-2 rounded-full" style={{ width: '30%' }}></div>
+                  <div className="bg-[#6A994E] h-2 rounded-full" style={{ width: `${typeof project?.progress === 'number' ? project.progress : 0}%` }}></div>
                 </div>
               </div>
             </div>
@@ -140,55 +187,39 @@ export default function DesignWorkspacePage() {
           <h4 className="text-[13px] font-bold text-[#022C4F] mb-8">Design Workflow</h4>
 
           <div className="grid grid-cols-2 gap-y-10 gap-x-6">
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">Architectural Design</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <div className="bg-[#4CAF50] rounded-sm p-[2px]">
-                  <CheckCircle size={10} className="text-white" strokeWidth={4} />
+            {([
+              { label: 'Architectural Design', discipline: 'Architecture' as const },
+              { label: 'Structural Design', discipline: 'Structural' as const },
+              { label: 'MEP Design', discipline: 'MEP' as const },
+              { label: 'Planning', discipline: 'Planning' as const },
+              { label: 'Civil Works', discipline: 'Civil' as const },
+              { label: 'Environmental', discipline: 'Environmental' as const },
+            ] as const).map(({ label, discipline }) => {
+              const status = disciplineStatus(discipline);
+              return (
+                <div key={label}>
+                  <p className="text-[13px] font-bold text-[#022C4F] mb-3">{label}</p>
+                  {status === 'complete' ? (
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
+                      <div className="bg-[#4CAF50] rounded-sm p-[2px]">
+                        <CheckCircle size={10} className="text-white" strokeWidth={4} />
+                      </div>
+                      Complete
+                    </div>
+                  ) : status === 'under_review' ? (
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#F1C40F]"></div>
+                      Under Review
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
+                      <Hourglass size={12} className="text-[#8B4513]" strokeWidth={3} />
+                      Pending
+                    </div>
+                  )}
                 </div>
-                Complete
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">Peer Review</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <Hourglass size={12} className="text-[#8B4513]" strokeWidth={3} />
-                Pending
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">Structural Design</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#F1C40F]"></div>
-                Under Review
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">Final Approval</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <Hourglass size={12} className="text-[#8B4513]" strokeWidth={3} />
-                Pending
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">MEP Design</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#F1C40F]"></div>
-                Under Review
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[13px] font-bold text-[#022C4F] mb-3">Quantity Surveying</p>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-600">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#4CAF50]"></div>
-                Active
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -208,28 +239,16 @@ export default function DesignWorkspacePage() {
                </thead>
                <tbody className="divide-y divide-gray-100">
                   <tr className="hover:bg-gray-50 transition-colors">
-                     <td className="py-4 px-4 text-[12px] font-medium text-[#022C4F]">Design Fees</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦2,500,000</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦2,500,000</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50 transition-colors">
-                     <td className="py-4 px-4 text-[12px] font-medium text-[#022C4F]">BOQ Production</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦1,200,000</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦1,200,000</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50 transition-colors">
-                     <td className="py-4 px-4 text-[12px] font-medium text-[#022C4F]">Permits/Fees</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦500,000</td>
-                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">₦500,000</td>
-                  </tr>
-                  <tr className="bg-gray-50/50">
-                     <td className="py-5 px-4 text-[13px] font-extrabold text-[#022C4F]">Total Budget</td>
-                     <td className="py-5 px-4 text-[13px] font-extrabold text-[#022C4F]">₦4,200,000</td>
-                     <td className="py-5 px-4 text-[13px] font-extrabold text-[#022C4F]">₦4,200,000</td>
+                     <td className="py-4 px-4 text-[12px] font-medium text-[#022C4F]">Estimated Project Value</td>
+                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">{project?.estimated_project_value || '—'}</td>
+                     <td className="py-4 px-4 text-[12px] text-gray-600 font-medium">—</td>
                   </tr>
                </tbody>
             </table>
           </div>
+          {project?.estimated_project_value ? null : (
+            <p className="text-[11px] text-gray-500 mt-4">No budget has been recorded for this project yet.</p>
+          )}
         </div>
       </div>
 

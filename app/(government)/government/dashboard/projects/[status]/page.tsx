@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getProjects, Project } from '@/services/projects';
+import { getBlacklistRecords, BlacklistRecord } from '@/services/stakeholders';
 import {
   Building2, Search, Filter, ArrowUpRight, Activity, Clock, CheckCircle, AlertTriangle,
   MapPin, Calendar, FileText, User, LayoutGrid, List, MoreVertical, ShieldCheck, Box, Eye,
@@ -23,20 +24,12 @@ const TABS = [
   { id: 'blacklist', label: 'Blacklist / Red-Flags', icon: AlertOctagon },
 ];
 
-const MOCK_OFFENDERS = [
-  { id: 'ENT-001', name: 'Rovengates Properties', type: 'Developer', reason: 'Pending Court Case (Structural Failure)', status: 'Suspended', date: 'Oct 2025', icon: Gavel },
-  { id: 'ENT-002', name: 'Mainland Builders', type: 'Contractor', reason: 'Previous Building Collapse', status: 'Blacklisted', date: 'Jan 2024', icon: AlertOctagon },
-  { id: 'ENT-003', name: 'O&A Consults', type: 'Consultant', reason: 'Revoked License (Falsified Docs)', status: 'Banned', date: 'Mar 2026', icon: FileX },
-];
-
-// Mock data for the table/cards
-const MOCK_PROJECTS = [
-  { id: 'PRJ-2026-001', name: 'Victoria Heights Commercial Development', developer: 'Rovengates Properties', location: 'Victoria Island, Lagos', type: 'Commercial', status: 'Active', progress: 68, compliance: 'Compliant', complianceScore: 92 },
-  { id: 'PRJ-2026-002', name: 'Lekki Commercial Plaza', developer: 'Lekki Concession Co.', location: 'Lekki Phase 1, Lagos', type: 'Mixed-Use', status: 'Flagged', progress: 42, compliance: 'Warning', complianceScore: 45 },
-  { id: 'PRJ-2026-003', name: 'Ikeja Mixed-Use Development', developer: 'Mainland Builders', location: 'Ikeja, Lagos', type: 'Mixed-Use', status: 'Active', progress: 15, compliance: 'Compliant', complianceScore: 88 },
-  { id: 'PRJ-2026-004', name: 'Harmony Business Complex', developer: 'Harmony Group', location: 'Port Harcourt, Rivers', type: 'Commercial', status: 'Completed', progress: 100, compliance: 'Compliant', complianceScore: 100 },
-  { id: 'PRJ-2026-005', name: 'Green Valley Apartments', developer: 'Green Valley Devs', location: 'Abuja Phase 2', type: 'Residential', status: 'Pending', progress: 0, compliance: 'Under Review', complianceScore: 60 },
-];
+const OFFENDER_TYPE_ICON = (entityType: string) => {
+  const t = (entityType || '').toLowerCase();
+  if (t.includes('developer')) return Gavel;
+  if (t.includes('contractor')) return AlertOctagon;
+  return FileX;
+};
 
 export default function ProjectsDynamicPage() {
   const params = useParams();
@@ -48,6 +41,9 @@ export default function ProjectsDynamicPage() {
 
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Real blacklist records from the stakeholders registry (never seeded rows).
+  const [offenders, setOffenders] = useState<BlacklistRecord[]>([]);
+  const [isOffendersLoading, setIsOffendersLoading] = useState(true);
 
   const [isQuickActionDrawerOpen, setIsQuickActionDrawerOpen] = useState(false);
   const [selectedQuickAction, setSelectedQuickAction] = useState("");
@@ -60,7 +56,9 @@ export default function ProjectsDynamicPage() {
         const res: any = await getProjects();
         const projectsArray = Array.isArray(res) ? res : (res.results || res.data || []);
 
-        // Map backend data to UI format
+        // Map backend data to UI format. Progress / compliance are never
+        // invented here — when the backend has not recorded them the card
+        // shows "Not recorded" instead of a fabricated percentage.
         const mapped = projectsArray.map((p: any) => ({
           id: p.id,
           name: p.name,
@@ -68,9 +66,9 @@ export default function ProjectsDynamicPage() {
           location: p.lga || p.site_address || 'Unknown',
           type: p.project_type || 'Mixed-Use',
           status: p.status === 'PLANNING' ? 'Pending' : p.status === 'ACTIVE' ? 'Active' : p.status === 'COMPLETED' ? 'Completed' : 'Flagged',
-          progress: p.status === 'ACTIVE' ? Math.floor(Math.random() * 60) + 10 : p.status === 'COMPLETED' ? 100 : 0,
-          compliance: 'Compliant',
-          complianceScore: Math.floor(Math.random() * 30) + 70,
+          progress: p.status === 'COMPLETED' ? 100 : (typeof p.progress_percentage === 'number' ? p.progress_percentage : null),
+          compliance: p.compliance_status || null,
+          complianceScore: (typeof p.compliance_score === 'number') ? p.compliance_score : null,
           reference: p.reference_number
         }));
 
@@ -85,11 +83,24 @@ export default function ProjectsDynamicPage() {
     fetchProjects();
   }, []);
 
+  // Real recurring-offenders registry from the stakeholders blacklist API.
+  useEffect(() => {
+    let cancelled = false;
+    getBlacklistRecords()
+      .then((records) => { if (!cancelled) setOffenders(records); })
+      .catch(() => { if (!cancelled) setOffenders([]); })
+      .finally(() => { if (!cancelled) setIsOffendersLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const activeCount = projects.filter(p => p.status === 'Active').length;
   const completedCount = projects.filter(p => p.status === 'Completed').length;
   const pendingCount = projects.filter(p => p.status === 'Pending').length;
   const flaggedCount = projects.filter(p => p.status === 'Flagged').length;
   const totalCount = projects.length;
+  const blacklistedCount = offenders.filter(o => o.status === 'Blacklisted').length;
+  const suspendedCount = offenders.filter(o => o.status === 'Suspended').length;
+  const monitoringCount = offenders.filter(o => o.status === 'Monitoring').length;
 
   const pageContent: any = {
     all: {
@@ -108,9 +119,9 @@ export default function ProjectsDynamicPage() {
       subtitle: "Monitor projects currently under construction or active regulatory supervision.",
       overview: [
         { label: "Active Projects", value: activeCount.toString(), icon: Activity, color: "blue" },
-        { label: "On Schedule", value: Math.floor(activeCount * 0.8).toString(), icon: CheckCircle, color: "emerald" },
-        { label: "At Risk", value: Math.ceil(activeCount * 0.2).toString(), icon: AlertCircle, color: "amber" },
-        { label: "Open Issues", value: "0", icon: ShieldCheck, color: "orange" },
+        { label: "Completed", value: completedCount.toString(), icon: CheckCircle, color: "emerald" },
+        { label: "Pending", value: pendingCount.toString(), icon: Clock, color: "amber" },
+        { label: "Flagged", value: flaggedCount.toString(), icon: AlertCircle, color: "red" },
       ],
       actions: ["Monitor Project", "Schedule Inspection", "Review Progress", "View Site Activity"]
     },
@@ -151,10 +162,10 @@ export default function ProjectsDynamicPage() {
       title: "Project Monitoring",
       subtitle: "Centralized monitoring workspace for tracking project progress, site activity, and regulatory milestones.",
       overview: [
-        { label: "Field Observations", value: "24", icon: Eye, color: "blue" },
-        { label: "Site Activity", value: "18", icon: Activity, color: "emerald" },
-        { label: "BIM Updates", value: "7", icon: Box, color: "purple" },
-        { label: "Tersus Verifications", value: "12", icon: MapPin, color: "indigo" },
+        { label: "Total Projects", value: totalCount.toString(), icon: Building2, color: "blue" },
+        { label: "Active Sites", value: activeCount.toString(), icon: Activity, color: "emerald" },
+        { label: "Completed", value: completedCount.toString(), icon: CheckCircle, color: "indigo" },
+        { label: "Flagged", value: flaggedCount.toString(), icon: AlertTriangle, color: "red" },
       ],
       actions: ["Open Project Monitor", "View Site Map", "Launch BIM Viewer", "Verify Site Coordinates", "Review Activity", "Generate Monitoring Report"]
     },
@@ -162,10 +173,10 @@ export default function ProjectsDynamicPage() {
       title: "Recurring Offenders Registry",
       subtitle: "Registry of blacklisted or red-flagged contractors, developers, and consultants.",
       overview: [
-        { label: "Total Blacklisted", value: "14", icon: AlertOctagon, color: "red" },
-        { label: "Pending Court Cases", value: "5", icon: Gavel, color: "orange" },
-        { label: "Revoked Licenses", value: "8", icon: FileX, color: "red" },
-        { label: "Suspended Entities", value: "22", icon: UserX, color: "amber" },
+        { label: "Registry Entries", value: offenders.length.toString(), icon: AlertOctagon, color: "red" },
+        { label: "Blacklisted", value: blacklistedCount.toString(), icon: AlertOctagon, color: "red" },
+        { label: "Suspended", value: suspendedCount.toString(), icon: UserX, color: "amber" },
+        { label: "Under Monitoring", value: monitoringCount.toString(), icon: Eye, color: "indigo" },
       ],
       actions: ["Add to Registry", "Review Case Files", "Generate Tribunal Report", "Escalate to Enforcement"]
     }
@@ -354,17 +365,28 @@ export default function ProjectsDynamicPage() {
         <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
           {currentStatus === 'blacklist' ? (
             <div className="flex flex-col gap-3">
-              {MOCK_OFFENDERS.map((offender) => (
+              {isOffendersLoading ? (
+                <div className="py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                  Loading the offenders registry from the server…
+                </div>
+              ) : offenders.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500">
+                  No blacklisted or red-flagged entities recorded in the registry yet.
+                </div>
+              ) : (
+                offenders.map((offender) => {
+                  const OffenderIcon = OFFENDER_TYPE_ICON(offender.entity_type);
+                  return (
                 <div key={offender.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-red-100 hover:border-red-300 hover:shadow-md transition-all group bg-red-50/30 gap-3 sm:gap-4">
                   <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-1/3">
                     <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-                      <offender.icon size={20} />
+                      <OffenderIcon size={20} />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors truncate">{offender.name}</h4>
+                      <h4 className="text-sm font-bold text-red-900 group-hover:text-red-700 transition-colors truncate">{offender.entity_name}</h4>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{offender.id}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{offender.type}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{offender.entity_id}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{offender.entity_type}</span>
                       </div>
                     </div>
                   </div>
@@ -374,6 +396,9 @@ export default function ProjectsDynamicPage() {
                     <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
                       <AlertTriangle size={12} className="shrink-0" /> {offender.reason}
                     </span>
+                    {offender.incident_count > 0 && (
+                      <span className="text-[10px] font-medium text-slate-500">{offender.incident_count} recorded incident(s)</span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-1/3">
@@ -381,22 +406,32 @@ export default function ProjectsDynamicPage() {
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1
                         ${offender.status === 'Blacklisted' ? 'bg-red-600 text-white shadow-sm' : ''}
                         ${offender.status === 'Suspended' ? 'bg-orange-100 text-orange-700' : ''}
-                        ${offender.status === 'Banned' ? 'bg-red-900 text-white shadow-sm' : ''}
+                        ${offender.status === 'Monitoring' ? 'bg-amber-100 text-amber-700' : ''}
                       `}>
                         {offender.status}
                       </span>
-                      <span className="text-[10px] font-medium text-slate-500">Since {offender.date}</span>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {offender.blacklisted_at ? `Since ${new Date(offender.blacklisted_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                      </span>
                     </div>
-                    <button className="p-2 text-slate-400 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors">
-                      <MoreVertical size={18} />
-                    </button>
                   </div>
                 </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           ) : viewMode === 'list' ? (
             <div className="flex flex-col gap-3">
-              {displayedProjects.map((project) => (
+              {isLoading ? (
+                <div className="py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                  Loading projects from the registry…
+                </div>
+              ) : displayedProjects.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500">
+                  No projects{currentStatus !== 'all' && currentStatus !== 'monitoring' ? ` in this category` : ''} registered yet.
+                </div>
+              ) : (
+              displayedProjects.map((project) => (
                 <div 
                   key={project.id} 
                   onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
@@ -425,9 +460,13 @@ export default function ProjectsDynamicPage() {
                   <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-1/4 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                     <div className="flex flex-col items-start md:items-end mr-2 text-left md:text-right">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Compliance</span>
-                      <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100' : project.complianceScore >= 50 ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100' : 'text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100'}`}>
-                        {project.complianceScore}%
-                      </span>
+                      {project.complianceScore != null ? (
+                        <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100' : project.complianceScore >= 50 ? 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100' : 'text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100'}`}>
+                          {project.complianceScore}%
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400">Not assessed</span>
+                      )}
                     </div>
                     <div className="flex flex-col items-end">
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-1
@@ -438,7 +477,7 @@ export default function ProjectsDynamicPage() {
                       `}>
                         {project.status}
                       </span>
-                      {project.status === 'Active' && (
+                      {project.status === 'Active' && project.progress != null && (
                         <div className="flex items-center gap-2 w-20 sm:w-24">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${project.progress}%` }}></div>
@@ -458,11 +497,21 @@ export default function ProjectsDynamicPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {displayedProjects.map((project) => (
+              {isLoading ? (
+                <div className="col-span-full py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                  Loading projects from the registry…
+                </div>
+              ) : displayedProjects.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-xs text-slate-500">
+                  No projects registered yet.
+                </div>
+              ) : (
+              displayedProjects.map((project) => (
                 <div 
                   key={project.id} 
                   onClick={() => router.push(`/government/dashboard/projects/view/${project.id}/monitoring?tab=overview`)}
@@ -501,12 +550,16 @@ export default function ProjectsDynamicPage() {
                     <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">Compliance</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-1.5 h-1.5 rounded-full ${project.complianceScore >= 80 ? 'bg-emerald-500' : project.complianceScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
-                          <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-700' : project.complianceScore >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{project.complianceScore}%</span>
-                        </div>
+                        {project.complianceScore != null ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${project.complianceScore >= 80 ? 'bg-emerald-500' : project.complianceScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}></div>
+                            <span className={`text-xs font-bold ${project.complianceScore >= 80 ? 'text-emerald-700' : project.complianceScore >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{project.complianceScore}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-400">Not assessed</span>
+                        )}
                       </div>
-                      {project.status === 'Active' ? (
+                      {project.status === 'Active' && project.progress != null ? (
                         <div className="flex flex-col w-24 items-end">
                           <span className="text-[10px] font-bold text-slate-500 mb-1">Progress: {project.progress}%</span>
                           <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -531,7 +584,8 @@ export default function ProjectsDynamicPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           )}
         </div>

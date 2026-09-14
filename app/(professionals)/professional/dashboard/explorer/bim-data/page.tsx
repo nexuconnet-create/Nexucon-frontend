@@ -1,82 +1,160 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { 
-  ChevronLeft, Search, Filter, Play, CheckCircle2, 
-  XCircle, AlertTriangle, Box, ArrowDownToLine,
-  Database, ShieldCheck, Download
+import {
+  ChevronLeft, Search, Filter, Play, CheckCircle2,
+  XCircle, AlertTriangle, Database, ShieldCheck, Download
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { BIMStructuralElement, getBIMStructuralElements } from "@/services/digitalEye";
 
-// Mock IFC Data
-const mockElements = [
-  { id: "3cR1x_Odf4gPZ_M1wX9$e1", category: "IfcBeam", name: "B-200x600", material: "Concrete (C30/37)", depth: 600, width: 200, length: 4500, volume: 0.54, status: "Approved" },
-  { id: "1aQ9z_Klm2yRX_V8bQ$c3", category: "IfcBeam", name: "B-250x450", material: "Concrete (C30/37)", depth: 450, width: 250, length: 3200, volume: 0.36, status: "Under Review" },
-  { id: "9vB2t_Xyz9mAQ_L4cN$p8", category: "IfcColumn", name: "C-400x400", material: "Concrete (C40/50)", depth: 400, width: 400, length: 3000, volume: 0.48, status: "Approved" },
-  { id: "2hM5k_Plm8zWR_B9vT$k2", category: "IfcWall", name: "W-200-Exterior", material: "Concrete (C30/37)", depth: 200, width: 5000, length: 3000, volume: 3.00, status: "Approved" },
-  { id: "7xJ4n_Qwe6cTY_N1mV$d5", category: "IfcBeam", name: "B-300x700", material: "Concrete (C40/50)", depth: 700, width: 300, length: 6000, volume: 1.26, status: "Changes Requested" },
-  { id: "4yK8p_Asd2fGH_M3bZ$x9", category: "IfcSlab", name: "S-150", material: "Concrete (C30/37)", depth: 150, width: 8000, length: 12000, volume: 14.4, status: "Approved" },
-  { id: "5zL9q_Zxc4vBN_P7nC$m1", category: "IfcBeam", name: "B-200x600", material: "Concrete (C30/37)", depth: 600, width: 200, length: 4000, volume: 0.48, status: "Approved" },
-];
+// Numeric element properties that actually exist on the real BIM element
+// records — unrecorded values (0/empty) never satisfy a numeric comparison.
+const numericProperties: Record<string, { label: string; get: (el: BIMStructuralElement) => number | null }> = {
+  rebar_spacing: { label: "Rebar Spacing (mm)", get: (e) => e.designed_rebar_spacing_mm > 0 ? e.designed_rebar_spacing_mm : null },
+  cover_depth: { label: "Cover Depth (mm)", get: (e) => e.designed_cover_depth_mm > 0 ? e.designed_cover_depth_mm : null },
+  elevation: { label: "Elevation Level (m)", get: (e) => e.elevation_level_m ?? null },
+};
+
+type QaqcResult = { id: string, name: string, status: 'pass' | 'fail' | 'warning', message: string };
 
 export default function BimDataExplorer() {
-  const [queryCategory, setQueryCategory] = useState("IfcBeam");
-  const [queryProperty, setQueryProperty] = useState("depth");
+  const [elements, setElements] = useState<BIMStructuralElement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [queryCategory, setQueryCategory] = useState("All");
+  const [queryProperty, setQueryProperty] = useState("rebar_spacing");
   const [queryOperator, setQueryOperator] = useState(">");
-  const [queryValue, setQueryValue] = useState("500");
+  const [queryValue, setQueryValue] = useState("");
   const [isQuerying, setIsQuerying] = useState(false);
-  
-  const [filteredElements, setFilteredElements] = useState(mockElements);
-  
+
+  const [filteredElements, setFilteredElements] = useState<BIMStructuralElement[]>([]);
+
   const [isRunningQAQC, setIsRunningQAQC] = useState(false);
-  const [qaqcResults, setQaqcResults] = useState<{ id: string, name: string, status: 'pass' | 'fail' | 'warning', message: string }[] | null>(null);
+  const [qaqcResults, setQaqcResults] = useState<QaqcResult[] | null>(null);
+
+  // Load the real BIM element registry (imported IFC/RVT model mappings).
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError(null);
+    getBIMStructuralElements()
+      .then((data) => {
+        if (cancelled) return;
+        setElements(data);
+        setFilteredElements(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load BIM elements", err);
+        if (!cancelled) setLoadError("BIM elements could not be loaded. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Real categories present in the loaded data.
+  const categories = useMemo(
+    () => Array.from(new Set(elements.map(e => e.category).filter(Boolean))).sort(),
+    [elements]
+  );
 
   const handleRunQuery = () => {
     setIsQuerying(true);
-    setTimeout(() => {
-      let filtered = mockElements.filter(e => e.category === queryCategory || queryCategory === "All");
-      
-      if (queryValue !== "") {
-        const val = parseFloat(queryValue);
+
+    let filtered = queryCategory === "All"
+      ? elements
+      : elements.filter(e => e.category === queryCategory);
+
+    if (queryValue.trim() !== "") {
+      const val = parseFloat(queryValue);
+      const prop = numericProperties[queryProperty];
+      if (!Number.isNaN(val) && prop) {
         filtered = filtered.filter(e => {
-          const propVal = e[queryProperty as keyof typeof e];
-          if (typeof propVal === 'number') {
-            if (queryOperator === ">") return propVal > val;
-            if (queryOperator === "<") return propVal < val;
-            if (queryOperator === "=") return propVal === val;
-            if (queryOperator === ">=") return propVal >= val;
-            if (queryOperator === "<=") return propVal <= val;
-          }
+          const propVal = prop.get(e);
+          if (propVal == null) return false;
+          if (queryOperator === ">") return propVal > val;
+          if (queryOperator === "<") return propVal < val;
+          if (queryOperator === "=") return propVal === val;
+          if (queryOperator === ">=") return propVal >= val;
+          if (queryOperator === "<=") return propVal <= val;
           return true;
         });
       }
-      
-      setFilteredElements(filtered);
-      setIsQuerying(false);
-    }, 600);
+    }
+
+    setFilteredElements(filtered);
+    setIsQuerying(false);
   };
 
+  // Export the currently filtered REAL rows as CSV.
+  const handleExportCsv = () => {
+    if (filteredElements.length === 0) return;
+    const header = ["GlobalId", "Category", "Name", "Discipline", "Level", "Grid Location", "Concrete Grade", "Rebar Spacing (mm)", "Cover Depth (mm)"];
+    const rows = filteredElements.map(e => [
+      e.element_guid || e.id,
+      e.category,
+      e.name,
+      e.discipline,
+      e.level,
+      e.grid_location,
+      e.designed_concrete_grade,
+      e.designed_rebar_spacing_mm > 0 ? String(e.designed_rebar_spacing_mm) : "",
+      e.designed_cover_depth_mm > 0 ? String(e.designed_cover_depth_mm) : "",
+    ]);
+    const csv = [header, ...rows]
+      .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bim_elements.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // Data-completeness checks computed from the REAL loaded element records —
+  // every count below comes from the actual data, nothing is invented.
   const handleRunQAQC = () => {
+    if (elements.length === 0) return;
     setIsRunningQAQC(true);
-    setTimeout(() => {
-      setQaqcResults([
-        { id: "QA-01", name: "Rebar Spacing ≤ 200mm", status: "pass", message: "All elements compliant." },
-        { id: "QA-02", name: "Beam Depth to Span Ratio > 1/15", status: "fail", message: "2 elements fail (B-250x450, B-300x700)." },
-        { id: "QA-03", name: "Fire Rating: Minimum 2 Hours", status: "warning", message: "Missing data on W-200-Exterior." },
-        { id: "QA-04", name: "Column Minimum Dimension ≥ 300mm", status: "pass", message: "All elements compliant." },
-      ]);
-      setIsRunningQAQC(false);
-    }, 1500);
+
+    const total = elements.length;
+    const withGuid = elements.filter(e => (e.element_guid || "").trim() !== "").length;
+    const withGrade = elements.filter(e => (e.designed_concrete_grade || "").trim() !== "").length;
+    const withRebar = elements.filter(e => e.designed_rebar_spacing_mm > 0).length;
+    const withCover = elements.filter(e => e.designed_cover_depth_mm > 0).length;
+
+    const evaluate = (recorded: number): { status: QaqcResult['status']; message: string } => {
+      if (recorded === total) return { status: 'pass', message: `Recorded on all ${total} elements.` };
+      if (recorded === 0) return { status: 'fail', message: `Not recorded on any of the ${total} loaded elements.` };
+      return { status: 'warning', message: `Recorded on ${recorded} of ${total} elements.` };
+    };
+
+    const results: QaqcResult[] = [
+      { id: "QA-01", name: "Element GUID Recorded", ...evaluate(withGuid) },
+      { id: "QA-02", name: "Concrete Grade Specified", ...evaluate(withGrade) },
+      { id: "QA-03", name: "Rebar Spacing Recorded", ...evaluate(withRebar) },
+      { id: "QA-04", name: "Cover Depth Recorded", ...evaluate(withCover) },
+    ];
+
+    setQaqcResults(results);
+    setIsRunningQAQC(false);
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] animate-in fade-in duration-500">
-      
+
       {/* Top Navigation */}
       <div className="flex items-center justify-between pb-4 border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-4">
-          <Link 
+          <Link
             href="/professional/dashboard/explorer"
             className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
           >
@@ -87,12 +165,18 @@ export default function BimDataExplorer() {
               <Database size={20} className="text-[#022C4F]" />
               BIM Data Explorer
             </h1>
-            <p className="text-[12px] text-gray-500 font-medium">Architectural Model V4.0 • Structured Data View</p>
+            <p className="text-[12px] text-gray-500 font-medium">
+              {isLoading ? "Loading BIM elements..." : `${elements.length} element${elements.length === 1 ? "" : "s"} • Structured Data View`}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <Button variant="outline" className="border-[#022C4F] text-[#022C4F] h-10 px-4 gap-2">
+          <Button
+            variant="outline"
+            className="border-[#022C4F] text-[#022C4F] h-10 px-4 gap-2"
+            onClick={handleExportCsv}
+          >
             <Download size={16} />
             Export CSV
           </Button>
@@ -100,49 +184,47 @@ export default function BimDataExplorer() {
       </div>
 
       <div className="flex flex-1 mt-6 gap-6 min-h-0">
-        
+
         {/* Left Side: Data Query & Table */}
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-          
+
           {/* Query Builder */}
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm shrink-0">
             <h2 className="text-[15px] font-extrabold text-[#022C4F] mb-4 flex items-center gap-2">
               <Filter size={16} /> Element Query Builder
             </h2>
-            
+
             <div className="flex items-end gap-3 flex-wrap">
               <div className="flex flex-col gap-1.5 flex-1 min-w-[150px]">
                 <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Category</label>
-                <select 
+                <select
                   value={queryCategory}
                   onChange={(e) => setQueryCategory(e.target.value)}
                   className="h-10 px-3 rounded-lg border border-gray-200 text-[13px] font-medium outline-none focus:border-[#022C4F]"
                 >
                   <option value="All">All Categories</option>
-                  <option value="IfcBeam">IfcBeam</option>
-                  <option value="IfcColumn">IfcColumn</option>
-                  <option value="IfcWall">IfcWall</option>
-                  <option value="IfcSlab">IfcSlab</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
               </div>
 
               <div className="flex flex-col gap-1.5 flex-1 min-w-[150px]">
                 <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Property</label>
-                <select 
+                <select
                   value={queryProperty}
                   onChange={(e) => setQueryProperty(e.target.value)}
                   className="h-10 px-3 rounded-lg border border-gray-200 text-[13px] font-medium outline-none focus:border-[#022C4F]"
                 >
-                  <option value="depth">Depth (mm)</option>
-                  <option value="width">Width (mm)</option>
-                  <option value="length">Length (mm)</option>
-                  <option value="volume">Volume (m³)</option>
+                  {Object.entries(numericProperties).map(([key, prop]) => (
+                    <option key={key} value={key}>{prop.label}</option>
+                  ))}
                 </select>
               </div>
 
               <div className="flex flex-col gap-1.5 w-[80px] shrink-0">
                 <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Op</label>
-                <select 
+                <select
                   value={queryOperator}
                   onChange={(e) => setQueryOperator(e.target.value)}
                   className="h-10 px-3 rounded-lg border border-gray-200 text-[13px] font-medium outline-none focus:border-[#022C4F]"
@@ -157,19 +239,19 @@ export default function BimDataExplorer() {
 
               <div className="flex flex-col gap-1.5 flex-1 min-w-[150px]">
                 <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Value</label>
-                <input 
+                <input
                   type="text"
                   value={queryValue}
                   onChange={(e) => setQueryValue(e.target.value)}
-                  placeholder="e.g. 600"
+                  placeholder="e.g. 150"
                   className="h-10 px-3 rounded-lg border border-gray-200 text-[13px] font-medium outline-none focus:border-[#022C4F]"
                 />
               </div>
 
-              <button 
+              <button
                 onClick={handleRunQuery}
-                disabled={isQuerying}
-                className="h-10 px-6 rounded-lg bg-[#022C4F] text-white text-[13px] font-bold hover:bg-[#033A6B] transition-colors flex items-center gap-2"
+                disabled={isQuerying || isLoading}
+                className="h-10 px-6 rounded-lg bg-[#022C4F] text-white text-[13px] font-bold hover:bg-[#033A6B] transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {isQuerying ? "Querying..." : <><Search size={16} /> Execute Query</>}
               </button>
@@ -180,7 +262,7 @@ export default function BimDataExplorer() {
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
               <h2 className="text-[15px] font-extrabold text-[#0F181F]">
-                Extracted IFC Elements
+                BIM Model Elements
               </h2>
               <span className="text-[12px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-bold">
                 {filteredElements.length} Results
@@ -194,29 +276,43 @@ export default function BimDataExplorer() {
                     <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">GlobalId</th>
                     <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Category</th>
                     <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Name / Type</th>
-                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Material</th>
-                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 text-right">D × W × L (mm)</th>
-                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 text-right">Vol (m³)</th>
+                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Discipline</th>
+                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Level / Grid</th>
+                    <th className="p-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">Concrete Grade</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredElements.length === 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-[13px] text-gray-400 font-medium">
+                        Loading BIM elements...
+                      </td>
+                    </tr>
+                  ) : loadError ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-[13px] text-red-500 font-medium">
+                        {loadError}
+                      </td>
+                    </tr>
+                  ) : filteredElements.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-8 text-center text-[13px] text-gray-500 font-medium">
-                        No elements match the current query.
+                        {elements.length === 0
+                          ? "No BIM elements found. Import a BIM model to populate the explorer."
+                          : "No elements match the current query."}
                       </td>
                     </tr>
                   ) : (
-                    filteredElements.map((el, i) => (
-                      <tr key={i} className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
-                        <td className="p-4 text-[12px] text-gray-500 font-mono">{el.id}</td>
+                    filteredElements.map((el) => (
+                      <tr key={el.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+                        <td className="p-4 text-[12px] text-gray-500 font-mono">{el.element_guid || el.id}</td>
                         <td className="p-4 text-[12px] font-bold text-[#022C4F]">{el.category}</td>
                         <td className="p-4 text-[13px] font-bold text-[#0F181F]">{el.name}</td>
-                        <td className="p-4 text-[12px] text-gray-600 font-medium">{el.material}</td>
-                        <td className="p-4 text-[12px] text-gray-600 text-right font-mono">
-                          {el.depth} × {el.width} × {el.length}
+                        <td className="p-4 text-[12px] text-gray-600 font-medium">{el.discipline}</td>
+                        <td className="p-4 text-[12px] text-gray-600 font-medium">
+                          {[el.level, el.grid_location].filter(Boolean).join(" • ") || "—"}
                         </td>
-                        <td className="p-4 text-[12px] text-gray-600 text-right font-bold">{el.volume.toFixed(2)}</td>
+                        <td className="p-4 text-[12px] text-gray-600 font-medium">{el.designed_concrete_grade || "—"}</td>
                       </tr>
                     ))
                   )}
@@ -230,17 +326,17 @@ export default function BimDataExplorer() {
         <div className="w-[360px] shrink-0 flex flex-col gap-4">
           <div className="bg-white p-5 rounded-2xl border border-[#022C4F]/20 shadow-sm flex-1 flex flex-col relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-[#022C4F]/5 rounded-bl-full -z-10" />
-            
+
             <h2 className="text-[16px] font-extrabold text-[#022C4F] mb-1 flex items-center gap-2">
-              <ShieldCheck size={18} /> Rule-Based QA/QC
+              <ShieldCheck size={18} /> Data Completeness QA/QC
             </h2>
             <p className="text-[12px] text-gray-500 mb-6 leading-relaxed">
-              Run automated checks against the extracted IFC data based on project specifications.
+              Run automated completeness checks over the loaded BIM element records.
             </p>
 
-            <button 
+            <button
               onClick={handleRunQAQC}
-              disabled={isRunningQAQC}
+              disabled={isRunningQAQC || isLoading || elements.length === 0}
               className="w-full h-12 rounded-xl bg-green-600 text-white font-bold text-[13px] flex items-center justify-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-70 mb-6 shrink-0 shadow-sm shadow-green-600/20"
             >
               {isRunningQAQC ? (
@@ -257,7 +353,11 @@ export default function BimDataExplorer() {
                     <ShieldCheck size={24} />
                   </div>
                   <p className="text-[13px] font-bold text-gray-600">No results yet</p>
-                  <p className="text-[11px] text-gray-400 mt-1">Run the automated checks to view compliance.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {elements.length === 0
+                      ? "Load BIM elements first to run the checks."
+                      : "Run the automated checks to view data completeness."}
+                  </p>
                 </div>
               )}
 
@@ -309,7 +409,7 @@ export default function BimDataExplorer() {
                 </div>
               ))}
             </div>
-            
+
           </div>
         </div>
 

@@ -195,7 +195,7 @@ export default function CreateStakeholderModal({
         await createContractor({
           name: name.trim(),
           contractor_type: roleOrType.trim() || 'General Contractor',
-          license_number: licenseNumber.trim() || `LIC-GC-${Math.floor(1000 + Math.random() * 9000)}`,
+          license_number: licenseNumber.trim() || undefined,
           compliance_score: 92,
           active_permits: 1,
           status: 'Prequalified',

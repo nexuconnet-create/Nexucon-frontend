@@ -56,7 +56,7 @@ export default function CreateDailyUpdateDrawer({
   const [originType, setOriginType] = useState<'FIELD_INSPECTOR' | 'PROXY_OFFICE_SUPERVISOR'>('FIELD_INSPECTOR');
   const [isLogMissedVisitOpen, setIsLogMissedVisitOpen] = useState(false);
   const [updateType, setUpdateType] = useState('DAILY_PHOTO');
-  const [progressPercentage, setProgressPercentage] = useState(50);
+  const [progressPercentage, setProgressPercentage] = useState(0);
   const [workSummary, setWorkSummary] = useState('');
   const [weatherCondition, setWeatherCondition] = useState('Clear / Sunny');
   const [workforceCount, setWorkforceCount] = useState(30);
@@ -78,23 +78,16 @@ export default function CreateDailyUpdateDrawer({
   const [uploadProgressText, setUploadProgressText] = useState('');
 
   // Live Feed Telemetry State & Mode Switching
+  // Distance / setback values are operator-entered or synced from the backend telemetry service — never generated client-side
   const [isTelemetryActive, setIsTelemetryActive] = useState(false);
   const [telemetryMode, setTelemetryMode] = useState<TelemetryMode>('distance');
-  const [liveDistanceMeters, setLiveDistanceMeters] = useState(14.852);
-  const [laserTargetName, setLaserTargetName] = useState('South-West Boundary Column (C-104)');
-  const [isMeasuringDistance, setIsMeasuringDistance] = useState(false);
+  const [liveDistanceMeters, setLiveDistanceMeters] = useState<number | null>(null);
+  const [laserTargetName, setLaserTargetName] = useState('');
   const [setbackTarget, setSetbackTarget] = useState(3.0); // 3.0m statutory setback
-  const [setbackMeasured, setSetbackMeasured] = useState(3.42);
+  const [setbackMeasured, setSetbackMeasured] = useState<number | null>(null);
 
-  // Geolocation & Google Maps Coordinate Integration
-  const [geoCoordinates, setGeoCoordinates] = useState<GeoLocationTelemetry>({
-    lat: 6.42814,
-    lng: 3.42197,
-    accuracy: 1.2,
-    altitude: 12.4,
-    source: 'CORS_BASE_DEFAULT',
-    address: 'Plot 14B, Victoria Island Central Business District, Lagos'
-  });
+  // Geolocation & Google Maps Coordinate Integration — populated only from a real device / backend fix
+  const [geoCoordinates, setGeoCoordinates] = useState<GeoLocationTelemetry | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
   // Link State & Security Verification
@@ -148,18 +141,6 @@ export default function CreateDailyUpdateDrawer({
       .catch(err => console.error("Failed to load existing project photos", err));
   }, [selectedProjectId]);
 
-  // Real-time simulated telemetry updates when telemetry is active
-  useEffect(() => {
-    if (!isTelemetryActive) return;
-    const interval = setInterval(() => {
-      setLiveDistanceMeters(prev => {
-        const delta = (Math.random() - 0.5) * 0.015;
-        return Number(Math.max(0.5, prev + delta).toFixed(3));
-      });
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [isTelemetryActive]);
-
   // Clean up camera stream on unmount
   useEffect(() => {
     return () => {
@@ -171,7 +152,7 @@ export default function CreateDailyUpdateDrawer({
   const requestLocationFromDeviceOrGoogleMaps = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: 'Geolocation API unavailable. Using calibrated CORS reference coordinates.', type: 'info' }
+        detail: { message: 'Device geolocation is unavailable — enter the coordinates manually.', type: 'error' }
       }));
       return;
     }
@@ -182,16 +163,16 @@ export default function CreateDailyUpdateDrawer({
         const { latitude, longitude, accuracy, altitude } = position.coords;
         const latVal = Number(latitude.toFixed(6));
         const lngVal = Number(longitude.toFixed(6));
-        const accVal = Number((accuracy || 1.5).toFixed(1));
-        const altVal = altitude ? Number(altitude.toFixed(1)) : 12.4;
+        // Only values reported by the device GPS are recorded — no assumed accuracy or altitude
+        const accVal = Number.isFinite(accuracy) ? Number(accuracy.toFixed(1)) : 0;
+        const altVal = altitude != null && Number.isFinite(altitude) ? Number(altitude.toFixed(1)) : null;
 
         setGeoCoordinates({
           lat: latVal,
           lng: lngVal,
           accuracy: accVal,
           altitude: altVal,
-          source: 'GPS_HARDWARE',
-          address: `Lagos Cadastral Sector (Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°)`
+          source: 'GPS_HARDWARE'
         });
 
         // Call Backend Spatial Telemetry Computation
@@ -205,7 +186,7 @@ export default function CreateDailyUpdateDrawer({
             if (backendTelemetry.laser_distance_meters) setLiveDistanceMeters(backendTelemetry.laser_distance_meters);
             if (backendTelemetry.setback_measured_meters) setSetbackMeasured(backendTelemetry.setback_measured_meters);
             if (backendTelemetry.address) {
-              setGeoCoordinates(prev => ({ ...prev, address: backendTelemetry.address }));
+              setGeoCoordinates(prev => (prev ? { ...prev, address: backendTelemetry.address } : prev));
             }
           }
         } catch (backendErr) {
@@ -214,18 +195,18 @@ export default function CreateDailyUpdateDrawer({
 
         setIsLocating(false);
         window.dispatchEvent(new CustomEvent('show-toast', {
-          detail: { 
-            message: `📍 GPS & Backend Telemetry Linked: ${latitude.toFixed(5)}°, ${longitude.toFixed(5)}° (±${accVal}m)`, 
-            type: 'success' 
+          detail: {
+            message: `📍 GPS Fix Acquired: ${latitude.toFixed(5)}°, ${longitude.toFixed(5)}° (±${accVal}m)`,
+            type: 'success'
           }
         }));
       },
       (error) => {
         console.warn('Geolocation permission or device error:', error.message);
         setIsLocating(false);
-        // Fallback to high-precision project benchmark
+        // No fabricated fallback coordinates — the operator enters measurements manually
         window.dispatchEvent(new CustomEvent('show-toast', {
-          detail: { message: 'Location fallback: Calibrated Lagos State CORS Station LASG-VI-01.', type: 'info' }
+          detail: { message: 'GNSS fix could not be acquired — enable location permission or enter the coordinates manually.', type: 'error' }
         }));
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
@@ -302,16 +283,24 @@ export default function CreateDailyUpdateDrawer({
     // Draw video frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // If telemetry is active, stamp real-time Google Maps coordinates & distance watermark into the canvas
+    // If telemetry is active, stamp the actually recorded coordinates & distance watermark into the canvas
     if (isTelemetryActive) {
       ctx.fillStyle = 'rgba(2, 44, 79, 0.85)';
       ctx.fillRect(20, canvas.height - 85, 600, 65);
       ctx.fillStyle = '#10B981';
       ctx.font = 'bold 16px monospace';
-      ctx.fillText(`DIST: ${liveDistanceMeters.toFixed(3)}m | SETBACK: ${setbackMeasured}m | RTK: FIXED (32 Sats)`, 35, canvas.height - 55);
+      ctx.fillText(
+        `DIST: ${liveDistanceMeters !== null ? liveDistanceMeters.toFixed(3) : '—'}m | SETBACK: ${setbackMeasured !== null ? setbackMeasured : '—'}m`,
+        35, canvas.height - 55
+      );
       ctx.fillStyle = '#38BDF8';
       ctx.font = 'bold 13px monospace';
-      ctx.fillText(`GPS/MAPS: ${geoCoordinates.lat.toFixed(5)}° N, ${geoCoordinates.lng.toFixed(5)}° E (±${geoCoordinates.accuracy}m)`, 35, canvas.height - 35);
+      ctx.fillText(
+        geoCoordinates
+          ? `GPS/MAPS: ${geoCoordinates.lat.toFixed(5)}° N, ${geoCoordinates.lng.toFixed(5)}° E (±${geoCoordinates.accuracy}m)`
+          : 'GPS/MAPS: No fix acquired',
+        35, canvas.height - 35
+      );
       ctx.fillStyle = '#94A3B8';
       ctx.font = '11px sans-serif';
       ctx.fillText(`Cloudflare R2 Storage Vault • ${new Date().toISOString()} • LASG-CORS`, 35, canvas.height - 18);
@@ -411,20 +400,6 @@ export default function CreateDailyUpdateDrawer({
     }
   };
 
-  const triggerLaserDistanceMeasurement = () => {
-    setIsMeasuringDistance(true);
-    setTimeout(() => {
-      const newDistance = Number((12.0 + Math.random() * 6.0).toFixed(3));
-      const newSetback = Number((3.1 + Math.random() * 0.8).toFixed(2));
-      setLiveDistanceMeters(newDistance);
-      setSetbackMeasured(newSetback);
-      setIsMeasuringDistance(false);
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: `🎯 Laser EDM Ping Acquired: ${newDistance} m (Setback: ${newSetback} m)`, type: 'success' }
-      }));
-    }, 600);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProjectId) {
@@ -453,20 +428,23 @@ export default function CreateDailyUpdateDrawer({
         work_summary: workSummary.trim(),
         weather_condition: weatherCondition,
         workforce_count: Number(workforceCount),
-        gps_coordinates: {
-          lat: geoCoordinates.lat,
-          lng: geoCoordinates.lng,
-          accuracy: geoCoordinates.accuracy,
-          altitude: geoCoordinates.altitude,
-          source: geoCoordinates.source,
-          address: geoCoordinates.address,
-          laser_distance_meters: liveDistanceMeters,
-          setback_measured_meters: setbackMeasured,
-          setback_target_meters: setbackTarget,
-          is_telemetry_active: isTelemetryActive,
-          cloudflare_r2_sync: true
-        },
-        photos: photos.length > 0 ? photos : ['https://images.unsplash.com/photo-1541888946425-d0fbb180c5f2?auto=format&fit=crop&w=1200&q=80']
+        // Telemetry block is only sent when a real device GPS fix / entered measurement exists
+        ...(geoCoordinates ? {
+          gps_coordinates: {
+            lat: geoCoordinates.lat,
+            lng: geoCoordinates.lng,
+            accuracy: geoCoordinates.accuracy,
+            altitude: geoCoordinates.altitude,
+            source: geoCoordinates.source,
+            address: geoCoordinates.address,
+            laser_distance_meters: liveDistanceMeters ?? undefined,
+            setback_measured_meters: setbackMeasured ?? undefined,
+            setback_target_meters: setbackTarget,
+            is_telemetry_active: isTelemetryActive,
+            cloudflare_r2_sync: true
+          }
+        } : {}),
+        photos
       });
 
       window.dispatchEvent(new CustomEvent('show-toast', { 
@@ -742,39 +720,71 @@ export default function CreateDailyUpdateDrawer({
                 {/* MODE 1: DISTANCE-BASED TELEMETRY */}
                 {telemetryMode === 'distance' && (
                   <div className="bg-black/30 p-3.5 rounded-xl border border-blue-500/20 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-blue-300 font-mono uppercase tracking-wider block">
-                          Optical Laser Distance to Target (EDM)
+                    <div>
+                      <span className="text-[10px] text-blue-300 font-mono uppercase tracking-wider block">
+                        Optical Laser Distance to Target (EDM)
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-2xl font-black font-mono text-emerald-400">
+                          {liveDistanceMeters !== null ? liveDistanceMeters.toFixed(3) : '—'}
                         </span>
-                        <div className="flex items-baseline gap-2 mt-0.5">
-                          <span className="text-2xl font-black font-mono text-emerald-400">
-                            {liveDistanceMeters.toFixed(3)}
-                          </span>
-                          <span className="text-xs font-bold text-slate-300">meters (±1.5mm)</span>
-                        </div>
+                        <span className="text-xs font-bold text-slate-300">meters</span>
                       </div>
+                    </div>
 
-                      <button
-                        type="button"
-                        onClick={triggerLaserDistanceMeasurement}
-                        disabled={isMeasuringDistance}
-                        className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                      >
-                        <Target size={13} className={isMeasuringDistance ? "animate-spin" : ""} />
-                        <span>{isMeasuringDistance ? 'Pinging...' : 'Laser Ping'}</span>
-                      </button>
+                    {/* Field measurements read off the EDM instrument by the operator — never generated on this device */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-slate-400 block text-[10px] mb-1">Laser Distance (m)</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          value={liveDistanceMeters ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setLiveDistanceMeters(v === '' ? null : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : null));
+                          }}
+                          placeholder="e.g. 14.852"
+                          className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[11px] font-mono font-bold text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 block text-[10px] mb-1">Measured Setback (m)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={setbackMeasured ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSetbackMeasured(v === '' ? null : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : null));
+                          }}
+                          placeholder="e.g. 3.42"
+                          className="w-full px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[11px] font-mono font-bold text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-white/10">
                       <div>
                         <span className="text-slate-400 block text-[10px]">Laser Target Node</span>
-                        <span className="font-bold text-slate-200 truncate block">{laserTargetName}</span>
+                        <input
+                          type="text"
+                          value={laserTargetName}
+                          onChange={(e) => setLaserTargetName(e.target.value)}
+                          placeholder="e.g. South-West Boundary Column (C-104)"
+                          className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-[11px] font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[10px]">Statutory Setback Clearance</span>
-                        <span className="font-bold text-emerald-400 flex items-center gap-1">
-                          {setbackMeasured}m / {setbackTarget}.0m <CheckCircle2 size={11} /> (Pass)
+                        <span className={`font-bold flex items-center gap-1 ${
+                          setbackMeasured !== null && setbackMeasured >= setbackTarget ? 'text-emerald-400' : 'text-slate-300'
+                        }`}>
+                          {setbackMeasured !== null
+                            ? `${setbackMeasured}m / ${setbackTarget}m ${setbackMeasured >= setbackTarget ? <CheckCircle2 size={11} /> : null} (${setbackMeasured >= setbackTarget ? 'Pass' : 'Fail'})`
+                            : 'Not recorded'}
                         </span>
                       </div>
                     </div>
@@ -802,24 +812,30 @@ export default function CreateDailyUpdateDrawer({
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div className="bg-white/5 p-2 rounded-lg">
                         <span className="text-[10px] text-slate-400 block">Latitude / Longitude</span>
-                        <span className="text-blue-300 font-bold">{geoCoordinates.lat}° N, {geoCoordinates.lng}° E</span>
+                        <span className="text-blue-300 font-bold">
+                          {geoCoordinates ? `${geoCoordinates.lat}° N, ${geoCoordinates.lng}° E` : 'No fix acquired'}
+                        </span>
                       </div>
                       <div className="bg-white/5 p-2 rounded-lg">
                         <span className="text-[10px] text-slate-400 block">Lock Accuracy / Fix</span>
-                        <span className="text-emerald-400 font-bold">±{geoCoordinates.accuracy}m • {geoCoordinates.source === 'GPS_HARDWARE' ? 'Device GPS' : 'CORS Base Station'}</span>
+                        <span className="text-emerald-400 font-bold">
+                          {geoCoordinates ? `±${geoCoordinates.accuracy}m • ${geoCoordinates.source === 'GPS_HARDWARE' ? 'Device GPS' : 'CORS Base Station'}` : '—'}
+                        </span>
                       </div>
                     </div>
 
                     <div className="bg-white/5 p-2 rounded-lg flex items-center justify-between text-[10px]">
-                      <span className="text-slate-300 truncate">{geoCoordinates.address}</span>
-                      <a
-                        href={`https://www.google.com/maps?q=${geoCoordinates.lat},${geoCoordinates.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold shrink-0 ml-2"
-                      >
-                        View in Google Maps <ExternalLink size={10} />
-                      </a>
+                      <span className="text-slate-300 truncate">{geoCoordinates?.address || 'Address not recorded'}</span>
+                      {geoCoordinates && (
+                        <a
+                          href={`https://www.google.com/maps?q=${geoCoordinates.lat},${geoCoordinates.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold shrink-0 ml-2"
+                        >
+                          View in Google Maps <ExternalLink size={10} />
+                        </a>
+                      )}
                     </div>
                   </div>
                 )}
@@ -830,13 +846,16 @@ export default function CreateDailyUpdateDrawer({
                     <div className="grid grid-cols-2 gap-2">
                       <div className="bg-white/5 p-2 rounded-lg">
                         <span className="text-[10px] text-slate-400 block">Point Density</span>
-                        <span className="text-blue-300 font-bold font-mono">14,200 pts/m²</span>
+                        <span className="text-slate-300 font-bold font-mono">Not recorded</span>
                       </div>
                       <div className="bg-white/5 p-2 rounded-lg">
                         <span className="text-[10px] text-slate-400 block">Mesh Tolerance</span>
-                        <span className="text-emerald-400 font-bold font-mono">0.02% (Tolerance Pass)</span>
+                        <span className="text-slate-300 font-bold font-mono">Not recorded</span>
                       </div>
                     </div>
+                    <p className="text-[10px] text-slate-400">
+                      No LiDAR scanner is connected — mesh telemetry is only shown when supplied by the survey instrument.
+                    </p>
                   </div>
                 )}
 
@@ -845,15 +864,15 @@ export default function CreateDailyUpdateDrawer({
                   <div className="bg-black/30 p-3.5 rounded-xl border border-blue-500/20 grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="bg-white/5 p-2 rounded-lg">
                       <span className="text-[10px] text-slate-400 block">Ambient Temp</span>
-                      <span className="text-amber-300 font-bold font-mono">31.4°C</span>
+                      <span className="text-slate-300 font-bold font-mono">—</span>
                     </div>
                     <div className="bg-white/5 p-2 rounded-lg">
                       <span className="text-[10px] text-slate-400 block">Wind Velocity</span>
-                      <span className="text-blue-300 font-bold font-mono">8.2 km/h</span>
+                      <span className="text-slate-300 font-bold font-mono">—</span>
                     </div>
                     <div className="bg-white/5 p-2 rounded-lg">
                       <span className="text-[10px] text-slate-400 block">Slump Test</span>
-                      <span className="text-emerald-400 font-bold font-mono">85mm (Pass)</span>
+                      <span className="text-slate-300 font-bold font-mono">—</span>
                     </div>
                   </div>
                 )}
@@ -1012,9 +1031,9 @@ export default function CreateDailyUpdateDrawer({
                       <div className="flex items-center justify-between text-[10px] font-mono font-bold text-emerald-400 bg-black/60 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-emerald-500/30">
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                          <span>LASER EDM: {liveDistanceMeters.toFixed(3)}m</span>
+                          <span>LASER EDM: {liveDistanceMeters !== null ? `${liveDistanceMeters.toFixed(3)}m` : '—'}</span>
                         </span>
-                        <span className="text-blue-300">SETBACK: {setbackMeasured}m</span>
+                        <span className="text-blue-300">SETBACK: {setbackMeasured !== null ? `${setbackMeasured}m` : '—'}</span>
                         <span className="text-slate-300">CLOUDFLARE R2 SYNC</span>
                       </div>
 
@@ -1026,14 +1045,18 @@ export default function CreateDailyUpdateDrawer({
                           <div className="absolute left-0 right-0 h-[1px] bg-emerald-400/40" />
                         </div>
                         <span className="absolute mt-16 text-[9px] font-mono font-bold text-emerald-300 bg-black/70 px-1.5 py-0.5 rounded">
-                          {liveDistanceMeters.toFixed(3)} m
+                          {liveDistanceMeters !== null ? `${liveDistanceMeters.toFixed(3)} m` : '— m'}
                         </span>
                       </div>
 
                       {/* Bottom Watermark with Google Maps GPS Coordinates */}
                       <div className="text-[9px] font-mono text-slate-300 bg-black/60 px-2 py-0.5 rounded flex justify-between">
-                        <span>LAT: {geoCoordinates.lat}°N | LNG: {geoCoordinates.lng}°E</span>
-                        <span>RTK FIXED ±{geoCoordinates.accuracy}m</span>
+                        <span>
+                          {geoCoordinates
+                            ? `LAT: ${geoCoordinates.lat}°N | LNG: ${geoCoordinates.lng}°E`
+                            : 'GPS: No fix acquired'}
+                        </span>
+                        <span>{geoCoordinates ? `GPS ±${geoCoordinates.accuracy}m` : ''}</span>
                       </div>
                     </div>
                   )}

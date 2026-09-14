@@ -4,15 +4,15 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   ArrowLeft,
   Sparkles,
-  Layers, 
-  Maximize2, 
-  Minimize2, 
-  Sliders, 
-  Info, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Download, 
-  Box, 
+  Layers,
+  Maximize2,
+  Minimize2,
+  Sliders,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  Box,
   Share2,
   ShieldAlert,
   Activity,
@@ -20,9 +20,18 @@ import {
   RefreshCw,
   Gauge,
   SlidersHorizontal,
-  Compass
+  Compass,
+  X
 } from "lucide-react";
-import { PunditTest, downloadNdtReport, formatVelocityMs } from "@/services/digitalEye";
+import {
+  PunditTest,
+  downloadNdtReport,
+  formatVelocityMs,
+  BUILTIN_CURVE_SNAPSHOT,
+  evalCurveSnapshot,
+  getActiveCurve,
+  CurveSnapshot,
+} from "@/services/digitalEye";
 
 interface PunditWaveformViewerProps {
   test: PunditTest;
@@ -66,15 +75,26 @@ export default function PunditWaveformViewer({
   // Dynamic Physics Calculation: Velocity V = Path Length (L) / Transit Time (t)
   const computedVelocity = transitTimeUs > 0 ? Math.round(pathLengthMm / (transitTimeUs / 1000)) : 0; // in m/s
 
-  // E.C.S calibration curve — identical to the backend engine (apps/reports/ndt_reports.py):
-  // fcu = 8.961·V − 7.97 N/mm², valid 2.0–5.0 km/s only (never extrapolated).
-  const ECS_SLOPE = 8.961;
-  const ECS_INTERCEPT = -7.97;
-  const computedFcu = (() => {
-    const vKmS = computedVelocity / 1000;
-    if (vKmS < 2.0 || vKmS > 5.0) return null;
-    return Number((ECS_SLOPE * vKmS + ECS_INTERCEPT).toFixed(1));
-  })();
+  // Active Nexucon Link calibration curve for this station's project — the
+  // same curve the server applied to the stored strengths. Falls back to the
+  // built-in BS 1881-203 laboratory curve (fcu = 8.961·V − 7.97, valid
+  // 2.0–5.0 km/s only, never extrapolated) until it resolves.
+  const [activeCurve, setActiveCurve] = useState<CurveSnapshot>(BUILTIN_CURVE_SNAPSHOT);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!test.project) {
+      setActiveCurve(BUILTIN_CURVE_SNAPSHOT);
+      return;
+    }
+    getActiveCurve(test.project)
+      .then((info) => { if (!cancelled) setActiveCurve(info?.curve_snapshot ?? BUILTIN_CURVE_SNAPSHOT); })
+      .catch(() => { if (!cancelled) setActiveCurve(BUILTIN_CURVE_SNAPSHOT); });
+    return () => { cancelled = true; };
+  }, [test.project]);
+
+  const computedFcuRaw = evalCurveSnapshot(activeCurve, computedVelocity, test.rebound_number ?? null);
+  const computedFcu = computedFcuRaw != null ? Number(computedFcuRaw.toFixed(1)) : null;
 
   // Dynamic Modulus of Elasticity Ed (GPa) assuming density = 2400 kg/m3, Poisson's ratio = 0.2
   const computedEdGpa = computedVelocity > 0
@@ -91,6 +111,13 @@ export default function PunditWaveformViewer({
   };
 
   const quality = getDynamicQuality(computedVelocity);
+
+  // Multi-point (A/B/C…) readings — 8 Sep meeting: show every point's
+  // waveform SIMULTANEOUSLY (compressed), not one at a time.
+  const multiReadings = (test.readings || []).filter(
+    (r) => r.transit_time_us != null && r.transit_time_us > 0
+  );
+  const [isOverlayMode, setIsOverlayMode] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -134,28 +161,28 @@ export default function PunditWaveformViewer({
     // Calculate arrival pixel relative to transit time
     const t0_pixel = Math.min(width - 60, Math.max(60, Math.round((transitTimeUs / 150) * width)));
 
-    // Draw Acoustic Time-Series Waveform (Oscillogram)
-    ctx.beginPath();
-    ctx.strokeStyle = quality.color;
-    ctx.lineWidth = 2.5;
+    // Raw A-scan samples exported by the field device, when available. When
+    // the device only reported a transit time we do NOT synthesise a
+    // waveform — the scope shows the grid, the recorded t₀ marker and an
+    // explicit "no raw waveform recorded" notice instead.
+    const samples = test.waveform_samples;
 
-    for (let x = 0; x < width; x++) {
-      let y = height / 2;
-      if (x < t0_pixel) {
-        // Pre-arrival noise (minimal baseline vibration)
-        y += (Math.sin(x * 0.4) * 1.5) + ((Math.random() - 0.5) * 1.2);
-      } else {
-        // P-wave first arrival & decaying acoustic wave packet
-        const t = (x - t0_pixel) * 0.12;
-        const decay = Math.exp(-t * 0.045);
-        const amp = (appliedGain * 4.2) * decay;
-        y += Math.sin(t * (transducerFreq / 16)) * amp;
-      }
-
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    if (samples && samples.length > 1) {
+      // Real recorded waveform: normalise to the canvas and scale by the
+      // operator's amplifier gain.
+      const maxAbs = Math.max(...samples.map((s) => Math.abs(s)), 1e-9);
+      const scale = ((height / 2 - 18) * (appliedGain / 40)) / maxAbs;
+      ctx.beginPath();
+      ctx.strokeStyle = quality.color;
+      ctx.lineWidth = 2.5;
+      samples.forEach((s, i) => {
+        const x = (i / (samples.length - 1)) * width;
+        const y = height / 2 - s * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
     }
-    ctx.stroke();
 
     // First arrival marker (t0 Arrival Marker)
     ctx.strokeStyle = isAutomatedPicking ? "#38BDF8" : "#fbbf24";
@@ -176,18 +203,26 @@ export default function PunditWaveformViewer({
       35
     );
 
-    // Honest disclosure: the oscillogram is rendered from the recorded transit
-    // time — the platform stores no raw waveform samples for this test.
-    ctx.fillStyle = "rgba(251, 191, 36, 0.75)";
+    // Honest disclosure: raw samples are only drawn when the device exported
+    // them; otherwise the scope shows the recorded t₀ marker and nothing else.
+    ctx.fillStyle = samples && samples.length > 1
+      ? "rgba(52, 211, 153, 0.8)"
+      : "rgba(251, 191, 36, 0.75)";
     ctx.font = "9px monospace";
-    ctx.fillText('SIMULATED TRACE — rendered from recorded t₀; no raw waveform stored', 12, 16);
+    ctx.fillText(
+      samples && samples.length > 1
+        ? `RECORDED WAVEFORM — ${samples.length} device samples`
+        : 'NO RAW WAVEFORM RECORDED — t₀ marker shown from recorded transit time',
+      12,
+      16
+    );
 
     // Path Length & Physics Annotation
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.font = "10px monospace";
     ctx.fillText(`L = ${pathLengthMm} mm | V = ${formatVelocityMs(computedVelocity)} m/s`, 12, height - 14);
 
-  }, [transducerFreq, appliedGain, pathLengthMm, transitTimeUs, isAutomatedPicking, quality]);
+  }, [appliedGain, pathLengthMm, transitTimeUs, isAutomatedPicking, quality, test.waveform_samples]);
 
   const handleResetAutomated = () => {
     setIsAutomatedPicking(true);
@@ -246,6 +281,18 @@ export default function PunditWaveformViewer({
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
+
+          {/* Close the oscillogram and return to the station list */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close oscillogram"
+              className="p-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl border border-rose-500/30 cursor-pointer flex items-center gap-1.5"
+            >
+              <X size={14} />
+              <span className="text-xs font-semibold">Cancel</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -270,7 +317,7 @@ export default function PunditWaveformViewer({
             {computedFcu == null ? (
               <span className="bg-slate-500/20 text-slate-300 border border-slate-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px]">
                 <Info size={12} className="text-slate-400" />
-                <span>{computedVelocity > 0 ? 'OUTSIDE E.C.S CALIBRATION (2.0–5.0 KM/S)' : 'NOT RECORDED'}</span>
+                <span>{computedVelocity > 0 ? 'OUTSIDE CALIBRATION RANGE' : 'NOT RECORDED'}</span>
               </span>
             ) : computedFcu >= 25 ? (
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1 text-[11px]">
@@ -296,6 +343,62 @@ export default function PunditWaveformViewer({
         
         {/* Oscilloscope Canvas (Cols 1-3) */}
         <div className="lg:col-span-3 p-4 bg-slate-950 flex flex-col justify-between">
+          {/* Simultaneous A/B/C waveforms (8 Sep meeting): every test point
+              rendered at once, compressed — the interactive single-trace
+              scope below still handles the forensic manual-pick workflow. */}
+          {multiReadings.length > 1 && (
+            <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Layers size={13} className="text-amber-400" />
+                  <span>
+                    Simultaneous Waveforms — {multiReadings.length} Test Points (A–
+                    {String.fromCharCode(64 + multiReadings.length)})
+                  </span>
+                </h4>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Element mean V: {formatVelocityMs(test.pulse_velocity_ms)} m/s
+                  </span>
+                  <button
+                    onClick={() => setIsOverlayMode((v) => !v)}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-200 rounded-lg border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Layers size={11} />
+                    <span>{isOverlayMode ? "Separate traces" : "Overlay on one axis"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {isOverlayMode ? (
+                <OverlayTraceCanvas
+                  readings={multiReadings}
+                  fallbackPathMm={test.path_length_mm}
+                  gain={appliedGain}
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                  {multiReadings.map((r, i) => (
+                    <ReadingTrace
+                      key={r.id || i}
+                      index={i}
+                      label={r.point_label || String.fromCharCode(65 + i)}
+                      transitTimeUs={r.transit_time_us as number}
+                      pathLengthMm={r.path_length_mm ?? test.path_length_mm}
+                      gain={appliedGain}
+                      velocityKmS={r.velocity_km_s}
+                      ecsMpa={r.ecs_mpa}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[10px] text-slate-500 font-mono">
+                t₀ markers rendered from each point&apos;s recorded transit time — per-point V and f_cu as
+                computed server-side through the active calibration curve.
+              </p>
+            </div>
+          )}
+
           <div className="relative w-full h-[360px] rounded-xl overflow-hidden border border-slate-800">
             <canvas
               ref={canvasRef}
@@ -519,6 +622,243 @@ export default function PunditWaveformViewer({
 
       </div>
 
+    </div>
+  );
+}
+
+// Trace colour per test point (A, B, C, D, E…).
+const TRACE_COLORS = ["#38BDF8", "#FBBF24", "#34D399", "#F472B6", "#A78BFA"];
+
+/** Draw one compressed scope (grid + baseline + recorded t₀ marker; the
+ *  device's raw samples when they were exported) into a canvas of the given
+ *  size. No trace is synthesised when no samples exist — the arrival marker
+ *  alone is drawn. */
+function drawTrace(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    width: number;
+    height: number;
+    transitTimeUs: number;
+    gain: number;
+    color: string;
+    t0MarkerColor: string;
+    samples?: number[] | null;
+  }
+) {
+  const { width, height, transitTimeUs, gain, color, t0MarkerColor, samples } = opts;
+  ctx.fillStyle = "#090D16";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < width; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = 0; y < height; y += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  const t0_pixel = Math.min(width - 60, Math.max(60, Math.round((transitTimeUs / 150) * width)));
+
+  // Raw device samples, when exported — normalised and gain-scaled. Readings
+  // without a waveform export render the t₀ marker only (no fake trace).
+  if (samples && samples.length > 1) {
+    const maxAbs = Math.max(...samples.map((s) => Math.abs(s)), 1e-9);
+    const scale = ((height / 2 - 10) * (gain / 40)) / maxAbs;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    samples.forEach((s, i) => {
+      const x = (i / (samples.length - 1)) * width;
+      const y = height / 2 - s * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = t0MarkerColor;
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(t0_pixel, 10);
+  ctx.lineTo(t0_pixel, height - 10);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/** One compressed per-point trace (A/B/C…) with its recorded transit time,
+ *  server-computed velocity and f_cu. */
+function ReadingTrace({
+  index,
+  label,
+  transitTimeUs,
+  pathLengthMm,
+  gain,
+  velocityKmS,
+  ecsMpa,
+}: {
+  index: number;
+  label: string;
+  transitTimeUs: number;
+  pathLengthMm: number;
+  gain: number;
+  velocityKmS: number | null;
+  ecsMpa: number | null;
+}) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const color = TRACE_COLORS[index % TRACE_COLORS.length];
+    drawTrace(ctx, {
+      width: canvas.width,
+      height: canvas.height,
+      transitTimeUs,
+      gain,
+      color,
+      t0MarkerColor: "#38BDF8",
+    });
+    ctx.fillStyle = color;
+    ctx.font = "bold 11px monospace";
+    ctx.fillText(`POINT ${label}`, 10, 16);
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.font = "10px monospace";
+    ctx.fillText(
+      `t₀ = ${transitTimeUs.toFixed(1)} µs · L = ${pathLengthMm} mm`,
+      10,
+      canvas.height - 10
+    );
+    ctx.fillStyle = "rgba(251, 191, 36, 0.75)";
+    ctx.font = "9px monospace";
+    ctx.fillText("t₀ marker from recorded transit time", canvas.width - 218, 16);
+  }, [index, label, transitTimeUs, pathLengthMm, gain]);
+
+  const velocityMs = velocityKmS != null ? velocityKmS * 1000 : null;
+
+  return (
+    <div className="rounded-lg border border-slate-800 overflow-hidden bg-slate-950">
+      <div className="px-2.5 py-1.5 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] font-mono">
+        <span className="font-bold" style={{ color: TRACE_COLORS[index % TRACE_COLORS.length] }}>
+          POINT {label}
+        </span>
+        <span className="text-slate-400">t₀ {transitTimeUs.toFixed(1)} µs</span>
+        <span className="text-amber-300 font-bold">
+          {velocityMs != null ? `${formatVelocityMs(velocityMs)} m/s` : "—"}
+        </span>
+        <span className={ecsMpa != null ? (ecsMpa >= 25 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold") : "text-slate-500"}>
+          {ecsMpa != null ? `f_cu ${ecsMpa.toFixed(2)} MPa` : "f_cu —"}
+        </span>
+      </div>
+      <canvas ref={ref} width={800} height={120} className="w-full h-[110px] block" />
+    </div>
+  );
+}
+
+/** All A/B/C traces overlaid on one shared time axis — the direct visual
+ *  comparison view (arrival-time offsets between points). */
+function OverlayTraceCanvas({
+  readings,
+  fallbackPathMm,
+  gain,
+}: {
+  readings: Array<{
+    id?: string;
+    point_label: string;
+    transit_time_us: number | null;
+    path_length_mm: number | null;
+    velocity_km_s: number | null;
+  }>;
+  fallbackPathMm: number;
+  gain: number;
+}) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.fillStyle = "#090D16";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    readings.forEach((r, i) => {
+      if (r.transit_time_us == null) return;
+      const color = TRACE_COLORS[i % TRACE_COLORS.length];
+      drawTrace(ctx, {
+        width,
+        height,
+        transitTimeUs: r.transit_time_us,
+        gain: gain * 0.55, // compressed so overlaid traces stay readable
+        color,
+        t0MarkerColor: color,
+      });
+    });
+
+    ctx.fillStyle = "rgba(251, 191, 36, 0.75)";
+    ctx.font = "9px monospace";
+    ctx.fillText("t₀ markers from recorded transit times; no raw waveforms stored", 12, 16);
+  }, [readings, gain]);
+
+  return (
+    <div className="rounded-lg border border-slate-800 overflow-hidden bg-slate-950">
+      <canvas ref={ref} width={800} height={280} className="w-full h-[260px] block" />
+      <div className="px-2.5 py-1.5 bg-slate-900 border-t border-slate-800 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono">
+        {readings.map((r, i) => {
+          const vMs = r.velocity_km_s != null ? r.velocity_km_s * 1000 : null;
+          return (
+            <span key={r.id || i} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ backgroundColor: TRACE_COLORS[i % TRACE_COLORS.length] }}
+              />
+              <span className="text-slate-300 font-bold">
+                {r.point_label || String.fromCharCode(65 + i)}
+              </span>
+              <span className="text-slate-400">
+                t₀ {(r.transit_time_us ?? 0).toFixed(1)} µs
+              </span>
+              <span className="text-amber-300">{vMs != null ? `${formatVelocityMs(vMs)} m/s` : "—"}</span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

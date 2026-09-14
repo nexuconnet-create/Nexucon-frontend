@@ -2,14 +2,35 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
+import { Document } from '@/services/documents';
 
 interface AddCommentDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  drawing: Document | null;
 }
 
-export default function AddCommentDrawer({ isOpen, onClose }: AddCommentDrawerProps) {
+const statusLabel: Record<Document['status'], string> = {
+  DRAFT: 'Draft',
+  PENDING_REVIEW: 'Awaiting Client Review',
+  UNDER_REVIEW: 'Under Review',
+  CHANGES_REQUESTED: 'Changes Requested',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  EXPIRED: 'Expired',
+  EXPIRING_SOON: 'Expiring Soon',
+  ARCHIVED: 'Archived',
+};
+
+const formatDateTime = (iso?: string): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return `${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} • ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+};
+
+export default function AddCommentDrawer({ isOpen, onClose, drawing }: AddCommentDrawerProps) {
   const [comment, setComment] = useState('');
 
   return (
@@ -54,36 +75,43 @@ export default function AddCommentDrawer({ isOpen, onClose }: AddCommentDrawerPr
               <div className="mb-8">
                 <h3 className="text-[18px] font-extrabold text-[#022C4F] mb-6">Drawing Information</h3>
 
-                <div className="grid grid-cols-2 gap-y-6 gap-x-8">
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Drawing Name</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Structural Foundation Layout - Revision 03</p>
+                {!drawing ? (
+                  <div className="border border-gray-200 rounded-2xl p-8 text-center">
+                    <FileText size={28} className="mx-auto mb-2 text-[#022C4F]/40" />
+                    <p className="text-[12px] font-medium text-gray-500">No drawing selected.</p>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Discipline</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Structural Engineering</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Drawing Name</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.title || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Discipline</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.discipline || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.project_name || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Submitted by</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.uploader_name || '—'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Submission Date</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{formatDateTime(drawing.created_at)}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Version</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{drawing.current_version || '—'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Status</h4>
+                      <p className="text-[11px] text-gray-500 font-medium">{statusLabel[drawing.status] || drawing.status}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Project</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Victoria Heights Residential Estate</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Submitted by</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Sarah Okafor - Civil Engineer</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Submission Date</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">June 17, 2026 • 10:42 AM</p>
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Version</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">V3.0</p>
-                  </div>
-                  <div className="col-span-2">
-                    <h4 className="text-[11px] font-extrabold text-[#022C4F] mb-1.5">Status</h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Awaiting Client Review</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Text Area */}

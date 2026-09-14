@@ -1,14 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
-import { Search, Bell, ChevronDown, ArrowUpRight, Folder, MoreHorizontal, Settings2, X, Box, Database } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, ChevronDown, ArrowUpRight, Folder, MoreHorizontal, Settings2, X, Box, Database } from "lucide-react";
 import TopRightControls from "@/components/dashboard/TopRightControls";
-import { CustomSelect } from "@/components/CustomSelect";
 import Link from "next/link";
 import FolderDetailsModal from "@/components/dashboard/FolderDetailsModal";
 import CreateFolderSideDrawer from "@/components/dashboard/CreateFolderSideDrawer";
 import UploadFileModal from "@/components/dashboard/UploadFileModal";
 import IfcManagerModal from "@/components/dashboard/IfcManagerModal";
+import { getProjects, Project } from "@/services/projects";
+import { getDocuments, getDocumentFolders, Document, DocumentFolder } from "@/services/documents";
+
+const formatStatus = (status?: string): string => {
+  if (!status) return "—";
+  return status
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 export default function ProjectExplorer() {
   const [fileType, setFileType] = useState("");
@@ -17,78 +26,70 @@ export default function ProjectExplorer() {
   const [isUploadFileOpen, setIsUploadFileOpen] = useState(false);
   const [isIfcModalOpen, setIsIfcModalOpen] = useState(false);
 
+  // Real data: the professional's latest project, their document records, and
+  // their document folders. Nothing is pre-populated — honest empty states
+  // render until real records exist.
+  const [latestProject, setLatestProject] = useState<Project | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [folders, setFolders] = useState<DocumentFolder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.all([
+      getProjects().catch(() => [] as Project[]),
+      getDocuments().catch(() => [] as Document[]),
+      getDocumentFolders().catch(() => [] as DocumentFolder[]),
+    ]).then(([projects, docs, folderRows]) => {
+      if (cancelled) return;
+      const latest = [...projects].sort(
+        (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      )[0];
+      setLatestProject(latest ?? null);
+      setDocuments(
+        [...docs].sort(
+          (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+        )
+      );
+      setFolders(folderRows);
+      setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const metricCards = [
-    { title: "Project", value: "Victoria Heights\nResidential Estate" },
-    { title: "Project Phase", value: "Design\nDevelopment" },
-    { title: "Total Files", value: "247" },
-    { title: "Folders", value: "18" },
+    { title: "Project", value: latestProject ? latestProject.name : "No project\nrecorded yet" },
+    { title: "Project Phase", value: latestProject ? formatStatus(latestProject.status) : "—" },
+    { title: "Total Files", value: isLoading ? "—" : String(documents.length) },
+    { title: "Folders", value: isLoading ? "—" : String(folders.length) },
   ];
 
-  const folders = [
-    { 
-      name: "Architectural Drawings", 
-      files: 21,
-      description: "Contains floor plans, elevations, sections, reflected ceiling plans, and architectural details.",
-      recentFiles: ["Ground Floor Plan.pdf", "First Floor Plan.pdf", "Roof Layout Plan.pdf"]
-    },
-    { 
-      name: "MEP Drawings", 
-      files: 18,
-      description: "Contains mechanical, electrical, and plumbing layouts and schematics.",
-      recentFiles: ["Electrical Layout.dwg", "HVAC Routing.pdf", "Plumbing Isometric.pdf"]
-    },
-    { 
-      name: "Bill of Quantities (BOQ)", 
-      files: 9,
-      description: "Contains detailed cost estimates and material takeoffs for all trades.",
-      recentFiles: ["Structural BOQ Final.xlsx", "Architectural BOQ.xlsx"]
-    },
-    { 
-      name: "Technical Reports", 
-      files: 16,
-      description: "Contains soil reports, structural analysis, and feasibility studies.",
-      recentFiles: ["Structural Design Report.pdf", "Geotechnical Survey.pdf"]
-    },
-    { 
-      name: "Specifications", 
-      files: 11,
-      description: "Contains detailed material specifications and construction methodologies.",
-      recentFiles: ["Concrete Specs.pdf", "Finishes Schedule.pdf"]
-    },
-    { 
-      name: "Meeting Records", 
-      files: 14,
-      description: "Contains minutes of meetings, site visit logs, and client correspondences.",
-      recentFiles: ["Coordination MOM - Aug 12.pdf", "Client Feedback - V2.pdf"]
-    },
-    { 
-      name: "Reviews & Approvals", 
-      files: 19,
-      description: "Contains peer review reports, code compliance checks, and final sign-offs.",
-      recentFiles: ["Peer Review Report.pdf", "Fire Safety Approval.pdf"]
-    },
-    { 
-      name: "Construction Handoff", 
-      files: 1,
-      description: "Contains the consolidated package issued for construction.",
-      recentFiles: ["IFC Package V1.zip"]
-    },
-  ];
+  // The most recent real documents on record.
+  const recentFiles = documents.slice(0, 6);
 
-  const recentFiles = [
-    { name: "Architectural Floor Plan.pdf", folder: "Architectural Drawings", version: "V4.0", updatedBy: "Olivia Thompson", status: "Approved" },
-    { name: "Structural Design Report.pdf", folder: "Technical Reports", version: "V3.2", updatedBy: "Michael Adeyemi", status: "Under Review" },
-    { name: "Electrical Layout.dwg", folder: "MEP Drawings", version: "V2.1", updatedBy: "James Ibrahim", status: "Approved" },
-    { name: "Peer Review Report.pdf", folder: "Reviews & Approvals", version: "V1.0", updatedBy: "Sarah Williams", status: "Completed" },
-  ];
+  // Recent updates derived from the real document records (who uploaded what).
+  const recentUpdates = documents.slice(0, 5).map((d) => {
+    const who = d.uploader_name ? `${d.uploader_name} uploaded ` : "";
+    const version = d.current_version ? ` (${d.current_version})` : "";
+    return `${who}${d.title}${version}`;
+  });
 
-  const recentUpdates = [
-    "Architectural Package updated to V4.0",
-    "Structural Drawings updated to V3.2",
-    "BOQ Final approved",
-    "Mechanical Layout revised",
-    "Design Package issued for peer review"
-  ];
+  const openFolderDetails = (folder: DocumentFolder) => {
+    const folderDocs = documents
+      .filter((d) => d.folder === folder.name)
+      .slice(0, 3)
+      .map((d) => d.title);
+    setSelectedFolder({
+      name: folder.name,
+      files: folder.files_count,
+      description:
+        folder.files_count === 0
+          ? "No files recorded in this folder yet."
+          : "Recent files recorded in this folder.",
+      recentFiles: folderDocs,
+    });
+  };
 
   return (
     <div className="h-full flex flex-col pt-2 pb-12 overflow-y-auto">
@@ -114,19 +115,19 @@ export default function ProjectExplorer() {
             <Database size={16} /> BIM Data Explorer
           </button>
         </Link>
-        <button 
+        <button
           onClick={() => setIsIfcModalOpen(true)}
           className="bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 px-8 py-3 rounded-full font-medium transition-colors text-sm shadow-sm flex items-center gap-2"
         >
           <Box size={16} /> Manage IFC Models
         </button>
-        <button 
+        <button
           onClick={() => setIsCreateFolderOpen(true)}
           className="bg-white border border-[#022C4F] text-[#022C4F] hover:bg-gray-50 px-12 py-3 rounded-full font-medium transition-colors text-sm shadow-sm"
         >
           Create Folder
         </button>
-        <button 
+        <button
           onClick={() => setIsUploadFileOpen(true)}
           className="bg-[#022C4F] hover:bg-[#033A6B] text-white px-12 py-3 rounded-full font-medium transition-colors shadow-sm text-sm"
         >
@@ -173,20 +174,32 @@ export default function ProjectExplorer() {
 
       {/* Folders Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        {folders.map((folder, idx) => (
-          <div 
-            key={idx} 
-            onClick={() => setSelectedFolder(folder)}
-            className="bg-white rounded-[24px] p-8 border border-gray-200 shadow-sm flex flex-col items-center text-center cursor-pointer hover:shadow-md hover:border-[#022C4F]/30 transition-all"
-          >
-            <svg width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-6">
-              <path d="M110 88H10C4.47715 88 0 83.5228 0 78V12C0 6.47715 4.47715 2 10 2H38.5C41.8142 2 44.9125 3.66601 46.7725 6.45598L53.2275 16.136C55.0875 18.926 58.1858 20.592 61.5 20.592H110C115.523 20.592 120 25.0691 120 30.592V78C120 83.5228 115.523 88 110 88Z" fill="#FDE047" />
-              <path d="M115 88H15C9.47715 88 5 83.5228 5 78V25C5 19.4772 9.47715 15 15 15H115C120.523 15 125 19.4772 125 25V78C125 83.5228 120.523 88 115 88Z" fill="#FACC15" />
-            </svg>
-            <h3 className="text-[#022C4F] font-bold text-[17px] leading-tight mb-2 max-w-[180px]">{folder.name}</h3>
-            <p className="text-gray-500 text-[15px]">{folder.files} Files</p>
+        {isLoading ? (
+          <div className="col-span-full py-12 text-center text-[13px] text-gray-400 font-medium">Loading folders...</div>
+        ) : folders.length === 0 ? (
+          <div className="col-span-full bg-white rounded-[24px] border border-dashed border-gray-300 p-12 flex flex-col items-center text-center gap-3">
+            <Folder className="w-8 h-8 text-gray-300" />
+            <p className="text-[14px] font-bold text-[#022C4F]">No folders recorded yet</p>
+            <p className="text-[12px] text-gray-500 max-w-[380px]">
+              Folders you create for your project documents will appear here.
+            </p>
           </div>
-        ))}
+        ) : (
+          folders.map((folder, idx) => (
+            <div
+              key={folder.id ?? idx}
+              onClick={() => openFolderDetails(folder)}
+              className="bg-white rounded-[24px] p-8 border border-gray-200 shadow-sm flex flex-col items-center text-center cursor-pointer hover:shadow-md hover:border-[#022C4F]/30 transition-all"
+            >
+              <svg width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-6">
+                <path d="M110 88H10C4.47715 88 0 83.5228 0 78V12C0 6.47715 4.47715 2 10 2H38.5C41.8142 2 44.9125 3.66601 46.7725 6.45598L53.2275 16.136C55.0875 18.926 58.1858 20.592 61.5 20.592H110C115.523 20.592 120 25.0691 120 30.592V78C120 83.5228 115.523 88 110 88Z" fill="#FDE047" />
+                <path d="M115 88H15C9.47715 88 5 83.5228 5 78V25C5 19.4772 9.47715 15 15 15H115C120.523 15 125 19.4772 125 25V78C125 83.5228 120.523 88 115 88Z" fill="#FACC15" />
+              </svg>
+              <h3 className="text-[#022C4F] font-bold text-[17px] leading-tight mb-2 max-w-[180px]">{folder.name}</h3>
+              <p className="text-gray-500 text-[15px]">{folder.files_count} Files</p>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Bottom Section */}
@@ -216,20 +229,30 @@ export default function ProjectExplorer() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {recentFiles.map((file, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="py-5 px-6 text-[13px] text-gray-800 font-medium">{file.name}</td>
-                    <td className="py-5 px-6 text-[13px] text-gray-600">{file.folder}</td>
-                    <td className="py-5 px-6 text-[13px] text-gray-600">{file.version}</td>
-                    <td className="py-5 px-6 text-[13px] text-gray-600">{file.updatedBy}</td>
-                    <td className="py-5 px-6 text-[13px] text-gray-600">{file.status}</td>
-                    <td className="py-5 px-6 text-center">
-                      <button className="text-gray-400 hover:text-gray-800 transition-colors">
-                        <MoreHorizontal className="w-5 h-5 mx-auto" />
-                      </button>
-                    </td>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 px-6 text-center text-[13px] text-gray-400 font-medium">Loading files...</td>
                   </tr>
-                ))}
+                ) : recentFiles.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 px-6 text-center text-[13px] text-gray-500 font-medium">No files recorded yet</td>
+                  </tr>
+                ) : (
+                  recentFiles.map((file, idx) => (
+                    <tr key={file.id ?? idx} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="py-5 px-6 text-[13px] text-gray-800 font-medium">{file.title || "—"}</td>
+                      <td className="py-5 px-6 text-[13px] text-gray-600">{file.folder || "—"}</td>
+                      <td className="py-5 px-6 text-[13px] text-gray-600">{file.current_version || "—"}</td>
+                      <td className="py-5 px-6 text-[13px] text-gray-600">{file.uploader_name || "—"}</td>
+                      <td className="py-5 px-6 text-[13px] text-gray-600">{formatStatus(file.status)}</td>
+                      <td className="py-5 px-6 text-center">
+                        <button className="text-gray-400 hover:text-gray-800 transition-colors">
+                          <MoreHorizontal className="w-5 h-5 mx-auto" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -240,16 +263,22 @@ export default function ProjectExplorer() {
           <h3 className="text-gray-500 text-[15px] mb-8 font-medium">Recent Updates</h3>
 
           <div className="flex-1 flex flex-col gap-6 mb-12">
-            {recentUpdates.map((update, idx) => (
-              <div key={idx} className="flex items-start gap-4">
-                <div className="w-4 h-4 mt-1 flex items-center justify-center">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 0L8.1822 5.09312L13.1788 3.51868L9.93291 7.753L13.1788 11.9873L8.1822 10.4129L7 15.506L5.8178 10.4129L0.821217 11.9873L4.06709 7.753L0.821217 3.51868L5.8178 5.09312L7 0Z" fill="#022C4F" />
-                  </svg>
+            {isLoading ? (
+              <p className="text-[13px] text-gray-400 font-medium">Loading updates...</p>
+            ) : recentUpdates.length === 0 ? (
+              <p className="text-[13px] text-gray-500 font-medium">No updates recorded yet</p>
+            ) : (
+              recentUpdates.map((update, idx) => (
+                <div key={idx} className="flex items-start gap-4">
+                  <div className="w-4 h-4 mt-1 flex items-center justify-center">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7 0L8.1822 5.09312L13.1788 3.51868L9.93291 7.753L13.1788 11.9873L8.1822 10.4129L7 15.506L5.8178 10.4129L0.821217 11.9873L4.06709 7.753L0.821217 3.51868L5.8178 5.09312L7 0Z" fill="#022C4F" />
+                    </svg>
+                  </div>
+                  <p className="text-[14px] text-[#022C4F] font-medium leading-snug">{update}</p>
                 </div>
-                <p className="text-[14px] text-[#022C4F] font-medium leading-snug">{update}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div className="flex justify-between gap-3 mt-auto">
@@ -267,20 +296,20 @@ export default function ProjectExplorer() {
       </div>
 
       {/* Folder Details Modal */}
-      <FolderDetailsModal 
-        folder={selectedFolder} 
-        onClose={() => setSelectedFolder(null)} 
+      <FolderDetailsModal
+        folder={selectedFolder}
+        onClose={() => setSelectedFolder(null)}
         onOpenUploadFile={() => setIsUploadFileOpen(true)}
       />
 
       {/* Create Folder Modal (Side Drawer) */}
-      <CreateFolderSideDrawer 
-        isOpen={isCreateFolderOpen} 
-        onClose={() => setIsCreateFolderOpen(false)} 
+      <CreateFolderSideDrawer
+        isOpen={isCreateFolderOpen}
+        onClose={() => setIsCreateFolderOpen(false)}
       />
 
       {/* Upload File Modal */}
-      <UploadFileModal 
+      <UploadFileModal
         isOpen={isUploadFileOpen}
         onClose={() => setIsUploadFileOpen(false)}
       />

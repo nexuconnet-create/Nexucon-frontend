@@ -37,9 +37,17 @@ export default function IndustryPerformancePage() {
 
   const handleExportIndustryReport = async () => {
     try {
-      const ref = `REP-IND-${Math.floor(100 + Math.random() * 900)}`;
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Generating Industry Benchmark Report...`, type: 'info' } 
+      // The statutory reference is issued server-side (GeneratedReport.generate_report_ref) — never fabricated here
+      const created = await createGeneratedReport({
+        title: "Statewide Construction Industry Benchmarking & Safety Index",
+        format: "PDF",
+        report_type: "Custom",
+        modules_included: ["Project Performance", "Compliance & Regulatory", "Agency Performance SLAs"]
+      });
+      const ref = created?.report_reference;
+      if (!ref) throw new Error('Backend did not issue a report reference for this export.');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Generating Industry Benchmark Report...`, type: 'info' }
       }));
       await generateAndDownloadDocument({
         title: "Statewide Construction Industry Benchmarking & Safety Index",

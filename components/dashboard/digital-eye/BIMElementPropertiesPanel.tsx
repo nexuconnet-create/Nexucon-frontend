@@ -17,6 +17,11 @@ interface BIMElementPropertiesPanelProps {
    *  property sets and design attributes. Null when the clicked mesh has no
    *  linked structural element record. */
   mapping: BIMStructuralElement | null;
+  /** A5 (4 Sep meeting): apply the element's own derived path length to the
+   *  active measurement form. When provided, the Position & size section
+   *  gains a "Use as path length" control per axis dimension. Only ever
+   *  called with a real derived dimension — never a placeholder. */
+  onApplyPathLength?: (lengthMm: number, axis: 'X' | 'Y' | 'Z') => void;
 }
 
 /** One label/value row — values the import never recorded render as an
@@ -93,6 +98,7 @@ export default function BIMElementPropertiesPanel({
   geometryElement,
   geometry,
   mapping,
+  onApplyPathLength,
 }: BIMElementPropertiesPanelProps) {
   // Nothing selected yet — the operator is told how to use the panel.
   if (!geometryElement) {
@@ -172,10 +178,36 @@ export default function BIMElementPropertiesPanel({
             <Row label="Centre Z" value={`${fmtCoord(bounds.center[2])} m`} />
             {/* Axis terminology per 7 Sep review; dimensions shown in metres,
                 matching the section title and the Centre rows above. */}
-            <Row label="Dimension X (m)" value={`${fmtCoord(bounds.size[0])} m`} />
-            <Row label="Dimension Y (m)" value={`${fmtCoord(bounds.size[1])} m`} />
-            <Row label="Dimension Z (m)" value={`${fmtCoord(bounds.size[2])} m`} />
+            {(['X', 'Y', 'Z'] as const).map((axis, i) => (
+              <div key={axis} className="flex items-center justify-between gap-3 py-1">
+                <span className="text-[11px] text-gray-500 shrink-0">Dimension {axis} (m)</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-right font-semibold text-gray-800">
+                    {fmtCoord(bounds.size[i])} m
+                  </span>
+                  {onApplyPathLength && (
+                    <button
+                      onClick={() => onApplyPathLength(
+                        Math.round(bounds.size[i] * 1000),
+                        axis,
+                      )}
+                      className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 shrink-0"
+                      title={`Set the measurement form's transducer path length to this element's real ${axis}-axis dimension (${Math.round(bounds.size[i] * 1000)} mm), derived from the imported BIM geometry`}
+                    >
+                      Use L
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
+          {onApplyPathLength && (
+            <p className="text-[10px] text-gray-400 leading-relaxed pt-1">
+              “Use L” applies that real model dimension as the transducer path
+              length for the selected element — verify it matches the actual
+              transducer arrangement on site before recording.
+            </p>
+          )}
         </div>
       )}
 

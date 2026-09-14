@@ -1,27 +1,45 @@
-import React from "react";
-import Image from "next/image";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import { ArrowUpRight } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { getLicensedProfessionals, LicensedProfessional } from "@/services/stakeholders";
+
+const getInitials = (name: string): string =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+const getStatusColor = (status: string): string => {
+  const s = (status || "").toLowerCase();
+  if (s.includes("active") || s.includes("valid") || s.includes("verified")) return "bg-green-500";
+  if (s.includes("expire") || s.includes("revoked") || s.includes("suspended")) return "bg-red-500";
+  return "bg-gray-400";
+};
 
 export default function HireProfessionals() {
-  const professionals = [
-    {
-      id: 1,
-      name: "Michael Adeyemi",
-      role: "Architect",
-      status: "Available",
-      statusColor: "bg-green-500",
-      image: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784444885/8_Contract_Clauses_Every_Homeowner_Should_Understand_achlab_1_qvvl2s.png",
-    },
-    {
-      id: 2,
-      name: "Michael Adeyemi", // The design has the same name twice
-      role: "Civil Engineer",
-      status: "Busy",
-      statusColor: "bg-red-500",
-      image: "https://res.cloudinary.com/depeqzb6z/image/upload/v1784444891/Download_free_image_of_Dark_skinned_female_construction_worker_portrait_hardhat_helmet__about_african_construction_worker_african_engineer_black_female_engineer_female_construction_worker_and_african_worker_12921744_1_gk870e.png",
-    }
-  ];
+  const [professionals, setProfessionals] = useState<LicensedProfessional[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLicensedProfessionals()
+      .then((data) => {
+        if (!cancelled) setProfessionals(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setProfessionals([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-[#022C4F] flex flex-col h-full">
@@ -32,33 +50,44 @@ export default function HireProfessionals() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 h-full">
-        {professionals.map((pro) => (
-          <div key={pro.id} className="flex-1 border border-[#022C4F] rounded-2xl p-4 flex flex-col items-center justify-between hover:shadow-md transition-shadow">
-            <div className="w-full flex justify-end mb-2">
-              <span className={`inline-block w-8 h-3 rounded-full ${pro.statusColor}`}></span>
-            </div>
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center py-12 text-[11px] font-semibold text-gray-400 animate-pulse">
+          Loading licensed professionals…
+        </div>
+      ) : professionals.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center py-12 text-[11px] font-medium text-gray-500 text-center px-4">
+          No licensed professionals registered yet
+        </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 h-full">
+          {professionals.map((pro) => (
+            <div key={pro.id} className="flex-1 min-w-[140px] border border-[#022C4F] rounded-2xl p-4 flex flex-col items-center justify-between hover:shadow-md transition-shadow">
+              <div className="w-full flex justify-end mb-2">
+                <span
+                  className={`inline-block w-8 h-3 rounded-full ${getStatusColor(pro.license_status)}`}
+                  title={pro.license_status || "Status not recorded"}
+                />
+              </div>
 
-            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-100 mb-3 relative">
-              <Image
-                src={pro.image}
-                alt={pro.name}
-                fill
-                className="object-cover"
-              />
-            </div>
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-100 mb-3 bg-[#022C4F]/10 flex items-center justify-center">
+                <span className="text-xl font-extrabold text-[#022C4F]">{getInitials(pro.name)}</span>
+              </div>
 
-            <div className="text-center mb-4">
-              <p className="text-xs font-bold text-[#0F181F] whitespace-nowrap">{pro.name}</p>
-              <p className="text-[10px] font-medium text-gray-500">{pro.role}</p>
-            </div>
+              <div className="text-center mb-4">
+                <p className="text-xs font-bold text-[#0F181F]">{pro.name}</p>
+                <p className="text-[10px] font-medium text-gray-500">{pro.role_title}</p>
+                {pro.firm_name && (
+                  <p className="text-[10px] font-medium text-gray-400 mt-0.5">{pro.firm_name}</p>
+                )}
+              </div>
 
-            <Button variant="outline" className="w-full h-[36px]">
-              Hire for Project
-            </Button>
-          </div>
-        ))}
-      </div>
+              <Button variant="outline" className="w-full h-[36px]">
+                Hire for Project
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
