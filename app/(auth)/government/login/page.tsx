@@ -82,6 +82,8 @@ export default function GovernmentLogin() {
               width={220}
               height={70}
               className="h-16 w-auto object-contain brightness-0 invert"
+              style={{ width: 'auto', height: 'auto' }}
+              priority
             />
           </div>
 
@@ -122,6 +124,7 @@ export default function GovernmentLogin() {
               width={40}
               height={40}
               className="h-10 w-auto object-contain"
+              style={{ width: 'auto', height: 'auto' }}
             />
             <p className="text-sm font-medium text-gray-500 mt-2">
               Don't have an account? <Link href="/government/register" className="text-[#022C4F] font-semibold hover:underline">Sign up</Link>
@@ -136,6 +139,7 @@ export default function GovernmentLogin() {
               width={160}
               height={50}
               className="h-10 sm:h-12 w-auto object-contain"
+              style={{ width: 'auto', height: 'auto' }}
             />
           </div>
 

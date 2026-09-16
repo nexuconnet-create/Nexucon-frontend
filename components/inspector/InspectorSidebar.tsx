@@ -58,7 +58,7 @@ const SECTIONS: NavSection[] = [
   {
     header: "TECHNICAL ANALYSIS",
     items: [
-      { name: "Digital Eye (GPR/BIM)", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true },
+      { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true, badge: "TS-1" },
       { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle, badge: "12" },
       { name: "Compliance Standards", href: "/inspector/dashboard/compliance", icon: ShieldCheck },
     ]

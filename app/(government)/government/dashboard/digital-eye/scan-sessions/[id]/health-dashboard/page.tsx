@@ -111,8 +111,7 @@ export default function SiteHealthDashboard() {
   
   if (rgbUrl && rgbUrl.startsWith('/media/')) {
     const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-    const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
-    const rawBaseUrl = (!envUrl || isLocalhost) ? 'https://api.nexucon.net' : envUrl;
+    const rawBaseUrl = envUrl.startsWith('http') ? envUrl : 'https://api.nexucon.net';
     const origin = rawBaseUrl.replace(/\/api\/v\d+.*$/, '').replace(/\/+$/, '');
     rgbUrl = origin + rgbUrl;
   }
