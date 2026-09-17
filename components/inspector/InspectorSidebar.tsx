@@ -83,7 +83,7 @@ const INSPECTOR_NAV_ITEMS: SidebarItem[] = [
     sectionHeader: "Digital Eye Suite",
     name: "Digital Eye",
     icon: Eye,
-    href: "/inspector/dashboard/digital-eye",
+    href: "/inspector/dashboard/digital-eye/ts-1",
     subItems: [
       { name: "T-S1 MVP", href: "/inspector/dashboard/digital-eye/ts-1", icon: Scan },
       { name: "PUNDIT UPV Ultrasonic", href: "/inspector/dashboard/digital-eye/pundit", icon: Sparkles },
@@ -284,12 +284,11 @@ export default function InspectorSidebar({
 
               {/* Main Nav Link */}
               <Link
-                href={isParent && (isMobile || !isCollapsed) ? targetHref : targetHref}
+                href={targetHref}
                 onClick={(e) => {
                   if (isParent) {
-                    if (isMobile) {
-                      toggleSection(e);
-                      return;
+                    if (!openSections.includes(link.name)) {
+                      setOpenSections((prev) => [...prev, link.name]);
                     }
                   }
                   if (isMobile) {

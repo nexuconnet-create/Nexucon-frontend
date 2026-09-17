@@ -283,10 +283,10 @@ export default function InspectorDashboardPage() {
             </div>
           </div>
           <Link
-            href="/inspector/dashboard/digital-eye"
+            href="/inspector/dashboard/digital-eye/ts-1"
             className="text-xs font-bold text-cyan-300 hover:text-white flex items-center gap-1 self-start sm:self-auto"
           >
-            <span>Open Full Suite</span>
+            <span>Open T-S1 Scanner</span>
             <ArrowRight size={14} />
           </Link>
         </div>
@@ -317,7 +317,7 @@ export default function InspectorDashboardPage() {
 
           {/* UPV ANALYZER */}
           <Link
-            href="/inspector/dashboard/digital-eye/upv"
+            href="/inspector/dashboard/digital-eye/pundit"
             className="p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-sm transition-all group hover:scale-[1.01]"
           >
             <div className="flex items-center justify-between mb-2">
@@ -340,7 +340,7 @@ export default function InspectorDashboardPage() {
 
           {/* BIM DEVIATION */}
           <Link
-            href="/inspector/dashboard/digital-eye/bim"
+            href="/inspector/dashboard/digital-eye/trimble"
             className="p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-sm transition-all group hover:scale-[1.01]"
           >
             <div className="flex items-center justify-between mb-2">

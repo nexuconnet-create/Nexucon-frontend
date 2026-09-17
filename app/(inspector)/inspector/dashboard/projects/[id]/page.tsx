@@ -204,7 +204,7 @@ export default function InspectorProjectDetailPage() {
               </div>
 
               <Link
-                href="/inspector/dashboard/digital-eye"
+                href="/inspector/dashboard/digital-eye/ts-1"
                 className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#022C4F] border border-slate-200 transition-colors flex items-center justify-center gap-2"
               >
                 <Eye size={14} className="text-emerald-600" />
@@ -271,7 +271,7 @@ export default function InspectorProjectDetailPage() {
             Interact with 3D Trimble BIM IFC geometry, GPR B-scan radargrams, and PUNDIT UPV measurements.
           </p>
           <Link
-            href="/inspector/dashboard/digital-eye"
+            href="/inspector/dashboard/digital-eye/ts-1"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-semibold shadow-sm"
           >
             Launch 3D & NDT Console &rarr;
