@@ -20,6 +20,9 @@ import {
   Calendar,
   ArrowUpRight,
   ExternalLink,
+  Scan,
+  Radio,
+  Zap,
 } from "lucide-react";
 import { getInspectorDashboard, InspectorDashboardData } from "@/services/inspector";
 
@@ -282,26 +285,90 @@ export default function InspectorDashboardPage() {
 
         {/* Right Col: Digital Eye Quick Access & Critical Alerts */}
         <div className="space-y-6 sm:space-y-8">
-          {/* Digital Eye Radar / NDT Banner Card */}
-          <div className="bg-gradient-to-br from-[#022C4F] to-[#011C33] rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="flex items-center gap-2 text-xs font-mono font-bold text-blue-300 uppercase tracking-wider mb-2">
-              <Eye size={16} />
-              <span>Digital Eye Multi-Modal</span>
+          {/* TS-1 (MVP) Field Hardware Hub & NDT Banner Card */}
+          <div className="bg-gradient-to-br from-[#022C4F] via-[#01223D] to-[#011C33] rounded-2xl p-6 text-white shadow-md relative overflow-hidden border border-blue-900/40">
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-cyan-300 uppercase tracking-wider bg-white/10 px-2.5 py-1 rounded-full border border-white/10 backdrop-blur-md">
+                <Scan size={14} className="text-cyan-400 animate-pulse" />
+                <span>TS-1 (MVP) HARDWARE HUB</span>
+              </div>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                Live Hub Active
+              </span>
             </div>
-            <h3 className="text-lg font-bold text-white mb-2 leading-snug">
-              BIM Verification & Subsurface NDT
+
+            <h3 className="text-lg font-bold text-white mb-1.5 leading-snug">
+              Multi-Modal Sensor Ingestion & UPV NDT
             </h3>
-            <p className="text-xs text-white/80 leading-relaxed mb-5">
-              Inspect GPR rebar spacing radargrams, Ultrasonic Pulse Velocity strength test waveforms, and 3D Trimble BIM model deviations.
+            <p className="text-xs text-white/80 leading-relaxed mb-4">
+              Direct ingestion for Screening Eagle PUNDIT UPV 54 kHz, Proceq GPR Live radar, and Tersus GNSS rovers with SHA-256 cryptographic audit seals.
             </p>
-            <Link
-              href="/inspector/dashboard/digital-eye"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#022C4F] font-bold text-xs hover:bg-slate-100 transition-colors shadow-sm"
-            >
-              <span>Launch 3D & NDT Viewer</span>
-              <ArrowUpRight size={14} />
-            </Link>
+
+            {/* Live Fleet Telemetry Pills */}
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-300 font-medium">PUNDIT Live UPV</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
+                  <span>54 kHz</span>
+                  <span className="text-[10px] text-cyan-300 font-normal">BLE 88%</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-300 font-medium">Proceq GPR Live</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
+                  <span>1.6 GHz</span>
+                  <span className="text-[10px] text-cyan-300 font-normal">Wi-Fi 94%</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-300 font-medium">Tersus GNSS</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
+                  <span>RTK Fix</span>
+                  <span className="text-[10px] text-emerald-300 font-normal">&plusmn;14mm</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-300 font-medium">Trimble X7</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                </div>
+                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
+                  <span>LiDAR</span>
+                  <span className="text-[10px] text-slate-300 font-normal">Standby</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Link
+                href="/inspector/dashboard/digital-eye"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#022C4F] font-bold text-xs hover:bg-slate-100 transition-colors shadow-sm"
+              >
+                <span>Launch TS-1 Workspace</span>
+                <ArrowUpRight size={14} />
+              </Link>
+              <Link
+                href="/inspector/dashboard/digital-eye?tab=pundit&action=new"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/30 text-cyan-200 font-bold text-xs transition-colors"
+              >
+                <Zap size={13} className="text-cyan-400" />
+                <span>New UPV Test</span>
+              </Link>
+            </div>
           </div>
 
           {/* Critical Findings / Stop Work Orders Card */}

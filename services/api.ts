@@ -2,10 +2,8 @@ import axios from 'axios';
 
 export function getBackendUrl(): string {
   const envUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
-  const isLocalhost = envUrl.includes('127.0.0.1') || envUrl.includes('localhost');
-  const validEnvUrl = (envUrl.startsWith('http') && !isLocalhost) ? envUrl : '';
   const fallback = 'https://api.nexucon.net';
-  return (validEnvUrl || fallback).replace(/\/+$/, '');
+  return (envUrl.startsWith('http') ? envUrl : fallback).replace(/\/+$/, '');
 }
 
 export const backendUrl = getBackendUrl();

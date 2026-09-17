@@ -35,7 +35,7 @@ export default function InspectorMobileNav() {
   ];
 
   const SECONDARY_ITEMS = [
-    { name: "Digital Eye (BIM / GPR / NDT)", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
+    { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
     { name: "Defect Findings", href: "/inspector/dashboard/findings", icon: AlertTriangle, color: "text-rose-600" },
     { name: "Compliance & Orders", href: "/inspector/dashboard/compliance", icon: ShieldCheck, color: "text-blue-600" },
     { name: "Documents", href: "/inspector/dashboard/documents", icon: FolderOpen, color: "text-cyan-600" },
