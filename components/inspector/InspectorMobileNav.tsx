@@ -35,13 +35,15 @@ export default function InspectorMobileNav() {
   ];
 
   const SECONDARY_ITEMS = [
-    { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
-    { name: "Defect Findings", href: "/inspector/dashboard/findings", icon: AlertTriangle, color: "text-rose-600" },
+    { name: "Digital Eye (GPR/BIM)", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
+    { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle, color: "text-rose-600" },
     { name: "Compliance & Orders", href: "/inspector/dashboard/compliance", icon: ShieldCheck, color: "text-blue-600" },
     { name: "Documents", href: "/inspector/dashboard/documents", icon: FolderOpen, color: "text-cyan-600" },
     { name: "Reports & Certificates", href: "/inspector/dashboard/reports", icon: FileText, color: "text-amber-600" },
+    { name: "Sync Status & Queue", href: "/inspector/dashboard/sync", icon: ClipboardCheck, color: "text-indigo-600" },
+    { name: "Manual Import (CSV/PDF)", href: "/inspector/dashboard/sync/import", icon: FolderOpen, color: "text-teal-600" },
     { name: "Notifications", href: "/inspector/dashboard/notifications", icon: Bell, color: "text-purple-600" },
-    { name: "Settings & Station", href: "/inspector/dashboard/settings", icon: Settings, color: "text-slate-600" },
+    { name: "Inspector Profile", href: "/inspector/dashboard/settings", icon: Settings, color: "text-slate-600" },
   ];
 
   return (

@@ -10,58 +10,43 @@ import {
   CheckCircle2,
   AlertTriangle,
   Camera,
-  Upload,
   Play,
-  FileCheck,
   Check,
   X,
-  AlertCircle,
+  Navigation,
+  Compass,
+  Calendar,
+  Layers,
+  Sparkles,
+  ArrowRight,
   Hash,
-  Send,
 } from "lucide-react";
 import {
   getInspectorInspectionById,
   checkinInspectorInspection,
-  submitInspectorExecution,
-  logInspectorFinding,
 } from "@/services/inspector";
 import { Inspection } from "@/services/inspections";
-
-const DEFAULT_CHECKLIST = [
-  { id: "chk-1", item: "Foundation Excavation Depth & Bearing Strata Check", status: "PENDING", notes: "" },
-  { id: "chk-2", item: "Rebar Spacing, Diameter & Splice Length Compliance", status: "PENDING", notes: "" },
-  { id: "chk-3", item: "Concrete Cover Spacers & Formwork Alignment", status: "PENDING", notes: "" },
-  { id: "chk-4", item: "Damp-Proof Membrane & Subsurface Drainage Verification", status: "PENDING", notes: "" },
-  { id: "chk-5", item: "Site Safety Scaffolding, Edge Protection & PPE Review", status: "PENDING", notes: "" },
-];
+import { computeSHA256, enqueueSyncItem } from "@/lib/offline-sync";
 
 export default function InspectorInspectionDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const inspectionId = (params?.id as string) || "";
+  const inspectionId = (params?.id as string) || "insp-001";
 
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Execution flow state
+  // Geofence & Check-In State
+  const [distanceMeters, setDistanceMeters] = useState(32);
   const [gpsVerified, setGpsVerified] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
-  const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
-  const [outcome, setOutcome] = useState<"PASSED" | "CONDITIONAL_PASS" | "FAILED">("PASSED");
-  const [summaryNotes, setSummaryNotes] = useState("");
-  const [evidenceFiles, setEvidenceFiles] = useState<Array<{ name: string; hash: string; type: string }>>([
-    { name: "IMG_FOUNDATION_NORTH.JPG", hash: "9a2f7c81b2e6...4f90", type: "photo" },
-    { name: "REBAR_SPACING_SURVEY.GPR", hash: "4c118e90ab12...33d8", type: "gpr" },
-  ]);
+  const [sitePhoto, setSitePhoto] = useState<string | null>(null);
+  const [sitePhotoHash, setSitePhotoHash] = useState<string | null>(null);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const [timestamp, setTimestamp] = useState("2026-09-16 09:15:23 WAT");
 
-  // Finding modal
-  const [isFindingModalOpen, setIsFindingModalOpen] = useState(false);
-  const [findingTitle, setFindingTitle] = useState("");
-  const [findingSeverity, setFindingSeverity] = useState<"LOW" | "MEDIUM" | "HIGH" | "CRITICAL">("HIGH");
-  const [findingDescription, setFindingDescription] = useState("");
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const GEOFENCE_RADIUS = 50;
+  const isWithinGeofence = distanceMeters <= GEOFENCE_RADIUS;
 
   useEffect(() => {
     if (!inspectionId) return;
@@ -69,423 +54,291 @@ export default function InspectorInspectionDetailPage() {
     getInspectorInspectionById(inspectionId)
       .then((data) => {
         setInspection(data);
-        if (data.gps_verified) setGpsVerified(true);
-        if (data.checklist_results && data.checklist_results.length > 0) {
-          setChecklist(data.checklist_results as any);
+        if (data.gps_verified) {
+          setGpsVerified(true);
+          setDistanceMeters(28);
         }
       })
-      .catch((err) => console.error("Failed to load inspection:", err))
+      .catch((err) => {
+        console.warn("Using sample inspection detail for terminal:", err);
+      })
       .finally(() => setIsLoading(false));
   }, [inspectionId]);
 
+  const projectName = inspection?.project_name || "Eko Atlantic Tower";
+  const siteAddress = inspection?.project_location || "Eko Atlantic Tower, Lekki Phase 1, Lagos";
+  const coordinates = "6.428100° N, 3.421900° E";
+  const inspectorBadge = "Badge #LAG-INS-042";
+
+  const handleCapturePhoto = async () => {
+    setIsCapturingPhoto(true);
+    const mockImageData = `SITE_PHOTO_${projectName}_${Date.now()}`;
+    const hash = await computeSHA256(mockImageData);
+    setTimeout(() => {
+      setSitePhoto("https://images.unsplash.com/photo-1541888946425-d0fbb1861593?q=80&w=800&auto=format&fit=crop");
+      setSitePhotoHash(hash);
+      setIsCapturingPhoto(false);
+
+      enqueueSyncItem({
+        type: "EVIDENCE",
+        title: `Site Arrival Photo - ${projectName}.jpg`,
+        payload: { coordinates, distanceMeters, inspectorBadge },
+        hash: hash,
+        timestamp: new Date().toISOString(),
+        sizeBytes: 2400000,
+        source: "FIELD_TERMINAL",
+      });
+    }, 600);
+  };
+
   const handleCheckin = async () => {
+    if (!isWithinGeofence) return;
     setIsCheckingIn(true);
     try {
-      // Coordinates for Lekki Phase 1
       await checkinInspectorInspection(inspectionId, {
-        latitude: 6.4474,
-        longitude: 3.4842,
+        latitude: 6.4281,
+        longitude: 3.4219,
       });
-      setGpsVerified(true);
     } catch (err) {
-      console.warn("GPS Checkin fallback notice:", err);
-      setGpsVerified(true);
+      console.warn("GPS Checkin offline cache mode:", err);
     } finally {
       setIsCheckingIn(false);
+      setGpsVerified(true);
+      setTimestamp(new Date().toLocaleString("en-US", { timeZoneName: "short" }));
     }
-  };
-
-  const handleToggleItemStatus = (itemId: string, newStatus: "PASSED" | "FAILED") => {
-    setChecklist((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, status: newStatus } : item))
-    );
-  };
-
-  const handleAddFinding = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!findingTitle.trim()) return;
-
-    try {
-      await logInspectorFinding(inspectionId, {
-        title: findingTitle.trim(),
-        description: findingDescription.trim() || "Defect recorded during mandatory site inspection.",
-        severity: findingSeverity,
-        category: "STRUCTURAL",
-      });
-      setIsFindingModalOpen(false);
-      setFindingTitle("");
-      setFindingDescription("");
-    } catch (err) {
-      console.warn("Log finding fallback notice:", err);
-      setIsFindingModalOpen(false);
-    }
-  };
-
-  const handleSubmitExecution = async () => {
-    setIsSubmitting(true);
-    try {
-      await submitInspectorExecution(inspectionId, {
-        latitude: 6.4474,
-        longitude: 3.4842,
-        outcome,
-        checklist_results: checklist,
-        evidence: evidenceFiles,
-        summary_notes: summaryNotes,
-      });
-      setSubmitSuccess(true);
-      setTimeout(() => {
-        router.push("/inspector/dashboard/inspections");
-      }, 2000);
-    } catch (err) {
-      console.error("Submission failed:", err);
-      setSubmitSuccess(true);
-      setTimeout(() => {
-        router.push("/inspector/dashboard/inspections");
-      }, 2000);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="py-24 flex items-center justify-center">
-        <div className="w-8 h-8 border-3 border-[#022C4F] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const insp = inspection || {
-    id: inspectionId,
-    inspection_reference: "INS-2026-00412",
-    project_name: "Lekki Pearl Residences",
-    project_location: "Plot 14, Block 3, Admiralty Way, Lekki Phase 1, Lagos",
-    inspection_type: "Structural Review & Rebar Verification",
-    status: "SCHEDULED",
-    priority: "High",
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 pb-12 min-w-0">
-      {/* Top Header */}
-      <div className="flex items-center justify-between gap-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-[#022C4F] transition-colors cursor-pointer"
-        >
-          <ArrowLeft size={14} />
-          <span>Back to Inspections</span>
-        </button>
+    <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl mx-auto pb-16">
+      {/* Top Breadcrumb & Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/inspector/dashboard/inspections")}
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#022C4F] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            title="Back to Inspections"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <div className="flex items-center gap-2 text-xs font-mono text-gray-400 font-bold uppercase">
+              <span>FIELD INSPECTION</span>
+              <span>•</span>
+              <span className="text-[#0284C7]">TERMINAL CHECK-IN</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-[#022C4F]">
+              FIELD INSPECTION - {projectName.toUpperCase()}
+            </h1>
+          </div>
+        </div>
 
-        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-          Ref: {insp.inspection_reference}
-        </span>
+        <Link
+          href="/inspector/dashboard/inspections"
+          className="text-xs font-bold text-[#022C4F] hover:text-[#0284C7] flex items-center gap-1 self-start sm:self-auto"
+        >
+          <span>&larr; Back to Schedule</span>
+        </Link>
       </div>
 
-      {/* Inspection Card Header */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-              Field Execution Protocol
+      {/* GEOFENCED GPS CHECK-IN (Module 2 Wireframe Container) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Navigation size={18} className="text-[#022C4F]" />
+            <h2 className="text-base font-bold text-[#022C4F] tracking-tight uppercase">
+              GEOFENCED GPS CHECK-IN
+            </h2>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold border ${
+            gpsVerified
+              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+              : isWithinGeofence
+              ? "bg-cyan-50 text-cyan-800 border-cyan-300"
+              : "bg-rose-50 text-rose-700 border-rose-300"
+          }`}>
+            {gpsVerified ? "CHECKED IN ✅" : isWithinGeofence ? "READY TO CHECK IN" : "OUTSIDE GEOFENCE ❌"}
+          </span>
+        </div>
+
+        {/* Interactive Geofence Radar Canvas / Map Simulation */}
+        <div className="relative rounded-2xl bg-[#031D33] border border-slate-700 p-6 text-white overflow-hidden flex flex-col items-center justify-center min-h-[300px]">
+          {/* Grid Background Pattern */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#093356_1px,transparent_1px),linear-gradient(to_bottom,#093356_1px,transparent_1px)] bg-[size:32px_32px] opacity-40" />
+
+          {/* Concentric Geofence Rings */}
+          <div className="relative w-64 h-64 flex items-center justify-center">
+            {/* Outer Geofence Perimeter: 50m Radius */}
+            <div className="absolute w-56 h-56 rounded-full border-2 border-dashed border-cyan-400/60 animate-pulse flex items-center justify-center bg-cyan-900/10">
+              <span className="absolute -top-3 px-2 py-0.5 rounded bg-cyan-950 text-[10px] font-mono text-cyan-300 font-bold border border-cyan-500/40">
+                50m Boundary
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-[#022C4F]">{insp.project_name}</h1>
-            <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
-              <MapPin size={14} className="text-slate-400 shrink-0" />
-              <span>{insp.project_location}</span>
+
+            {/* Inner Proximity Ring: 25m */}
+            <div className="absolute w-28 h-28 rounded-full border border-blue-400/30" />
+
+            {/* Center: Site Construction Target */}
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="w-12 h-12 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.5)]">
+                <span className="text-xl">🏗️</span>
+              </div>
+              <span className="text-[11px] font-bold text-cyan-200 mt-1 font-mono">Site Datum</span>
+            </div>
+
+            {/* Inspector Current Position Marker (32m away) */}
+            <div
+              className="absolute z-20 flex flex-col items-center"
+              style={{ transform: "translate(38px, -42px)" }}
+            >
+              <div className="relative">
+                <span className="absolute -inset-1 rounded-full bg-rose-500/50 animate-ping" />
+                <div className="w-5 h-5 rounded-full bg-rose-500 border-2 border-white flex items-center justify-center text-[9px] font-bold text-white shadow-lg">
+                  🔴
+                </div>
+              </div>
+              <div className="mt-1 px-2 py-0.5 rounded bg-slate-900/90 text-[10px] font-mono font-bold text-white border border-rose-500/40 whitespace-nowrap">
+                Inspector ({distanceMeters}m)
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-[#022C4F] px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200">
-              {insp.inspection_type}
+          {/* Live Geofence HUD Readout */}
+          <div className="relative z-10 mt-4 px-4 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 backdrop-blur-md flex flex-wrap items-center justify-center gap-4 text-xs font-mono">
+            <span className="flex items-center gap-1.5 text-rose-400 font-bold">
+              <span>🔴 Your Location:</span>
+              <span className="text-white">6.4281° N, 3.4219° E</span>
+            </span>
+            <span className="text-slate-500">|</span>
+            <span className="flex items-center gap-1.5 text-cyan-300">
+              <span>🏗️ Site Boundary:</span>
+              <span className="text-white">50m radius</span>
+            </span>
+            <span className="text-slate-500">|</span>
+            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span>Distance: {distanceMeters}m</span>
+              <span>•</span>
+              <span>Status: WITHIN GEOFENCE ✅</span>
             </span>
           </div>
         </div>
-      </div>
 
-      {/* Step 1: Geofenced GPS Check-in */}
-      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              gpsVerified ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-[#022C4F]/10 text-[#022C4F] border border-[#022C4F]/20"
-            }`}>
-              <MapPin size={20} />
+        {/* Site Details Box (Specified in Wireframe 2) */}
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs font-mono">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <span className="text-gray-500 block">SITE ADDRESS:</span>
+              <span className="font-bold text-gray-900">{siteAddress}</span>
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#022C4F]">1. Geofenced Site Verification</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {gpsVerified
-                  ? "Location confirmed via GNSS coordinates (6.4474° N, 3.4842° E). Check-in timestamped."
-                  : "Mandatory GPS verification confirms your physical presence on the construction site."}
-              </p>
+              <span className="text-gray-500 block">GPS COORDINATES:</span>
+              <span className="font-bold text-gray-900">{coordinates}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">INSPECTOR:</span>
+              <span className="font-bold text-gray-900">{inspectorBadge}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">TIMESTAMP:</span>
+              <span className="font-bold text-gray-900">{timestamp}</span>
             </div>
           </div>
-
-          <div>
-            {gpsVerified ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-                <Check size={14} />
-                <span>Verified On-Site</span>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={handleCheckin}
-                disabled={isCheckingIn}
-                className="px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isCheckingIn ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Play size={13} className="fill-current" />
-                )}
-                <span>Confirm GPS Check-in</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Step 2: Dynamic Discipline Checklist */}
-      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-[#022C4F]">2. Structural Verification Checklist</h2>
-            <p className="text-xs text-slate-500">
-              Verify each mandatory item per statutory building code requirements.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsFindingModalOpen(true)}
-            className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <AlertTriangle size={13} />
-            <span>Log Defect</span>
-          </button>
         </div>
 
-        <div className="space-y-2.5">
-          {checklist.map((item) => (
-            <div
-              key={item.id}
-              className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-            >
-              <div className="text-xs font-semibold text-slate-800 max-w-xl leading-relaxed">
-                {item.item}
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleToggleItemStatus(item.id, "PASSED")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                    item.status === "PASSED"
-                      ? "bg-emerald-600 text-white"
-                      : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
-                  }`}
-                >
-                  <Check size={13} />
-                  <span>Pass</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleToggleItemStatus(item.id, "FAILED")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                    item.status === "FAILED"
-                      ? "bg-rose-600 text-white"
-                      : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
-                  }`}
-                >
-                  <X size={13} />
-                  <span>Fail</span>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Step 3: Tamper-Evident Evidence Files */}
-      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4">
-        <div>
-          <h2 className="text-sm font-bold text-[#022C4F]">3. Tamper-Evident Evidence Registry</h2>
-          <p className="text-xs text-slate-500">
-            Photographic records and sensor scans are tagged with cryptographic SHA-256 integrity checksums.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {evidenceFiles.map((file, idx) => (
-            <div
-              key={idx}
-              className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs flex items-center justify-between"
-            >
+        {/* Photo Preview if Captured */}
+        {sitePhoto && (
+          <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={sitePhoto}
+                alt="Site Arrival"
+                className="w-16 h-16 rounded-lg object-cover border border-emerald-300 shadow-sm"
+              />
               <div>
-                <div className="font-bold text-slate-800">{file.name}</div>
-                <div className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
-                  <Hash size={11} />
-                  <span>SHA-256: {file.hash}</span>
-                </div>
+                <span className="text-xs font-bold text-emerald-900 block">
+                  Site Arrival Verification Photo Attached ✅
+                </span>
+                <span className="text-[11px] font-mono text-emerald-700 block truncate max-w-sm">
+                  SHA-256: {sitePhotoHash}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                Verified
-              </span>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Step 4: Outcome & Sign-Off */}
-      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4">
-        <h2 className="text-sm font-bold text-[#022C4F]">4. Final Assessment & Digital Sign-off</h2>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2">
-            Inspection Outcome Decision
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              { id: "PASSED", label: "Clear / Passed", color: "border-emerald-300 bg-emerald-50 text-emerald-800" },
-              { id: "CONDITIONAL_PASS", label: "Conditional Pass", color: "border-amber-300 bg-amber-50 text-amber-800" },
-              { id: "FAILED", label: "Failed / Violations Found", color: "border-rose-300 bg-rose-50 text-rose-800" },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setOutcome(opt.id as any)}
-                className={`p-3 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm ${
-                  outcome === opt.id ? `${opt.color} ring-2 ring-[#022C4F]` : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2">
-            Official Inspector Field Summary Notes
-          </label>
-          <textarea
-            rows={3}
-            value={summaryNotes}
-            onChange={(e) => setSummaryNotes(e.target.value)}
-            placeholder="Record technical observations, required corrective remedies, or re-inspection requirements..."
-            className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
-          />
-        </div>
-
-        {submitSuccess && (
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            <span className="font-medium">Inspection report cryptographically signed and synchronized to state database!</span>
+            <span className="text-[10px] font-mono bg-emerald-200/70 text-emerald-900 font-bold px-2 py-1 rounded">
+              Cryptographically Stamped
+            </span>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleSubmitExecution}
-          disabled={isSubmitting || !gpsVerified}
-          className="w-full h-12 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <Send size={15} />
-              <span>Submit Cryptographic Sign-Off</span>
-            </>
-          )}
-        </button>
-      </div>
+        {/* Geofence Check-In Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleCapturePhoto}
+            disabled={isCapturingPhoto}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-[#022C4F] font-bold text-xs uppercase tracking-wider transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Camera size={16} className="text-[#0284C7]" />
+            <span>{isCapturingPhoto ? "Hashing Photo..." : "📸 TAKE SITE PHOTO"}</span>
+          </button>
 
-      {/* Log Finding Modal */}
-      {isFindingModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
-                <AlertTriangle size={16} className="text-rose-500" />
-                <span>Log Non-Conformance Finding</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsFindingModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddFinding} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-                  Defect / Violation Title
-                </label>
-                <input
-                  type="text"
-                  value={findingTitle}
-                  onChange={(e) => setFindingTitle(e.target.value)}
-                  placeholder="e.g. Inadequate rebar cover on Column C-24"
-                  required
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-                  Severity Level
-                </label>
-                <select
-                  value={findingSeverity}
-                  onChange={(e) => setFindingSeverity(e.target.value as any)}
-                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
-                >
-                  <option value="CRITICAL">Critical (Statutory Stop-Work Eligible)</option>
-                  <option value="HIGH">High Severity</option>
-                  <option value="MEDIUM">Medium Severity</option>
-                  <option value="LOW">Low Severity</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-                  Corrective Remedy
-                </label>
-                <textarea
-                  rows={3}
-                  value={findingDescription}
-                  onChange={(e) => setFindingDescription(e.target.value)}
-                  placeholder="Describe required remedy before next concrete pour..."
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFindingModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-sm"
-                >
-                  Save Finding
-                </button>
-              </div>
-            </form>
-          </div>
+          <button
+            type="button"
+            onClick={handleCheckin}
+            disabled={!isWithinGeofence || isCheckingIn || gpsVerified}
+            className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+              gpsVerified
+                ? "bg-emerald-600 text-white cursor-default"
+                : isWithinGeofence
+                ? "bg-[#022C4F] hover:bg-[#022C4F]/90 text-white"
+                : "bg-slate-300 text-slate-500 cursor-not-allowed"
+            }`}
+          >
+            {gpsVerified ? (
+              <>
+                <CheckCircle2 size={16} />
+                <span>CHECKED IN AT SITE ✅</span>
+              </>
+            ) : (
+              <>
+                <Navigation size={16} className="text-cyan-300" />
+                <span>{isCheckingIn ? "Verifying Geofence..." : "📍 CAPTURE GPS + CHECK IN"}</span>
+              </>
+            )}
+          </button>
         </div>
-      )}
+
+        {/* Geofence Notice Banner */}
+        <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs font-medium text-amber-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>⚠️ <strong>WARNING:</strong> You must be within 50m of the site to check in. Current distance: {distanceMeters}m ✅</span>
+          </div>
+          <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
+            WITHIN GEOFENCE
+          </span>
+        </div>
+
+        {/* Stage Execution Gateway */}
+        {gpsVerified && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-[#022C4F] to-[#014175] text-white flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-bottom duration-300">
+            <div>
+              <span className="text-[10px] font-mono font-bold text-cyan-300 uppercase tracking-widest block mb-1">
+                CHECK-IN VERIFIED &bull; STAGES UNLOCKED
+              </span>
+              <h3 className="text-base font-bold">Launch Interactive Structural Checklist</h3>
+              <p className="text-xs text-cyan-100/80">Begin Foundation Excavation, Rebar Spacing, and Cover Alignment checks.</p>
+            </div>
+            <Link
+              href={`/inspector/dashboard/inspections/${inspectionId}/stage/stage-1`}
+              className="px-5 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-[#022C4F] font-black text-xs uppercase tracking-wider transition-colors shadow-lg flex items-center gap-2 shrink-0"
+            >
+              <span>OPEN STAGE 1 CHECKLIST</span>
+              <ArrowRight size={15} />
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -22,6 +22,10 @@ import {
   LogOut,
   ExternalLink,
   X,
+  RefreshCw,
+  Inbox,
+  Wifi,
+  HardDrive,
 } from "lucide-react";
 
 interface InspectorSidebarProps {
@@ -58,7 +62,7 @@ const SECTIONS: NavSection[] = [
   {
     header: "TECHNICAL ANALYSIS",
     items: [
-      { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true, badge: "TS-1" },
+      { name: "Digital Eye (GPR/BIM)", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true },
       { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle, badge: "12" },
       { name: "Compliance Standards", href: "/inspector/dashboard/compliance", icon: ShieldCheck },
     ]
@@ -70,6 +74,13 @@ const SECTIONS: NavSection[] = [
       { name: "Inspection Reports", href: "/inspector/dashboard/reports", icon: FileText },
       { name: "Alerts & Notices", href: "/inspector/dashboard/notifications", icon: Bell },
       { name: "Inspector Profile", href: "/inspector/dashboard/settings", icon: Settings },
+    ]
+  },
+  {
+    header: "SYNC CENTER",
+    items: [
+      { name: "Sync Status", href: "/inspector/dashboard/sync", icon: RefreshCw, badge: "3" },
+      { name: "Manual Import", href: "/inspector/dashboard/sync/import", icon: Inbox },
     ]
   }
 ];
@@ -216,6 +227,23 @@ export default function InspectorSidebar({
 
       {/* Footer: Directorate Link & Inspector Profile */}
       <div className={`p-4 border-t border-white/15 space-y-2 shrink-0 ${isCollapsed && !isMobile ? "px-2 text-center" : ""}`}>
+        {/* Sync Status Badges */}
+        {(!isCollapsed || isMobile) ? (
+          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] font-mono">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Live Sync Active
+            </span>
+            <span className="text-amber-300/90 font-medium">
+              Offline Cache
+            </span>
+          </div>
+        ) : (
+          <div className="flex justify-center p-1.5" title="Live Sync Active 🟢 • Offline Cache">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          </div>
+        )}
+
         {/* Link to Agency Directorate */}
         <a
           href="https://nexucon.net/government/login"
