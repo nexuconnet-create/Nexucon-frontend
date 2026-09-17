@@ -17,15 +17,19 @@ import {
   Bell,
   Settings,
   X,
-  ExternalLink,
-  LogOut,
+  RefreshCw,
+  Inbox,
+  Scan,
+  Sparkles,
+  Radio,
+  Box,
+  Satellite,
+  ChevronRight,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
 
 export default function InspectorMobileNav() {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const { logout } = useAuth();
 
   const PRIMARY_MOBILE_ITEMS = [
     { name: "Home", href: "/inspector/dashboard", icon: LayoutDashboard, exact: true },
@@ -34,21 +38,29 @@ export default function InspectorMobileNav() {
     { name: "Evidence", href: "/inspector/dashboard/evidence", icon: Layers },
   ];
 
-  const SECONDARY_ITEMS = [
-    { name: "Digital Eye (GPR/BIM)", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
+  const DIGITAL_EYE_DEVICES = [
+    { name: "T-S1 MVP (LiDAR SLAM)", href: "/inspector/dashboard/digital-eye/ts-1", icon: Scan, color: "text-cyan-600 bg-cyan-50" },
+    { name: "PUNDIT UPV Ultrasonic", href: "/inspector/dashboard/digital-eye/pundit", icon: Sparkles, color: "text-amber-600 bg-amber-50" },
+    { name: "GPR Radargram Radar", href: "/inspector/dashboard/digital-eye/gpr", icon: Radio, color: "text-blue-600 bg-blue-50" },
+    { name: "Trimble Connect (BIM)", href: "/inspector/dashboard/digital-eye/trimble", icon: Box, color: "text-indigo-600 bg-indigo-50" },
+    { name: "GNSS Geodetic RTK", href: "/inspector/dashboard/digital-eye/gnss", icon: Satellite, color: "text-emerald-600 bg-emerald-50" },
+    { name: "Audit & SHA-Vault", href: "/inspector/dashboard/digital-eye/audit-vault", icon: ShieldCheck, color: "text-purple-600 bg-purple-50" },
+  ];
+
+  const SECONDARY_MODULES = [
     { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle, color: "text-rose-600" },
-    { name: "Compliance & Orders", href: "/inspector/dashboard/compliance", icon: ShieldCheck, color: "text-blue-600" },
-    { name: "Documents", href: "/inspector/dashboard/documents", icon: FolderOpen, color: "text-cyan-600" },
-    { name: "Reports & Certificates", href: "/inspector/dashboard/reports", icon: FileText, color: "text-amber-600" },
-    { name: "Sync Status & Queue", href: "/inspector/dashboard/sync", icon: ClipboardCheck, color: "text-indigo-600" },
-    { name: "Manual Import (CSV/PDF)", href: "/inspector/dashboard/sync/import", icon: FolderOpen, color: "text-teal-600" },
-    { name: "Notifications", href: "/inspector/dashboard/notifications", icon: Bell, color: "text-purple-600" },
+    { name: "Compliance Standards", href: "/inspector/dashboard/compliance", icon: ShieldCheck, color: "text-blue-600" },
+    { name: "Site Documents", href: "/inspector/dashboard/documents", icon: FolderOpen, color: "text-cyan-600" },
+    { name: "Inspection Reports", href: "/inspector/dashboard/reports", icon: FileText, color: "text-teal-600" },
+    { name: "Sync Status & Queue", href: "/inspector/dashboard/sync", icon: RefreshCw, color: "text-indigo-600" },
+    { name: "Manual Data Import", href: "/inspector/dashboard/sync/import", icon: Inbox, color: "text-emerald-600" },
+    { name: "Notifications & Alerts", href: "/inspector/dashboard/notifications", icon: Bell, color: "text-violet-600" },
     { name: "Inspector Profile", href: "/inspector/dashboard/settings", icon: Settings, color: "text-slate-600" },
   ];
 
   return (
     <>
-      {/* Fixed Bottom Navigation Bar on Mobile & Small Tablets */}
+      {/* Fixed Bottom Navigation Bar on Mobile */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-2xl border-t border-slate-200/90 shadow-lg z-40 px-2 flex items-center justify-around">
         {PRIMARY_MOBILE_ITEMS.map((item) => {
           const isActive = item.exact
@@ -60,10 +72,15 @@ export default function InspectorMobileNav() {
               key={item.name}
               href={item.href}
               className={`flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all select-none ${
-                isActive ? "text-[#022C4F] font-extrabold" : "text-slate-400 hover:text-slate-700"
+                isActive
+                  ? "text-[#022C4F] font-extrabold"
+                  : "text-slate-400 hover:text-slate-700"
               }`}
             >
-              <item.icon size={19} className={isActive ? "scale-110 text-[#022C4F]" : "text-slate-400"} />
+              <item.icon
+                size={19}
+                className={isActive ? "scale-110 text-[#022C4F]" : "text-slate-400"}
+              />
               <span className="text-[10px] tracking-tight">{item.name}</span>
             </Link>
           );
@@ -78,7 +95,7 @@ export default function InspectorMobileNav() {
           }`}
         >
           <MoreHorizontal size={19} />
-          <span className="text-[10px] tracking-tight">More</span>
+          <span className="text-[10px] tracking-tight">Devices & More</span>
         </button>
       </nav>
 
@@ -90,11 +107,11 @@ export default function InspectorMobileNav() {
             onClick={() => setIsMoreOpen(false)}
           />
 
-          <div className="relative bg-white rounded-t-[28px] border-t border-slate-200 shadow-2xl p-5 max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+          <div className="relative bg-white rounded-t-[28px] border-t border-slate-200 shadow-2xl p-5 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
-                <h3 className="text-sm font-bold text-[#022C4F]">Inspector Modules</h3>
-                <p className="text-[11px] text-gray-500">Fast station navigation</p>
+                <h3 className="text-sm font-bold text-[#022C4F]">Inspector Modules & Devices</h3>
+                <p className="text-[11px] text-gray-500">Digital Eye Suite & Field Navigation</p>
               </div>
               <button
                 type="button"
@@ -105,42 +122,51 @@ export default function InspectorMobileNav() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-1.5 py-1">
-              {SECONDARY_ITEMS.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setIsMoreOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-700"
-                >
-                  <item.icon size={18} className={item.color} />
-                  <span>{item.name}</span>
-                </Link>
-              ))}
+            {/* Digital Eye Device Sub-pages */}
+            <div className="mb-4">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0284C7] block mb-2 px-1">
+                Digital Eye Sensor Devices
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {DIGITAL_EYE_DEVICES.map((dev) => (
+                  <Link
+                    key={dev.name}
+                    href={dev.href}
+                    onClick={() => setIsMoreOpen(false)}
+                    className="flex flex-col gap-1 p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/40 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${dev.color}`}>
+                        <dev.icon size={15} />
+                      </div>
+                      <span className="text-xs font-bold text-[#022C4F] truncate">{dev.name.split(' ')[0]}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-500 truncate">{dev.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
 
-              <div className="pt-2 mt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setIsMoreOpen(false);
-                    await logout("/inspector/login");
-                  }}
-                  className="flex items-center justify-between p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors text-xs font-bold w-full cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <LogOut size={15} />
-                    <span>Sign Out of Inspector Terminal</span>
-                  </span>
-                </button>
-                <a
-                  href="https://nexucon.net/government/login"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#022C4F] transition-colors text-xs font-bold"
-                >
-                  <span>Agency Directorate Portal</span>
-                  <ExternalLink size={14} className="text-[#0284C7]" />
-                </a>
+            {/* Core Modules */}
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 block mb-2 px-1">
+                System & Field Records
+              </span>
+              <div className="grid grid-cols-1 gap-1">
+                {SECONDARY_MODULES.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => setIsMoreOpen(false)}
+                    className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors text-xs font-medium text-slate-700"
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon size={16} className={item.color} />
+                      <span>{item.name}</span>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-300" />
+                  </Link>
+                ))}
               </div>
             </div>
           </div>

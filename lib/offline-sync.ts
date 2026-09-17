@@ -7,7 +7,7 @@
 
 export interface SyncQueueItem {
   id: string;
-  type: "EVIDENCE" | "CHECKLIST_STAGE" | "UPV_READING" | "GPR_SCAN" | "MANUAL_IMPORT" | "SWO";
+  type: "EVIDENCE" | "CHECKLIST_STAGE" | "UPV_READING" | "GPR_SCAN" | "MANUAL_IMPORT" | "SWO" | "TELEMETRY_LOG";
   title: string;
   payload: any;
   hash: string;
@@ -108,16 +108,32 @@ export function getSyncQueue(): SyncQueueItem[] {
   }
 }
 
+export type EnqueueSyncItemInput = {
+  type: SyncQueueItem["type"];
+  title: string;
+  payload: any;
+  hash?: string;
+  timestamp?: string;
+  source?: SyncQueueItem["source"];
+  sizeBytes?: number;
+};
+
 /**
  * Enqueue an item into the offline sync cache.
  */
-export function enqueueSyncItem(item: Omit<SyncQueueItem, "id" | "status" | "retryCount">): SyncQueueItem {
+export function enqueueSyncItem(item: EnqueueSyncItemInput): SyncQueueItem {
   const current = getSyncQueue();
   const newItem: SyncQueueItem = {
-    ...item,
     id: `sync-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     status: "PENDING",
     retryCount: 0,
+    type: item.type,
+    title: item.title,
+    payload: item.payload,
+    hash: item.hash || "0x" + Math.random().toString(16).slice(2) + "fa829b31d0442e",
+    timestamp: item.timestamp || new Date().toISOString(),
+    source: item.source || "TELEMETRY",
+    sizeBytes: item.sizeBytes || 1024,
   };
   const updated = [newItem, ...current];
   if (typeof window !== "undefined") {
@@ -156,6 +172,30 @@ export function removeSyncItem(id: string): void {
  */
 export function getPendingSyncCount(): number {
   return getSyncQueue().filter((item) => item.status === "PENDING").length;
+}
+
+/**
+ * Get aggregated sync statistics for header and cockpit.
+ */
+export function getSyncStats(): {
+  total: number;
+  pendingCount: number;
+  syncingCount: number;
+  syncedCount: number;
+  failedCount: number;
+} {
+  const queue = getSyncQueue();
+  const pendingCount = queue.filter((i) => i.status === "PENDING").length;
+  const syncingCount = queue.filter((i) => i.status === "SYNCING").length;
+  const syncedCount = queue.filter((i) => i.status === "SYNCED").length;
+  const failedCount = queue.filter((i) => i.status === "FAILED").length;
+  return {
+    total: queue.length,
+    pendingCount,
+    syncingCount,
+    syncedCount,
+    failedCount,
+  };
 }
 
 /**

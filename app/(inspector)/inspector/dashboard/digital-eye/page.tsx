@@ -32,6 +32,7 @@ import {
   X,
   Plus,
   Play,
+  Satellite,
   RotateCcw,
   Check,
   AlertCircle,
@@ -644,6 +645,53 @@ export default function InspectorDigitalEyePage() {
         </div>
       </div>
 
+      {/* Dedicated Device Consoles Quick Jump Grid */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-[#022C4F] uppercase tracking-wider flex items-center gap-2">
+              <Scan size={16} className="text-[#0284C7]" />
+              Dedicated Device Sub-Pages (Full Screen Consoles)
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Launch dedicated device analyzers for deep structural telemetry, oscillograms, and LiDAR SLAM point clouds.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { name: "T-S1 MVP", href: "/inspector/dashboard/digital-eye/ts-1", desc: "LiDAR SLAM & 3D Cloud", icon: Scan, color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
+            { name: "PUNDIT UPV", href: "/inspector/dashboard/digital-eye/pundit", desc: "Pulse Velocity NDT", icon: Sparkles, color: "text-amber-600 bg-amber-50 border-amber-200" },
+            { name: "GPR Radar", href: "/inspector/dashboard/digital-eye/gpr", desc: "Radargram & Rebar Cover", icon: Radio, color: "text-blue-600 bg-blue-50 border-blue-200" },
+            { name: "Trimble Connect", href: "/inspector/dashboard/digital-eye/trimble", desc: "3D BIM & BCF Issues", icon: Box, color: "text-indigo-600 bg-indigo-50 border-indigo-200" },
+            { name: "GNSS RTK", href: "/inspector/dashboard/digital-eye/gnss", desc: "Centimeter Geodetic Fix", icon: Satellite, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+            { name: "Audit Vault", href: "/inspector/dashboard/digital-eye/audit-vault", desc: "SHA-256 Merkle Ledger", icon: ShieldCheck, color: "text-purple-600 bg-purple-50 border-purple-200" },
+          ].map((item) => (
+            <Link
+              key={item.name}
+              href={item.href}
+              className="flex flex-col justify-between p-3.5 rounded-2xl border border-slate-200/80 hover:border-[#0284C7] hover:shadow-md transition-all group bg-white"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className={`p-2 rounded-xl border ${item.color}`}>
+                  <item.icon size={16} />
+                </div>
+                <ChevronRight size={14} className="text-gray-300 group-hover:text-[#0284C7] transition-colors" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-[#022C4F] group-hover:text-[#0284C7] transition-colors">
+                  {item.name}
+                </h3>
+                <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">
+                  {item.desc}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {/* Hardware Telemetry Fleet Status Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {devices.map((dev) => (
@@ -695,11 +743,10 @@ export default function InspectorDigitalEyePage() {
             key={tab.id}
             type="button"
             onClick={() => setActiveSubmodule(tab.id as any)}
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer shrink-0 shadow-sm ${
-              activeSubmodule === tab.id
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer shrink-0 shadow-sm ${activeSubmodule === tab.id
                 ? "bg-[#022C4F] text-white font-bold"
                 : "bg-white text-slate-600 hover:text-[#022C4F] hover:bg-slate-50 border border-slate-200/80 font-medium"
-            }`}
+              }`}
           >
             <tab.icon size={16} />
             <div className="text-left">
@@ -742,11 +789,10 @@ export default function InspectorDigitalEyePage() {
                   key={mode.id}
                   type="button"
                   onClick={() => setPunditMode(mode.id as any)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    punditMode === mode.id
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${punditMode === mode.id
                       ? "bg-white text-[#022C4F] shadow-sm font-bold"
                       : "text-slate-600 hover:text-[#022C4F]"
-                  }`}
+                    }`}
                 >
                   <mode.icon size={13} />
                   <span>{mode.label}</span>
@@ -1272,11 +1318,10 @@ export default function InspectorDigitalEyePage() {
                       setActivePunditTest(t);
                       setPunditMode("live");
                     }}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
+                    className={`p-4 rounded-xl border transition-all cursor-pointer ${isSelected
                         ? "border-[#022C4F] bg-blue-50/40 ring-2 ring-[#022C4F]/10 shadow-sm"
                         : "border-slate-200/70 bg-white hover:bg-slate-50/50"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1.5">
                       <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">

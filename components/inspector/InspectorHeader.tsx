@@ -10,13 +10,17 @@ import {
   User,
   LogOut,
   Shield,
-  HelpCircle,
   ExternalLink,
   Menu,
   Radio,
+  Sparkles,
+  Wifi,
+  HardDrive,
+  ChevronDown,
   CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getSyncStats } from "@/lib/offline-sync";
 
 interface InspectorHeaderProps {
   onOpenMobileMenu?: () => void;
@@ -27,17 +31,37 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
   const { user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [queueCount, setQueueCount] = useState(0);
 
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+    const updateStats = () => {
+      const stats = getSyncStats();
+      setQueueCount(stats.pendingCount);
+    };
+
+    updateStats();
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      updateStats();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      updateStats();
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("storage", updateStats);
+    window.addEventListener("offline-sync-queue-updated", updateStats);
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("storage", updateStats);
+      window.removeEventListener("offline-sync-queue-updated", updateStats);
     };
   }, []);
 
@@ -47,135 +71,185 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
   };
 
   const userName = user
-    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email?.split("@")[0]
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+      user.email?.split("@")[0]
     : "Field Inspector";
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sm:gap-4 shadow-sm">
-      {/* Left: Mobile trigger & Jurisdiction Breadcrumb */}
-      <div className="flex items-center gap-3 min-w-0">
-        {onOpenMobileMenu && (
-          <button
-            type="button"
-            onClick={onOpenMobileMenu}
-            className="w-9 h-9 flex items-center justify-center text-[#022C4F] bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors shrink-0 cursor-pointer lg:hidden"
-            aria-label="Open Navigation Menu"
-          >
-            <Menu size={20} />
-          </button>
-        )}
+    <header className="h-24 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 sm:px-10 sticky top-0 z-30 transition-all duration-300">
+      {/* Mobile Menu & Logo */}
+      <div className="flex items-center gap-4 lg:hidden">
+        <button
+          type="button"
+          onClick={onOpenMobileMenu}
+          className="p-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-[#0F181F] transition-colors"
+          aria-label="Open Navigation Drawer"
+        >
+          <Menu size={24} />
+        </button>
+        <Link href="/inspector/dashboard" className="flex items-center">
+          <Image
+            src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
+            alt="Nexucon Logo"
+            width={120}
+            height={36}
+            priority
+            className="h-8 w-auto object-contain"
+          />
+        </Link>
+      </div>
 
-        <div className="flex lg:hidden items-center">
-          <Link href="/inspector/dashboard" className="flex items-center">
-            <Image
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
-              alt="Nexucon Logo"
-              width={110}
-              height={28}
-              className="h-6 w-auto object-contain"
+      {/* Desktop Search Bar matching Government Dashboard */}
+      <div className="hidden md:flex items-center flex-1 max-w-md mx-4 lg:mx-0">
+        <div className="relative w-full group">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search
+              size={18}
+              className="text-gray-400 group-focus-within:text-blue-500 transition-colors"
             />
-          </Link>
-        </div>
-
-        {/* Desktop Jurisdiction Pill */}
-        <div className="hidden sm:flex items-center gap-2 min-w-0">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 border border-blue-200/80 text-xs font-bold text-[#022C4F]">
-            <Shield size={13} className="text-[#0284C7]" />
-            <span className="truncate">Lagos State Building Control Agency</span>
-            <span className="text-gray-300">&bull;</span>
-            <span className="text-gray-600 font-medium">Ikeja North Directorate</span>
-          </span>
+          </div>
+          <input
+            type="text"
+            placeholder="Search inspections, permits, GPR scans, SWOs..."
+            className="w-full pl-11 pr-4 py-3 bg-gray-50/50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 text-gray-700 placeholder-gray-400"
+          />
         </div>
       </div>
 
-      {/* Right: Sync Status, Search, Notifications & User */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Offline / Online Sync Indicator */}
-        <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
-          <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-          <span>{isOnline ? "Live Sync Active" : "Offline Cache"}</span>
+      {/* Right Controls Area */}
+      <div className="flex items-center gap-3 sm:gap-5 ml-auto">
+        {/* LASBCA Field Jurisdiction Badge */}
+        <div className="hidden xl:flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-blue-50/80 border border-blue-100/80 text-xs font-bold text-[#022C4F]">
+          <Shield size={14} className="text-blue-600 shrink-0" />
+          <span className="truncate">LASBCA Field Operations</span>
+          <span className="text-blue-200">•</span>
+          <span className="text-blue-700/80 font-semibold text-[11px]">Ikeja North</span>
         </div>
 
-        {/* Agency Directorate Quick Jump */}
-        <a
-          href="https://nexucon.net/government/login"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-[#022C4F] bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition-colors"
-          title="Open Agency Directorate Portal"
-        >
-          <span>Directorate</span>
-          <ExternalLink size={12} className="text-[#0284C7]" />
-        </a>
-
-        {/* Notifications */}
+        {/* Live Sync Status Pill */}
         <Link
-          href="/inspector/dashboard/notifications"
-          className="relative w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center text-[#022C4F] hover:bg-slate-50 transition-colors shrink-0"
-          aria-label="Open Notifications"
+          href="/inspector/dashboard/sync"
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl text-xs font-bold border transition-all ${
+            isOnline
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
+              : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
+          }`}
+          title="Open Sync Status Center"
         >
-          <Bell size={16} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {isOnline ? "Live Sync Active" : "Offline Cache"}
+          </span>
+          {queueCount > 0 && (
+            <span className="px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full text-[10px] font-mono font-bold">
+              {queueCount}
+            </span>
+          )}
         </Link>
 
-        {/* User Profile Dropdown */}
+        {/* Government Portal Quick Link */}
+        <a
+          href="https://nexucon.net/government/dashboard/command-center"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden lg:inline-flex items-center gap-1.5 text-xs font-bold text-[#022C4F] bg-gray-50 hover:bg-gray-100 border border-gray-200/70 px-3 py-2 rounded-2xl transition-all hover:border-gray-300"
+          title="Open State Directorate Portal"
+        >
+          <span>Directorate</span>
+          <ExternalLink size={12} className="text-blue-600" />
+        </a>
+
+        {/* Notifications Icon Button */}
+        <Link
+          href="/inspector/dashboard/notifications"
+          className="relative p-2.5 rounded-full text-gray-500 hover:bg-gray-50 hover:text-[#0F181F] transition-all duration-300 hover:scale-105 shrink-0"
+          aria-label="Open Notifications"
+        >
+          <Bell size={22} />
+          <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+        </Link>
+
+        <div className="h-8 w-px bg-gray-200 hidden sm:block" />
+
+        {/* User Profile Pill matching Government Dashboard */}
         <div className="relative">
           <button
             type="button"
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
+            className="flex items-center gap-3 p-1.5 pr-4 rounded-full border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all duration-300 bg-white group cursor-pointer"
           >
-            <div className="w-7 h-7 rounded-lg bg-[#022C4F] text-white flex items-center justify-center text-xs font-bold shrink-0">
-              {userName.charAt(0).toUpperCase()}
+            <div className="relative w-9 h-9 rounded-full overflow-hidden bg-blue-100 border-2 border-white shadow-sm flex items-center justify-center text-[#022C4F] font-bold text-sm">
+              {user
+                ? (
+                    user.first_name?.[0] ||
+                    user.email?.[0] ||
+                    "I"
+                  ).toUpperCase()
+                : "I"}
             </div>
-            <span className="hidden md:inline-block text-xs font-bold text-[#022C4F] max-w-[120px] truncate">
-              {userName}
-            </span>
+            <div className="hidden sm:block text-left">
+              <p className="text-sm font-bold text-[#0F181F] leading-none mb-1">
+                {userName}
+              </p>
+              <p className="text-[11px] font-medium text-gray-500 leading-none">
+                Badge #LAG-INS-042
+              </p>
+            </div>
+            <ChevronDown
+              size={14}
+              className={`text-gray-400 transition-transform hidden sm:block ${
+                isProfileOpen ? "rotate-180" : ""
+              }`}
+            />
           </button>
 
+          {/* Profile Dropdown Menu */}
           {isProfileOpen && (
             <>
               <div
                 className="fixed inset-0 z-40"
                 onClick={() => setIsProfileOpen(false)}
               />
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl p-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="p-3 bg-slate-50 rounded-xl mb-2">
-                  <p className="text-xs font-bold text-[#022C4F] truncate">{userName}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{user?.email || "inspector@nexucon.gov.ng"}</p>
-                  <span className="inline-block mt-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
-                    Accredited Inspector
+              <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-4 py-3 border-b border-gray-100 bg-slate-50/50 rounded-t-2xl">
+                  <p className="text-xs text-gray-500 font-medium">Logged in as</p>
+                  <p className="text-sm font-bold text-[#022C4F] truncate">
+                    {userName}
+                  </p>
+                  <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={11} /> Authorized Field Inspector
                   </span>
                 </div>
 
-                <div className="space-y-1 text-xs font-medium">
+                <div className="py-1">
                   <Link
                     href="/inspector/dashboard/settings"
                     onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-700 hover:bg-slate-100 hover:text-[#022C4F] transition-colors"
+                    className="flex items-center gap-3 px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                   >
-                    <User size={15} />
-                    <span>Inspector Profile & Key</span>
+                    <User size={15} className="text-gray-500" />
+                    <span>Inspector Profile & Credentials</span>
                   </Link>
-                  <a
-                    href="https://nexucon.net/government/login"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between px-3 py-2 rounded-xl text-gray-700 hover:bg-slate-100 hover:text-[#022C4F] transition-colors"
+
+                  <Link
+                    href="/inspector/dashboard/sync"
+                    onClick={() => setIsProfileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors font-medium"
                   >
-                    <span className="flex items-center gap-2.5">
-                      <Shield size={15} />
-                      <span>Agency Directorate</span>
-                    </span>
-                    <ExternalLink size={12} className="text-gray-400" />
-                  </a>
+                    <Wifi size={15} className="text-gray-500" />
+                    <span>Offline Sync Ledger</span>
+                  </Link>
                 </div>
 
-                <div className="pt-2 mt-2 border-t border-slate-100">
+                <div className="border-t border-gray-100 pt-1 mt-1">
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 transition-colors font-semibold text-left cursor-pointer"
                   >
                     <LogOut size={15} />
                     <span>Sign Out</span>

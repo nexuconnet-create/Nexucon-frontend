@@ -56,36 +56,32 @@ export default function GprRadargramPage() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl mx-auto pb-16">
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/inspector/dashboard/digital-eye")}
-            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#022C4F] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-            title="Back to Digital Eye"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <div className="text-[11px] font-mono text-gray-400 font-bold uppercase">
-              TECHNICAL ANALYSIS &bull; NDT GPR
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-[#022C4F]">
-              GPR RADARGRAM ANALYSIS
-            </h1>
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold text-[#0284C7] uppercase tracking-wider mb-2">
+            <Link href="/inspector/dashboard/digital-eye" className="hover:underline">Digital Eye</Link>
+            <span className="text-gray-400">/</span>
+            <span>GPR Radargram Radar</span>
           </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F] tracking-tight flex items-center gap-3">
+            <Radio className="text-[#0284C7]" />
+            GPR Radargram Analysis
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            High-frequency subsurface radar imaging (400 MHz–2.0 GHz) for concrete rebar spacing, void detection, and cover validation.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={handleExport}
             className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Download size={14} />
-            <span>Export</span>
+            <span>Export DZT / Report</span>
           </button>
         </div>
       </div>
