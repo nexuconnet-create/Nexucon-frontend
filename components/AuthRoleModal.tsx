@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Building2, HardHat, GraduationCap, Users, Landmark } from "lucide-react";
+import { X, Building2, HardHat, GraduationCap, Users, Landmark, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface AuthRoleModalProps {
@@ -35,6 +35,25 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
 
   const handleRoleSelect = (role: string) => {
     onClose();
+    if (role === "inspector") {
+      if (typeof window !== "undefined") {
+        const hostname = window.location.hostname;
+        const isLocalhost =
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname.includes("localhost");
+
+        if (isLocalhost) {
+          const port = window.location.port ? `:${window.location.port}` : "";
+          window.location.href = `${window.location.protocol}//${hostname}${port}/inspector`;
+        } else {
+          window.location.href = "https://inspector.nexucon.net";
+        }
+      } else {
+        router.push("/inspector");
+      }
+      return;
+    }
     // Navigate to the appropriate auth page based on the role and mode
     router.push(`/${role}/${mode}`);
   };
@@ -46,6 +65,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Post projects, hire verified professionals, and manage construction.",
       icon: <Building2 size={24} />,
       color: "bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-500",
+      loginOnly: false,
     },
     {
       id: "government",
@@ -53,6 +73,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Review plans, issue permits, and oversee building compliance.",
       icon: <Landmark size={24} />,
       color: "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-500",
+      loginOnly: false,
     },
     {
       id: "professional",
@@ -60,6 +81,15 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Find jobs, bid on projects, and showcase your expertise.",
       icon: <HardHat size={24} />,
       color: "bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-500",
+      loginOnly: false,
+    },
+    {
+      id: "inspector",
+      title: "Inspector",
+      description: "Access field inspection terminal, NDT diagnostic telemetry, and findings.",
+      icon: <ShieldCheck size={24} />,
+      color: "bg-teal-50 text-teal-700 border-teal-200 hover:border-teal-500",
+      loginOnly: true,
     },
     {
       id: "mentor",
@@ -67,6 +97,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Guide emerging talent, share industry expertise, and give back.",
       icon: <Users size={24} />,
       color: "bg-purple-50 text-purple-700 border-purple-200 hover:border-purple-500",
+      loginOnly: false,
     },
     {
       id: "mentee",
@@ -74,9 +105,11 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Learn from mentors, build your skills, and start your career.",
       icon: <GraduationCap size={24} />,
       color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-500",
+      loginOnly: false,
     },
-
   ];
+
+  const visibleRoles = roles.filter((role) => mode === "login" || !role.loginOnly);
 
   return (
     <AnimatePresence>
@@ -144,7 +177,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
                 </div>
 
                 <div className="flex flex-col gap-4">
-                  {roles.map((role) => (
+                  {visibleRoles.map((role) => (
                     <button
                       key={role.id}
                       onClick={() => handleRoleSelect(role.id)}
