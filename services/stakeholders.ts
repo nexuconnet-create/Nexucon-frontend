@@ -1,4 +1,5 @@
 import api from './api';
+import { getDistricts as settingsGetDistricts, type District } from './settings';
 
 export interface Developer {
   id: string;
@@ -253,6 +254,28 @@ export const getContractors = async (params?: Record<string, any>): Promise<Cont
     return unwrapList<Contractor>(response);
   } catch (err) {
     console.warn('Fallback loading contractors', err);
+    return [];
+  }
+};
+
+/**
+ * The operational zone register, for the zone dropdowns.
+ *
+ * This used to call `/evidence/hq/districts/` — the HQ risk heatmap, which is
+ * Director-only and answers `{districts, computed_at}`. `unwrapList` discards
+ * that shape, so the function returned `[]` for every caller and both the
+ * reassignment and stakeholder modals showed "no operational zones" no matter
+ * how many districts existed. It now reads the real zone register
+ * (`apps.government.district_views`), which returns a plain list.
+ */
+export const getDistricts = async (params?: {
+  active?: 'true' | 'false' | 'all';
+  search?: string;
+}): Promise<District[]> => {
+  try {
+    return await settingsGetDistricts(params);
+  } catch (err) {
+    console.warn('Could not load operational zones', err);
     return [];
   }
 };

@@ -1,10 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import {
+  getInspectorAccreditation,
+  getInspectorDashboard,
+} from "@/services/inspector";
 import {
   LayoutDashboard,
   Building2,
@@ -13,6 +17,10 @@ import {
   Eye,
   AlertTriangle,
   ShieldCheck,
+  RefreshCw,
+  Upload,
+  Radio,
+  Cpu,
   FolderOpen,
   FileText,
   Bell,
@@ -51,7 +59,9 @@ const SECTIONS: NavSection[] = [
     items: [
       { name: "Command Center", href: "/inspector/dashboard", icon: LayoutDashboard, exact: true },
       { name: "Assigned Projects", href: "/inspector/dashboard/projects", icon: Building2 },
-      { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck, badge: "4" },
+      // These two badges are filled in from the dashboard payload at render
+      // time. They were literals ("4" and "12") before.
+      { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck },
       { name: "Evidence Vault", href: "/inspector/dashboard/evidence", icon: Layers },
     ]
   },
@@ -59,8 +69,22 @@ const SECTIONS: NavSection[] = [
     header: "TECHNICAL ANALYSIS",
     items: [
       { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true, badge: "TS-1" },
-      { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle, badge: "12" },
+      { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle },
       { name: "Compliance Standards", href: "/inspector/dashboard/compliance", icon: ShieldCheck },
+    ]
+  },
+  {
+    header: "SYNC CENTER",
+    items: [
+      // "Sync Status" is `exact` because every other item in this section
+      // lives underneath its path — without it, /sync/import would light up
+      // both rows. Each of these is a distinct job: what has not reached the
+      // server, how to bring a file in by hand, what the instruments are
+      // doing, and which instruments exist to send at all.
+      { name: "Sync Status", href: "/inspector/dashboard/sync", icon: RefreshCw, exact: true },
+      { name: "Manual Import", href: "/inspector/dashboard/sync/import", icon: Upload },
+      { name: "Telemetry Status", href: "/inspector/dashboard/sync/telemetry", icon: Radio },
+      { name: "Instruments", href: "/inspector/dashboard/sync/devices", icon: Cpu },
     ]
   },
   {
@@ -84,14 +108,64 @@ export default function InspectorSidebar({
   const router = useRouter();
   const { user, logout } = useAuth();
 
+  // The nav badges used to be fixed strings — "4" on Field Inspections and
+  // "12" on Findings & SWOs — printed identically for every inspector on every
+  // page, whatever their actual workload. They are now the real counts, and
+  // they are omitted rather than defaulted when the server has not been read.
+  const [badges, setBadges] = useState<Record<string, string> | null>(null);
+  const [accreditationLine, setAccreditationLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getInspectorDashboard()
+      .then((dashboard) => {
+        if (cancelled) return;
+        const kpis = dashboard.kpis;
+        setBadges({
+          "/inspector/dashboard/findings": String(kpis.open_findings),
+          "/inspector/dashboard/inspections": String(kpis.upcoming_inspections),
+        });
+        const profile = dashboard.profile;
+        // Agency and directorate as recorded, or a plain statement that
+        // neither is. "LASBCA • Ikeja North" was a literal.
+        const agency = profile?.agency;
+        const district = profile?.district;
+        setAccreditationLine(
+          agency || district
+            ? [agency, district].filter(Boolean).join(" • ")
+            : "Agency not recorded"
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAccreditationLine("Agency not read");
+      });
+    getInspectorAccreditation()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.accredited) {
+          setAccreditationLine((prev) =>
+            prev && prev !== "Agency not recorded"
+              ? prev
+              : result.accreditation.directorate || "Directorate not recorded"
+          );
+        }
+      })
+      .catch(() => {
+        /* the dashboard call already covers the not-read case */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleLogout = async () => {
     if (onCloseMobile) onCloseMobile();
     await logout("/inspector/login");
   };
 
   const userName = user
-    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email?.split("@")[0]
-    : "Field Inspector";
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "Inspector"
+    : "Inspector";
 
   return (
     <aside
@@ -205,6 +279,18 @@ export default function InspectorSidebar({
                           {item.badge}
                         </span>
                       )}
+
+                      {!item.badge && !item.live && badges?.[item.href] && (
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                            isActive
+                              ? "bg-[#022C4F] text-white"
+                              : "bg-white/15 text-white"
+                          }`}
+                        >
+                          {badges[item.href]}
+                        </span>
+                      )}
                     </div>
                   )}
                 </Link>
@@ -235,7 +321,9 @@ export default function InspectorSidebar({
           <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
             <div className="min-w-0 flex-1 mr-2">
               <p className="text-xs font-bold text-white truncate">{userName}</p>
-              <p className="text-[10px] font-mono text-white/60 truncate">LASBCA &bull; Ikeja North</p>
+              <p className="text-[10px] font-mono text-white/60 truncate">
+                {accreditationLine || "Agency not read"}
+              </p>
             </div>
             <button
               type="button"

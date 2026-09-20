@@ -23,20 +23,34 @@ import {
   Scan,
   Radio,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { getInspectorDashboard, InspectorDashboardData } from "@/services/inspector";
+import { getErrorMessage, notify } from "@/lib/api";
+import { ABSENT, countOr, orDash, timeOr, dateTimeOr } from "@/lib/display";
 
 export default function InspectorDashboardPage() {
   const [data, setData] = useState<InspectorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
       const res = await getInspectorDashboard();
       setData(res);
+      setLoadError(null);
     } catch (err) {
-      console.error("Failed to load dashboard data", err);
+      // Previously this logged to the console and left the fabricated
+      // fallback dashboard on screen, so a failed load was indistinguishable
+      // from a successful one. Now the failure owns the page.
+      const message = getErrorMessage(
+        err,
+        'Could not load your dashboard from the server.'
+      );
+      setLoadError(message);
+      setData(null);
+      notify(`⚠️ ${message}`, 'error');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -63,8 +77,37 @@ export default function InspectorDashboardPage() {
     );
   }
 
-  const profile = data?.profile;
-  const kpis = data?.kpis;
+  if (loadError || !data) {
+    // An honest dead end. The alternative — rendering the shell with blank
+    // stats — reads as "your jurisdiction is empty", which is a different and
+    // false statement.
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[400px] px-4">
+        <div className="max-w-lg w-full rounded-2xl border border-rose-200 bg-rose-50/60 p-6 text-center">
+          <div className="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto mb-3">
+            <AlertCircle size={22} />
+          </div>
+          <h2 className="text-sm font-bold text-rose-900 mb-1">
+            Dashboard unavailable
+          </h2>
+          <p className="text-xs text-rose-800 leading-relaxed mb-4">
+            {loadError || 'The server returned no dashboard data for your account.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>Try again</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const profile = data.profile;
+  const kpis = data.kpis;
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300 min-w-0">
@@ -80,7 +123,51 @@ export default function InspectorDashboardPage() {
             </h1>
           </div>
           <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
-            Welcome back, <strong className="text-gray-800">{profile?.name || "Field Inspector"}</strong> (Badge #{profile?.badge_number || "LAG-INS-042"}). Real-time field oversight for active construction sites in <strong className="text-gray-800">{profile?.district || "Ikeja North Directorate"}</strong>.
+            {/* `profile.name` is `user.get_full_name()` and is None when the
+                account has no name recorded. The fallback here used to be the
+                literal "Inspector", which put a job title in the position a
+                name occupies and read as though the platform knew who was
+                signed in. Where no name is recorded the sentence simply does
+                not name anyone, which is what the record supports. */}
+            Welcome back
+            {profile.name ? (
+              <>
+                , <strong className="text-gray-800">{profile.name}</strong>
+              </>
+            ) : null}{' '}
+            {profile.badge_number ? (
+              <>(Badge #{profile.badge_number})</>
+            ) : (
+              <span className="text-amber-700 font-semibold">
+                (no badge number recorded)
+              </span>
+            )}
+            .{' '}
+            {profile.district ? (
+              <>
+                Real-time field oversight for active construction sites in{' '}
+                <strong className="text-gray-800">{profile.district}</strong>.
+              </>
+            ) : (
+              <>
+                Territorial scope:{' '}
+                <span className="text-amber-700 font-semibold">
+                  no district recorded
+                </span>
+                .
+              </>
+            )}
+            {profile.accreditation_status &&
+              profile.accreditation_status !== 'ACTIVE' && (
+                <>
+                  {' '}
+                  Accreditation status:{' '}
+                  <strong className="text-rose-700">
+                    {profile.accreditation_status}
+                  </strong>
+                  .
+                </>
+              )}
           </p>
         </div>
 
@@ -103,12 +190,17 @@ export default function InspectorDashboardPage() {
         </div>
       </div>
 
-      {/* Overview Stat Cards */}
+      {/* Overview Stat Cards.
+          Each figure is the recorded count, or an explicit absence. The
+          previous version defaulted every one of them with `?? <number>`, so a
+          brand-new inspector with no projects saw "8 Assigned Sites" and
+          "12 Open Findings" before the request had even returned. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {[
           {
             title: "Assigned Sites",
-            value: kpis?.assigned_projects ?? 8,
+            value: countOr(kpis.assigned_projects, ABSENT),
+            note: undefined as string | undefined,
             icon: Building2,
             border: "border-l-blue-600",
             textColor: "text-blue-600",
@@ -116,7 +208,8 @@ export default function InspectorDashboardPage() {
           },
           {
             title: "Upcoming Tasks",
-            value: kpis?.upcoming_inspections ?? 4,
+            value: countOr(kpis.upcoming_inspections, ABSENT),
+            note: undefined as string | undefined,
             icon: ClipboardCheck,
             border: "border-l-amber-500",
             textColor: "text-amber-600",
@@ -124,7 +217,8 @@ export default function InspectorDashboardPage() {
           },
           {
             title: "Open Findings",
-            value: kpis?.open_findings ?? 12,
+            value: countOr(kpis.open_findings, ABSENT),
+            note: undefined as string | undefined,
             icon: AlertTriangle,
             border: "border-l-rose-500",
             textColor: "text-rose-600",
@@ -132,15 +226,22 @@ export default function InspectorDashboardPage() {
           },
           {
             title: "Non-Compliances",
-            value: kpis?.compliance_issues ?? 3,
+            value: countOr(kpis.compliance_issues, ABSENT),
+            note: undefined as string | undefined,
             icon: ShieldCheck,
             border: "border-l-purple-600",
             textColor: "text-purple-600",
             href: "/inspector/dashboard/compliance",
           },
           {
+            // `null` here means the platform has nothing to measure it with
+            // yet, so the tile says so instead of showing a zero.
             title: "Pending Sync",
-            value: kpis?.pending_evidence ?? 2,
+            value:
+              kpis.pending_evidence === null
+                ? ABSENT
+                : String(kpis.pending_evidence),
+            note: kpis.pending_evidence === null ? "Not measured" : undefined,
             icon: Layers,
             border: "border-l-emerald-600",
             textColor: "text-emerald-600",
@@ -163,6 +264,11 @@ export default function InspectorDashboardPage() {
                 <stat.icon size={16} />
               </div>
             </div>
+            {stat.note && (
+              <span className="mt-1 text-[10px] font-semibold text-gray-400">
+                {stat.note}
+              </span>
+            )}
           </Link>
         ))}
       </div>
@@ -197,7 +303,7 @@ export default function InspectorDashboardPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[11px] font-bold text-[#022C4F] bg-blue-100/60 px-2 py-0.5 rounded-md">
-                          {item.scheduled_date ? new Date(item.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "10:00 AM"}
+                          {timeOr(item.scheduled_date)}
                         </span>
                         <span className="text-xs font-bold text-gray-900 truncate">
                           {item.project_name}
@@ -205,7 +311,9 @@ export default function InspectorDashboardPage() {
                       </div>
                       <p className="text-xs text-gray-500 flex items-center gap-1.5">
                         <MapPin size={12} className="text-gray-400 shrink-0" />
-                        <span className="truncate">{item.location || "Lekki, Lagos"}</span>
+                        <span className="truncate">
+                          {orDash(item.location, "Location not recorded")}
+                        </span>
                       </p>
                     </div>
 
@@ -260,19 +368,25 @@ export default function InspectorDashboardPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       p.compliance_status === "COMPLIANT"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-blue-50 text-[#022C4F] border border-blue-200"
+                        : p.compliance_status
+                        ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-slate-100 text-slate-500 border border-slate-200"
                     }`}>
-                      {p.compliance_status || p.current_phase || "ACTIVE"}
+                      {/* Compliance is reported from a recorded certificate.
+                          When none exists this says so — it used to fall back
+                          to the project phase, so an uncertified site read as
+                          "ACTIVE" inside a compliance chip. */}
+                      {p.compliance_status || "No compliance certificate"}
                     </span>
                   </div>
                   <h3 className="text-sm font-bold text-gray-900 group-hover:text-[#022C4F] transition-colors truncate mb-1">
                     {p.name}
                   </h3>
                   <p className="text-xs text-gray-500 truncate mb-3">
-                    {p.location || "Lekki, Lagos"}
+                    {orDash(p.location, "Location not recorded")}
                   </p>
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[11px] text-gray-500 font-medium">
-                    <span>{p.open_findings || 0} findings open</span>
+                    <span>{p.open_findings} findings open</span>
                     <span className="text-[#022C4F] font-bold flex items-center gap-0.5">
                       Open Site &rarr;
                     </span>
@@ -293,10 +407,6 @@ export default function InspectorDashboardPage() {
                 <Scan size={14} className="text-cyan-400 animate-pulse" />
                 <span>TS-1 (MVP) HARDWARE HUB</span>
               </div>
-              <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                Live Hub Active
-              </span>
             </div>
 
             <h3 className="text-lg font-bold text-white mb-1.5 leading-snug">
@@ -306,51 +416,16 @@ export default function InspectorDashboardPage() {
               Direct ingestion for Screening Eagle PUNDIT UPV 54 kHz, Proceq GPR Live radar, and Tersus GNSS rovers with SHA-256 cryptographic audit seals.
             </p>
 
-            {/* Live Fleet Telemetry Pills */}
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-slate-300 font-medium">PUNDIT Live UPV</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                </div>
-                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
-                  <span>54 kHz</span>
-                  <span className="text-[10px] text-cyan-300 font-normal">BLE 88%</span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-slate-300 font-medium">Proceq GPR Live</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                </div>
-                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
-                  <span>1.6 GHz</span>
-                  <span className="text-[10px] text-cyan-300 font-normal">Wi-Fi 94%</span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-slate-300 font-medium">Tersus GNSS</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                </div>
-                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
-                  <span>RTK Fix</span>
-                  <span className="text-[10px] text-emerald-300 font-normal">&plusmn;14mm</span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-slate-300 font-medium">Trimble X7</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                </div>
-                <div className="text-xs font-bold text-white font-mono flex items-center gap-1">
-                  <span>LiDAR</span>
-                  <span className="text-[10px] text-slate-300 font-normal">Standby</span>
-                </div>
-              </div>
+            {/* The four "live" readings that used to sit here — a PUNDIT at
+                54 kHz / 88% BLE, a GPR Live at 1.6 GHz / 94% Wi-Fi, an RTK fix
+                at ±14 mm and a Trimble X7 "on standby" — were hardcoded
+                strings with pulsing status dots. Nothing read them from a
+                device or from the server, so they presented invented hardware
+                telemetry as live. Device and session state is served by the
+                ingestion API and surfaced in the TS-1 workspace, not here. */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm mb-5 text-[11px] text-slate-300 leading-relaxed">
+              Live device status is not reported on this screen. Recorded
+              sessions and registered devices are listed in the TS-1 workspace.
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
@@ -382,7 +457,7 @@ export default function InspectorDashboardPage() {
                 href="/inspector/dashboard/findings"
                 className="text-xs font-bold text-rose-600 hover:underline"
               >
-                All (12)
+                All ({kpis.open_findings})
               </Link>
             </div>
 
@@ -405,7 +480,7 @@ export default function InspectorDashboardPage() {
                       {f.title}
                     </p>
                     <p className="text-[11px] text-gray-500 truncate">
-                      {f.project_name}
+                      {orDash(f.project_name, "Project not recorded")}
                     </p>
                   </div>
                 ))
@@ -427,18 +502,39 @@ export default function InspectorDashboardPage() {
               All field photos and test files are cryptographically hashed with SHA-256 and synchronized with immutable audit trails.
             </p>
 
+            {/* These four figures are read from the dashboard payload. The
+                "Hash Verification: 100% SHA-256 Verified" row that used to sit
+                at the bottom of this card was a literal string — no hash on
+                this screen had been verified, and the number could not have
+                been wrong because nothing computed it. */}
             <div className="p-3 bg-slate-50 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-medium">
-                <span className="text-gray-500">Synced Records:</span>
-                <span className="font-bold text-gray-800">{data?.evidence_sync?.uploaded ?? 142}</span>
+                <span className="text-gray-500">Evidence Records:</span>
+                <span className="font-bold text-gray-800">
+                  {data.evidence_sync.uploaded}
+                </span>
               </div>
               <div className="flex justify-between font-medium">
-                <span className="text-gray-500">Pending Upload:</span>
-                <span className="font-bold text-emerald-600">{data?.evidence_sync?.pending ?? 0}</span>
+                {/* The queue carries findings, inspections, stop-work orders
+                    and telemetry as well as evidence, so this is labelled for
+                    what it counts. "Pending Upload" named a file transfer that
+                    this figure does not measure. */}
+                <span className="text-gray-500">Queued for sync:</span>
+                <span className="font-bold text-emerald-600">
+                  {countOr(data.evidence_sync.pending)}
+                </span>
               </div>
               <div className="flex justify-between font-medium">
-                <span className="text-gray-500">Hash Verification:</span>
-                <span className="font-bold text-blue-600">100% SHA-256 Verified</span>
+                <span className="text-gray-500">Failed Syncs:</span>
+                <span className="font-bold text-gray-800">
+                  {countOr(data.evidence_sync.failed)}
+                </span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span className="text-gray-500">Last Synced:</span>
+                <span className="font-bold text-gray-800">
+                  {dateTimeOr(data.evidence_sync.last_synced_at, "Never")}
+                </span>
               </div>
             </div>
 

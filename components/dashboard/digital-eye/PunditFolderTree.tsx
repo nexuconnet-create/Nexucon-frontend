@@ -43,6 +43,14 @@ export const punditFloorOf = (t: PunditTest): string =>
 export const punditStationOf = (t: PunditTest): string =>
   (t.structural_element_name || t.test_location || '').trim() || 'Station not named';
 
+/** Grouping key for the outer folder level, for pages whose records span more
+ *  than one project (the Inspector workspace sees every project in their
+ *  scope, so `Floor:200THK RC SLAB` legitimately recurs across projects and
+ *  must not merge into one folder). Same honest-bucket rule as the others: a
+ *  record naming no project is its own group, never folded into a neighbour. */
+export const punditProjectOf = (t: PunditTest): string =>
+  (t.project_name || '').trim() || 'Project not recorded';
+
 /** Mean velocity / mean f_cu / worst rating across a station's tests
  *  (server-persisted element means per test). */
 export const punditStationSummary = (rows: PunditTest[]): StationSummary => {
@@ -105,6 +113,81 @@ export function useFloorStationFolders<T>(
     });
 
   return { viewMode, setViewMode, groups, openFloors, openStations, toggleFloor, toggleStation };
+}
+
+/** Three-level variant: Project → Floor → Station.
+ *
+ *  For pages whose records span several projects — the Inspector workspace
+ *  calls `getPunditTests()` with no project filter, so its 14 records cross
+ *  five projects and a Floor-first tree would merge different projects' tests
+ *  under one heading. The Government registry has a single-project selector
+ *  above its tree and so keeps using the two-level hook.
+ *
+ *  Same state shape as `useFloorStationFolders`, with the project level added.
+ */
+export function useProjectFloorStationFolders<T>(
+  items: T[],
+  getProject: (item: T) => string,
+  getFloor: (item: T) => string,
+  getStation: (item: T) => string,
+) {
+  const [viewMode, setViewMode] = useState<FolderViewMode>('grouped');
+  const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
+  const [openFloors, setOpenFloors] = useState<Set<string>>(new Set());
+  const [openStations, setOpenStations] = useState<Set<string>>(new Set());
+
+  // Project folder -> Floor folder -> Station sub-menu -> items, in record order.
+  const groups = useMemo<[string, Map<string, Map<string, T[]>>][]>(() => {
+    const projects = new Map<string, Map<string, Map<string, T[]>>>();
+    for (const item of items) {
+      const projectKey = getProject(item);
+      const floorKey = getFloor(item);
+      const stationKey = getStation(item);
+      if (!projects.has(projectKey)) projects.set(projectKey, new Map());
+      const floors = projects.get(projectKey)!;
+      if (!floors.has(floorKey)) floors.set(floorKey, new Map());
+      const stations = floors.get(floorKey)!;
+      if (!stations.has(stationKey)) stations.set(stationKey, []);
+      stations.get(stationKey)!.push(item);
+    }
+    return Array.from(projects.entries());
+  }, [items, getProject, getFloor, getStation]);
+
+  const toggleProject = (project: string) =>
+    setOpenProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(project)) next.delete(project);
+      else next.add(project);
+      return next;
+    });
+
+  const toggleFloor = (floor: string) =>
+    setOpenFloors((prev) => {
+      const next = new Set(prev);
+      if (next.has(floor)) next.delete(floor);
+      else next.add(floor);
+      return next;
+    });
+
+  const toggleStation = (key: string) =>
+    setOpenStations((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  return {
+    viewMode,
+    setViewMode,
+    groups,
+    openProjects,
+    openFloors,
+    openStations,
+    toggleProject,
+    toggleFloor,
+    toggleStation,
+  };
 }
 
 /** The Folders / Flat list segmented toggle (each page places it in its own
@@ -217,6 +300,150 @@ export function FloorStationTreeBody<T>({
                       </button>
 
                       {stationOpen && <div>{renderStationBody(rows)}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- Three-level folder tree (Project → Floor → Station) ----
+
+/**
+ * The grouped body for a cross-project register: Project folder → Floor folder
+ * → Station sub-menu → the page's own rows/cards via `renderStationBody`.
+ *
+ * Each level indents one step further so the hierarchy is legible without
+ * colour alone. Project and Floor rows both carry the same mean badges via
+ * `stationSummary`; the Station row additionally carries the worst-rating
+ * badge, as in the two-level tree. Means are whatever the summary returns —
+ * `null` renders as `—`, never as `0`.
+ */
+export function ProjectFloorStationTreeBody<T>({
+  groups,
+  openProjects,
+  openFloors,
+  openStations,
+  toggleProject,
+  toggleFloor,
+  toggleStation,
+  stationSummary,
+  renderStationBody,
+}: {
+  groups: [string, Map<string, Map<string, T[]>>][];
+  openProjects: Set<string>;
+  openFloors: Set<string>;
+  openStations: Set<string>;
+  toggleProject: (project: string) => void;
+  toggleFloor: (floor: string) => void;
+  toggleStation: (key: string) => void;
+  /** Mean badges for a folder/station row; return null to hide them. */
+  stationSummary: (rows: T[]) => StationSummary | null;
+  /** The page's rows/cards for one open station (table, card grid…). */
+  renderStationBody: (rows: T[]) => React.ReactNode;
+}) {
+  return (
+    <div className="divide-y divide-gray-100">
+      {groups.map(([project, floors]) => {
+        const projectRows = Array.from(floors.values())
+          .flatMap((stations) => Array.from(stations.values()))
+          .flat();
+        const projectOpen = openProjects.has(project);
+        const projectSummary = stationSummary(projectRows);
+        return (
+          <div key={project}>
+            {/* Project folder */}
+            <button
+              onClick={() => toggleProject(project)}
+              className="w-full px-5 py-3.5 flex flex-wrap items-center gap-3 bg-slate-100/80 hover:bg-slate-200/70 transition-colors text-left cursor-pointer"
+            >
+              {projectOpen ? <ChevronDown size={14} className="text-gray-600" /> : <ChevronRight size={14} className="text-gray-600" />}
+              {projectOpen ? <FolderOpen size={16} className="text-[#022C4F]" /> : <Folder size={16} className="text-[#022C4F]" />}
+              <span className="text-xs font-black uppercase tracking-wide text-[#022C4F]">{project}</span>
+              <span className="text-[10px] font-mono text-gray-500">
+                {floors.size} floor{floors.size === 1 ? '' : 's'} · {projectRows.length} test{projectRows.length === 1 ? '' : 's'}
+              </span>
+              {projectSummary && (
+                <span className="ml-auto text-[10px] font-mono text-gray-500">
+                  mean V {formatVelocityMs(projectSummary.meanV)} m/s · mean f_cu{' '}
+                  {projectSummary.meanF != null ? `${projectSummary.meanF.toFixed(1)} MPa` : '—'}
+                </span>
+              )}
+            </button>
+
+            {projectOpen && (
+              <div className="bg-white">
+                {Array.from(floors.entries()).map(([floor, stations]) => {
+                  const floorKey = `${project}::${floor}`;
+                  const floorOpen = openFloors.has(floorKey);
+                  const floorRows = Array.from(stations.values()).flat();
+                  const floorSummary = stationSummary(floorRows);
+                  return (
+                    <div key={floorKey} className="border-t border-gray-100">
+                      {/* Floor folder — indented one step under the project */}
+                      <button
+                        onClick={() => toggleFloor(floorKey)}
+                        className="w-full px-5 py-3 pl-10 flex flex-wrap items-center gap-3 bg-gray-50/80 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                      >
+                        {floorOpen ? <ChevronDown size={13} className="text-gray-500" /> : <ChevronRight size={13} className="text-gray-500" />}
+                        {floorOpen ? <FolderOpen size={15} className="text-amber-500" /> : <Folder size={15} className="text-amber-500" />}
+                        <span className="text-xs font-black uppercase tracking-wide text-[#022C4F]">{floor}</span>
+                        <span className="text-[10px] font-mono text-gray-500">
+                          {stations.size} station{stations.size === 1 ? '' : 's'} · {floorRows.length} test{floorRows.length === 1 ? '' : 's'}
+                        </span>
+                        {floorSummary && (
+                          <span className="ml-auto text-[10px] font-mono text-gray-400">
+                            mean V {formatVelocityMs(floorSummary.meanV)} m/s · mean f_cu{' '}
+                            {floorSummary.meanF != null ? `${floorSummary.meanF.toFixed(1)} MPa` : '—'}
+                          </span>
+                        )}
+                      </button>
+
+                      {floorOpen && (
+                        <div className="bg-white">
+                          {Array.from(stations.entries()).map(([station, rows]) => {
+                            // Unique across projects and floors — two projects can
+                            // legitimately name the same floor and station.
+                            const stationKey = `${project}::${floor}::${station}`;
+                            const stationOpen = openStations.has(stationKey);
+                            const summary = stationSummary(rows);
+                            return (
+                              <div key={stationKey} className="border-t border-gray-100">
+                                {/* Station sub-menu row with its mean values */}
+                                <button
+                                  onClick={() => toggleStation(stationKey)}
+                                  className="w-full px-5 py-2.5 pl-16 flex flex-wrap items-center gap-3 hover:bg-amber-50/40 transition-colors text-left cursor-pointer"
+                                >
+                                  {stationOpen ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
+                                  <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                                    <Sparkles size={12} className="text-sky-500" />
+                                    {station}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-gray-500">{rows.length} test{rows.length === 1 ? '' : 's'}</span>
+                                  {summary && (
+                                    <span className="ml-auto flex items-center gap-4 text-[11px] font-mono">
+                                      <span className="text-gray-500">
+                                        Mean V: <span className="font-bold text-amber-700">{formatVelocityMs(summary.meanV)} m/s</span>
+                                      </span>
+                                      <span className="text-gray-500">
+                                        Mean f_cu: <span className={`font-bold ${summary.meanF != null && summary.meanF < 25 ? 'text-rose-600' : 'text-gray-800'}`}>{summary.meanF != null ? `${summary.meanF.toFixed(1)} MPa` : '—'}</span>
+                                      </span>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ratingBadgeClass(summary.remark)}`}>{summary.remark}</span>
+                                    </span>
+                                  )}
+                                </button>
+
+                                {stationOpen && <div>{renderStationBody(rows)}</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

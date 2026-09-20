@@ -17,6 +17,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getInspectorAccreditation, type AccreditationResult } from "@/services/inspector";
+import { getUnreadCounts } from "@/services/notifications";
 
 interface InspectorHeaderProps {
   onOpenMobileMenu?: () => void;
@@ -27,6 +29,16 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
   const { user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+
+  // Real accreditation. The pill below used to read "Lagos State Building
+  // Control Agency • Ikeja North Directorate" and the dropdown badge
+  // "Accredited Inspector" for every inspector who ever loaded a page, none of
+  // it read from anywhere.
+  const [accreditation, setAccreditation] = useState<AccreditationResult | null>(null);
+  const [accreditationFailed, setAccreditationFailed] = useState(false);
+  // A real unread count, instead of an unconditional pulsing dot that asserted
+  // unread notifications on every account, always.
+  const [unreadCount, setUnreadCount] = useState<number | null>(null);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -41,14 +53,42 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getInspectorAccreditation()
+      .then((result) => {
+        if (!cancelled) setAccreditation(result);
+      })
+      .catch(() => {
+        // Distinct from "no accreditation recorded": the header says which.
+        if (!cancelled) setAccreditationFailed(true);
+      });
+    getUnreadCounts()
+      .then((counts) => {
+        if (!cancelled) setUnreadCount(counts?.total_unread ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setUnreadCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleLogout = async () => {
     setIsProfileOpen(false);
     await logout("/inspector/login");
   };
 
+  // The full name, else the email — which is a real identifier the inspector
+  // recognises. Not `email.split("@")[0]`: turning "a.adeleke" into a display
+  // name invents a name the platform does not hold, which is the same defect
+  // that was removed from the dashboard's backend.
   const userName = user
-    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email?.split("@")[0]
-    : "Field Inspector";
+    ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email || "Inspector"
+    : "Inspector";
+
+  const accredited = accreditation?.accredited ? accreditation.accreditation : null;
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sm:gap-4 shadow-sm">
@@ -81,19 +121,36 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
         <div className="hidden sm:flex items-center gap-2 min-w-0">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 border border-blue-200/80 text-xs font-bold text-[#022C4F]">
             <Shield size={13} className="text-[#0284C7]" />
-            <span className="truncate">Lagos State Building Control Agency</span>
-            <span className="text-gray-300">&bull;</span>
-            <span className="text-gray-600 font-medium">Ikeja North Directorate</span>
+            {accredited ? (
+              <>
+                <span className="truncate">
+                  {accredited.directorate || "Directorate not recorded"}
+                </span>
+                <span className="text-gray-300">&bull;</span>
+                <span className="text-gray-600 font-medium">
+                  Badge {accredited.badge_number}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-600 font-medium">
+                {accreditationFailed
+                  ? "Accreditation unavailable"
+                  : "No accreditation recorded"}
+              </span>
+            )}
           </span>
         </div>
       </div>
 
       {/* Right: Sync Status, Search, Notifications & User */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Offline / Online Sync Indicator */}
+        {/* Connectivity. This used to read "Live Sync Active" whenever the
+            browser was online — claiming a field-sync process that does not
+            exist in this app (no service worker, no offline queue, no
+            WebSocket client). Online and offline are what is actually known. */}
         <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
           <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-          <span>{isOnline ? "Live Sync Active" : "Offline Cache"}</span>
+          <span>{isOnline ? "Online" : "Offline"}</span>
         </div>
 
         {/* Agency Directorate Quick Jump */}
@@ -115,7 +172,15 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
           aria-label="Open Notifications"
         >
           <Bell size={16} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+          {/* Shown only when the server reports unread notifications. The dot
+              used to pulse unconditionally, telling every inspector they had
+              something waiting. `null` means the count could not be read, and
+              nothing is claimed. */}
+          {unreadCount !== null && unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
         </Link>
 
         {/* User Profile Dropdown */}
@@ -142,10 +207,19 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
               <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl p-3 z-50 text-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="p-3 bg-slate-50 rounded-xl mb-2">
                   <p className="text-xs font-bold text-[#022C4F] truncate">{userName}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{user?.email || "inspector@nexucon.gov.ng"}</p>
-                  <span className="inline-block mt-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
-                    Accredited Inspector
-                  </span>
+                  <p className="text-[11px] text-gray-500 truncate">
+                    {user?.email || "No email on this account"}
+                  </p>
+                  {accredited ? (
+                    <span className="inline-block mt-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
+                      {accredited.effective_status || accredited.accreditation_status || "Status not recorded"}
+                      {accredited.is_suspended ? " • Suspended" : ""}
+                    </span>
+                  ) : (
+                    <span className="inline-block mt-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                      {accreditationFailed ? "Accreditation unavailable" : "No accreditation recorded"}
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-1 text-xs font-medium">

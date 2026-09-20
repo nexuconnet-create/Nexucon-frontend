@@ -15,24 +15,34 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { getInspectorProjects } from "@/services/inspector";
+import { orDash } from "@/lib/display";
 
 export default function InspectorProjectsPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [phaseFilter, setPhaseFilter] = useState("ALL");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchProjects = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await getInspectorProjects({
         search: search.trim() || undefined,
         phase: phaseFilter !== "ALL" ? phaseFilter : undefined,
       });
       setProjects(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to load inspector projects:", err);
+    } catch (err: any) {
+      // Was a silent `setProjects([])`, which rendered "no projects match your
+      // filters" for a request that never completed — telling an inspector
+      // their jurisdiction is empty when the app is simply unreachable.
       setProjects([]);
+      setLoadError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Could not reach the projects service."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +126,17 @@ export default function InspectorProjectsPage() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-8 h-8 border-3 border-[#022C4F] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : loadError ? (
+        <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200">
+          <h3 className="text-sm font-bold text-amber-900 mb-1">
+            Projects could not be loaded
+          </h3>
+          <p className="text-xs text-amber-800">{loadError}</p>
+          <p className="text-xs text-amber-700 mt-2">
+            Nothing is listed because nothing could be read. This is not an
+            empty jurisdiction.
+          </p>
+        </div>
       ) : filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {filteredProjects.map((proj) => (
@@ -127,45 +148,54 @@ export default function InspectorProjectsPage() {
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <span className="text-[11px] font-mono font-bold text-gray-500 bg-slate-100 px-2.5 py-0.5 rounded-md">
-                    {proj.reference_number || "REF-PENDING"}
+                    {orDash(proj.reference_number, "No reference")}
                   </span>
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                     proj.status === 'ACTIVE'
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : proj.status === 'SUSPENDED'
                       ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                      : 'bg-blue-50 text-[#022C4F] border border-blue-200'
+                      : 'bg-slate-100 text-slate-700 border border-slate-200'
                   }`}>
-                    {proj.status || 'ACTIVE'}
+                    {orDash(proj.status, "Status not recorded")}
                   </span>
                 </div>
 
                 <h3 className="text-base font-bold text-gray-900 group-hover:text-[#022C4F] transition-colors line-clamp-1 mb-1">
-                  {proj.name}
+                  {orDash(proj.name, "Project name not recorded")}
                 </h3>
 
                 <p className="text-xs text-gray-500 line-clamp-1 mb-4 flex items-center gap-1.5">
                   <MapPin size={13} className="text-gray-400 shrink-0" />
-                  <span>{proj.site_address || proj.lga || "Lagos District"}</span>
+                  <span>{orDash(proj.site_address || proj.lga, "Location not recorded")}</span>
                 </p>
 
                 <div className="p-3 bg-slate-50 rounded-xl space-y-2 text-xs mb-4">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Developer:</span>
                     <span className="font-semibold text-gray-800 truncate max-w-[160px]">
-                      {proj.developer_name || proj.developer_organization || "Developer Corp"}
+                      {orDash(proj.developer_name || proj.developer_organization, "Not recorded")}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Floors:</span>
-                    <span className="font-bold text-gray-800">{proj.number_of_floors || 5} Levels</span>
+                    <span className="font-bold text-gray-800">
+                      {typeof proj.number_of_floors === "number"
+                        ? `${proj.number_of_floors} Levels`
+                        : "Not recorded"}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                {/* Was `proj.inspections_count || 0` — a `0` for a field the
+                    project payload does not carry, which reads as "none
+                    logged" rather than "not reported". */}
                 <span className="text-gray-500 font-medium">
-                  {proj.inspections_count || 0} inspections logged
+                  {typeof proj.inspections_count === "number"
+                    ? `${proj.inspections_count} inspections logged`
+                    : "Inspection count not reported"}
                 </span>
                 <span className="text-[#022C4F] font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                   <span>Open Site</span>

@@ -35,6 +35,11 @@ export interface Project {
   state?: string;
   lga?: string;
   ward_area?: string;
+  // Zonal jurisdiction — the operational zone (government.District) with
+  // authority over this project. `district` is the pk written on save;
+  // `district_name` is read-only and resolved server-side.
+  district?: string | null;
+  district_name?: string | null;
   plot_number?: string;
   block_number?: string;
   land_title_reference?: string;
@@ -123,6 +128,18 @@ export const getProjectById = async (id: string): Promise<Project> => {
 
 export const createProject = async (data: Partial<Project>): Promise<Project> => {
   const response = await api.post('/projects/', data);
+  return response as unknown as Project;
+};
+
+/**
+ * Amend an existing project — used to place a project in an operational zone
+ * (and to move it out of one, by sending `district: null`).
+ */
+export const updateProject = async (
+  id: string,
+  data: Partial<Project>,
+): Promise<Project> => {
+  const response = await api.patch(`/projects/${id}/`, data);
   return response as unknown as Project;
 };
 

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getInspectorDashboard, InspectorDashboardData } from "@/services/inspector";
+import { orDash } from "@/lib/display";
 
 const ONBOARDING_STEPS = [
   { id: 1, title: "Welcome", subtitle: "Inspector Workspace Overview" },
@@ -162,22 +163,31 @@ export default function InspectorOnboardingPage() {
                 </div>
 
                 <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                  {/* Every value is the recorded one or an honest absence. The
+                      fallbacks here used to be "Lagos State Building Control
+                      Agency (LASBCA)", "Ikeja North Directorate" and "#LAG-INS-042"
+                      — a specific agency, a specific office and a specific badge
+                      shown to every inspector whose profile held none of them,
+                      on the very screen that introduces them to their
+                      jurisdiction. */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Supervising Agency</span>
                     <span className="text-xs font-extrabold text-[#022C4F]">
-                      {dashboardData?.profile?.agency || "Lagos State Building Control Agency (LASBCA)"}
+                      {orDash(dashboardData?.profile?.agency, "Not recorded")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Zonal Directorate</span>
                     <span className="text-xs font-extrabold text-blue-700">
-                      {dashboardData?.profile?.district || "Ikeja North Directorate"}
+                      {orDash(dashboardData?.profile?.district, "Not recorded")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Designated Inspector Badge</span>
                     <span className="text-xs font-mono font-bold text-gray-800">
-                      #{dashboardData?.profile?.badge_number || "LAG-INS-042"}
+                      {dashboardData?.profile?.badge_number
+                        ? `#${dashboardData.profile.badge_number}`
+                        : "No accreditation recorded"}
                     </span>
                   </div>
                 </div>
@@ -216,7 +226,7 @@ export default function InspectorOnboardingPage() {
                         <p className="text-[11px] font-mono text-gray-400">{p.reference_number}</p>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        {p.compliance_status || p.current_phase || "Active"}
+                        {orDash(p.compliance_status || p.current_phase, "Status not recorded")}
                       </span>
                     </div>
                   ))}

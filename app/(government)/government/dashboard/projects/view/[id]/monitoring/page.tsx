@@ -2,18 +2,93 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { getProjectById, Project } from '@/services/projects';
-import { 
-  Building2, Activity, FileText, Box, 
-  ArrowLeft, MapPin, Calendar, User, CheckCircle, ShieldCheck, 
+import { getProjectById, updateProject, Project } from '@/services/projects';
+import { getDistricts, District } from '@/services/settings';
+import {
+  Building2, Activity, FileText, Box,
+  ArrowLeft, MapPin, Calendar, User, CheckCircle, ShieldCheck,
   AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus
 } from 'lucide-react';
+import Link from 'next/link';
 import { getInspections, Inspection } from '@/services/inspections';
 import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
 
 // --- MOCK COMPONENTS FOR TABS --- //
 
-const OverviewTab = ({ project }: { project: Project }) => (
+/**
+ * The project overview, and the one place a project's operational zone is set.
+ *
+ * Progress and compliance percentages are deliberately absent. The `Project`
+ * model has no such columns, so the 45% / 92% bars this card used to show were
+ * invented outright — not a missing fallback, a permanent fiction. Both figures
+ * are measured from inspections and progress reports, which live on the Site
+ * Activity tab.
+ */
+const OverviewTab = ({
+  project,
+  onProjectUpdated,
+}: {
+  project: Project;
+  onProjectUpdated: (updated: Project) => void;
+}) => {
+  const [zones, setZones] = useState<District[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
+  const [zonesError, setZonesError] = useState<string | null>(null);
+  const [isSavingZone, setIsSavingZone] = useState(false);
+  const [zoneError, setZoneError] = useState<string | null>(null);
+
+  // `active: 'all'` — a project may sit in a zone that has since been retired,
+  // and the select still has to name it as the current assignment rather than
+  // silently reading as unassigned.
+  useEffect(() => {
+    let cancelled = false;
+    getDistricts({ active: 'all' })
+      .then((data) => {
+        if (!cancelled) setZones(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setZonesError('The zone register could not be read from the server.');
+      })
+      .finally(() => {
+        if (!cancelled) setZonesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleZoneChange = async (value: string) => {
+    setIsSavingZone(true);
+    setZoneError(null);
+    try {
+      const updated = await updateProject(project.id, {
+        district: value === '' ? null : value,
+      });
+      onProjectUpdated(updated);
+      window.dispatchEvent(
+        new CustomEvent('show-toast', {
+          detail: {
+            message: updated.district_name
+              ? `${project.name} moved to ${updated.district_name}.`
+              : `${project.name} is no longer assigned to an operational zone.`,
+            type: 'success',
+          },
+        }),
+      );
+    } catch (err: any) {
+      setZoneError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          'The operational zone could not be changed.',
+      );
+    } finally {
+      setIsSavingZone(false);
+    }
+  };
+
+  const notRecorded = <span className="text-slate-400">Not recorded</span>;
+
+  return (
   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0">
     <div className="lg:col-span-2 space-y-6 min-w-0">
       <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
@@ -25,46 +100,127 @@ const OverviewTab = ({ project }: { project: Project }) => (
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Developer</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{project.developer_name || 'N/A'}</p>
+            <p className="text-sm font-medium text-slate-800 break-words">{project.developer_name || notRecorded}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Site Address</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{project.site_address || project.location || 'N/A'}</p>
+            <p className="text-sm font-medium text-slate-800 break-words">{project.site_address || project.location || notRecorded}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">LGA</p>
-            <p className="text-sm font-medium text-slate-800">{project.lga || 'N/A'}</p>
+            <p className="text-sm font-medium text-slate-800">{project.lga || notRecorded}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Operational Zone</p>
+            <p className="text-sm font-medium text-slate-800">
+              {project.district_name || <span className="text-slate-400">No zone assigned</span>}
+            </p>
           </div>
         </div>
       </div>
-      
+
+      {/* Assigning the zone writes straight through to the project record. */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
+        <h3 className="text-sm font-bold text-[#022C4F] mb-1">Operational Zone</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          The district office holding jurisdiction over this project. The zone
+          scopes which officers can see the project and which district it appears
+          under on the HQ heatmap.
+        </p>
+
+        {zonesLoading ? (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <RefreshCw size={14} className="animate-spin" /> Loading the zone register...
+          </div>
+        ) : zonesError ? (
+          <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50">
+            <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-800">{zonesError}</p>
+          </div>
+        ) : zones.length === 0 ? (
+          <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <AlertTriangle size={15} className="text-slate-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-slate-600">
+              No operational zone has been created yet, so this project cannot be
+              placed in one.{' '}
+              <Link
+                href="/government/dashboard/settings/districts"
+                className="font-bold text-blue-600 hover:text-blue-700"
+              >
+                Create a zone
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <select
+                value={project.district || ''}
+                onChange={(e) => void handleZoneChange(e.target.value)}
+                disabled={isSavingZone}
+                aria-label="Operational zone for this project"
+                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-transparent transition-all disabled:opacity-60 cursor-pointer"
+              >
+                <option value="">No zone assigned</option>
+                {zones.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.name}
+                    {zone.code ? ` (${zone.code})` : ''}
+                    {zone.is_active ? '' : ' — retired'}
+                  </option>
+                ))}
+              </select>
+              {isSavingZone && (
+                <span className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                  <RefreshCw size={13} className="animate-spin" /> Saving...
+                </span>
+              )}
+            </div>
+            {zoneError && (
+              <div className="mt-3 flex items-start gap-2 p-3 rounded-xl border border-red-200 bg-red-50">
+                <AlertTriangle size={15} className="text-red-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-red-700">{zoneError}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
         <h3 className="text-sm font-bold text-[#022C4F] mb-4">Technical Details</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
           <div>
             <p className="text-xs text-slate-500 mb-1">Primary Use</p>
-            <p className="text-sm font-medium text-slate-800">{project.primary_use || 'Commercial'}</p>
+            <p className="text-sm font-medium text-slate-800">{project.primary_use || notRecorded}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">No. of Floors</p>
-            <p className="text-sm font-medium text-slate-800">{project.number_of_floors || '12'}</p>
+            <p className="text-sm font-medium text-slate-800">{project.number_of_floors ?? notRecorded}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Estimated Value</p>
-            <p className="text-sm font-medium text-slate-800">{project.estimated_project_value || '₦500M'}</p>
+            <p className="text-sm font-medium text-slate-800">
+              {project.estimated_project_value
+                ? `₦${Number(project.estimated_project_value).toLocaleString()}`
+                : notRecorded}
+            </p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Permit Number</p>
-            <p className="text-sm font-medium text-slate-800">{project.permit_number || 'Pending'}</p>
+            <p className="text-sm font-medium text-slate-800">{project.permit_number || notRecorded}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500 mb-1">Gross Floor Area</p>
-            <p className="text-sm font-medium text-slate-800">{project.gross_floor_area || '2500 sqm'}</p>
+            <p className="text-sm font-medium text-slate-800">
+              {project.gross_floor_area
+                ? `${Number(project.gross_floor_area).toLocaleString()} sqm`
+                : notRecorded}
+            </p>
           </div>
         </div>
       </div>
     </div>
-    
+
     <div className="space-y-6">
       <div className="bg-gradient-to-br from-[#022C4F] to-[#044073] rounded-2xl p-6 text-white shadow-md relative overflow-hidden group">
         <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:bg-blue-400/20 transition-all"></div>
@@ -74,25 +230,13 @@ const OverviewTab = ({ project }: { project: Project }) => (
         <div className="mb-6">
           <span className="text-3xl font-bold">{project.status}</span>
         </div>
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-blue-100">Overall Progress</span>
-              <span className="font-bold">{project.progress || 45}%</span>
-            </div>
-            <div className="h-1.5 bg-blue-900/50 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${project.progress || 45}%` }}></div>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-blue-100">Compliance Score</span>
-              <span className="font-bold">{project.complianceScore || 92}%</span>
-            </div>
-            <div className="h-1.5 bg-blue-900/50 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-400 rounded-full" style={{ width: `${project.complianceScore || 92}%` }}></div>
-            </div>
-          </div>
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-900/40 border border-blue-700/40">
+          <AlertTriangle size={14} className="text-blue-200 mt-0.5 shrink-0" />
+          <p className="text-[11px] leading-relaxed text-blue-100">
+            No progress or compliance percentage is recorded against this project.
+            Both are measured from submitted inspections and progress reports,
+            under Site Activity.
+          </p>
         </div>
       </div>
 
@@ -104,7 +248,7 @@ const OverviewTab = ({ project }: { project: Project }) => (
             </div>
             <div>
                <p className="text-xs text-slate-500">Assigned Inspector</p>
-               <p className="text-sm font-medium text-slate-800">{project.assigned_inspector || 'John Doe'}</p>
+               <p className="text-sm font-medium text-slate-800">{project.assigned_inspector || 'Not assigned'}</p>
             </div>
          </div>
          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
@@ -113,13 +257,14 @@ const OverviewTab = ({ project }: { project: Project }) => (
             </div>
             <div>
                <p className="text-xs text-slate-500">Compliance Officer</p>
-               <p className="text-sm font-medium text-slate-800">{project.compliance_officer || 'Jane Smith'}</p>
+               <p className="text-sm font-medium text-slate-800">{project.compliance_officer || notRecorded}</p>
             </div>
          </div>
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const DocumentsTab = ({ project, onRequestDocs }: { project: Project; onRequestDocs: () => void }) => {
   const [subTab, setSubTab] = useState<'project' | 'requested'>('project');
@@ -510,7 +655,9 @@ export default function ProjectMonitoringPage() {
 
       {/* Tab Content Area */}
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto min-w-0">
-        {activeTab === 'overview' && <OverviewTab project={project} />}
+        {activeTab === 'overview' && (
+          <OverviewTab project={project} onProjectUpdated={setProject} />
+        )}
         {activeTab === 'documents' && (
           <DocumentsTab 
             project={project} 

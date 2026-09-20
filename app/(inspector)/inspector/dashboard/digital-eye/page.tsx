@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import {
   Eye,
   Box,
@@ -43,11 +44,34 @@ import {
   PunditReading,
   getPunditTests,
   createPunditTest,
+  getGPRScans,
   getFieldDevices,
+  getEvidenceSpatialPoints,
+  getBIMStructuralElements,
+  uploadSensorFile,
   FieldDeviceRecord,
+  EvidenceSpatialPoint,
+  BIMStructuralElement,
   createDigitalEyeFinding,
   formatVelocityMs,
 } from "@/services/digitalEye";
+import { orDash, dateOr } from "@/lib/display";
+import {
+  FolderViewToggle,
+  ProjectFloorStationTreeBody,
+  useProjectFloorStationFolders,
+  punditProjectOf,
+  punditFloorOf,
+  punditStationOf,
+  punditStationSummary,
+} from "@/components/dashboard/digital-eye/PunditFolderTree";
+import { getAssignableProjects } from "@/services/inspector";
+
+/** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
+function humaniseTransducer(value?: string | null): string | null {
+  if (!value) return null;
+  return value.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+}
 
 // Dynamically import heavy 3D and canvas viewers
 const RadargramViewer = dynamic(
@@ -70,80 +94,15 @@ const EvidenceMapCanvas = dynamic(
   { ssr: false, loading: () => <div className="h-96 flex items-center justify-center text-xs text-slate-400 font-mono">Initializing GNSS Spatial Canvas...</div> }
 );
 
-// Sample baseline GPR scan for radargram viewer tab
-const sampleGprScan: GPRScan = {
-  id: "gpr-1",
-  survey_reference: "GPR-2026-LKK-0014",
-  project: "prj-1",
-  project_name: "Lekki Pearl Residences",
-  title: "Basement Slab & Pile Cap Subsurface Radar Profile",
-  survey_area: "Grid A1 to D4 Basement Level 1",
-  structural_element: "FND-PILE-CAP-04",
-  antenna_frequency_mhz: 1600,
-  depth_range_m: 0.8,
-  grid_spacing_m: 0.15,
-  operator_name: "Engr. A. Adeleke",
-  status: "completed",
-  status_display: "Completed",
-  notes: "1.6 GHz antenna run across Grid A1-D4. Detected 8 rebar layers and 1 potential air void anomaly.",
-  anomaly_count: 1,
-  anomalies: [],
-  raw_file_urls: [],
-  created_at: new Date().toISOString(),
-};
-
-// Initial simulated/persisted PUNDIT test record
-const initialPunditTest: PunditTest = {
-  id: "pundit-live-01",
-  test_reference: "UPV-2026-0042",
-  project: "prj-1",
-  project_name: "Lekki Pearl Residences",
-  test_type: "pulse_velocity",
-  test_location: "Grid D-7 Core Section Column C-24",
-  structural_element_name: "COL-C24",
-  transducer_type: "DIRECT",
-  transducer_frequency_khz: 54,
-  path_length_mm: 400,
-  transit_time_us: 94.2,
-  readings: [
-    {
-      point_label: "A",
-      path_length_mm: 400,
-      transit_time_us: 94.2,
-      uncracked_transit_time_us: null,
-      surface_condition: "Smooth Formwork Finish",
-      velocity_km_s: 4.25,
-      ecs_mpa: 42.5,
-      crack_depth_mm: null,
-    },
-    {
-      point_label: "B",
-      path_length_mm: 400,
-      transit_time_us: 96.8,
-      uncracked_transit_time_us: null,
-      surface_condition: "Smooth Formwork Finish",
-      velocity_km_s: 4.13,
-      ecs_mpa: 39.8,
-      crack_depth_mm: null,
-    },
-  ],
-  weather_condition: "Dry / 29°C",
-  floor: "Level 3",
-  crack_path_length_mm: 0,
-  crack_pulse_time_us: 0,
-  uncracked_pulse_time_us: 0,
-  surface_condition: "Smooth finish",
-  surface_temperature_c: 29.5,
-  pulse_velocity_ms: 4190,
-  estimated_compressive_strength_mpa: 41.2,
-  concrete_quality_rating: "GOOD",
-  operator_name: "Engr. A. Adeleke",
-  test_date: "2026-09-15",
-  created_at: new Date().toISOString(),
-  file_count: 2,
-};
-
-// Concrete quality rating evaluation per BS 1881-203 / ASTM C597
+// There used to be a `sampleGprScan` and an `initialPunditTest` here: a
+// complete GPR survey ("GPR-2026-LKK-0014", Grid A1-D4 basement, 8 rebar layers
+// and one air void) and a complete PUNDIT test with two readings, a
+// "UPV-2026-0042" reference, an operator name and a 41.2 MPa strength. Both
+// were literals, and both were rendered as this inspector's live work. They are
+// gone: the panels below now read the records the platform actually holds, and
+// say so when it holds none.
+//
+// Concrete quality rating evaluation per BS 1881-203 / ASTM C597.
 function getConcreteQuality(velocityMs: number): {
   rating: PunditTest['concrete_quality_rating'];
   label: string;
@@ -196,7 +155,17 @@ function getConcreteQuality(velocityMs: number): {
   };
 }
 
-// Empirical SONREB Compressive Strength estimate (MPa)
+/**
+ * A provisional strength from a velocity, for the MANUAL ENTRY PREVIEW ONLY.
+ *
+ * This is not the platform's figure. The registered strength is computed
+ * server-side from the project's active calibration curve and stored on the
+ * test with a provenance snapshot; `PunditTest.estimated_compressive_strength_mpa`
+ * is that value, and it is what every recorded measurement on this page
+ * displays. This helper exists so an inspector typing raw readings can see an
+ * indicative number before committing — it must never be shown for a stored
+ * test, because it can disagree with the sealed one.
+ */
 function estimateCompressiveStrength(velocityMs: number): number {
   if (velocityMs <= 0) return 0;
   // Standard regression for 20-30 MPa nominal mixes in West Africa:
@@ -206,20 +175,25 @@ function estimateCompressiveStrength(velocityMs: number): number {
   return Math.round(Math.min(75, Math.max(10, strength)) * 10) / 10;
 }
 
-// Client-side SHA-256 seal computation
+/**
+ * The digest of a payload, as bytes → hex.
+ *
+ * This used to fall back to `"0x" + Math.random().toString(16)…` on failure, so
+ * a browser without `crypto.subtle` — or any thrown error at all — produced a
+ * string that looked exactly like a SHA-256 seal and was printed in the audit
+ * panel as one. A fabricated seal on a tamper-evidence control is worse than no
+ * seal: it certifies nothing while appearing to certify everything. It now
+ * throws, and every caller reports that the digest could not be computed.
+ */
 async function computeSha256(payload: string): Promise<string> {
-  try {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(payload);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  } catch (e) {
-    return "0x" + Math.random().toString(16).slice(2) + "fa829b31d0442e";
-  }
+  const encoder = new TextEncoder();
+  const data = encoder.encode(payload);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export default function InspectorDigitalEyePage() {
+function InspectorDigitalEyeWorkspace() {
   // Navigation tabs
   const [activeSubmodule, setActiveSubmodule] = useState<
     "pundit" | "gpr" | "bim" | "spatial" | "sessions"
@@ -228,367 +202,697 @@ export default function InspectorDigitalEyePage() {
   // PUNDIT ingestion mode
   const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch">("live");
 
-  // Device telemetry state
-  const [devices, setDevices] = useState([
-    {
-      id: "dev-pundit",
-      name: "Screening Eagle Pundit Live",
-      type: "UPV Ultrasonic Probe",
-      serial: "PL-54K-99214",
-      interface: "BLE 5.0",
-      transducer: "54 kHz PZT Ceramic Transducers",
-      battery: 88,
-      isCharging: false,
-      rssi: -58,
-      calibrated: true,
-      calibrationDaysLeft: 12,
-      status: "CONNECTED",
-      color: "text-emerald-600",
-      badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    },
-    {
-      id: "dev-gpr",
-      name: "Proceq GPR Live SFCW",
-      type: "Ground Penetrating Radar",
-      serial: "GPR-SFCW-0048",
-      interface: "Wi-Fi 5 GHz",
-      transducer: "1.6 GHz Stepped-Frequency Continuous Wave",
-      battery: 94,
-      isCharging: false,
-      rssi: -45,
-      calibrated: true,
-      calibrationDaysLeft: 34,
-      status: "CONNECTED",
-      color: "text-cyan-600",
-      badge: "bg-cyan-50 text-cyan-700 border-cyan-200",
-    },
-    {
-      id: "dev-gnss",
-      name: "Tersus Oscar RTK Rover",
-      type: "Geodetic GNSS Station",
-      serial: "TER-OSC-4091",
-      interface: "UHF / 4G NTRIP",
-      transducer: "18 Satellites Tracked • ±14mm 3D Fix",
-      battery: 82,
-      isCharging: false,
-      rssi: -62,
-      calibrated: true,
-      calibrationDaysLeft: 89,
-      status: "RTK FIXED",
-      color: "text-blue-600",
-      badge: "bg-blue-50 text-blue-700 border-blue-200",
-    },
-    {
-      id: "dev-trimble",
-      name: "Trimble X7 3D Scanner",
-      type: "LiDAR Spatial Imaging",
-      serial: "TX7-88301",
-      interface: "Wi-Fi 802.11ac",
-      transducer: "High-Speed Laser Scanner & HDR Dome",
-      battery: 76,
-      isCharging: false,
-      rssi: -70,
-      calibrated: true,
-      calibrationDaysLeft: 110,
-      status: "STANDBY",
-      color: "text-slate-500",
-      badge: "bg-slate-100 text-slate-700 border-slate-200",
-    },
-  ]);
+  /**
+   * Honour the deep link the Command Center's "New UPV Test" button sends.
+   *
+   * That link has always been `/digital-eye?tab=pundit&action=new`, and this
+   * page read neither parameter: the button landed on the default tab in
+   * "Recorded Tests" mode, which lists tests already recorded rather than
+   * offering a new one. A control that names an action and performs a different
+   * one is worse than a control that does nothing, because the inspector
+   * believes the form is open.
+   *
+   * Only the two parameters this application emits are read, and an
+   * unrecognised value is ignored rather than coerced — a `tab` naming a
+   * submodule that does not exist must not silently select some other one.
+   */
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "pundit" || tab === "gpr" || tab === "bim" || tab === "spatial" || tab === "sessions") {
+      setActiveSubmodule(tab);
+    }
+    // "new" opens the manual station entry form, which is where a single
+    // ultrasonic test is typed in by hand. The other two modes read records the
+    // platform already holds, so neither can start a new test.
+    if (searchParams.get("action") === "new") {
+      setPunditMode("manual");
+    }
+  }, [searchParams]);
+
+  // Device telemetry state.
+  //
+  // This was four hand-written device objects — a "Screening Eagle Pundit Live"
+  // with serial PL-54K-99214, 88% battery, RSSI -58 and "12 days calibration
+  // left", plus a Proceq GPR, a Tersus rover and a Trimble scanner — each
+  // rendered with a live-looking status pill. None came from the platform, and
+  // `getFieldDevices()` was imported by this file and never called. The cards
+  // now show the devices the platform actually has registered.
+  const [devices, setDevices] = useState<FieldDeviceRecord[]>([]);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
 
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
-  const [isScanningDevices, setIsScanningDevices] = useState(false);
 
-  // Active PUNDIT test data for Waveform Viewer
-  const [activePunditTest, setActivePunditTest] = useState<PunditTest>(initialPunditTest);
-  const [testHistory, setTestHistory] = useState<PunditTest[]>([initialPunditTest]);
+  // The inspector's recorded PUNDIT tests and GPR surveys. `null` distinguishes
+  // "could not be read" from an empty list ("none recorded"), which the panels
+  // report differently.
+  const [punditTests, setPunditTests] = useState<PunditTest[] | null>(null);
+  const [gprScans, setGprScans] = useState<GPRScan[] | null>(null);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
 
-  // Live BLE Streaming Mode states
-  const [livePulseTransitUs, setLivePulseTransitUs] = useState(94.2);
-  const [livePathLengthMm, setLivePathLengthMm] = useState(400);
-  const [isPulsing, setIsPulsing] = useState(false);
-  const [liveShaHash, setLiveShaHash] = useState("a837cf21...91b8");
+  const [activePunditTest, setActivePunditTest] = useState<PunditTest | null>(null);
+  const [activeGprScan, setActiveGprScan] = useState<GPRScan | null>(null);
 
-  // Manual Station Entry Form state
-  const [manualForm, setManualForm] = useState({
-    elementName: "COL-C24",
-    elementLocation: "Grid D-7 Core Section Column C-24 Level 3",
-    method: "DIRECT" as "DIRECT" | "SEMI_DIRECT" | "INDIRECT",
+  // The recorded spatial evidence points for the projects in this inspector's
+  // scope. `null` is "the register could not be read", distinct from `[]`
+  // ("nothing recorded"), which the map panel reports differently. The panel
+  // used to render `<EvidenceMapCanvas points={[]} />` — a literal empty array
+  // on every project — under a header reading "Accuracy: ±14mm • 18 Satellites
+  // Fix" and an "RTK Fixed" badge, neither of which came from any record.
+  const [spatialPoints, setSpatialPoints] = useState<EvidenceSpatialPoint[] | null>(null);
+  const [spatialError, setSpatialError] = useState<string | null>(null);
+
+  // The BIM tab's project and its imported structural elements.
+  //
+  // The viewer below used to be mounted as
+  // `<TrimbleBIMViewer projectId="prj-1" elements={[]} />` — a literal project
+  // id belonging to no project on the platform, and a literal empty element
+  // list — under a badge reading "LOD 350" and a subtitle promising "NDT
+  // inspection station markers". `TrimbleBIMViewer` is honest: given a project
+  // it fetches that project's real tessellated geometry and reports `no-model`
+  // when there is none. It was simply never given one, so the panel reported
+  // "no model" for a project that does not exist, and the inspector could not
+  // tell that from their own site having no model imported.
+  //
+  // `null` elements is "could not be read", distinct from `[]`.
+  const [bimProjectId, setBimProjectId] = useState("");
+  const [bimElements, setBimElements] = useState<BIMStructuralElement[] | null>(null);
+  const [bimError, setBimError] = useState<string | null>(null);
+
+  // Manual Station Entry Form state.
+  //
+  // Every field here used to be pre-filled with a fabricated measurement —
+  // element "COL-C24", location "Grid D-7 Core Section Column C-24 Level 3",
+  // 400 mm, 95.0 µs, 29.5 °C, operator "Engr. A. Adeleke" — and three
+  // pre-computed reading points. An inspector who opened this form and pressed
+  // "Commit & Transmit to Pipeline" without typing anything filed a complete
+  // ultrasonic test that no instrument had performed, against an element that
+  // may not exist, under another engineer's name. The form now starts empty.
+  const [manualForm, setManualForm] = useState<{
+    projectId: string;
+    elementName: string;
+    elementLocation: string;
+    method: "DIRECT" | "SEMI_DIRECT" | "INDIRECT";
+    frequencyKhz: number;
+    pathLengthMm: string;
+    transitTimeUs: string;
+    surfaceTempC: string;
+    concreteAgeDays: string;
+    surfaceCondition: string;
+    operatorName: string;
+    notes: string;
+    points: { label: string; pathMm: number; timeUs: number; velMs: number }[];
+  }>({
+    projectId: "",
+    elementName: "",
+    elementLocation: "",
+    method: "DIRECT",
     frequencyKhz: 54,
-    pathLengthMm: 400,
-    transitTimeUs: 95.0,
-    surfaceTempC: 29.5,
-    concreteAgeDays: 28,
-    surfaceCondition: "Smooth Formwork Finish",
-    operatorName: "Engr. A. Adeleke",
-    notes: "Direct transmission across column opposite faces. Good acoustic coupling with water-soluble gel.",
-    points: [
-      { label: "Point A", pathMm: 400, timeUs: 94.2, velMs: 4246 },
-      { label: "Point B", pathMm: 400, timeUs: 96.0, velMs: 4166 },
-      { label: "Point C", pathMm: 400, timeUs: 95.4, velMs: 4192 },
-    ],
+    pathLengthMm: "",
+    transitTimeUs: "",
+    surfaceTempC: "",
+    concreteAgeDays: "",
+    surfaceCondition: "",
+    operatorName: "",
+    notes: "",
+    points: [],
   });
 
-  // Batch Session Import state
+  // The projects the inspector can record against. A measurement is only
+  // meaningful against a project — the calibration curve that turns a transit
+  // time into a strength belongs to one — so the server requires it and the
+  // form cannot leave it blank. There is no default: guessing which project a
+  // reading belongs to would file a real measurement against the wrong
+  // structure.
+  const [projects, setProjects] = useState<
+    { id: string; name: string; reference?: string }[]
+  >([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+
+  // Batch session file state. There were three fabricated rows here plus a
+  // `batchRows` preview of six invented stations ("ST-01/COL-C24/94.2 µs" …)
+  // shown for *any* file the inspector dropped in, followed by a toast claiming
+  // six stations had been ingested with a seal. Nothing was ever uploaded.
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [batchSha256, setBatchSha256] = useState<string | null>(null);
-  const [batchRows, setBatchRows] = useState<Array<{
-    station: string;
-    element: string;
-    pathMm: number;
-    timeUs: number;
-    velocityMs: number;
-    quality: string;
-    status: "valid" | "warning" | "error";
-  }>>([]);
-  const [isBatchImporting, setIsBatchImporting] = useState(false);
+  const [batchHashError, setBatchHashError] = useState<string | null>(null);
+  const [uploadedFileRef, setUploadedFileRef] = useState<string | null>(null);
+  const [isBatchUploading, setIsBatchUploading] = useState(false);
 
-  // Stop Work Order (SWO) Defect Escalation modal state
+  // Stop Work Order (SWO) Defect Escalation modal state. `swoData` used to be
+  // pre-seeded with a "COL-C24 / 2450 m/s / 19.2 MPa / DOUBTFUL" reading, so
+  // opening the modal before any measurement showed a defect that had not been
+  // found. It is now only ever populated from a measurement the inspector is
+  // looking at, or from a value they type in themselves.
   const [swoModalOpen, setSwoModalOpen] = useState(false);
   const [swoData, setSwoData] = useState<{
     element: string;
-    velocityMs: number;
-    strengthMpa: number;
+    velocityMs: number | null;
+    strengthMpa: number | null;
     rating: string;
     recommendation: string;
+    /**
+     * Where these figures came from, because the finding's wording depends on
+     * it. A regression raised from a saved test can cite the server's own
+     * numbers. One raised from the manual-entry form is citing entries that
+     * have never been stored and have had no calibration curve applied, so the
+     * statutory record must describe them as the inspector's own entries rather
+     * than as a measurement the platform recorded.
+     */
+    source: "recorded_test" | "manual_entry";
   }>({
-    element: "COL-C24",
-    velocityMs: 2450,
-    strengthMpa: 19.2,
-    rating: "DOUBTFUL",
-    recommendation: "Immediate core extraction & Stop Work Order per LASBCA Building Code.",
+    element: "",
+    velocityMs: null,
+    strengthMpa: null,
+    rating: "",
+    recommendation: "",
+    source: "recorded_test",
   });
+  const [swoRecommendation, setSwoRecommendation] = useState("");
+  const [isSubmittingSwo, setIsSubmittingSwo] = useState(false);
+  const [swoError, setSwoError] = useState<string | null>(null);
 
   // Toast / feedback message
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isReloadingRegisters, setIsReloadingRegisters] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // Compute live streaming velocity
-  const liveVelocityMs = Math.round((livePathLengthMm / livePulseTransitUs) * 1000);
-  const liveQuality = getConcreteQuality(liveVelocityMs);
-  const liveStrengthMpa = estimateCompressiveStrength(liveVelocityMs);
+  const loadRecords = async () => {
+    setRecordsError(null);
+    setSpatialError(null);
 
-  // Trigger simulated ultrasonic pulse over BLE
-  const handleTriggerPulse = async () => {
-    setIsPulsing(true);
-    // Simulate real acoustic travel time jitter: ±1.8 µs
-    const jitter = (Math.random() - 0.5) * 3.2;
-    const newTransit = Math.round((livePulseTransitUs + jitter) * 10) / 10;
-    const clampedTransit = Math.max(70, Math.min(200, newTransit));
+    const [tests, scans, deviceRows, spatialRows] = await Promise.allSettled([
+      getPunditTests(),
+      getGPRScans(),
+      getFieldDevices(),
+      // No `project` filter: the viewset scopes this to the projects in the
+      // inspector's own scope, so an unfiltered read is the inspector's whole
+      // spatial register rather than every point on the platform.
+      getEvidenceSpatialPoints(),
+    ]);
 
-    setTimeout(async () => {
-      setLivePulseTransitUs(clampedTransit);
-      const computedVel = Math.round((livePathLengthMm / clampedTransit) * 1000);
-      const computedStrength = estimateCompressiveStrength(computedVel);
-      const quality = getConcreteQuality(computedVel);
-
-      // Deterministic SHA-256 seal of the pulse payload
-      const pulsePayload = JSON.stringify({
-        device: "PL-54K-99214",
-        timestamp: new Date().toISOString(),
-        frequencyKhz: 54,
-        pathLengthMm: livePathLengthMm,
-        transitTimeUs: clampedTransit,
-        velocityMs: computedVel,
-        gainDb: 24,
+    if (tests.status === "fulfilled") {
+      const rows = Array.isArray(tests.value) ? tests.value : [];
+      setPunditTests(rows);
+      setActivePunditTest((prev) => {
+        if (prev && rows.some((r) => r.id === prev.id)) return prev;
+        return rows[0] ?? null;
       });
-      const hash = await computeSha256(pulsePayload);
-      setLiveShaHash(hash.slice(0, 16) + "..." + hash.slice(-8));
+    } else {
+      setPunditTests(null);
+      setRecordsError(
+        tests.reason?.response?.data?.detail ||
+          tests.reason?.message ||
+          "The UPV test register could not be read."
+      );
+    }
 
-      // Update active test object
-      const updatedTest: PunditTest = {
-        ...activePunditTest,
-        id: "pundit-live-" + Date.now(),
-        test_reference: `UPV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        path_length_mm: livePathLengthMm,
-        transit_time_us: clampedTransit,
-        pulse_velocity_ms: computedVel,
-        estimated_compressive_strength_mpa: computedStrength,
-        concrete_quality_rating: quality.rating,
-        readings: [
-          {
-            point_label: "Live Point",
-            path_length_mm: livePathLengthMm,
-            transit_time_us: clampedTransit,
-            uncracked_transit_time_us: null,
-            surface_condition: "Smooth finish",
-            velocity_km_s: computedVel / 1000,
-            ecs_mpa: computedStrength,
-            crack_depth_mm: null,
-          },
-        ],
-      };
-      setActivePunditTest(updatedTest);
-      setTestHistory((prev) => [updatedTest, ...prev.slice(0, 19)]);
-      setIsPulsing(false);
-      showToast(`Pulse captured: ${computedVel} m/s (${quality.rating}). SHA-256 sealed.`);
-    }, 650);
+    if (scans.status === "fulfilled") {
+      const rows = Array.isArray(scans.value) ? scans.value : [];
+      setGprScans(rows);
+      setActiveGprScan((prev) => {
+        if (prev && rows.some((r) => r.id === prev.id)) return prev;
+        return rows[0] ?? null;
+      });
+    } else {
+      setGprScans(null);
+    }
+
+    if (deviceRows.status === "fulfilled") {
+      setDevices(Array.isArray(deviceRows.value) ? deviceRows.value : []);
+    } else {
+      setDevices([]);
+      setDevicesError(
+        deviceRows.reason?.response?.data?.detail ||
+          deviceRows.reason?.message ||
+          "The device registry could not be read."
+      );
+    }
+
+    if (spatialRows.status === "fulfilled") {
+      const rows = Array.isArray(spatialRows.value) ? spatialRows.value : [];
+      setSpatialPoints(rows);
+    } else {
+      setSpatialPoints(null);
+      setSpatialError(
+        spatialRows.reason?.response?.data?.detail ||
+          spatialRows.reason?.message ||
+          "The spatial evidence register could not be read."
+      );
+    }
   };
 
-  // Trigger Defect Escalation dialog
-  const handleOpenEscalation = (element: string, velocity: number, strength: number, rating: string) => {
-    setSwoData({
-      element,
-      velocityMs: velocity,
-      strengthMpa: strength,
-      rating,
-      recommendation:
-        velocity < 3000
-          ? "CRITICAL DEFECT: Pulse velocity falls under Doubtful/Poor threshold (< 3000 m/s). Concrete integrity failed per BS 1881-203. Recommend immediate Stop Work Order."
-          : "ATTENTION: Structural element exhibits marginal compressive strength. Enhanced ultrasonic scanning required.",
-    });
+  useEffect(() => {
+    loadRecords();
+  }, []);
+
+  /**
+   * Read the imported BIM elements for the project the BIM tab is showing.
+   *
+   * Nothing is requested until a project is chosen, because the alternative —
+   * guessing one — is what put `prj-1` on this screen. A failed read leaves
+   * `bimElements` null so the tab can say the register could not be read, which
+   * is a different statement from a project whose model has no elements.
+   */
+  useEffect(() => {
+    if (!bimProjectId) {
+      setBimElements(null);
+      setBimError(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getBIMStructuralElements({ project: bimProjectId });
+        if (cancelled) return;
+        setBimElements(Array.isArray(rows) ? rows : []);
+        setBimError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        setBimElements(null);
+        setBimError(
+          err?.response?.data?.detail ||
+            err?.message ||
+            "The BIM element register could not be read."
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bimProjectId]);
+
+  /**
+   * Re-read the three registers.
+   *
+   * The button this replaced showed the toast "Hardware telemetry synced with
+   * cloud pipeline." and issued no request at all: nothing was read, nothing was
+   * synced, and the sentence named a cloud pipeline this application does not
+   * talk to. A refresh control reports what it actually did, and a read that
+   * fails is reported by the error panels `loadRecords` sets rather than by a
+   * success message here.
+   */
+  const handleReloadRegisters = async () => {
+    setIsReloadingRegisters(true);
+    await loadRecords();
+    setIsReloadingRegisters(false);
+    showToast("Registers re-read from the server.");
+  };
+
+  // Load the projects a measurement can be recorded against.
+  //
+  // The *assignable* list, not the registry browse: recording a measurement
+  // resolves its project through `scoped_projects(user)` server-side, so a
+  // picker filled from the unscoped browse would offer projects the write
+  // then refuses.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getAssignableProjects();
+        if (cancelled) return;
+        const shaped = (Array.isArray(rows) ? rows : [])
+          .map((p: any) => ({
+            id: String(p?.id ?? ""),
+            name: p?.name || p?.project_name || "",
+            reference: p?.project_reference || p?.reference || undefined,
+          }))
+          .filter((p) => p.id);
+        setProjects(shaped);
+        setProjectsError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        setProjects([]);
+        setProjectsError(
+          err?.response?.data?.detail ||
+            err?.message ||
+            "The project list could not be read."
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The registered devices, shaped for the fleet cards.
+  //
+  // Every field below is a recorded one. Where the registry holds nothing —
+  // `battery_level` is nullable, and a device may never have been calibrated —
+  // the card says so rather than filling in a plausible number.
+  const deviceCards = devices.map((d) => {
+    const statusLabel = d.status_display || d.status || "";
+    const online = /connect|active|online|fixed|ready/i.test(statusLabel) && d.is_active;
+    return {
+      id: d.id,
+      name: d.name || d.model || d.device_id || "Unnamed device",
+      type: d.device_type_display || d.device_type || "",
+      serial: d.device_reference || d.device_id || "",
+      interface: [d.manufacturer, d.model].filter(Boolean).join(" ") || "Make and model not recorded",
+      firmware: d.firmware_version || null,
+      battery: d.battery_level,
+      lastSeen: d.last_seen,
+      calibrationDate: d.calibration_date,
+      status: statusLabel || "Status not recorded",
+      badge: online
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+        : "bg-slate-100 text-slate-600 border-slate-200",
+      online,
+    };
+  });
+
+  const onlineDeviceCount = deviceCards.filter((d) => d.online).length;
+
+  // The values shown in the readout panel, taken from the record on screen.
+  //
+  // There is no live device stream in this application: the "Live BLE
+  // Streaming" panel used to synthesise one, adding `Math.random()` jitter to a
+  // transit time on a 650 ms timer and sealing the result with a SHA-256 hash
+  // of the made-up payload. The panel is now a readout of the selected recorded
+  // test — the same numbers the report and the audit trail carry.
+  const livePulseTransitUs = activePunditTest?.transit_time_us ?? null;
+  const livePathLengthMm = activePunditTest?.path_length_mm ?? null;
+  const liveVelocityMs =
+    activePunditTest && activePunditTest.pulse_velocity_ms > 0
+      ? activePunditTest.pulse_velocity_ms
+      : null;
+  const liveQuality = liveVelocityMs !== null ? getConcreteQuality(liveVelocityMs) : null;
+  // The platform computes the strength from the project's active calibration
+  // curve and stores it with a provenance snapshot. The figure below is that
+  // stored value — never a client-side recomputation, which could disagree with
+  // the number the sealed report carries.
+  const liveStrengthMpa = activePunditTest?.estimated_compressive_strength_mpa ?? null;
+
+  // Pre-fill the escalation dialog from a recorded measurement.
+  const handleOpenEscalation = (
+    element: string,
+    velocity: number | null,
+    strength: number | null,
+    rating: string,
+    source: "recorded_test" | "manual_entry" = "recorded_test"
+  ) => {
+    // The band itself is a real classification (below 3000 m/s is the
+    // Doubtful/Poor band in the standard UPV scale). What differs is what the
+    // figure is attached to: a stored measurement, or figures the inspector has
+    // typed and not yet saved.
+    const subject =
+      source === "manual_entry"
+        ? "the figures entered on this form (not yet saved)"
+        : "the transmission path recorded";
+    const recommendation =
+      velocity !== null && velocity < 3000
+        ? `CRITICAL: pulse velocity falls in the Doubtful/Poor band (< 3000 m/s) for ${subject}. Recommend core extraction to corroborate before any Stop Work decision.`
+        : `Marginal pulse velocity recorded for ${subject}. Recommend extended scanning before any regulatory decision.`;
+    setSwoData({ element, velocityMs: velocity, strengthMpa: strength, rating, recommendation, source });
+    setSwoRecommendation(recommendation);
+    setSwoError(null);
     setSwoModalOpen(true);
   };
 
-  // Submit Regulatory Finding / SWO
+  // Submit Regulatory Finding / SWO.
+  //
+  // The catch here used to say "Regulatory finding registered locally and
+  // queued for audit sync" — a claim that something was stored and would be
+  // sent later. Nothing was stored and nothing was queued; the finding was
+  // simply lost, and the inspector was told the opposite.
+  //
+  // The description is assembled from what was actually on screen. It used to
+  // interpolate the velocity unconditionally, so a finding raised from a
+  // survey that carries no velocity read "measured a pulse velocity of null
+  // m/s" as if a measurement had been taken.
   const handleSubmitSwo = async () => {
+    setIsSubmittingSwo(true);
+    setSwoError(null);
     try {
+      // The description is assembled from what was actually on screen, and from
+      // where it came from. Two separate false claims used to be possible here:
+      // it interpolated the velocity unconditionally, so a finding raised from a
+      // survey with no velocity read "measured a pulse velocity of null m/s" as
+      // if a measurement had been taken; and it cited a strength as
+      // "platform-estimated" when the figure had come from a client-side
+      // approximation applied to entries the server had never seen.
+      const measured =
+        swoData.velocityMs !== null
+          ? swoData.source === "manual_entry"
+            ? `Inspector's manual UPV entries average a pulse velocity of ${formatVelocityMs(
+                swoData.velocityMs
+              )} m/s. These entries are unsaved, and no calibration curve has been applied, so no platform strength estimate exists for them`
+            : `Ultrasonic UPV inspection recorded a pulse velocity of ${formatVelocityMs(
+                swoData.velocityMs
+              )} m/s` +
+              (swoData.strengthMpa !== null
+                ? ` (platform-estimated strength ${swoData.strengthMpa} MPa)`
+                : "")
+          : "No pulse velocity was measured for this record";
+      const rating = swoData.rating ? ` Rating on record: ${swoData.rating}.` : "";
+
       await createDigitalEyeFinding({
-        title: `Stop Work Order: Substandard Concrete Velocity at ${swoData.element}`,
+        title: `Concrete defect finding: ${swoData.element}`,
         structural_element_name: swoData.element,
         severity: "CRITICAL",
         status: "OPEN",
-        description: `Ultrasonic UPV inspection measured pulse velocity of ${swoData.velocityMs} m/s (estimated strength ${swoData.strengthMpa} MPa). Failed minimum threshold of 3,000 m/s per BS 1881-203 & Lagos State Building Control Agency compliance standard.`,
+        description:
+          `${measured} for element ${swoData.element}.${rating} ` +
+          `Inspector's regulatory decision: ${swoRecommendation}`,
       });
       setSwoModalOpen(false);
-      showToast("Regulatory Defect Finding & Stop Work Order logged to Government Portal!");
-    } catch (e) {
-      setSwoModalOpen(false);
-      showToast("Regulatory finding registered locally and queued for audit sync.");
+      showToast("Defect finding logged and returned by the server with a reference.");
+    } catch (err: any) {
+      setSwoError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "The finding was not accepted by the server. Nothing has been recorded."
+      );
+    } finally {
+      setIsSubmittingSwo(false);
     }
   };
 
   // Manual Form: Add reading point
   const handleAddManualPoint = () => {
+    const pathMm = Number(manualForm.pathLengthMm);
+    const timeUs = Number(manualForm.transitTimeUs);
+    if (!Number.isFinite(pathMm) || !Number.isFinite(timeUs) || pathMm <= 0 || timeUs <= 0) {
+      showToast("Enter a path length and a transit time before adding a point.");
+      return;
+    }
     const nextChar = String.fromCharCode(65 + manualForm.points.length);
-    const vel = Math.round((manualForm.pathLengthMm / manualForm.transitTimeUs) * 1000);
+    const vel = Math.round((pathMm / timeUs) * 1000);
     setManualForm({
       ...manualForm,
-      points: [
-        ...manualForm.points,
-        {
-          label: `Point ${nextChar}`,
-          pathMm: manualForm.pathLengthMm,
-          timeUs: manualForm.transitTimeUs,
-          velMs: vel,
-        },
-      ],
+      points: [...manualForm.points, { label: `Point ${nextChar}`, pathMm, timeUs, velMs: vel }],
     });
   };
 
   // Manual Form: Submit test to API
+  //
+  // The catch here used to build a `mockSaved` record — a fabricated reference,
+  // the project name "Lekki Pearl Residences", "Dry / 29.5°C", "Level 3" — push
+  // it into the visible history, and announce it as "saved to local offline
+  // store". No offline store exists. A failed ultrasonic test appeared as a
+  // completed one, and the inspector had no way to know it had not been saved.
   const handleSaveManualTest = async () => {
-    const meanVel = Math.round(
-      manualForm.points.reduce((acc, p) => acc + p.velMs, 0) / (manualForm.points.length || 1)
-    );
-    const quality = getConcreteQuality(meanVel);
-    const strength = estimateCompressiveStrength(meanVel);
+    if (!manualForm.projectId) {
+      showToast("Select the project this measurement was taken against.");
+      return;
+    }
+    if (!manualForm.elementName.trim()) {
+      showToast("Record the structural element before committing this test.");
+      return;
+    }
+    if (manualForm.points.length === 0) {
+      showToast("Add at least one reading point before committing this test.");
+      return;
+    }
 
     const payload = {
-      project: "prj-1",
+      project: manualForm.projectId,
       test_type: "pulse_velocity" as const,
-      structural_element: manualForm.elementName,
-      test_location: manualForm.elementLocation,
+      // `structural_element` and `pulse_time_us` are the names the serializer
+      // reads. This payload used to send `structural_element_name` and
+      // `transit_time_us`, which the create path does not accept at the top
+      // level: TypeScript did not catch it because excess-property checking
+      // does not apply to a variable, so the element name and the scalar
+      // transit time were silently dropped and the row was written without
+      // them.
+      structural_element: manualForm.elementName.trim(),
+      test_location: manualForm.elementLocation.trim(),
       transducer_type: manualForm.method,
       transducer_frequency_khz: manualForm.frequencyKhz,
-      path_length_mm: manualForm.pathLengthMm,
-      pulse_time_us: manualForm.transitTimeUs,
-      surface_condition: manualForm.surfaceCondition,
-      surface_temperature_c: manualForm.surfaceTempC,
-      concrete_age_days: manualForm.concreteAgeDays,
-      operator_name: manualForm.operatorName,
-      notes: manualForm.notes,
+      path_length_mm: manualForm.points[0].pathMm,
+      pulse_time_us: manualForm.points[0].timeUs,
+      surface_condition: manualForm.surfaceCondition.trim(),
+      surface_temperature_c: manualForm.surfaceTempC === "" ? null : Number(manualForm.surfaceTempC),
+      concrete_age_days: manualForm.concreteAgeDays === "" ? null : Number(manualForm.concreteAgeDays),
+      operator_name: manualForm.operatorName.trim(),
+      notes: manualForm.notes.trim(),
       readings: manualForm.points.map((p) => ({
         point_label: p.label,
         path_length_mm: p.pathMm,
         transit_time_us: p.timeUs,
-        surface_condition: manualForm.surfaceCondition,
-        velocity_km_s: p.velMs / 1000,
-        ecs_mpa: estimateCompressiveStrength(p.velMs),
+        surface_condition: manualForm.surfaceCondition.trim(),
       })),
     };
 
     try {
       const saved = await createPunditTest(payload);
+      setPunditTests((prev) => (prev ? [saved, ...prev] : [saved]));
       setActivePunditTest(saved);
-      setTestHistory((prev) => [saved, ...prev]);
-      showToast(`UPV Test #${saved.test_reference} committed with SHA-256 seal.`);
-    } catch (err) {
-      // Create local fallback record if backend is offline
-      const mockSaved: PunditTest = {
-        id: "pundit-" + Date.now(),
-        test_reference: `UPV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        project: "prj-1",
-        project_name: "Lekki Pearl Residences",
-        test_type: "pulse_velocity",
-        test_location: manualForm.elementLocation,
-        structural_element_name: manualForm.elementName,
-        transducer_type: manualForm.method,
-        transducer_frequency_khz: manualForm.frequencyKhz,
-        path_length_mm: manualForm.pathLengthMm,
-        transit_time_us: manualForm.transitTimeUs,
-        pulse_velocity_ms: meanVel,
-        estimated_compressive_strength_mpa: strength,
-        concrete_quality_rating: quality.rating,
-        operator_name: manualForm.operatorName,
-        weather_condition: "Dry / 29.5°C",
-        floor: "Level 3",
-        crack_path_length_mm: 0,
-        crack_pulse_time_us: 0,
-        uncracked_pulse_time_us: 0,
-        file_count: 0,
-        surface_condition: manualForm.surfaceCondition,
-        surface_temperature_c: manualForm.surfaceTempC,
-        test_date: new Date().toISOString().split("T")[0],
-        readings: manualForm.points.map((p) => ({
-          point_label: p.label,
-          path_length_mm: p.pathMm,
-          transit_time_us: p.timeUs,
-          uncracked_transit_time_us: null,
-          surface_condition: manualForm.surfaceCondition,
-          velocity_km_s: p.velMs / 1000,
-          ecs_mpa: estimateCompressiveStrength(p.velMs),
-          crack_depth_mm: null,
-        })),
-        created_at: new Date().toISOString(),
-      };
-      setActivePunditTest(mockSaved);
-      setTestHistory((prev) => [mockSaved, ...prev]);
-      showToast(`Test ${mockSaved.test_reference} saved to local offline store.`);
+      setManualForm((prev) => ({ ...prev, points: [] }));
+      showToast(`UPV test ${saved.test_reference} recorded by the server.`);
+    } catch (err: any) {
+      showToast(
+        err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "The test was not saved. Check your connection and commit again."
+      );
     }
   };
 
-  // Batch Session File Import Handler
+  // Batch Session File Upload.
+  //
+  // This used to "parse" nothing at all: it hashed the file locally and then
+  // set a hardcoded array of six plausible-looking stations, which the preview
+  // table rendered as "All 6 Records Validated"; the commit button then waited
+  // 800 ms and announced six stations ingested. The file never left the browser.
+  // It now uploads the file to the server, which returns the digest it computed
+  // over the stored bytes.
   const handleBatchFileUpload = async (file: File) => {
     setBatchFile(file);
-    const text = await file.text();
-    const hash = await computeSha256(text);
-    setBatchSha256(hash);
+    setBatchSha256(null);
+    setBatchHashError(null);
+    setUploadedFileRef(null);
+    setIsBatchUploading(true);
 
-    // Mock parsing realistic Pundit Live CSV rows
-    const rows = [
-      { station: "ST-01", element: "COL-C24", pathMm: 400, timeUs: 94.2, velocityMs: 4246, quality: "GOOD", status: "valid" as const },
-      { station: "ST-02", element: "COL-C24", pathMm: 400, timeUs: 95.8, velocityMs: 4175, quality: "GOOD", status: "valid" as const },
-      { station: "ST-03", element: "COL-C25", pathMm: 400, timeUs: 142.0, velocityMs: 2816, quality: "DOUBTFUL", status: "warning" as const },
-      { station: "ST-04", element: "BEAM-B12", pathMm: 350, timeUs: 82.3, velocityMs: 4252, quality: "GOOD", status: "valid" as const },
-      { station: "ST-05", element: "SLAB-S04", pathMm: 250, timeUs: 59.5, velocityMs: 4201, quality: "GOOD", status: "valid" as const },
-      { station: "ST-06", element: "CORE-W01", pathMm: 300, timeUs: 70.1, velocityMs: 4279, quality: "EXCELLENT", status: "valid" as const },
-    ];
-    setBatchRows(rows);
+    try {
+      const record = await uploadSensorFile(file, "pundit_raw", "PUNDIT session export");
+      setUploadedFileRef(record.id);
+      setBatchSha256(record.sha256_checksum || null);
+      if (!record.sha256_checksum) {
+        setBatchHashError(
+          "The server stored the file but returned no digest for it."
+        );
+      }
+      showToast(`${file.name} uploaded and stored by the server.`);
+    } catch (err: any) {
+      setBatchHashError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "The file could not be uploaded."
+      );
+    } finally {
+      setIsBatchUploading(false);
+    }
   };
 
-  const handleCommitBatch = () => {
-    setIsBatchImporting(true);
-    setTimeout(() => {
-      setIsBatchImporting(false);
-      showToast(`Successfully ingested 6 Pundit stations with SHA-256 seal: ${batchSha256?.slice(0, 16)}...`);
-      setBatchFile(null);
-      setBatchRows([]);
-    }, 800);
+  const handleClearBatch = () => {
+    setBatchFile(null);
+    setBatchSha256(null);
+    setBatchHashError(null);
+    setUploadedFileRef(null);
+  };
+
+  /**
+   * What the spatial register actually says, for the map panel's subtitle.
+   *
+   * This header used to read "Accuracy: ±14mm • 18 Satellites Fix" with an
+   * "RTK Fixed" badge, on every project, for every inspector, whether or not a
+   * receiver had ever been on site. Both are measurements — a positional
+   * precision and a satellite count — and neither was recorded anywhere the
+   * platform could read. The subtitle now reports the count of points held and
+   * the best precision among those that recorded one, and the badge reports the
+   * layer mix rather than claiming a fix.
+   */
+  const spatialAccuracies = (spatialPoints ?? [])
+    .map((p) => p.accuracy_mm)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+  const spatialBestAccuracyMm =
+    spatialAccuracies.length > 0 ? Math.min(...spatialAccuracies) : null;
+
+  /**
+   * Folder state for the Recorded UPV Tests register.
+   *
+   * This page's register is deliberately cross-project — `getPunditTests()` is
+   * called with no project filter so the viewset returns every project in the
+   * inspector's scope — so it gets the three-level Project → Floor → Station
+   * tree. A Floor-first tree would fold several projects' tests under one
+   * "Floor:200THK RC SLAB" heading, which is a merged structure the records do
+   * not support. Called unconditionally: `punditTests` is null until the fetch
+   * resolves, and a hook may not be skipped on that.
+   */
+  const testFolders = useProjectFloorStationFolders(
+    punditTests ?? [],
+    punditProjectOf,
+    punditFloorOf,
+    punditStationOf
+  );
+
+  /** One recorded test card — shared by the flat grid and the folder tree's
+   *  station body, so the two views can never drift apart. */
+  const renderTestCard = (t: PunditTest) => {
+    const isSelected = activePunditTest?.id === t.id;
+    const analysed = t.pulse_velocity_ms > 0;
+    const quality = analysed ? getConcreteQuality(t.pulse_velocity_ms) : null;
+    return (
+      <div
+        key={t.id}
+        onClick={() => {
+          setActivePunditTest(t);
+          setPunditMode("live");
+        }}
+        className={`p-4 rounded-xl border transition-all cursor-pointer ${
+          isSelected
+            ? "border-[#022C4F] bg-blue-50/40 ring-2 ring-[#022C4F]/10 shadow-sm"
+            : "border-slate-200/70 bg-white hover:bg-slate-50/50"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+            {orDash(t.test_reference, "No reference")}
+          </span>
+          {quality ? (
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${quality.badgeClass}`}>
+              {quality.rating}
+            </span>
+          ) : (
+            <span className="text-[10px] px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+              {orDash(t.concrete_quality_rating, "Unanalysed")}
+            </span>
+          )}
+        </div>
+
+        <h4 className="text-xs font-bold text-slate-900 truncate mb-1">
+          {orDash(t.structural_element_name, "Element not recorded")}
+        </h4>
+        <p className="text-[11px] text-slate-500 truncate mb-1">
+          {orDash(t.test_location, "Location not recorded")}
+        </p>
+        <p className="text-[11px] text-slate-400 truncate mb-3">
+          {orDash(t.project_name, "Project not recorded")} &bull;{" "}
+          {dateOr(t.test_date, "Date not recorded")}
+        </p>
+
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono font-bold text-[#022C4F]">
+          <span>
+            {analysed
+              ? `${t.pulse_velocity_ms} m/s`
+              : "Not yet analysed"}
+          </span>
+          <span className="text-slate-500 text-[11px] font-normal">
+            {t.estimated_compressive_strength_mpa !== null
+              ? `${t.estimated_compressive_strength_mpa} MPa`
+              : "Strength not reported"}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -631,56 +935,88 @@ export default function InspectorDigitalEyePage() {
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/80 hover:bg-slate-50 text-[#022C4F] text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <Bluetooth size={14} className="text-blue-600" />
-            <span>Hardware Telemetry ({devices.filter((d) => d.status.includes("CONNECTED") || d.status.includes("FIXED")).length}/4)</span>
+            <span>Hardware Telemetry ({onlineDeviceCount}/{deviceCards.length})</span>
           </button>
           <button
             type="button"
-            onClick={() => showToast("Hardware telemetry synced with cloud pipeline.")}
-            className="p-2 rounded-xl bg-white border border-slate-200/80 hover:bg-slate-50 text-slate-600 transition-colors shadow-sm"
-            title="Refresh device signals"
+            onClick={handleReloadRegisters}
+            disabled={isReloadingRegisters}
+            className="p-2 rounded-xl bg-white border border-slate-200/80 hover:bg-slate-50 text-slate-600 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+            title="Re-read the device, UPV and GPR registers from the server"
           >
-            <RefreshCw size={15} />
+            <RefreshCw
+              size={15}
+              className={isReloadingRegisters ? "animate-spin" : ""}
+            />
           </button>
         </div>
       </div>
 
       {/* Hardware Telemetry Fleet Status Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {devices.map((dev) => (
-          <div
-            key={dev.id}
-            onClick={() => setIsPairModalOpen(true)}
-            className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="min-w-0">
-                <span className="text-[10px] font-mono font-bold text-slate-400 block uppercase">
-                  {dev.interface}
+      {devicesError ? (
+        <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200">
+          <h3 className="text-sm font-bold text-amber-900 mb-1">
+            The device registry could not be read
+          </h3>
+          <p className="text-xs text-amber-800">{devicesError}</p>
+        </div>
+      ) : deviceCards.length === 0 ? (
+        <div className="p-5 rounded-2xl bg-white border border-dashed border-slate-300">
+          <h3 className="text-sm font-bold text-slate-800 mb-1">
+            No field devices registered
+          </h3>
+          <p className="text-xs text-slate-500">
+            No instruments are registered to your scope, so none are listed.
+            Device registration is done from the Directorate console, not from
+            this workspace.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {deviceCards.map((dev) => (
+            <div
+              key={dev.id}
+              onClick={() => setIsPairModalOpen(true)}
+              className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-mono font-bold text-slate-400 block uppercase truncate">
+                    {dev.type || "Type not recorded"}
+                  </span>
+                  <h3 className="text-xs font-bold text-[#022C4F] group-hover:text-cyan-700 transition-colors truncate">
+                    {dev.name}
+                  </h3>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${dev.badge}`}>
+                  {dev.status}
                 </span>
-                <h3 className="text-xs font-bold text-[#022C4F] group-hover:text-cyan-700 transition-colors truncate">
-                  {dev.name}
-                </h3>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${dev.badge}`}>
-                {dev.status}
-              </span>
-            </div>
 
-            <div className="text-[11px] text-slate-500 line-clamp-1 mb-3">
-              {dev.transducer}
-            </div>
+              <div className="text-[11px] text-slate-500 line-clamp-1 mb-3">
+                {dev.interface}
+              </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] font-medium text-slate-500">
-              <span className="flex items-center gap-1">
-                <BatteryCharging size={12} className="text-emerald-600" />
-                <span>{dev.battery}%</span>
-              </span>
-              <span className="text-slate-400 font-mono">{dev.serial}</span>
-              <span className="text-emerald-700 font-semibold">Calibrated</span>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] font-medium text-slate-500">
+                <span className="flex items-center gap-1">
+                  <BatteryCharging size={12} className="text-emerald-600" />
+                  <span>
+                    {dev.battery === null ? "Battery not reported" : `${dev.battery}%`}
+                  </span>
+                </span>
+                <span className="text-slate-400 font-mono truncate max-w-[90px]">
+                  {dev.serial || "No reference"}
+                </span>
+                <span className={dev.calibrationDate ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
+                  {dev.calibrationDate
+                    ? `Calibrated ${dateOr(dev.calibrationDate)}`
+                    : "No calibration recorded"}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Multi-Modal Submodule Navigation Tabs */}
       <div className="flex items-center gap-2 pb-1 overflow-x-auto">
@@ -688,7 +1024,11 @@ export default function InspectorDigitalEyePage() {
           { id: "pundit", label: "PUNDIT UPV Ultrasonic", icon: Activity, desc: "Pulse Velocity (TS-1 MVP)", badge: "Primary MVP" },
           { id: "gpr", label: "GPR Radargram Radar", icon: Radio, desc: "Rebar & Void Profile" },
           { id: "bim", label: "3D BIM IFC Geometry", icon: Box, desc: "Trimble Connect" },
-          { id: "spatial", label: "Spatial Evidence Map", icon: MapPin, desc: "GNSS RTK Telemetry" },
+          // "GNSS RTK Telemetry" named a receiver and a correction service as
+          // the source of these points. The register holds whatever was
+          // recorded against the project, and the platform has no GNSS feed —
+          // see the tab's own panel, which reports what each point carries.
+          { id: "spatial", label: "Spatial Evidence Map", icon: MapPin, desc: "Recorded Survey Points" },
           { id: "sessions", label: "Audit & SHA-256 Vault", icon: ShieldCheck, desc: "Cryptographic Seals" },
         ].map((tab) => (
           <button
@@ -734,9 +1074,9 @@ export default function InspectorDigitalEyePage() {
 
             <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
               {[
-                { id: "live", label: "Live BLE Streaming", icon: Zap },
+                { id: "live", label: "Recorded Tests", icon: Zap },
                 { id: "manual", label: "Manual Station Entry", icon: Sliders },
-                { id: "batch", label: "Batch Session Import", icon: FileSpreadsheet },
+                { id: "batch", label: "Session File Upload", icon: FileSpreadsheet },
               ].map((mode) => (
                 <button
                   key={mode.id}
@@ -755,123 +1095,173 @@ export default function InspectorDigitalEyePage() {
             </div>
           </div>
 
-          {/* MODE 1: LIVE BLE STREAMING INGESTION */}
+          {/* MODE 1: RECORDED TEST READOUT
+              This panel was a simulated BLE stream. It added `Math.random()`
+              jitter to a transit time on a timer, recomputed a strength with a
+              client-side formula, sealed the invented payload with a real
+              SHA-256 hash and displayed that hash as an audit seal — all while
+              presenting itself as a live instrument feed. There is no BLE bridge
+              in this application. What the panel shows now is the selected
+              recorded test, with the server's own velocity and strength. */}
           {punditMode === "live" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left Column: Live Control & Trigger Panel */}
+              {/* Left Column: Recorded Measurement Panel */}
               <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
                     <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
-                      Live BLE Transducer Feed
+                      Recorded Ultrasonic Measurement
                     </h3>
                   </div>
-                  <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
-                    CONNECTED (54 kHz)
+                  <span className="text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
+                    {activePunditTest
+                      ? activePunditTest.test_reference || "No reference"
+                      : "NO TEST SELECTED"}
                   </span>
                 </div>
 
-                {/* Target Element Context */}
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Target Element:</span>
-                    <strong className="text-[#022C4F]">COL-C24 (Level 3 Column)</strong>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Transmission:</span>
-                    <span className="font-semibold text-slate-700">Direct (180° opposite faces)</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Couplant:</span>
-                    <span className="font-semibold text-slate-700">Ultrasound Gel (No gaps)</span>
-                  </div>
-                </div>
-
-                {/* Live Measurement Readouts */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-xl bg-slate-900 text-white flex flex-col justify-between">
-                    <span className="text-[10px] text-cyan-300 font-mono uppercase">Transit Time (t)</span>
-                    <div className="text-2xl font-bold font-mono tracking-tight text-white mt-1">
-                      {livePulseTransitUs} <span className="text-xs font-normal text-slate-400">&mu;s</span>
+                {activePunditTest === null ? (
+                  <div className="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-300 text-xs text-slate-600 space-y-1">
+                    <div className="font-bold text-slate-700">
+                      No UPV test is selected
                     </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-900 text-white flex flex-col justify-between">
-                    <span className="text-[10px] text-cyan-300 font-mono uppercase">Path Length (L)</span>
-                    <div className="text-2xl font-bold font-mono tracking-tight text-white mt-1">
-                      {livePathLengthMm} <span className="text-xs font-normal text-slate-400">mm</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Live Velocity & Quality Grade */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 font-medium">Pulse Velocity (V = L/t):</span>
-                    <span className="text-lg font-extrabold text-[#022C4F] font-mono">
-                      {liveVelocityMs} m/s
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 font-medium">BS 1881-203 Rating:</span>
-                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full border ${liveQuality.badgeClass}`}>
-                      {liveQuality.rating}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 font-medium">Est. Compressive (f_ck):</span>
-                    <span className="text-xs font-bold text-slate-900 font-mono">
-                      ~{liveStrengthMpa} MPa
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 leading-snug pt-1 border-t border-slate-200">
-                    {liveQuality.description}
-                  </p>
-                </div>
-
-                {/* Interactive Trigger Pulse Button */}
-                <button
-                  type="button"
-                  disabled={isPulsing}
-                  onClick={handleTriggerPulse}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-75"
-                >
-                  <Zap size={16} className={`text-cyan-400 ${isPulsing ? "animate-spin" : ""}`} />
-                  <span>{isPulsing ? "Transmitting Ultrasonic Wave..." : "⚡ Trigger Pulse Capture"}</span>
-                </button>
-
-                {/* Defect Escalation Alert if doubtful */}
-                {liveVelocityMs < 3000 && (
-                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-2">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-                      <span>Substandard Velocity Detected</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed">
-                      Velocity &lt; 3,000 m/s indicates serious concrete honeycombing or void defect. Immediate Stop Work Order recommended.
+                    <p className="leading-relaxed">
+                      {punditTests === null
+                        ? "The test register could not be read, so no measurement is shown."
+                        : "No ultrasonic test has been recorded for you yet. Record one from Manual Station Entry, or upload an instrument session file."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEscalation("COL-C24", liveVelocityMs, liveStrengthMpa, liveQuality.rating)}
-                      className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors"
-                    >
-                      🚨 Issue Stop Work Order (SWO)
-                    </button>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {/* Target Element Context */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-2">
+                      <div className="flex justify-between gap-3 text-xs">
+                        <span className="text-slate-500 shrink-0">Target Element:</span>
+                        <strong className="text-[#022C4F] text-right">
+                          {orDash(activePunditTest.structural_element_name, "Element name not recorded")}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between gap-3 text-xs">
+                        <span className="text-slate-500 shrink-0">Test Location:</span>
+                        <span className="font-semibold text-slate-700 text-right">
+                          {orDash(activePunditTest.test_location, "Location not recorded")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-3 text-xs">
+                        <span className="text-slate-500 shrink-0">Transmission:</span>
+                        <span className="font-semibold text-slate-700 text-right">
+                          {orDash(humaniseTransducer(activePunditTest.transducer_type), "Not recorded")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-3 text-xs">
+                        <span className="text-slate-500 shrink-0">Operator:</span>
+                        <span className="font-semibold text-slate-700 text-right">
+                          {orDash(activePunditTest.operator_name, "Not recorded")}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* SHA-256 Audit Seal Pill */}
-                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-[10px] text-slate-600">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Lock size={12} className="text-blue-600" />
-                    <span>Payload Seal:</span>
-                  </span>
-                  <span className="font-mono font-bold text-slate-800">{liveShaHash}</span>
-                </div>
+                    {/* Measurement Readouts */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3.5 rounded-xl bg-slate-900 text-white flex flex-col justify-between">
+                        <span className="text-[10px] text-cyan-300 font-mono uppercase">Transit Time (t)</span>
+                        <div className="text-2xl font-bold font-mono tracking-tight text-white mt-1">
+                          {livePulseTransitUs} <span className="text-xs font-normal text-slate-400">&mu;s</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900 text-white flex flex-col justify-between">
+                        <span className="text-[10px] text-cyan-300 font-mono uppercase">Path Length (L)</span>
+                        <div className="text-2xl font-bold font-mono tracking-tight text-white mt-1">
+                          {livePathLengthMm} <span className="text-xs font-normal text-slate-400">mm</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Velocity & Quality Grade */}
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 font-medium">Pulse Velocity (V = L/t):</span>
+                        <span className="text-lg font-extrabold text-[#022C4F] font-mono">
+                          {liveVelocityMs === null ? (
+                            <span className="text-xs font-semibold text-amber-700">
+                              Not yet analysed
+                            </span>
+                          ) : (
+                            `${liveVelocityMs} m/s`
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 font-medium">BS 1881-203 Rating:</span>
+                        {liveQuality === null ? (
+                          <span className="text-[11px] px-2.5 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+                            Not rated
+                          </span>
+                        ) : (
+                          <span className={`text-[11px] px-2.5 py-0.5 rounded-full border ${liveQuality.badgeClass}`}>
+                            {liveQuality.rating}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 font-medium">Est. Compressive (f_ck):</span>
+                        <span className="text-xs font-bold text-slate-900 font-mono">
+                          {liveStrengthMpa === null
+                            ? "Not reported by the platform"
+                            : `${liveStrengthMpa} MPa`}
+                        </span>
+                      </div>
+
+                      {liveQuality !== null && (
+                        <p className="text-[11px] text-slate-500 leading-snug pt-1 border-t border-slate-200">
+                          {liveQuality.description}
+                        </p>
+                      )}
+                      {liveVelocityMs === null && (
+                        <p className="text-[11px] text-amber-700 leading-snug pt-1 border-t border-slate-200">
+                          The server has not yet computed a pulse velocity for this
+                          record, so no velocity, rating or strength is shown. A
+                          value will not be estimated here.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Escalation */}
+                    {liveVelocityMs !== null && liveVelocityMs < 3000 && (
+                      <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-2">
+                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                          <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+                          <span>Substandard Velocity Recorded</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          The recorded velocity for this element is below
+                          3,000 m/s, the lower bound of the BS 1881-203
+                          &ldquo;Doubtful&rdquo; band. Corroboration by core
+                          extraction is normally required before a regulatory
+                          decision.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenEscalation(
+                              activePunditTest.structural_element_name || "",
+                              liveVelocityMs,
+                              liveStrengthMpa,
+                              liveQuality?.rating || ""
+                            )
+                          }
+                          className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Record a defect finding
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Right 2 Columns: Oscillogram Waveform Canvas Viewer */}
@@ -879,24 +1269,45 @@ export default function InspectorDigitalEyePage() {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="text-base font-bold text-[#022C4F]">
-                      A-Scan Waveform Oscillogram (54 kHz)
+                      A-Scan Waveform Oscillogram
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Real-time first break detection &amp; envelope peak analysis for Station #UPV-2026-0042
+                      {activePunditTest
+                        ? `Waveform recorded for ${activePunditTest.test_reference || "this test"}`
+                        : "No test selected"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                      Auto-Peak Active
-                    </span>
-                  </div>
+                  {activePunditTest && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
+                        {activePunditTest.waveform_samples &&
+                        activePunditTest.waveform_samples.length > 0
+                          ? "Trace recorded by device"
+                          : "No trace recorded"}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="min-h-[420px] bg-slate-950 rounded-xl border border-slate-800 p-2 overflow-hidden flex-1">
-                  <PunditWaveformViewer
-                    test={activePunditTest}
-                    onEscalateNCR={() => handleOpenEscalation("COL-C24", liveVelocityMs, liveStrengthMpa, liveQuality.rating)}
-                  />
+                  {activePunditTest ? (
+                    <PunditWaveformViewer
+                      test={activePunditTest}
+                      onEscalateNCR={() =>
+                        handleOpenEscalation(
+                          activePunditTest.structural_element_name || "",
+                          liveVelocityMs,
+                          liveStrengthMpa,
+                          liveQuality?.rating || ""
+                        )
+                      }
+                    />
+                  ) : (
+                    <div className="h-full min-h-[400px] flex items-center justify-center text-xs text-slate-400 font-mono text-center px-6">
+                      Select a recorded test to view its waveform. No trace is
+                      drawn when the device did not export one.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -919,21 +1330,69 @@ export default function InspectorDigitalEyePage() {
                 </span>
               </div>
 
+              {/*
+                These two were a `<select>` fixed to five invented elements —
+                COL-C24, COL-C25, BEAM-B12, SLAB-S04, PILE-CAP-01 — and no input
+                at all for the test location, which the API requires. The element
+                a UPV test is taken on is a property of the structure being
+                inspected, not of this screen, and the platform holds no list of
+                them scoped to a single inspector; offering five hardcoded names
+                would let a real measurement be filed against an element that
+                does not exist on the site. Both are freetext, as the API stores
+                them.
+              */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                {/* Structural Element Picker */}
+                {/* Project */}
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Project</label>
+                  <select
+                    value={manualForm.projectId}
+                    onChange={(e) => setManualForm({ ...manualForm, projectId: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800"
+                  >
+                    <option value="">
+                      {projectsError
+                        ? "Project list unavailable"
+                        : projects.length === 0
+                        ? "No projects in your scope"
+                        : "Select the project…"}
+                    </option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name || "Unnamed project"}
+                        {p.reference ? ` (${p.reference})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {projectsError && (
+                    <p className="text-[11px] text-rose-700 mt-1 leading-relaxed">
+                      {projectsError} A test cannot be recorded without one.
+                    </p>
+                  )}
+                </div>
+
+                {/* Structural Element */}
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">Structural Element</label>
-                  <select
+                  <input
+                    type="text"
                     value={manualForm.elementName}
                     onChange={(e) => setManualForm({ ...manualForm, elementName: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800"
-                  >
-                    <option value="COL-C24">COL-C24 (Level 3 Core Column)</option>
-                    <option value="COL-C25">COL-C25 (Basement Column)</option>
-                    <option value="BEAM-B12">BEAM-B12 (Level 2 Transfer Beam)</option>
-                    <option value="SLAB-S04">SLAB-S04 (Basement Suspended Slab)</option>
-                    <option value="PILE-CAP-01">PILE-CAP-01 (Foundation Pile Cap)</option>
-                  </select>
+                    placeholder="Element as marked on the drawing"
+                  />
+                </div>
+
+                {/* Test Location */}
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Test Location</label>
+                  <input
+                    type="text"
+                    value={manualForm.elementLocation}
+                    onChange={(e) => setManualForm({ ...manualForm, elementLocation: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800"
+                    placeholder="Grid reference, level and face"
+                  />
                 </div>
 
                 {/* Transmission Method */}
@@ -970,7 +1429,7 @@ export default function InspectorDigitalEyePage() {
                   <input
                     type="number"
                     value={manualForm.pathLengthMm}
-                    onChange={(e) => setManualForm({ ...manualForm, pathLengthMm: Number(e.target.value) })}
+                    onChange={(e) => setManualForm({ ...manualForm, pathLengthMm: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-mono text-slate-800 font-semibold"
                     placeholder="e.g. 400"
                   />
@@ -983,7 +1442,7 @@ export default function InspectorDigitalEyePage() {
                     type="number"
                     step="0.1"
                     value={manualForm.transitTimeUs}
-                    onChange={(e) => setManualForm({ ...manualForm, transitTimeUs: Number(e.target.value) })}
+                    onChange={(e) => setManualForm({ ...manualForm, transitTimeUs: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-mono text-slate-800 font-semibold"
                     placeholder="e.g. 94.2"
                   />
@@ -996,18 +1455,54 @@ export default function InspectorDigitalEyePage() {
                     <input
                       type="number"
                       value={manualForm.surfaceTempC}
-                      onChange={(e) => setManualForm({ ...manualForm, surfaceTempC: Number(e.target.value) })}
+                      onChange={(e) => setManualForm({ ...manualForm, surfaceTempC: e.target.value })}
                       className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-mono"
                       placeholder="Temp °C"
                     />
                     <input
                       type="number"
                       value={manualForm.concreteAgeDays}
-                      onChange={(e) => setManualForm({ ...manualForm, concreteAgeDays: Number(e.target.value) })}
+                      onChange={(e) => setManualForm({ ...manualForm, concreteAgeDays: e.target.value })}
                       className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-mono"
                       placeholder="Days"
                     />
                   </div>
+                </div>
+
+                {/* Surface Condition */}
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Surface Condition</label>
+                  <input
+                    type="text"
+                    value={manualForm.surfaceCondition}
+                    onChange={(e) => setManualForm({ ...manualForm, surfaceCondition: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800"
+                    placeholder="Dry, damp, rendered, honeycombed…"
+                  />
+                </div>
+
+                {/* Operator */}
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Operator</label>
+                  <input
+                    type="text"
+                    value={manualForm.operatorName}
+                    onChange={(e) => setManualForm({ ...manualForm, operatorName: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800"
+                    placeholder="Name of the person who took the reading"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="md:col-span-3">
+                  <label className="block text-slate-600 font-bold mb-1">Notes</label>
+                  <input
+                    type="text"
+                    value={manualForm.notes}
+                    onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-800"
+                    placeholder="Anything about the reading the record should carry"
+                  />
                 </div>
               </div>
 
@@ -1035,7 +1530,7 @@ export default function InspectorDigitalEyePage() {
                         <th className="p-3">Path Length (mm)</th>
                         <th className="p-3">Transit Time (&mu;s)</th>
                         <th className="p-3">Calculated Velocity</th>
-                        <th className="p-3">Est. Compressive (MPa)</th>
+                        <th className="p-3">Preview Strength (MPa)</th>
                         <th className="p-3">Quality Rating</th>
                       </tr>
                     </thead>
@@ -1061,28 +1556,79 @@ export default function InspectorDigitalEyePage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/*
+                  The strength column above is a local preview so the operator
+                  can sanity-check a reading as they type it. It is NOT the
+                  recorded strength: on save the platform recomputes it from the
+                  project's active calibration curve and stores the curve it used
+                  as a provenance snapshot. The two can legitimately differ, so
+                  the preview says so here rather than being mistaken for the
+                  sealed figure in the registry below.
+                */}
+                {manualForm.points.length > 0 && (
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Preview strength is indicative only. The platform recomputes
+                    the recorded value from the project&apos;s active calibration
+                    curve on save, and stores the curve it used.
+                  </p>
+                )}
               </div>
 
               {/* Submit & Commit Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100">
                 <div className="text-xs text-slate-500">
                   <span>Inspector Operator: </span>
-                  <strong className="text-slate-800">{manualForm.operatorName}</strong>
+                  <strong className="text-slate-800">
+                    {manualForm.operatorName.trim() || "Not entered"}
+                  </strong>
                   <span className="mx-2">&bull;</span>
-                  <span>SHA-256 seal will be created upon transmission.</span>
+                  <span>
+                    Saved against your account. No seal is claimed for a
+                    manual entry beyond the record the server stores.
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
+                      // A mean over unsaved form entries, and nothing more.
+                      //
+                      // This button used to assert "Element passes compliance
+                      // velocity threshold." for any mean >= 3000 m/s: a
+                      // compliance verdict on data the server had never seen,
+                      // resting on a hardcoded client-side constant. It also
+                      // reduced an empty list to 0 and then took the `< 3000`
+                      // branch, so pressing it with no points entered opened an
+                      // escalation citing a pulse velocity of 0 m/s.
+                      if (manualForm.points.length === 0) {
+                        showToast(
+                          "Add at least one reading point before checking SWO risk."
+                        );
+                        return;
+                      }
                       const meanVel = Math.round(
-                        manualForm.points.reduce((acc, p) => acc + p.velMs, 0) / (manualForm.points.length || 1)
+                        manualForm.points.reduce((acc, p) => acc + p.velMs, 0) /
+                          manualForm.points.length
                       );
                       if (meanVel < 3000) {
-                        handleOpenEscalation(manualForm.elementName, meanVel, estimateCompressiveStrength(meanVel), "DOUBTFUL");
+                        // `null` strength, deliberately: the platform has not
+                        // analysed these entries, so there is no estimate to
+                        // cite in an enforcement notice.
+                        handleOpenEscalation(
+                          manualForm.elementName,
+                          meanVel,
+                          null,
+                          "DOUBTFUL",
+                          "manual_entry"
+                        );
                       } else {
-                        showToast("Element passes compliance velocity threshold.");
+                        showToast(
+                          `Mean of ${manualForm.points.length} entered point${
+                            manualForm.points.length === 1 ? "" : "s"
+                          }: ${meanVel} m/s. These entries are not saved, so no compliance verdict has been recorded.`
+                        );
                       }
                     }}
                     className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold cursor-pointer"
@@ -1116,7 +1662,7 @@ export default function InspectorDigitalEyePage() {
                   </p>
                 </div>
                 <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                  Instant SHA-256 Verification
+                  Stored &amp; Hashed On Upload
                 </span>
               </div>
 
@@ -1164,146 +1710,175 @@ export default function InspectorDigitalEyePage() {
                 </div>
               )}
 
-              {/* Preview Table of Ingested Rows */}
-              {batchRows.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
-                      Parsed Session Stations ({batchRows.length} Stations Found)
-                    </h4>
-                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      All 6 Records Validated
+              {/* Upload / digest state */}
+              {isBatchUploading && (
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 text-xs text-slate-600">
+                  <RefreshCw size={14} className="animate-spin shrink-0" />
+                  <span>Uploading {batchFile?.name} to the platform…</span>
+                </div>
+              )}
+
+              {batchHashError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5">
+                  <AlertTriangle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs text-rose-800">
+                    <div className="font-bold mb-0.5">The file was not stored</div>
+                    <p className="leading-relaxed">{batchHashError}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* SHA-256 checksum computed by the server over the stored bytes */}
+              {batchSha256 && (
+                <div className="p-3.5 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Hash size={15} className="text-cyan-400 shrink-0" />
+                    <span className="text-slate-300">
+                      SHA-256 of the stored file, computed by the server:
                     </span>
                   </div>
+                  <span className="font-mono text-cyan-300 font-bold break-all">
+                    {batchSha256}
+                  </span>
+                </div>
+              )}
 
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold">
-                          <th className="p-3">Station</th>
-                          <th className="p-3">Element</th>
-                          <th className="p-3">Path (mm)</th>
-                          <th className="p-3">Transit Time (&mu;s)</th>
-                          <th className="p-3">Pulse Velocity</th>
-                          <th className="p-3">Rating</th>
-                          <th className="p-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-mono">
-                        {batchRows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50/60">
-                            <td className="p-3 font-bold text-slate-800">{r.station}</td>
-                            <td className="p-3 font-sans text-slate-700">{r.element}</td>
-                            <td className="p-3 text-slate-600">{r.pathMm} mm</td>
-                            <td className="p-3 text-slate-600">{r.timeUs} &mu;s</td>
-                            <td className="p-3 font-bold text-[#022C4F]">{r.velocityMs} m/s</td>
-                            <td className="p-3 font-sans">
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full border ${getConcreteQuality(r.velocityMs).badgeClass}`}>
-                                {r.quality}
-                              </span>
-                            </td>
-                            <td className="p-3 font-sans">
-                              {r.velocityMs < 3000 ? (
-                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
-                                  DOUBTFUL (Defect)
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                  PASSED
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              {/*
+                What this panel used to show: a table of six parsed stations
+                ("ST-01 / COL-C24 / 400 mm / 94.2 µs"), an "All 6 Records
+                Validated" badge, and a button reading "Batch Ingest All 6
+                Stations" that waited 800 ms, then claimed the stations had been
+                ingested under a seal. Nothing was parsed and nothing was
+                ingested — the file never left the browser.
 
-                  <div className="flex items-center justify-end gap-3 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBatchFile(null);
-                        setBatchRows([]);
-                      }}
-                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
-                    >
-                      Clear File
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isBatchImporting}
-                      onClick={handleCommitBatch}
-                      className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold shadow-md cursor-pointer transition-all"
-                    >
-                      {isBatchImporting ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
-                      <span>{isBatchImporting ? "Ingesting..." : "Batch Ingest All 6 Stations"}</span>
-                    </button>
+                The platform stores the upload and attests its bytes. It does not
+                yet have an agreed column contract for a PUNDIT session export,
+                so no row can honestly be presented as parsed. The panel says
+                that instead of inventing six.
+              */}
+              {batchFile && !isBatchUploading && !batchHashError && uploadedFileRef && (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
+                  <div className="font-bold text-slate-800">
+                    File stored as a sensor file record
                   </div>
+                  <p className="leading-relaxed">
+                    The platform has stored {batchFile.name} against your account
+                    and computed the digest above from the bytes it holds. It has
+                    not interpreted the file&apos;s contents. A PUNDIT session
+                    export needs a column contract agreed before its rows can be
+                    turned into test records, and until that exists nothing here
+                    will guess at one.
+                  </p>
+                  <p className="leading-relaxed">
+                    To record these measurements now, enter them under Manual
+                    Station Entry.
+                  </p>
+                </div>
+              )}
+
+              {batchFile && (
+                <div className="flex items-center justify-end gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleClearBatch}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+                  >
+                    Clear File
+                  </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* RECENT PUNDIT TEST REGISTRY */}
+          {/*
+            This registry used to render `testHistory`, a constant array of six
+            invented tests — "UPV-2026-0418 / COL-C24 / Level 3 Core Column",
+            each with a velocity and a strength — under the fixed heading
+            "Project: Lekki Pearl Residences". It listed them whether or not the
+            inspector had ever taken a reading, and `getPunditTests()` was
+            imported by this file and never called. It now lists what the
+            platform holds. A velocity of 0 is the server's PENDING state before
+            its BS 1881-203 analysis has run, so it is shown as unanalysed rather
+            than defaulted to a passing value.
+
+            The register folds into Project → Floor → Station, the same folder
+            structure the Government PUNDIT registry uses, one level deeper
+            because this register is cross-project: an inspector's scope spans
+            several projects, so `Floor:200THK RC SLAB` recurs and must not
+            merge. A record naming no project groups under "Project not
+            recorded" rather than into a neighbour's folder. Flat list restores
+            the previous grid.
+          */}
           <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-sm font-bold text-[#022C4F] uppercase tracking-wider">
-                  Site UPV Test Records ({testHistory.length})
+                  Recorded UPV Tests{punditTests ? ` (${punditTests.length})` : ""}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Click any test station to load its complete oscillogram waveform and diagnostics.
+                  Tests the platform holds against the projects in your scope. Select one to read its recorded values.
                 </p>
               </div>
-              <span className="text-xs text-slate-400 font-mono">
-                Project: Lekki Pearl Residences
-              </span>
+              {punditTests && punditTests.length > 0 && (
+                <FolderViewToggle
+                  viewMode={testFolders.viewMode}
+                  onChange={testFolders.setViewMode}
+                />
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {testHistory.map((t) => {
-                const isSelected = activePunditTest.id === t.id;
-                const quality = getConcreteQuality(t.pulse_velocity_ms || 4000);
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => {
-                      setActivePunditTest(t);
-                      setPunditMode("live");
-                    }}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? "border-[#022C4F] bg-blue-50/40 ring-2 ring-[#022C4F]/10 shadow-sm"
-                        : "border-slate-200/70 bg-white hover:bg-slate-50/50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
-                        {t.test_reference}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${quality.badgeClass}`}>
-                        {quality.rating}
-                      </span>
+            {punditTests === null ? (
+              recordsError ? (
+                <div className="p-5 rounded-xl bg-amber-50 border border-amber-200">
+                  <h4 className="text-xs font-bold text-amber-900 mb-1">
+                    Recorded tests could not be read
+                  </h4>
+                  <p className="text-xs text-amber-800">{recordsError}</p>
+                  <p className="text-xs text-amber-700 mt-1.5">
+                    No test is listed because none could be read. This is not a
+                    statement that you have recorded none.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-10 flex items-center justify-center">
+                  <div className="w-6 h-6 border-3 border-[#022C4F] border-t-transparent rounded-full animate-spin" />
+                </div>
+              )
+            ) : punditTests.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50/60 border border-slate-200/70 rounded-xl p-6">
+                <Radio size={28} className="text-slate-400 mx-auto mb-2.5" />
+                <h4 className="text-xs font-bold text-slate-800 mb-1">
+                  No UPV Tests Recorded
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No ultrasonic test has been recorded against the projects in
+                  your scope. Measurements are recorded from the Manual Station
+                  Entry or Live Streaming panels above.
+                </p>
+              </div>
+            ) : testFolders.viewMode === "flat" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {punditTests.map((t) => renderTestCard(t))}
+              </div>
+            ) : (
+              <div className="border border-slate-200/70 rounded-xl overflow-hidden">
+                <ProjectFloorStationTreeBody
+                  groups={testFolders.groups}
+                  openProjects={testFolders.openProjects}
+                  openFloors={testFolders.openFloors}
+                  openStations={testFolders.openStations}
+                  toggleProject={testFolders.toggleProject}
+                  toggleFloor={testFolders.toggleFloor}
+                  toggleStation={testFolders.toggleStation}
+                  stationSummary={punditStationSummary}
+                  renderStationBody={(rows) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                      {rows.map((t) => renderTestCard(t))}
                     </div>
-
-                    <h4 className="text-xs font-bold text-slate-900 truncate mb-1">
-                      {t.structural_element_name || "COL-C24"}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 truncate mb-3">
-                      {t.test_location || "Level 3 Core Column"}
-                    </p>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono font-bold text-[#022C4F]">
-                      <span>{t.pulse_velocity_ms} m/s</span>
-                      <span className="text-slate-500 text-[11px] font-normal">
-                        ~{t.estimated_compressive_strength_mpa} MPa
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1311,23 +1886,149 @@ export default function InspectorDigitalEyePage() {
       {/* SUBMODULE 2: GPR RADARGRAM RADAR */}
       {activeSubmodule === "gpr" && (
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-base font-bold text-[#022C4F]">GPR Radargram Analysis (1.6 GHz)</h2>
+              <h2 className="text-base font-bold text-[#022C4F]">GPR Radargram Analysis</h2>
               <p className="text-xs text-slate-500">
-                Profile Scan #{sampleGprScan.survey_reference} &bull; Proceq SFCW Antenna &bull; Basement Grid A1-D4
+                {activeGprScan
+                  ? `Survey ${orDash(activeGprScan.survey_reference, "with no reference recorded")}` +
+                    ` • ${orDash(activeGprScan.project_name, "project not recorded")}` +
+                    ` • ${orDash(activeGprScan.structural_element, "element not recorded")}`
+                  : "No survey selected."}
               </p>
             </div>
-            <span className="text-[11px] font-semibold text-cyan-800 bg-cyan-50 px-2.5 py-0.5 rounded-full border border-cyan-200">
-              Depth Range: 0.8m
-            </span>
+            {activeGprScan && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                  {orDash(activeGprScan.status_display, "Status not recorded")}
+                </span>
+                <span className="text-[11px] font-semibold text-cyan-800 bg-cyan-50 px-2.5 py-0.5 rounded-full border border-cyan-200">
+                  {activeGprScan.anomaly_count}{" "}
+                  {activeGprScan.anomaly_count === 1 ? "anomaly" : "anomalies"}
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className="min-h-[380px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center p-2">
-            <RadargramViewer
-              scan={sampleGprScan}
-              onEscalateNCR={() => handleOpenEscalation("FND-PILE-CAP-04", 2400, 18, "DOUBTFUL")}
-            />
+          {/*
+            The radargram used to be drawn from `sampleGprScan`: a constant
+            "GPR-2026-88A1" survey on "Basement Grid A1-D4" with an "0.8m" depth
+            range badge, and an escalation handler wired to a fixed
+            ("FND-PILE-CAP-04", 2400 m/s, 18 MPa) defect. Every one of those
+            numbers was a literal, so the panel rendered a complete radar
+            interpretation over a project that had never been surveyed. It now
+            shows a survey the platform holds, or says there is none.
+          */}
+          {activeGprScan ? (
+            <>
+              <div className="min-h-[380px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center p-2">
+                <RadargramViewer
+                  scan={activeGprScan}
+                  onEscalateNCR={() =>
+                    handleOpenEscalation(
+                      activeGprScan.structural_element ||
+                        activeGprScan.survey_reference ||
+                        "Unnamed GPR survey",
+                      null,
+                      null,
+                      orDash(activeGprScan.status_display, "Not recorded")
+                    )
+                  }
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Depth range, permittivity and gain are operator controls on the
+                viewer, not properties of the stored survey. A GPR radargram
+                carries no pulse velocity, so raising a defect finding from this
+                screen records the survey it came from and no velocity.
+              </p>
+            </>
+          ) : (
+            <div className="text-center py-16 bg-slate-50/60 border border-slate-200/70 rounded-xl p-8">
+              <Radio size={28} className="text-slate-400 mx-auto mb-2.5" />
+              <h4 className="text-xs font-bold text-slate-800 mb-1">
+                No GPR Survey Selected
+              </h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Select a survey from the Recorded GPR Surveys list below. A
+                radargram is drawn from the stored survey record, so there is
+                nothing to display until one is chosen.
+              </p>
+            </div>
+          )}
+
+          {/* Recorded GPR surveys held by the platform */}
+          <div className="pt-4 border-t border-slate-100 space-y-3">
+            <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+              Recorded GPR Surveys{gprScans ? ` (${gprScans.length})` : ""}
+            </h3>
+
+            {gprScans === null ? (
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <h4 className="text-xs font-bold text-amber-900 mb-1">
+                  GPR surveys could not be read
+                </h4>
+                <p className="text-xs text-amber-800">
+                  {recordsError || "The survey register could not be reached."}
+                </p>
+                <p className="text-xs text-amber-700 mt-1.5">
+                  No survey is listed because none could be read. This is not a
+                  statement that none has been recorded.
+                </p>
+              </div>
+            ) : gprScans.length === 0 ? (
+              <div className="text-center py-10 bg-slate-50/60 border border-slate-200/70 rounded-xl p-6">
+                <Radio size={24} className="text-slate-400 mx-auto mb-2" />
+                <h4 className="text-xs font-bold text-slate-800 mb-1">
+                  No GPR Surveys Recorded
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No ground-penetrating radar survey has been recorded against
+                  the projects in your scope.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {gprScans.map((s) => {
+                  const isSelected = activeGprScan?.id === s.id;
+                  return (
+                    <button
+                      type="button"
+                      key={s.id}
+                      onClick={() => setActiveGprScan(s)}
+                      className={`text-left p-4 rounded-xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-[#022C4F] bg-blue-50/40 ring-2 ring-[#022C4F]/10 shadow-sm"
+                          : "border-slate-200/70 bg-white hover:bg-slate-50/50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+                          {orDash(s.survey_reference, "No reference")}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200 shrink-0">
+                          {orDash(s.status_display, "Status not recorded")}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 truncate mb-1">
+                        {orDash(s.title, "Survey title not recorded")}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 truncate mb-2">
+                        {orDash(s.structural_element, "Element not recorded")} &bull;{" "}
+                        {orDash(s.survey_area, "area not recorded")}
+                      </p>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                        <span>{dateOr(s.created_at, "Date not recorded")}</span>
+                        <span className="font-mono">
+                          {s.anomaly_count}{" "}
+                          {s.anomaly_count === 1 ? "anomaly" : "anomalies"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1338,123 +2039,340 @@ export default function InspectorDigitalEyePage() {
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
               <h2 className="text-base font-bold text-[#022C4F]">Trimble Connect 3D BIM Viewer</h2>
+              {/*
+                The subtitle used to promise "Federated architectural &amp;
+                structural IFC model with NDT inspection station markers". The
+                viewer draws tessellated IFC geometry for one project and
+                nothing else — it places no test stations on the model. The
+                station positions the platform actually holds are the recorded
+                survey points, and those are drawn on the Spatial Evidence Map
+                tab. Saying so is cheaper than an inspector hunting a marker
+                layer that was never rendered.
+              */}
               <p className="text-xs text-slate-500">
-                Federated architectural &amp; structural IFC model with NDT inspection station markers
+                The IFC model imported against one project, drawn from its stored
+                geometry. Recorded test and survey positions are plotted on the
+                Spatial Evidence Map tab.
               </p>
             </div>
-            <span className="text-[11px] font-semibold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-              LOD 350
-            </span>
+            {bimProjectId && bimElements !== null && !bimError && (
+              <span className="text-[11px] font-semibold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                {bimElements.length === 0
+                  ? "No elements imported"
+                  : `${bimElements.length} structural element${bimElements.length === 1 ? "" : "s"}`}
+              </span>
+            )}
           </div>
 
-          <div className="min-h-[420px] bg-slate-950 rounded-xl border border-slate-800 p-2">
-            <TrimbleBIMViewer projectId="prj-1" elements={[]} />
+          {/* Which model to open. Nothing is requested until this is set. */}
+          <div className="max-w-md">
+            <label className="block text-slate-600 font-bold mb-1 text-xs">Project</label>
+            <select
+              value={bimProjectId}
+              onChange={(e) => setBimProjectId(e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-medium text-slate-800 text-xs"
+            >
+              <option value="">
+                {projectsError
+                  ? "Project list unavailable"
+                  : projects.length === 0
+                  ? "No projects in your scope"
+                  : "Select the project…"}
+              </option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || "Unnamed project"}
+                  {p.reference ? ` (${p.reference})` : ""}
+                </option>
+              ))}
+            </select>
+            {projectsError && (
+              <p className="text-[11px] text-rose-700 mt-1 leading-relaxed">
+                {projectsError} A model cannot be opened without a project.
+              </p>
+            )}
           </div>
+
+          {!bimProjectId ? (
+            <div className="min-h-[420px] flex items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center px-6">
+              <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                Select a project above to open its imported IFC model. No project
+                is opened by default — a model belongs to a site, and guessing
+                one would show you someone else&apos;s building.
+              </p>
+            </div>
+          ) : bimError ? (
+            <div className="min-h-[420px] flex items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-center px-6">
+              <p className="text-xs text-amber-900 max-w-sm leading-relaxed">
+                {bimError} The imported element register for this project could
+                not be read, so no model is shown.
+              </p>
+            </div>
+          ) : bimElements === null ? (
+            <div className="min-h-[420px] flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-400 font-mono">
+              Reading the imported element register…
+            </div>
+          ) : (
+            <div className="min-h-[420px] bg-slate-950 rounded-xl border border-slate-800 p-2">
+              {/*
+                `TrimbleBIMViewer` fetches the project's tessellated geometry
+                itself and reports "no model" when the project has none
+                imported; `elements` is the structural register it labels that
+                geometry with. It is given the project the inspector chose, not
+                the literal `prj-1` that used to sit here — an id belonging to
+                no project on the platform, under which the panel reported "no
+                model" whether or not the inspector's own site had one.
+              */}
+              <TrimbleBIMViewer projectId={bimProjectId} elements={bimElements} />
+            </div>
+          )}
         </div>
       )}
 
       {/* SUBMODULE 4: SPATIAL EVIDENCE MAP */}
       {activeSubmodule === "spatial" && (
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-base font-bold text-[#022C4F]">Spatial Telemetry Canvas (Tersus RTK GNSS)</h2>
+              <h2 className="text-base font-bold text-[#022C4F]">Spatial Evidence Map</h2>
               <p className="text-xs text-slate-500">
-                Georeferenced inspection survey locations &bull; Accuracy: &plusmn;14mm &bull; 18 Satellites Fix
+                {spatialPoints === null
+                  ? "The spatial evidence register could not be read."
+                  : spatialPoints.length === 0
+                    ? "No spatial evidence point is recorded against the projects in your scope."
+                    : `${spatialPoints.length} recorded point${spatialPoints.length === 1 ? "" : "s"} in your scope` +
+                      (spatialBestAccuracyMm === null
+                        ? " • no positional precision recorded"
+                        : ` • best recorded precision ±${spatialBestAccuracyMm} mm`)}
               </p>
             </div>
-            <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              RTK Fixed
-            </span>
+            {spatialPoints !== null && spatialPoints.length > 0 && (
+              <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200 shrink-0">
+                {new Set(spatialPoints.map((p) => p.layer_type || "unclassified")).size}{" "}
+                layer{new Set(spatialPoints.map((p) => p.layer_type || "unclassified")).size === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
 
-          <div className="min-h-[420px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden p-2">
-            <EvidenceMapCanvas points={[]} />
-          </div>
+          {spatialPoints === null ? (
+            <div className="p-5 rounded-xl bg-amber-50 border border-amber-200">
+              <h4 className="text-xs font-bold text-amber-900 mb-1">
+                The spatial register could not be read
+              </h4>
+              <p className="text-xs text-amber-800">
+                {spatialError || "The spatial evidence register could not be reached."}
+              </p>
+              <p className="text-xs text-amber-700 mt-1.5">
+                Nothing is plotted because nothing could be read. This is not an
+                empty register, and it is not a site with no survey.
+              </p>
+            </div>
+          ) : (
+            <div className="min-h-[420px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden p-2">
+              <EvidenceMapCanvas points={spatialPoints} />
+            </div>
+          )}
         </div>
       )}
 
       {/* SUBMODULE 5: AUDIT & SHA-256 VAULT */}
       {activeSubmodule === "sessions" && (
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          {/*
+            This panel was titled "TS-1 Cryptographic Audit Vault", carried a
+            "100% Tamper-Proof Audit" badge, and gave every row a "SHA-256 Seal
+            Hash" built by string-concatenating a real SHA-256 constant with the
+            row index, next to a green "Verified" pill. A PUNDIT test record
+            carries no digest, so there was nothing to verify and nothing that
+            had been verified — the panel certified its own invention on the
+            screen whose whole purpose is to be trustworthy. It now reports the
+            digest that does exist: the one the server computes over an uploaded
+            sensor file, and for tests, the files the platform holds against
+            them.
+          */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-base font-bold text-[#022C4F]">TS-1 Cryptographic Audit Vault</h2>
+              <h2 className="text-base font-bold text-[#022C4F]">
+                Recorded NDT Register
+              </h2>
               <p className="text-xs text-slate-500">
-                All PUNDIT UPV tests, GPR surveys, and rover coordinates sealed with immutable SHA-256 hashes.
+                The ultrasonic tests and radar surveys the platform holds for the
+                projects in your scope.
               </p>
             </div>
-            <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-              100% Tamper-Proof Audit
-            </span>
+            {punditTests && gprScans && (
+              <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg shrink-0">
+                {punditTests.length} UPV &bull; {gprScans.length} GPR
+              </span>
+            )}
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold">
-                  <th className="p-3">Reference</th>
-                  <th className="p-3">Element</th>
-                  <th className="p-3">Timestamp</th>
-                  <th className="p-3">Velocity (m/s)</th>
-                  <th className="p-3">SHA-256 Seal Hash</th>
-                  <th className="p-3">Integrity</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-mono">
-                {testHistory.map((t, i) => (
-                  <tr key={t.id} className="hover:bg-slate-50/60">
-                    <td className="p-3 font-bold text-[#022C4F]">{t.test_reference}</td>
-                    <td className="p-3 font-sans text-slate-700">{t.structural_element_name || "COL-C24"}</td>
-                    <td className="p-3 text-slate-500">{new Date(t.created_at).toLocaleDateString()}</td>
-                    <td className="p-3 font-bold">{t.pulse_velocity_ms} m/s</td>
-                    <td className="p-3 text-slate-500 break-all text-[10px]">
-                      {`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b8${i}5`}
-                    </td>
-                    <td className="p-3 font-sans">
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
-                        <Check size={11} /> Verified
-                      </span>
-                    </td>
+          {punditTests === null ? (
+            <div className="p-5 rounded-xl bg-amber-50 border border-amber-200">
+              <h4 className="text-xs font-bold text-amber-900 mb-1">
+                The NDT register could not be read
+              </h4>
+              <p className="text-xs text-amber-800">
+                {recordsError || "The test register could not be reached."}
+              </p>
+              <p className="text-xs text-amber-700 mt-1.5">
+                Nothing is listed because nothing could be read. This is not an
+                empty register.
+              </p>
+            </div>
+          ) : punditTests.length === 0 ? (
+            <div className="text-center py-14 bg-slate-50/60 border border-slate-200/70 rounded-xl p-6">
+              <ShieldCheck size={28} className="text-slate-400 mx-auto mb-2.5" />
+              <h4 className="text-xs font-bold text-slate-800 mb-1">
+                No NDT Records Held
+              </h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No ultrasonic test has been recorded against the projects in your
+                scope yet.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-semibold">
+                    <th className="p-3">Reference</th>
+                    <th className="p-3">Element</th>
+                    <th className="p-3">Project</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Velocity (m/s)</th>
+                    <th className="p-3">Strength (MPa)</th>
+                    <th className="p-3">Attached Files</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono">
+                  {punditTests.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50/60">
+                      <td className="p-3 font-bold text-[#022C4F]">
+                        {orDash(t.test_reference, "No reference")}
+                      </td>
+                      <td className="p-3 font-sans text-slate-700">
+                        {orDash(t.structural_element_name, "Not recorded")}
+                      </td>
+                      <td className="p-3 font-sans text-slate-600">
+                        {orDash(t.project_name, "Not recorded")}
+                      </td>
+                      <td className="p-3 text-slate-500">
+                        {dateOr(t.test_date, "Not recorded")}
+                      </td>
+                      <td className="p-3 font-bold">
+                        {t.pulse_velocity_ms > 0
+                          ? `${t.pulse_velocity_ms} m/s`
+                          : "Not yet analysed"}
+                      </td>
+                      <td className="p-3 text-slate-600">
+                        {t.estimated_compressive_strength_mpa !== null
+                          ? `${t.estimated_compressive_strength_mpa} MPa`
+                          : "Not reported"}
+                      </td>
+                      <td className="p-3 text-slate-500">
+                        {t.file_count === 0
+                          ? "None attached"
+                          : `${t.file_count} file${t.file_count === 1 ? "" : "s"}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            A digest is computed by the server over the bytes of a file it
+            stores — the Session File Upload panel shows the one returned for a
+            file you upload. The platform does not hold a per-test seal, so this
+            register reports the recorded values and the files attached to them,
+            and claims nothing further about their integrity.
+          </p>
         </div>
       )}
 
-      {/* Advisory AI Anomaly Analysis Banner */}
-      <div className="p-5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-[#022C4F]" />
-            <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
-              TS-1 Automated Diagnostic Engine (BS 1881-203 / ASTM C597)
-            </h3>
-          </div>
-          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-            Pulse Velocity Confidence: 94%
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
-            <span className="text-slate-500 text-[11px] block font-medium">Transducer Frequency</span>
-            <span className="text-slate-800 font-bold">54 kHz Direct Mode</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
-            <span className="text-slate-500 text-[11px] block font-medium">Mean Pulse Velocity</span>
-            <span className="text-slate-800 font-bold">4,190 m/s (&plusmn;32 m/s)</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm sm:col-span-2">
-            <span className="text-slate-500 text-[11px] block font-medium">Regulatory Finding Status</span>
-            <span className="text-slate-700 font-medium leading-relaxed">
-              Column COL-C24 concrete density satisfies BS 1881-203 structural standards for Class C35/45 mix.
+      {/*
+        This banner used to read "Pulse Velocity Confidence: 94%", "54 kHz
+        Direct Mode", "4,190 m/s (±32 m/s)" and "Column COL-C24 concrete density
+        satisfies BS 1881-203 structural standards for Class C35/45 mix" — a
+        passing verdict on a named column, with a confidence figure and a
+        tolerance, none of which came from any measurement. A false pass on a
+        concrete compliance screen is the single most dangerous thing this page
+        could say, so the panel now reports only what the selected test holds,
+        and says plainly when there is nothing to report.
+      */}
+      {activePunditTest && (
+        <div className="p-5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[#022C4F]" />
+              <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+                Recorded Diagnostic — {orDash(activePunditTest.test_reference, "no reference")}
+              </h3>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-0.5 rounded-full border border-blue-200">
+              {orDash(activePunditTest.concrete_quality_rating, "Not yet rated by the platform")}
             </span>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
+              <span className="text-slate-500 text-[11px] block font-medium">Transducer</span>
+              <span className="text-slate-800 font-bold">
+                {activePunditTest.transducer_frequency_khz
+                  ? `${activePunditTest.transducer_frequency_khz} kHz`
+                  : "Frequency not recorded"}
+                {activePunditTest.transducer_type
+                  ? ` • ${humaniseTransducer(activePunditTest.transducer_type)}`
+                  : ""}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
+              <span className="text-slate-500 text-[11px] block font-medium">Pulse Velocity</span>
+              <span className="text-slate-800 font-bold">
+                {liveVelocityMs !== null
+                  ? `${formatVelocityMs(liveVelocityMs)} m/s`
+                  : "Not yet analysed"}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
+              <span className="text-slate-500 text-[11px] block font-medium">
+                Platform Confidence Interval
+              </span>
+              <span className="text-slate-800 font-bold">
+                {activePunditTest.ai_ci_lower_mpa !== null &&
+                activePunditTest.ai_ci_upper_mpa !== undefined &&
+                activePunditTest.ai_ci_lower_mpa !== undefined
+                  ? `${activePunditTest.ai_ci_lower_mpa}–${activePunditTest.ai_ci_upper_mpa} MPa`
+                  : "Not reported"}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-white border border-blue-100 shadow-sm">
+              <span className="text-slate-500 text-[11px] block font-medium">Strength</span>
+              <span className="text-slate-800 font-bold">
+                {activePunditTest.estimated_compressive_strength_mpa !== null
+                  ? `${activePunditTest.estimated_compressive_strength_mpa} MPa`
+                  : "Not reported by the platform"}
+              </span>
+            </div>
+          </div>
+
+          {activePunditTest.ai_reasoning_traces &&
+          activePunditTest.ai_reasoning_traces.length > 0 ? (
+            <ul className="text-xs text-slate-700 leading-relaxed space-y-1 list-disc pl-4">
+              {activePunditTest.ai_reasoning_traces.map((trace, idx) => (
+                <li key={idx}>{trace}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              The platform has recorded no diagnostic reasoning for this test. It
+              is not restated here as a compliance verdict.
+            </p>
+          )}
         </div>
-      </div>
+      )}
 
       {/* HARDWARE PAIRING & TELEMETRY MODAL */}
       {isPairModalOpen && (
@@ -1480,65 +2398,90 @@ export default function InspectorDigitalEyePage() {
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Discover and pair field inspection sensors over Bluetooth Low Energy (BLE 5.0) and direct Wi-Fi.
+            {/*
+              The Connect / Disconnect button here used to flip a string on a
+              hand-written array — `setDevices(...)` over four constants — so it
+              reported "Toggled connection for Screening Eagle Pundit Live"
+              against a device that was never contacted. There is no BLE or
+              Wi-Fi bridge in this application, so no control on this screen can
+              open a link to a field device. The list reports the devices the
+              platform has registered and their recorded state.
+            */}
+            <p className="text-xs text-slate-500 leading-relaxed">
+              These are the field devices the platform has registered against
+              your scope, with the state each was last reported in. This
+              application holds no Bluetooth or direct Wi-Fi link to field
+              hardware, so a device cannot be paired or its state changed from
+              this screen.
             </p>
 
             <div className="space-y-3">
-              {devices.map((dev) => (
-                <div
-                  key={dev.id}
-                  className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <strong className="text-slate-900">{dev.name}</strong>
-                      <span className={`text-[10px] px-2 py-0.2 rounded-full border ${dev.badge}`}>
-                        {dev.status}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                      <span>{dev.interface}</span>
-                      <span>&bull;</span>
-                      <span>Battery: {dev.battery}%</span>
-                      <span>&bull;</span>
-                      <span>Calibrated ({dev.calibrationDaysLeft}d left)</span>
+              {devicesError ? (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                  <h4 className="text-xs font-bold text-amber-900 mb-1">
+                    The device registry could not be read
+                  </h4>
+                  <p className="text-xs text-amber-800">{devicesError}</p>
+                </div>
+              ) : deviceCards.length === 0 ? (
+                <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                  <Cpu size={24} className="text-slate-400 mx-auto mb-2" />
+                  <h4 className="text-xs font-bold text-slate-800 mb-1">
+                    No Field Devices Registered
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    No device has been registered against the projects in your
+                    scope.
+                  </p>
+                </div>
+              ) : (
+                deviceCards.map((dev) => (
+                  <div
+                    key={dev.id}
+                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                        <strong className="text-slate-900">{dev.name}</strong>
+                        <span className={`text-[10px] px-2 py-0.2 rounded-full border ${dev.badge}`}>
+                          {dev.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
+                        <span>{dev.interface}</span>
+                        <span>&bull;</span>
+                        <span>
+                          {dev.battery === null
+                            ? "Battery not reported"
+                            : `Battery: ${dev.battery}%`}
+                        </span>
+                        <span>&bull;</span>
+                        <span>
+                          {dev.calibrationDate
+                            ? `Calibrated ${dateOr(dev.calibrationDate)}`
+                            : "No calibration recorded"}
+                        </span>
+                        {dev.serial && (
+                          <>
+                            <span>&bull;</span>
+                            <span className="font-mono">{dev.serial}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = devices.map((d) =>
-                        d.id === dev.id
-                          ? { ...d, status: d.status.includes("DISCONNECTED") ? "CONNECTED" : "DISCONNECTED", badge: d.status.includes("DISCONNECTED") ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200" }
-                          : d
-                      );
-                      setDevices(updated);
-                      showToast(`Toggled connection for ${dev.name}`);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 font-semibold text-[#022C4F] transition-colors"
-                  >
-                    {dev.status.includes("DISCONNECTED") ? "Connect" : "Disconnect"}
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => {
-                  setIsScanningDevices(true);
-                  setTimeout(() => {
-                    setIsScanningDevices(false);
-                    showToast("BLE scan completed. 4 devices active in range.");
-                  }, 1200);
-                }}
+                onClick={loadRecords}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
               >
-                <RefreshCw size={13} className={isScanningDevices ? "animate-spin" : ""} />
-                <span>{isScanningDevices ? "Scanning Probes..." : "Scan for Probes"}</span>
+                <RefreshCw size={13} />
+                <span>Reload Registry</span>
               </button>
 
               <button
@@ -1565,7 +2508,7 @@ export default function InspectorDigitalEyePage() {
               <div className="flex items-center gap-2 text-rose-700">
                 <AlertTriangle size={20} />
                 <h3 className="text-base font-bold">
-                  Issue Stop Work Order (SWO) Defect Notice
+                  Raise Concrete Defect Finding
                 </h3>
               </div>
               <button
@@ -1577,53 +2520,108 @@ export default function InspectorDigitalEyePage() {
               </button>
             </div>
 
+            {/*
+              The three values below used to be printed with fixed annotations —
+              "(DOUBTFUL)" after the velocity whatever it was, "(< 25 MPa
+              required)" after the strength, and "BS 1881-203 & LASBCA Code"
+              under "Standard Violated". The last of those asserts a specific
+              clause was breached, and nothing on this screen knows which clause
+              applies: the acceptance band depends on the element, the mix and
+              the standard the project is being built to. Each row now shows the
+              recorded value or says it was not measured, and the standard is
+              left for the inspector to state.
+            */}
             <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-semibold">Element:</span>
-                <strong className="text-slate-900">{swoData.element}</strong>
+              <div className="flex justify-between gap-3">
+                <span className="text-rose-700 font-semibold shrink-0">Element:</span>
+                <strong className="text-slate-900 text-right">
+                  {swoData.element || "Not recorded"}
+                </strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-semibold">Measured Pulse Velocity:</span>
-                <strong className="text-rose-800 font-mono">{swoData.velocityMs} m/s (DOUBTFUL)</strong>
+              <div className="flex justify-between gap-3">
+                <span className="text-rose-700 font-semibold shrink-0">Recorded Pulse Velocity:</span>
+                <strong className="text-rose-800 font-mono text-right">
+                  {swoData.velocityMs !== null
+                    ? `${formatVelocityMs(swoData.velocityMs)} m/s`
+                    : "Not measured"}
+                </strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-semibold">Est. Compressive Strength:</span>
-                <strong className="text-rose-800 font-mono">{swoData.strengthMpa} MPa (&lt; 25 MPa required)</strong>
+              <div className="flex justify-between gap-3">
+                <span className="text-rose-700 font-semibold shrink-0">Est. Compressive Strength:</span>
+                <strong className="text-rose-800 font-mono text-right">
+                  {swoData.strengthMpa !== null
+                    ? `${swoData.strengthMpa} MPa`
+                    : "Not reported by the platform"}
+                </strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-semibold">Standard Violated:</span>
-                <span className="font-semibold text-slate-800">BS 1881-203 &amp; LASBCA Code</span>
+              <div className="flex justify-between gap-3">
+                <span className="text-rose-700 font-semibold shrink-0">Recorded Rating:</span>
+                <span className="font-semibold text-slate-800 text-right">
+                  {swoData.rating || "Not rated"}
+                </span>
               </div>
             </div>
 
             <div className="space-y-1 text-xs">
-              <label className="block text-slate-700 font-bold">Inspector Regulatory Decision</label>
+              <label className="block text-slate-700 font-bold">
+                Inspector Regulatory Decision
+              </label>
               <textarea
-                rows={3}
-                defaultValue={swoData.recommendation}
+                rows={4}
+                value={swoRecommendation}
+                onChange={(e) => setSwoRecommendation(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs leading-relaxed"
               />
             </div>
+
+            {swoError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                <div className="font-bold mb-0.5">The finding was not recorded</div>
+                <p className="leading-relaxed">{swoError}</p>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setSwoModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSubmitSwo}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md cursor-pointer"
+                disabled={isSubmittingSwo}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md cursor-pointer disabled:opacity-60 flex items-center gap-2"
               >
-                Issue Formal Stop Work Order
+                {isSubmittingSwo && <RefreshCw size={13} className="animate-spin" />}
+                <span>{isSubmittingSwo ? "Recording…" : "Record Defect Finding"}</span>
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * `useSearchParams()` suspends during a static render, so the workspace above
+ * is wrapped the same way the inspector login page wraps its own — the default
+ * export is the boundary, and the fallback names what is being loaded rather
+ * than showing a blank frame.
+ */
+export default function InspectorDigitalEyePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[420px] flex items-center justify-center text-xs text-slate-400 font-mono">
+          Opening the TS-1 workspace…
+        </div>
+      }
+    >
+      <InspectorDigitalEyeWorkspace />
+    </Suspense>
   );
 }

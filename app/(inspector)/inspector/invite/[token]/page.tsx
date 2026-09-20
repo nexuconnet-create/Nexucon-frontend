@@ -265,7 +265,7 @@ export default function InspectorInvitePage() {
                         >
                           <div className="min-w-0">
                             <p className="font-bold text-gray-900 truncate">{proj.name}</p>
-                            <p className="text-[11px] font-mono text-gray-400">{proj.reference_number || "REF-GOV-2026"}</p>
+                            <p className="text-[11px] font-mono text-gray-400">{proj.reference_number || "No reference recorded"}</p>
                           </div>
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                             Active Site
@@ -333,23 +333,43 @@ export default function InspectorInvitePage() {
                   </div>
                 )}
 
-                {/* Temporary Password Box */}
-                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-amber-800 uppercase font-bold">Temporary Access Password</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyPassword}
-                      className="flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                    >
-                      {copiedPass ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                      <span>{copiedPass ? "Copied!" : "Copy"}</span>
-                    </button>
+                {/* Temporary Password Box.
+                    Rendered only when the server actually issued one. This box
+                    used to display `validationResult.temporary_password ||
+                    "Nexucon@8842-2026!"` with a Copy button — so an invitation
+                    that came with no temporary password showed a real-looking
+                    credential that is not the account's password. An inspector
+                    who copied it would paste a string that cannot sign them in,
+                    and would reasonably conclude their account was broken. */}
+                {validationResult.temporary_password ? (
+                  <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono text-amber-800 uppercase font-bold">Temporary Access Password</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyPassword}
+                        className="flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {copiedPass ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                        <span>{copiedPass ? "Copied!" : "Copy"}</span>
+                      </button>
+                    </div>
+                    <div className="p-3 bg-white rounded-xl border border-amber-200 font-mono text-base font-extrabold text-gray-900 tracking-wider select-all">
+                      {validationResult.temporary_password}
+                    </div>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-amber-200 font-mono text-base font-extrabold text-gray-900 tracking-wider select-all">
-                    {validationResult.temporary_password || "Nexucon@8842-2026!"}
+                ) : (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <div className="font-bold text-slate-700">
+                      No temporary password was issued
+                    </div>
+                    <p className="leading-relaxed">
+                      This invitation did not come with one, so none is shown.
+                      Use the password you set when accepting the invitation, or
+                      ask the Agency Directorate to reissue your access.
+                    </p>
                   </div>
-                </div>
+                )}
 
                 <button
                   type="button"

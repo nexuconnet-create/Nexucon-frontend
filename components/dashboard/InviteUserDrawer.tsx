@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
-import { X, UserPlus, Mail, ShieldCheck, Building2, RefreshCw, Send, CheckCircle2 } from 'lucide-react';
-import { inviteStaffUser } from '@/services/settings';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { X, UserPlus, Mail, ShieldCheck, Building2, RefreshCw, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { inviteStaffUser, getDistricts, District } from '@/services/settings';
 
 interface InviteUserDrawerProps {
   isOpen: boolean;
@@ -19,13 +20,45 @@ export default function InviteUserDrawer({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('Inspector');
   const [department, setDepartment] = useState('Building Inspectorate');
-  const [district, setDistrict] = useState('Lekki-Epe Zonal Directorate');
-  const [assignedProjectRef, setAssignedProjectRef] = useState('');
+  const [districtId, setDistrictId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dispatchedInvitation, setDispatchedInvitation] = useState<any | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // The operational zone register — the real one. This was a hardcoded list of
+  // five zone names, none of which existed as a `District` row, so every officer
+  // invited through this form was scoped to nothing.
+  const [zones, setZones] = useState<District[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
+  const [zonesError, setZonesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDistricts({ active: 'true' })
+      .then((data) => {
+        if (!cancelled) setZones(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setZonesError('The zone register could not be read from the server.');
+      })
+      .finally(() => {
+        if (!cancelled) setZonesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!isOpen) return null;
+
+  const selectedZone = zones.find((zone) => zone.id === districtId) || null;
+  // Only shown when the server actually returned one — the panel used to fall
+  // back to a literal "NXC-8842-2026", which is not a code anyone can redeem.
+  const inviteCode = dispatchedInvitation?.invite_code || null;
+  const inviteToken = dispatchedInvitation?.token || dispatchedInvitation?.id || null;
+  const inviteLink = inviteToken
+    ? `https://inspector.nexucon.net/invite/${inviteToken}`
+    : null;
 
   const handleRoleChange = (newRole: string) => {
     setRole(newRole);
@@ -48,25 +81,37 @@ export default function InviteUserDrawer({
         email: email.trim(),
         role,
         department,
-        assigned_projects: assignedProjectRef.trim() ? [assignedProjectRef.trim()] : []
+        // Omitted entirely when no zone was chosen, so the officer is created
+        // with a state-wide (unscoped) profile rather than a made-up zone.
+        district_id: districtId || undefined,
       });
 
-      setDispatchedInvitation(res || { email, role, invite_code: 'GENERATED' });
+      setDispatchedInvitation(res || { email, role });
 
-      window.dispatchEvent(new CustomEvent('show-toast', { 
-        detail: { message: `Invitation successfully dispatched to ${email}!`, type: 'success' } 
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `Invitation successfully dispatched to ${email}!`, type: 'success' }
       }));
       if (onSuccess) onSuccess();
-    } catch (err) {
-      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Failed to invite user', type: 'error' } }));
+    } catch (err: any) {
+      // The server's reason is the useful one — a duplicate email, an unknown
+      // zone id. "Failed to invite user" would hide which.
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          message:
+            err?.response?.data?.detail ||
+            err?.response?.data?.message ||
+            'The invitation could not be dispatched.',
+          type: 'error',
+        },
+      }));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCopyLink = () => {
-    const link = `https://inspector.nexucon.net/invite/${dispatchedInvitation?.token || dispatchedInvitation?.id || 'TOKEN'}`;
-    navigator.clipboard.writeText(link);
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
@@ -172,20 +217,58 @@ export default function InviteUserDrawer({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#022C4F] uppercase tracking-wider mb-2">
+                  <label htmlFor="invite-zone" className="block text-xs font-bold text-[#022C4F] uppercase tracking-wider mb-2">
                     Zonal District Jurisdiction
                   </label>
-                  <select
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full h-12 bg-white rounded-xl border border-gray-200 px-4 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-                  >
-                    <option value="Lekki-Epe Zonal Directorate">Lekki-Epe Zonal Directorate</option>
-                    <option value="Ikeja Central Directorate">Ikeja Central Directorate</option>
-                    <option value="Badagry Directorate">Badagry Directorate</option>
-                    <option value="Ikorodu Directorate">Ikorodu Directorate</option>
-                    <option value="State Headquarters Directorate">State Headquarters Directorate (State-Wide)</option>
-                  </select>
+                  {zonesLoading ? (
+                    <div className="flex items-center gap-2 h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 text-xs text-gray-500">
+                      <RefreshCw size={13} className="animate-spin" /> Loading the zone register...
+                    </div>
+                  ) : zonesError ? (
+                    <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50">
+                      <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-[11px] leading-relaxed text-amber-800">
+                        {zonesError} The officer can still be invited without a
+                        zone and scoped to one later.
+                      </p>
+                    </div>
+                  ) : zones.length === 0 ? (
+                    <div className="flex items-start gap-2 p-3 rounded-xl border border-gray-200 bg-gray-50">
+                      <AlertTriangle size={15} className="text-gray-500 mt-0.5 shrink-0" />
+                      <p className="text-[11px] leading-relaxed text-gray-600">
+                        No operational zone has been created yet.{' '}
+                        <Link
+                          href="/government/dashboard/settings/districts"
+                          className="font-bold text-blue-600 hover:text-blue-700"
+                        >
+                          Create one
+                        </Link>{' '}
+                        to scope which projects this officer can see.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        id="invite-zone"
+                        value={districtId}
+                        onChange={(e) => setDistrictId(e.target.value)}
+                        className="w-full h-12 bg-white rounded-xl border border-gray-200 px-4 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                      >
+                        <option value="">No zone — state-wide scope</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name}
+                            {zone.code ? ` (${zone.code})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1.5 text-[11px] text-gray-500">
+                        Determines which projects this officer can see. It is set
+                        when the invitation is accepted and cannot be changed
+                        afterwards — invite to the correct zone.
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 flex items-start gap-3">
@@ -233,14 +316,24 @@ export default function InviteUserDrawer({
               <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 text-left space-y-3 text-xs">
                 <div>
                   <span className="text-[10px] font-mono text-gray-400 block uppercase font-bold">Designated Role</span>
-                  <span className="font-bold text-gray-800">{role} &bull; {district}</span>
+                  <span className="font-bold text-gray-800">
+                    {role} &bull; {selectedZone ? selectedZone.name : 'State-wide (no zone)'}
+                  </span>
                 </div>
 
                 <div>
                   <span className="text-[10px] font-mono text-gray-400 block uppercase font-bold">Verification Invite Code</span>
-                  <span className="font-mono font-bold text-blue-600 text-base">
-                    {dispatchedInvitation.invite_code || "NXC-8842-2026"}
-                  </span>
+                  {inviteCode ? (
+                    <span className="font-mono font-bold text-blue-600 text-base">
+                      {inviteCode}
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 leading-relaxed block">
+                      The server did not return an invite code for this invitation.
+                      The officer is on the roster — resend the invitation from
+                      User Management, or check its status there.
+                    </span>
+                  )}
                 </div>
 
                 {dispatchedInvitation.temporary_password && (
@@ -254,18 +347,23 @@ export default function InviteUserDrawer({
 
                 <div className="pt-2 border-t border-gray-200">
                   <span className="text-[10px] font-mono text-gray-400 block uppercase font-bold mb-1">Direct Activation Link</span>
-                  <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-gray-200 font-mono text-[11px] text-gray-600 select-all">
-                    <span className="truncate">
-                      https://inspector.nexucon.net/invite/{dispatchedInvitation.token || dispatchedInvitation.id || 'token'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyLink}
-                      className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold shrink-0 transition-colors"
-                    >
-                      {copiedLink ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
+                  {inviteLink ? (
+                    <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-gray-200 font-mono text-[11px] text-gray-600 select-all">
+                      <span className="truncate">{inviteLink}</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold shrink-0 transition-colors"
+                      >
+                        {copiedLink ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 leading-relaxed">
+                      The server did not return an activation token, so no link can
+                      be shown. The invitation itself was created.
+                    </p>
+                  )}
                 </div>
               </div>
 

@@ -17,8 +17,10 @@ import {
   Lock,
   UploadCloud,
   ChevronDown,
+  BookOpen,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
+import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import {
   StrengthCurve,
   CurveType,
@@ -26,14 +28,17 @@ import {
   CalibrationResult,
   RegressionFit,
   CurvePreviewResponse,
+  SEAnalysis,
   PunditTest,
   CoreSample,
   BIMStructuralElement,
+  StandardEntry,
   getStrengthCurves,
   createStrengthCurve,
   deleteStrengthCurve,
   getActiveCurve,
   activateStrengthCurve,
+  restorePlatformDefaultCurve,
   calibrateCurve,
   previewCurve,
   formatVelocityMs,
@@ -45,24 +50,98 @@ import {
   getCoreSamplePairs,
   getPunditTests,
   getBIMStructuralElements,
+  getSEAnalysis,
+  getStandards,
+  CURVE_PARAM_FIELDS,
+  CURVE_TYPE_LABEL,
 } from "@/services/digitalEye";
 
 // Statutory acceptance rule shared with the strength page / report engine.
 const CRITICAL_STRENGTH_THRESHOLD_MPA = 25.0;
+// Pending-marker for the platform-default switch, which is the one curve-table
+// action that has no curve id of its own to key on (it clears the project's
+// choice rather than pointing at a record). Curve ids are UUIDs, so a literal
+// like this can never collide with one.
+const PLATFORM_DEFAULT_PENDING = "__platform_default__";
 // Reliability advisory from the 8 Sep meeting: 9-15 real calibration pairs.
 const RELIABILITY_MIN_POINTS = 9;
 
-const CURVE_TYPE_LABEL: Record<CurveType, string> = {
-  linear: "Linear",
-  polynomial: "Polynomial (deg 2)",
-  exponential: "Exponential",
-  sonreb: "SonReb (UPV + Rebound)",
-  lookup: "Lookup table",
-};
+// Curve-type labels now live in the service layer (CURVE_TYPE_LABEL), so the
+// Curve Manager and the measurement browser cannot come to call the same curve
+// two different things.
+
+/** A stored timestamp as a plain calendar date — "15 Sep 2026" — or "—".
+ *
+ *  The Curve Manager's Added column, so the format is pinned to en-GB to match
+ *  the BS standards the curves are calibrated against (and the dates already
+ *  shown on the reports page), rather than following whatever locale the
+ *  server or the reader's browser happens to be in.
+ *
+ *  Two states are honest and distinct: no timestamp recorded ("—"), and a
+ *  timestamp that will not parse ("—"). Neither is a date, so neither is shown
+ *  as one — `new Date("...")` on unparseable input yields "Invalid Date",
+ *  which would put a non-date in a date column.
+ */
+function formatRecordedDate(value?: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 // The four curve types the regression engine fits (lookup tables are
 // hand-entered, never regressed).
 type FitType = "linear" | "polynomial" | "exponential" | "sonreb";
+
+// Short label for a standard-error policy, used when the active curve row is
+// not loaded (so the policy is still named rather than left blank).
+const SE_ADJUSTMENT_LABEL: Record<string, string> = {
+  none: "No adjustment — curve estimate as fitted",
+  bias_correction: "Bias correction — measured mean residual added",
+  confidence_margin: "Confidence margin — k × standard error deducted",
+};
+
+// Human titles for the statistic definitions served by the backend. This
+// must cover EVERY key the backend publishes in `definitions` — an unlabelled
+// key falls back to its raw snake_case name in the panel, which is the
+// opposite of self-explanatory. Keys mirror DEFINITION_LABELS on the Nexucon
+// Link settings page, which documents the same set.
+const SE_STAT_LABEL: Record<string, string> = {
+  r2_score: "R² (coefficient of determination)",
+  standard_error: "Standard error (s = √(SSE/(n−k)))",
+  mean_residual: "Mean residual (observed − predicted)",
+  aic: "AIC (Akaike Information Criterion)",
+  point_count: "Points averaged (the n in s/√n)",
+  velocity_step: "Where the error is applied — the velocity step",
+  margin_scope: "What the margin covers — and what it does not",
+};
+
+// How the standards registry is grouped on this page. The registry's own
+// `role_label` is per-document and reads as a description of that one
+// document; grouping by `role` instead gives the reader the three questions
+// the registry actually answers. Order is the order of the workflow:
+// measure the velocity, turn it into a strength, choose the model.
+const STANDARD_ROLE_ORDER: StandardEntry["role"][] = [
+  "measurement",
+  "correlation",
+  "statistics",
+];
+
+const STANDARD_ROLE_GROUP: Record<StandardEntry["role"], string> = {
+  measurement: "Test methods — how the pulse velocity is measured",
+  correlation: "Strength correlation — how a velocity becomes a strength",
+  statistics: "Model selection — how the curve type is chosen",
+};
+
+const STANDARD_ROLE_BADGE: Record<StandardEntry["role"], string> = {
+  measurement: "bg-blue-50 text-blue-800 border-blue-200",
+  correlation: "bg-purple-50 text-purple-800 border-purple-200",
+  statistics: "bg-teal-50 text-teal-800 border-teal-200",
+};
 
 const errText = (err: any): string => {
   const data = err?.response?.data;
@@ -123,6 +202,15 @@ export default function NeuralLinkPage() {
   const [viewedCalibration, setViewedCalibration] = useState<CalibrationResult | null>(null);
   const [viewedFitType, setViewedFitType] = useState<FitType | null>(null);
   const [isInspecting, setIsInspecting] = useState(false);
+  // Guards the async re-fit below: the project or the selection can change
+  // while that round trip is in flight, and a superseded response must not
+  // paint one project's curve into a panel now showing another's.
+  const inspectToken = useRef(0);
+  // Which project this panel has already opened itself on. It opens on the
+  // project's ACTIVE curve rather than on an empty placeholder, but only once
+  // per project — 'Back to regression candidates' clears the selection, and
+  // re-opening would undo that choice on the spot.
+  const [autoOpenedProject, setAutoOpenedProject] = useState<string>("");
 
   // ---- Manual parameter entry (when a curve's parameters are already known
   //      from a laboratory / published calibration).
@@ -142,8 +230,27 @@ export default function NeuralLinkPage() {
   const [pvTimeUs, setPvTimeUs] = useState<string>("");
   const [pvTempC, setPvTempC] = useState<string>("");
   const [pvRebound, setPvRebound] = useState<string>("");
+  // How many test points this velocity averages (the client's three-point
+  // aggregation). The confidence-margin adjustment uses the standard error
+  // of that mean, s/sqrt(n), so the margin narrows as points are added.
+  const [pvPoints, setPvPoints] = useState<string>("");
   const [preview, setPreview] = useState<CurvePreviewResponse | null>(null);
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
+
+  // ---- Standard-error analysis of the project's active curve (15 Sep 2026
+  // client direction). Every figure is computed server-side from the curve's
+  // REAL calibration pairs; nothing here is estimated client-side.
+  const [seAnalysis, setSeAnalysis] = useState<SEAnalysis | null>(null);
+  const [isSeLoading, setIsSeLoading] = useState<boolean>(false);
+  const [seExpanded, setSeExpanded] = useState<boolean>(false);
+
+  // ---- The standards the model rests on (15 Sep 2026 review: "show me a
+  // literature on this"). Static platform reference data, so it loads once
+  // rather than per project. A failure leaves the list empty and the panel
+  // says so — there is no client-side substitute for a reference document.
+  const [standards, setStandards] = useState<StandardEntry[]>([]);
+  const [standardsError, setStandardsError] = useState<string | null>(null);
+  const [isStandardsLoading, setIsStandardsLoading] = useState<boolean>(true);
 
   // ---- Core samples (ground-truth layer, path-to-95% Layer 3): laboratory
   // core-crushing results linked to the in-situ UPV test at the same spot.
@@ -310,9 +417,68 @@ export default function NeuralLinkPage() {
     }
   };
 
+  // The standard-error picture of the project's active curve. Loaded with the
+  // curve itself so the two can never disagree on screen. A failure leaves it
+  // null — the panel then says the analysis could not be read rather than
+  // showing a zero.
+  const refreshSEAnalysis = async (projectId: string) => {
+    if (!projectId) {
+      setSeAnalysis(null);
+      return;
+    }
+    setIsSeLoading(true);
+    try {
+      const res = await getSEAnalysis(projectId);
+      setSeAnalysis(res.analysis);
+    } catch {
+      setSeAnalysis(null);
+    } finally {
+      setIsSeLoading(false);
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    refreshSEAnalysis(selectedProjectId);
+  }, [selectedProjectId]);
+
+  // The standards registry is project-independent platform reference data:
+  // load it once. A failure is recorded, never substituted — a reference list
+  // this page invented would be worse than no reference list at all.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fetched = await getStandards();
+        if (cancelled) return;
+        setStandards(fetched);
+        setStandardsError(null);
+      } catch (err: any) {
+        if (cancelled) return;
+        setStandards([]);
+        setStandardsError(
+          err?.response?.data?.detail ||
+            err?.message ||
+            "the registry could not be read"
+        );
+      } finally {
+        if (!cancelled) setIsStandardsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Code -> registry entry, so a statistic can name its source document in
+  // full rather than as a bare code the reader has to go and look up.
+  const standardByCode = useMemo(
+    () => new Map(standards.map((s) => [s.code, s])),
+    [standards]
+  );
 
   // Parsed calibration points (numeric only; incomplete rows are ignored).
   const calPoints = useMemo(
@@ -398,6 +564,7 @@ export default function NeuralLinkPage() {
       setSelectedCurveId(null);
       return;
     }
+    const token = ++inspectToken.current;
     setSelectedCurveId(curve.id);
     setViewedCalibration(null);
     setViewedFitType(null);
@@ -410,6 +577,7 @@ export default function NeuralLinkPage() {
       const result = await calibrateCurve(
         pts.map((p) => ({ v: p.v, f: p.f, r: p.r ?? null }))
       );
+      if (token !== inspectToken.current) return;
       setViewedCalibration(result);
       // Pre-select the saved curve's own type when the engine fitted it.
       const ownType = curve.curve_type as FitType;
@@ -419,11 +587,49 @@ export default function NeuralLinkPage() {
           : (result.best_fit_type as FitType) || null
       );
     } catch (err: any) {
+      if (token !== inspectToken.current) return;
       toast(`Could not re-fit this curve's stored pairs: ${errText(err)}`, "error");
     } finally {
-      setIsInspecting(false);
+      // Only the current request may end the spinner — a superseded one
+      // returning would clear it while the newer fit is still running.
+      if (token === inspectToken.current) setIsInspecting(false);
     }
   };
+
+  // A curve selection belongs to the project it was made in: the library is
+  // re-fetched per project, so an id carried across a project switch names a
+  // curve that is no longer in the list. Clearing it also invalidates any
+  // re-fit still in flight for the project being left.
+  useEffect(() => {
+    inspectToken.current += 1;
+    setSelectedCurveId(null);
+    setViewedCalibration(null);
+    setViewedFitType(null);
+    setIsInspecting(false);
+  }, [selectedProjectId]);
+
+  // Open the panel on the curve the project is actually using, rather than on
+  // a placeholder that made the active calibration something you had to go
+  // and press View to see. This is the graph worth showing first — every new
+  // reading is converted through it. Once per project, and never over a
+  // choice already made: a fresh regression (calibration) or a manual
+  // selection both suppress it.
+  useEffect(() => {
+    if (!selectedProjectId || autoOpenedProject === selectedProjectId) return;
+    if (selectedCurveId || calibration) return;
+    const target = active?.curve;
+    // builtin_fallback carries no stored record — there is nothing to inspect,
+    // so the panel keeps its honest empty state.
+    if (!target) return;
+    const known = curves.find((c) => c.id === target.id);
+    if (!known) return; // the library has not loaded it yet
+    setAutoOpenedProject(selectedProjectId);
+    void inspectCurve(known);
+    // inspectCurve is deliberately not a dependency: it is redefined on every
+    // render, so listing it would re-run this effect continuously. Every
+    // condition it needs to be correct is in the array above.
+  }, [selectedProjectId, active, curves, selectedCurveId, calibration, autoOpenedProject]);
+
   // Build the payload for saving a curve (from a regression fit or manual
   // parameters). Formula parameters are in the m/s velocity domain.
   const buildParams = (type: CurveType, raw: Record<string, string>): Record<string, any> | null => {
@@ -572,9 +778,39 @@ export default function NeuralLinkPage() {
     try {
       const res = await activateStrengthCurve(curveId, selectedProjectId);
       toast(
-        `Active calibration for this project is now '${res.active_curve?.name || curveName}'. Every new f_cu flows through it.`,
+        `Active calibration for this project is now '${res.active_curve || curveName}'. Every new f_cu flows through it.`,
         "success"
       );
+      await refresh();
+    } catch (err: any) {
+      toast(errText(err), "error");
+    } finally {
+      setIsActivating(null);
+    }
+  };
+
+  // Put the project back on the platform default calibration. This is not a
+  // no-op that "activates" a curve: the platform default is what applies when
+  // a project has no curve of its own, so choosing it means dropping the
+  // project's own choice. The server reports whether anything actually moved,
+  // and the toast repeats that rather than claiming a switch that did not
+  // happen — a project already on the default is a real, unremarkable state.
+  const restorePlatformDefault = async () => {
+    if (!selectedProjectId) {
+      toast("Select a project first — the active calibration is per-project.", "error");
+      return;
+    }
+    setIsActivating(PLATFORM_DEFAULT_PENDING);
+    try {
+      const res = await restorePlatformDefaultCurve(selectedProjectId);
+      if (res.changed) {
+        toast(
+          `This project is back on the platform default calibration${res.previous_active_curve ? ` — '${res.previous_active_curve}' is no longer active for it` : ""}. Stored strengths keep their snapshots.`,
+          "success"
+        );
+      } else {
+        toast("This project was already using the platform default calibration.", "success");
+      }
       await refresh();
     } catch (err: any) {
       toast(errText(err), "error");
@@ -614,6 +850,7 @@ export default function NeuralLinkPage() {
         transit_time_us: time,
         temperature_c: pvTempC.trim() === "" ? null : Number(pvTempC),
         rebound_number: pvRebound.trim() === "" ? null : Number(pvRebound),
+        n_points: pvPoints.trim() === "" ? null : Number(pvPoints),
       });
       setPreview(res);
     } catch (err: any) {
@@ -712,12 +949,18 @@ export default function NeuralLinkPage() {
       : "Built-in laboratory curve (fallback)";
 
   return (
-    <div className="w-full min-h-screen pb-16 animate-in fade-in duration-300">
+    <div className="w-full min-h-screen pb-16 animate-in fade-in duration-300 bg-slate-50/50">
       <DigitalEyeHeader
         activePillar="PUNDIT: Nexucon Link — Strength Calibration (fcu)"
         selectedProjectId={selectedProjectId}
         onProjectChange={setSelectedProjectId}
       />
+
+      {/* The Nexucon Link navigation layer — the client's "castle-like"
+          structure: Digital Eye -> Nexucon Link -> this page. */}
+      <div className="mb-6">
+        <NexuconLinkNav subtitle="Curve Manager" />
+      </div>
 
       {/* Banner: what this module is, per the 8 Sep meeting decision */}
       <div className="bg-gradient-to-r from-[#022C4F] via-[#03467B] to-[#0A66C2] rounded-2xl p-6 text-white shadow-xl mb-8 border border-blue-400/20">
@@ -761,218 +1004,23 @@ export default function NeuralLinkPage() {
         </div>
       )}
 
-      {/* ACTIVE CALIBRATION CARD */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
-                <Zap size={18} className="text-amber-500" />
-                <span>Active Calibration Curve</span>
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                The exact formula every new f_cu on this project flows through
-                {selectedProjectId ? "" : " — select a project above"}
-              </p>
-            </div>
-            <span
-              className={`px-3 py-1 text-xs font-mono font-bold rounded-lg border ${
-                active?.source === "project_setting"
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                  : "bg-slate-100 text-slate-700 border-slate-200"
-              }`}
-            >
-              {selectedProjectId ? activeSourceLabel : "No project selected"}
-            </span>
-          </div>
-
-          {active ? (
-            <div className="space-y-3">
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">
-                  f_cu formula (V in m/s)
-                </p>
-                <p className="text-lg font-mono font-bold text-sky-300 break-words">
-                  {active.curve_snapshot.formula}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Standard</p>
-                  <p className="font-mono font-bold text-gray-900 mt-1 break-words">
-                    {active.curve_snapshot.standard || "—"}
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Valid range</p>
-                  <p className="font-mono font-bold text-gray-900 mt-1">
-                    {active.curve_snapshot.valid_range_ms
-                      ? `${active.curve_snapshot.valid_range_ms[0]}–${active.curve_snapshot.valid_range_ms[1]} m/s`
-                      : "—"}
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 font-semibold uppercase text-[10px]">R² (fit)</p>
-                  <p className="font-mono font-bold text-gray-900 mt-1">
-                    {active.curve_snapshot.r2_score != null
-                      ? active.curve_snapshot.r2_score.toFixed(4)
-                      : "n/a (fixed curve)"}
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
-                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Curve</p>
-                  <p className="font-mono font-bold text-gray-900 mt-1">
-                    {activeCurveRow ? activeCurveRow.name : active.curve_snapshot.name}
-                  </p>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-500 flex items-start gap-1.5">
-                <Info size={13} className="shrink-0 mt-0.5 text-blue-600" />
-                <span>
-                  Provenance: {active.curve_snapshot.provenance_source || "—"}
-                  {active.curve_snapshot.temperature_correction_applied
-                    ? " · temperature correction is applied outside the 5–30 °C band (ACI 228.2R) inside this computation"
-                    : ""}
-                </span>
-              </p>
-            </div>
-          ) : (
-            <div className="py-10 text-center text-xs text-gray-500">
-              {isLoading ? "Resolving active curve…" : "Select a project to resolve its active calibration."}
-            </div>
-          )}
+      
+      <div className="max-w-6xl mx-auto">
+        
+      {/* STEP 1: Input Calibration Data */}
+      <div className="mb-10 relative">
+        <div className="absolute -left-3 md:-left-5 top-6 w-10 h-10 rounded-full bg-blue-600 text-white font-black text-lg flex items-center justify-center shadow-lg shadow-blue-500/30 z-10 border-4 border-white">
+          1
         </div>
-
-        {/* LIVE f_cu PREVIEW through the active curve */}
-        <div className="bg-[#0F172A] text-white rounded-2xl p-6 border border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-              <Sigma size={16} className="text-amber-400" />
-              <span>Live f_cu Preview</span>
-            </h3>
-            <span className="text-[10px] font-mono text-slate-400">V = L / t</span>
+        <div className="ml-5 md:ml-10 bg-white/70 backdrop-blur-xl rounded-2xl border border-gray-200/80 shadow-xl shadow-gray-200/40 p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="font-black text-gray-900 text-2xl tracking-tight mb-2">Input Calibration Data</h3>
+            <p className="text-gray-600 text-sm leading-relaxed max-w-3xl">
+              Enter the raw data from your lab tests here. This links the ultrasonic pulse velocity (measured on site) with the actual concrete strength (tested in the lab). The system uses this exact data to build your custom strength curve.
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <label className="space-y-1">
-              <span className="text-slate-400 font-semibold">Path L (mm)</span>
-              <input
-                value={pvPathMm}
-                onChange={(e) => setPvPathMm(e.target.value)}
-                inputMode="decimal"
-                placeholder="e.g. 400"
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-slate-400 font-semibold">Transit t (µs)</span>
-              <input
-                value={pvTimeUs}
-                onChange={(e) => setPvTimeUs(e.target.value)}
-                inputMode="decimal"
-                placeholder="e.g. 94.2"
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-slate-400 font-semibold">Temp (°C, optional)</span>
-              <input
-                value={pvTempC}
-                onChange={(e) => setPvTempC(e.target.value)}
-                inputMode="decimal"
-                placeholder="—"
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-slate-400 font-semibold">Rebound R (SonReb)</span>
-              <input
-                value={pvRebound}
-                onChange={(e) => setPvRebound(e.target.value)}
-                inputMode="decimal"
-                placeholder="—"
-                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
-              />
-            </label>
-          </div>
-          <button
-            onClick={runPreview}
-            disabled={isPreviewing || !selectedProjectId}
-            className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:text-slate-400 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-          >
-            <Sigma size={14} />
-            <span>{isPreviewing ? "Computing…" : "Compute f_cu via active curve"}</span>
-          </button>
-
-          {preview && (
-            <div
-              className={`mt-4 p-4 rounded-xl border ${
-                preview.status === "ok"
-                  ? preview.f_cu_mpa != null && preview.f_cu_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA
-                    ? "bg-emerald-950/40 border-emerald-500/40"
-                    : "bg-rose-950/40 border-rose-500/40"
-                  : "bg-slate-900/60 border-slate-600/60"
-              }`}
-            >
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400 uppercase font-bold">f_cu</span>
-                <span
-                  className={`text-2xl font-black font-mono ${
-                    preview.status === "ok"
-                      ? preview.f_cu_mpa != null && preview.f_cu_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA
-                        ? "text-emerald-400"
-                        : "text-rose-400"
-                      : "text-slate-400"
-                  }`}
-                >
-                  {preview.status === "ok" && preview.f_cu_mpa != null
-                    ? `${preview.f_cu_mpa.toFixed(2)} MPa`
-                    : "—"}
-                </span>
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-700/60 space-y-1 text-[11px] font-mono text-slate-300">
-                <div className="flex justify-between">
-                  <span>Velocity V</span>
-                  <span className="text-amber-300 font-bold">
-                    {preview.velocity_m_s != null ? `${formatVelocityMs(preview.velocity_m_s)} m/s` : "—"}
-                  </span>
-                </div>
-                {preview.temperature_correction_applied && preview.corrected_velocity_m_s != null && (
-                  <div className="flex justify-between">
-                    <span>Temp-corrected V</span>
-                    <span className="text-sky-300 font-bold">
-                      {formatVelocityMs(preview.corrected_velocity_m_s)} m/s
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Curve</span>
-                  <span className="text-slate-400 truncate max-w-[160px]" title={preview.curve_snapshot.formula}>
-                    {preview.curve_snapshot.name}
-                  </span>
-                </div>
-              </div>
-              {preview.status !== "ok" && (
-                <p className="mt-2 text-[11px] font-bold flex items-center gap-1.5 text-amber-300">
-                  <Info size={13} />
-                  <span>
-                    {preview.status === "rebound_number_required"
-                      ? "This SonReb curve needs a rebound number R."
-                      : preview.status === "below_valid_range"
-                      ? "Velocity below the curve's valid range — record nothing rather than extrapolate."
-                      : preview.status === "above_valid_range"
-                      ? "Velocity above the curve's valid range."
-                      : "Not computable with these inputs."}
-                  </span>
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* CALIBRATION WORKFLOW */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Real calibration pairs */}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">{/* Real calibration pairs */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2 mb-1">
             <Beaker size={18} className="text-emerald-600" />
@@ -1095,228 +1143,7 @@ export default function NeuralLinkPage() {
           )}
         </div>
 
-        {/* Regression candidates + chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">
-          <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2 mb-1">
-            <TrendingUp size={18} className="text-amber-500" />
-            <span>Regression Fits &amp; Selection</span>
-          </h3>
-          <p className="text-xs text-gray-500 mb-4">
-            {viewedCurve ? (
-              <>
-                Inspecting saved curve <strong>{viewedCurve.name}</strong> — its stored parameters
-                and real calibration pairs, exactly as saved. Statistics the curve was not fitted
-                with show as n/a.
-              </>
-            ) : (
-              <>
-                Least-squares candidates fitted to your pairs. Pick one, save it, then activate it
-                for the project — calibration happens <strong>before</strong> data injection.
-              </>
-            )}
-          </p>
-
-          {viewedCurve ? (
-            <div className="space-y-4">
-              {/* The saved curve's provenance strip — stored values only */}
-              <div className="p-3 rounded-xl border border-sky-200 bg-sky-50/60">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-900">
-                      {viewedCurve.curve_type_display ||
-                        CURVE_TYPE_LABEL[viewedCurve.curve_type] ||
-                        viewedCurve.curve_type}
-                    </span>
-                    {viewedCurve.is_default && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        PLATFORM DEFAULT
-                      </span>
-                    )}
-                    {active?.source === "project_setting" && active.curve?.id === viewedCurve.id && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5">
-                        <ShieldCheck size={9} />
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className="font-mono text-[11px] font-bold text-gray-700"
-                    title="n/a = the platform has no honest value stored for this statistic — a curve saved without a regression, or a statistic the maths cannot support (e.g. standard error with as many parameters as pairs)."
-                  >
-                    R² {viewedCurve.r2_score != null ? viewedCurve.r2_score.toFixed(4) : "n/a"} · SE{" "}
-                    {viewedCurve.standard_error != null ? viewedCurve.standard_error.toFixed(2) : "n/a"} · AIC{" "}
-                    {viewedCurve.aic != null ? viewedCurve.aic.toFixed(1) : "n/a"}
-                  </span>
-                </div>
-                <p className="mt-1 font-mono text-[11px] text-slate-600 break-words">
-                  {viewedCurve.formula_display || "—"}
-                </p>
-                <p className="mt-1 text-[10px] text-gray-500">
-                  Valid {viewedCurve.valid_range_min_ms}–{viewedCurve.valid_range_max_ms} m/s ·{" "}
-                  {viewedCurve.provenance?.source || viewedCurve.standard || "provenance not recorded"}
-                  {viewedCurve.data_points && viewedCurve.data_points.length > 0
-                    ? ` · ${viewedCurve.data_points.length} stored calibration pair(s)`
-                    : " · no stored pairs (parameters only)"}
-                </p>
-              </div>
-
-              {isInspecting ? (
-                <div className="py-10 text-center text-xs text-gray-400 animate-pulse">
-                  Re-fitting the curve&apos;s stored pairs on the server…
-                </div>
-              ) : viewedCalibration ? (
-                <div className="space-y-2">
-                  {(Object.keys(viewedCalibration.results) as FitType[])
-                    .filter((t) => viewedCalibration.results[t] != null)
-                    .map((t) => (
-                      <FitCandidateButton
-                        key={t}
-                        type={t}
-                        fit={viewedCalibration.results[t]!}
-                        isBest={viewedCalibration.best_fit_type === t}
-                        isSel={viewedFitType === t}
-                        savedBadge={t === viewedCurve.curve_type}
-                        onClick={() => setViewedFitType(t)}
-                      />
-                    ))}
-                  {Object.values(viewedCalibration.results).every((r) => r == null) && (
-                    <p className="text-xs text-rose-600 font-semibold">
-                      No curve type could be fitted: {Object.values(viewedCalibration.fit_errors)[0]}
-                    </p>
-                  )}
-                </div>
-              ) : null}
-
-              {!isInspecting && (
-                <CorrelationChart
-                  xOf={xOf}
-                  yOf={yOf}
-                  curveLine={curveLine}
-                  points={plotPoints}
-                  xMin={xMin}
-                  xMax={xMax}
-                  sonrebNeedsR={sonrebNeedsR}
-                />
-              )}
-
-              {viewedCalibration && !isInspecting && (
-                <p className="text-[10px] text-gray-400">
-                  Candidates re-fitted on the server from this curve&apos;s {plotPoints.length} stored
-                  pair(s) — the same regression engine as a fresh run, not stored snapshots.
-                </p>
-              )}
-              {!viewedCalibration && !isInspecting && (
-                <p className="text-[10px] text-gray-400">
-                  Parameters-only curve — no stored pairs to re-fit or scatter; the line is drawn
-                  from the stored formula inside its valid range.
-                </p>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSelectedCurveId(null)}
-                  className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
-                >
-                  Back to regression candidates
-                </button>
-                {viewedCurve.data_points && viewedCurve.data_points.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setCalRows(
-                        viewedCurve.data_points!.map((p) => ({
-                          v: String(p.v),
-                          f: String(p.f),
-                          r: p.r != null ? String(p.r) : "",
-                        }))
-                      );
-                      toast(
-                        `Loaded ${viewedCurve.data_points!.length} stored pair(s) into the calibration table — re-run the regression on them if needed.`,
-                        "success"
-                      );
-                    }}
-                    className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
-                  >
-                    Load stored pairs into the table
-                  </button>
-                )}
-                {!viewedCurve.is_default && (
-                  <button
-                    onClick={() => activate(viewedCurve.id, viewedCurve.name)}
-                    disabled={isActivating === viewedCurve.id || !selectedProjectId}
-                    title={
-                      selectedProjectId
-                        ? "Make this the project's active calibration"
-                        : "Select a project first"
-                    }
-                    className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    {isActivating === viewedCurve.id ? "Activating…" : "Activate for this project"}
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : !calibration ? (
-            <div className="flex-1 py-12 text-center text-xs text-gray-400">
-              Run the regression to see the fitted candidates and the correlation chart — or press
-              View on a saved curve in the library below to inspect it here.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                {(Object.keys(calibration.results) as FitType[])
-                  .filter((t) => calibration.results[t] != null)
-                  .map((t) => (
-                    <FitCandidateButton
-                      key={t}
-                      type={t}
-                      fit={calibration.results[t]!}
-                      isBest={calibration.best_fit_type === t}
-                      isSel={selectedFit === t}
-                      onClick={() => setSelectedFit(t)}
-                    />
-                  ))}
-                {Object.values(calibration.results).every((r) => r == null) && (
-                  <p className="text-xs text-rose-600 font-semibold">
-                    No curve type could be fitted: {Object.values(calibration.fit_errors)[0]}
-                  </p>
-                )}
-              </div>
-
-              {/* Chart: calibration scatter + selected candidate */}
-              <CorrelationChart
-                xOf={xOf}
-                yOf={yOf}
-                curveLine={curveLine}
-                points={plotPoints}
-                xMin={xMin}
-                xMax={xMax}
-                sonrebNeedsR={sonrebNeedsR}
-              />
-
-              {chosenFit && (
-                <button
-                  onClick={openSaveFitModal}
-                  disabled={isSaving}
-                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <CheckCircle2 size={14} />
-                  <span>
-                    {isSaving
-                      ? "Saving…"
-                      : `Save ${CURVE_TYPE_LABEL[chosenFit.curve_type]} fit as project curve & activate`}
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* CORE SAMPLES — ground-truth lab results (path-to-95% Layer 3).
-          Each core's lab-crushing strength pairs with the linked in-situ UPV
-          test's measured velocity; the pairs feed the SAME regression engine
-          as manually typed calibration rows. */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+        {/* Regression candidates + chart */} <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
           <div>
             <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
@@ -1588,10 +1415,1169 @@ export default function NeuralLinkPage() {
             )}
           </div>
         )}
+      </div></div>
+          </div>
+        </div>
       </div>
 
-      {/* MANUAL PARAMETER ENTRY */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+        
+      {/* STEP 2: Generate & Select Curve */}
+      <div className="mb-10 relative">
+        <div className="absolute -left-3 md:-left-5 top-6 w-10 h-10 rounded-full bg-amber-500 text-white font-black text-lg flex items-center justify-center shadow-lg shadow-amber-500/30 z-10 border-4 border-white">
+          2
+        </div>
+        <div className="ml-5 md:ml-10 bg-white/70 backdrop-blur-xl rounded-2xl border border-gray-200/80 shadow-xl shadow-gray-200/40 p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="font-black text-gray-900 text-2xl tracking-tight mb-2">Generate & Select Curve</h3>
+            <p className="text-gray-600 text-sm leading-relaxed max-w-3xl">
+              Opens on the project's active calibration curve — its stored parameters, its real
+              calibration pairs, and the chart. To fit a new one instead, click 'Run regression' to
+              calculate the best mathematical fit for your data. The system tests multiple curve
+              types. Select the best one, review the chart, and save it to activate it for the
+              project.
+            </p>
+          </div>
+          <div className="space-y-6">
+            <div className="w-full"><div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col"><h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2 mb-1">
+            <TrendingUp size={18} className="text-amber-500" />
+            <span>Regression Fits &amp; Selection</span>
+          </h3>
+          <p className="text-xs text-gray-500 mb-4">
+            {viewedCurve ? (
+              <>
+                Inspecting saved curve <strong>{viewedCurve.name}</strong> — its stored parameters
+                and real calibration pairs, exactly as saved. Statistics the curve was not fitted
+                with show as n/a.
+              </>
+            ) : (
+              <>
+                Least-squares candidates fitted to your pairs. Pick one, save it, then activate it
+                for the project — calibration happens <strong>before</strong> data injection.
+              </>
+            )}
+          </p>
+
+          {viewedCurve ? (
+            <div className="space-y-4">
+              {/* The saved curve's provenance strip — stored values only */}
+              <div className="p-3 rounded-xl border border-sky-200 bg-sky-50/60">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-900">
+                      {viewedCurve.curve_type_display ||
+                        CURVE_TYPE_LABEL[viewedCurve.curve_type] ||
+                        viewedCurve.curve_type}
+                    </span>
+                    {viewedCurve.is_default && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        PLATFORM DEFAULT
+                      </span>
+                    )}
+                    {active?.source === "project_setting" &&
+                      active.curve?.id === viewedCurve.id && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5">
+                          <ShieldCheck size={9} />
+                          ACTIVE
+                        </span>
+                      )}
+                    {/* The platform default is the project's active
+                        calibration in the same sense when the project has no
+                        curve of its own — resolved from the server's `source`
+                        rather than from anything on this curve's row, so the
+                        strip cannot claim a state the project is not in. */}
+                    {viewedCurve.is_default &&
+                      active?.source === "platform_default" && (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5"
+                          title="This project has no curve of its own, so every new f_cu it computes flows through this platform default"
+                        >
+                          <ShieldCheck size={9} />
+                          ACTIVE
+                        </span>
+                      )}
+                  </div>
+                  <span
+                    className="font-mono text-[11px] font-bold text-gray-700"
+                    title="n/a = the platform has no honest value stored for this statistic — a curve saved without a regression, or a statistic the maths cannot support (e.g. standard error with as many parameters as pairs)."
+                  >
+                    R² {viewedCurve.r2_score != null ? viewedCurve.r2_score.toFixed(4) : "n/a"} · SE{" "}
+                    {viewedCurve.standard_error != null ? viewedCurve.standard_error.toFixed(2) : "n/a"} · AIC{" "}
+                    {viewedCurve.aic != null ? viewedCurve.aic.toFixed(1) : "n/a"}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-[11px] text-slate-600 break-words">
+                  {viewedCurve.formula_display || "—"}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-500">
+                  Valid {viewedCurve.valid_range_min_ms}–{viewedCurve.valid_range_max_ms} m/s ·{" "}
+                  {viewedCurve.provenance?.source || viewedCurve.standard || "provenance not recorded"}
+                  {viewedCurve.data_points && viewedCurve.data_points.length > 0
+                    ? ` · ${viewedCurve.data_points.length} stored calibration pair(s)`
+                    : " · no stored pairs (parameters only)"}
+                </p>
+              </div>
+
+              {isInspecting ? (
+                <div className="py-10 text-center text-xs text-gray-400 animate-pulse">
+                  Re-fitting the curve&apos;s stored pairs on the server…
+                </div>
+              ) : viewedCalibration ? (
+                <div className="space-y-2">
+                  {(Object.keys(viewedCalibration.results) as FitType[])
+                    .filter((t) => viewedCalibration.results[t] != null)
+                    .map((t) => (
+                      <FitCandidateButton
+                        key={t}
+                        type={t}
+                        fit={viewedCalibration.results[t]!}
+                        isBest={viewedCalibration.best_fit_type === t}
+                        isSel={viewedFitType === t}
+                        savedBadge={t === viewedCurve.curve_type}
+                        onClick={() => setViewedFitType(t)}
+                      />
+                    ))}
+                  {Object.values(viewedCalibration.results).every((r) => r == null) && (
+                    <p className="text-xs text-rose-600 font-semibold">
+                      No curve type could be fitted: {Object.values(viewedCalibration.fit_errors)[0]}
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {!isInspecting && (
+                <CorrelationChart
+                  xOf={xOf}
+                  yOf={yOf}
+                  curveLine={curveLine}
+                  points={plotPoints}
+                  xMin={xMin}
+                  xMax={xMax}
+                  sonrebNeedsR={sonrebNeedsR}
+                />
+              )}
+
+              {viewedCalibration && !isInspecting && (
+                <p className="text-[10px] text-gray-400">
+                  Candidates re-fitted on the server from this curve&apos;s {plotPoints.length} stored
+                  pair(s) — the same regression engine as a fresh run, not stored snapshots.
+                </p>
+              )}
+              {!viewedCalibration && !isInspecting && (
+                <p className="text-[10px] text-gray-400">
+                  Parameters-only curve — no stored pairs to re-fit or scatter; the line is drawn
+                  from the stored formula inside its valid range.
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedCurveId(null)}
+                  className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
+                >
+                  Back to regression candidates
+                </button>
+                {viewedCurve.data_points && viewedCurve.data_points.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setCalRows(
+                        viewedCurve.data_points!.map((p) => ({
+                          v: String(p.v),
+                          f: String(p.f),
+                          r: p.r != null ? String(p.r) : "",
+                        }))
+                      );
+                      toast(
+                        `Loaded ${viewedCurve.data_points!.length} stored pair(s) into the calibration table — re-run the regression on them if needed.`,
+                        "success"
+                      );
+                    }}
+                    className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
+                  >
+                    Load stored pairs into the table
+                  </button>
+                )}
+                {/* Activate belongs on every curve you can inspect, the
+                    platform default included — it is a real, selectable
+                    calibration, and this panel is the other route to it
+                    besides the library row. Leaving it off here made the
+                    default the one curve you could look at but not choose.
+                    (Activating it clears the project's own curve rather than
+                    pointing at one, since there is no is_active flag — same
+                    outcome, and the service call says so.) */}
+                {viewedCurve.is_default ? (
+                  active?.source === "platform_default" ? (
+                    <span className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                      <ShieldCheck size={12} />
+                      Active for this project
+                    </span>
+                  ) : (
+                    <button
+                      onClick={restorePlatformDefault}
+                      disabled={
+                        isActivating === PLATFORM_DEFAULT_PENDING ||
+                        !selectedProjectId
+                      }
+                      title={
+                        selectedProjectId
+                          ? "Make this the project's active calibration (the project's own curve, if any, is dropped — stored strengths keep their snapshots)"
+                          : "Select a project first"
+                      }
+                      className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {isActivating === PLATFORM_DEFAULT_PENDING
+                        ? "Activating…"
+                        : "Activate for this project"}
+                    </button>
+                  )
+                ) : active?.source === "project_setting" &&
+                  active.curve?.id === viewedCurve.id ? (
+                  <span className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                    <ShieldCheck size={12} />
+                    Active for this project
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => activate(viewedCurve.id, viewedCurve.name)}
+                    disabled={isActivating === viewedCurve.id || !selectedProjectId}
+                    title={
+                      selectedProjectId
+                        ? "Make this the project's active calibration"
+                        : "Select a project first"
+                    }
+                    className="px-4 py-2 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isActivating === viewedCurve.id ? "Activating…" : "Activate for this project"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : !calibration ? (
+            <div className="flex-1 py-12 text-center text-xs text-gray-400">
+              {!selectedProjectId
+                ? "Select a project — its active calibration curve opens here, with its stored parameters and real calibration pairs."
+                : curves.length === 0
+                  ? "No calibration curve is saved yet. Run the regression to fit candidates to your pairs, then save one and activate it for this project."
+                  : "Run the regression to see the fitted candidates and the correlation chart — or press View on a saved curve in the library below to inspect it here."}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {(Object.keys(calibration.results) as FitType[])
+                  .filter((t) => calibration.results[t] != null)
+                  .map((t) => (
+                    <FitCandidateButton
+                      key={t}
+                      type={t}
+                      fit={calibration.results[t]!}
+                      isBest={calibration.best_fit_type === t}
+                      isSel={selectedFit === t}
+                      onClick={() => setSelectedFit(t)}
+                    />
+                  ))}
+                {Object.values(calibration.results).every((r) => r == null) && (
+                  <p className="text-xs text-rose-600 font-semibold">
+                    No curve type could be fitted: {Object.values(calibration.fit_errors)[0]}
+                  </p>
+                )}
+              </div>
+
+              {/* Chart: calibration scatter + selected candidate */}
+              <CorrelationChart
+                xOf={xOf}
+                yOf={yOf}
+                curveLine={curveLine}
+                points={plotPoints}
+                xMin={xMin}
+                xMax={xMax}
+                sonrebNeedsR={sonrebNeedsR}
+              />
+
+              {chosenFit && (
+                <button
+                  onClick={openSaveFitModal}
+                  disabled={isSaving}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>
+                    {isSaving
+                      ? "Saving…"
+                      : `Save ${CURVE_TYPE_LABEL[chosenFit.curve_type]} fit as project curve & activate`}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+        </div></div>
+          </div>
+        </div>
+      </div>
+
+        
+      {/* STEP 3: Review Standard Error Policy */}
+      <div className="mb-10 relative">
+        <div className="absolute -left-3 md:-left-5 top-6 w-10 h-10 rounded-full bg-purple-600 text-white font-black text-lg flex items-center justify-center shadow-lg shadow-purple-500/30 z-10 border-4 border-white">
+          3
+        </div>
+        <div className="ml-5 md:ml-10 bg-white/70 backdrop-blur-xl rounded-2xl border border-gray-200/80 shadow-xl shadow-gray-200/40 p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="font-black text-gray-900 text-2xl tracking-tight mb-2">Review Standard Error Policy</h3>
+            <p className="text-gray-600 text-sm leading-relaxed max-w-3xl">
+              Review the statistical confidence of your active curve. The Standard Error measures the scatter, while the Mean Residual shows if there's any systematic bias. The system uses these to apply adjustments to the raw strength output.
+            </p>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
+              <Sigma size={18} className="text-purple-600" />
+              <span>Standard Error &amp; Adjustment Policy</span>
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5 max-w-2xl">
+              Every figure below is computed from this curve&rsquo;s own recorded
+              calibration pairs. The standard error measures the scatter of those
+              pairs about the curve; the mean residual measures whether the curve is
+              systematically offset — the &ldquo;add 2 to close the gap&rdquo; figure,
+              measured rather than assumed.
+            </p>
+          </div>
+          {selectedProjectId && (
+            <button
+              onClick={() => refreshSEAnalysis(selectedProjectId)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw size={13} className={isSeLoading ? "animate-spin" : ""} />
+              <span>Recompute</span>
+            </button>
+          )}
+        </div>
+
+        {!selectedProjectId ? (
+          <p className="py-6 text-center text-xs text-gray-500">
+            Select a project to analyse its active curve&rsquo;s calibration error.
+          </p>
+        ) : isSeLoading && !seAnalysis ? (
+          <p className="py-6 text-center text-xs text-gray-500">
+            Analysing the active curve…
+          </p>
+        ) : !seAnalysis ? (
+          <p className="py-6 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+            <AlertTriangle size={14} className="text-amber-500" />
+            <span>
+              The standard-error analysis could not be read from the server. Nothing
+              is shown in its place.
+            </span>
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-semibold uppercase text-[10px]">
+                  Calibration pairs
+                </p>
+                <p className="font-mono font-bold text-gray-900 mt-1 text-lg">
+                  {seAnalysis.n_pairs}
+                </p>
+                {seAnalysis.n_pairs < seAnalysis.min_pairs_required && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    ≥ {seAnalysis.min_pairs_required} needed
+                  </p>
+                )}
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-semibold uppercase text-[10px]">
+                  Standard error
+                </p>
+                <p className="font-mono font-bold text-gray-900 mt-1 text-lg">
+                  {seAnalysis.standard_error_mpa != null
+                    ? `${seAnalysis.standard_error_mpa.toFixed(2)}`
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">N/mm² (scatter)</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-semibold uppercase text-[10px]">
+                  Mean residual
+                </p>
+                <p
+                  className={`font-mono font-bold mt-1 text-lg ${
+                    seAnalysis.mean_residual_mpa != null &&
+                    Math.abs(seAnalysis.mean_residual_mpa) >= 0.5
+                      ? "text-amber-700"
+                      : "text-gray-900"
+                  }`}
+                >
+                  {seAnalysis.mean_residual_mpa != null
+                    ? `${seAnalysis.mean_residual_mpa >= 0 ? "+" : ""}${seAnalysis.mean_residual_mpa.toFixed(2)}`
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">N/mm² (bias)</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-semibold uppercase text-[10px]">R²</p>
+                <p className="font-mono font-bold text-gray-900 mt-1 text-lg">
+                  {seAnalysis.r2_score != null
+                    ? seAnalysis.r2_score.toFixed(4)
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {seAnalysis.r2_score != null
+                    ? `${(seAnalysis.r2_score * 100).toFixed(2)}% explained`
+                    : "no regression"}
+                </p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                <p className="text-gray-500 font-semibold uppercase text-[10px]">AIC</p>
+                <p className="font-mono font-bold text-gray-900 mt-1 text-lg">
+                  {seAnalysis.aic != null ? seAnalysis.aic.toFixed(2) : "—"}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">lower is better</p>
+              </div>
+            </div>
+
+            {!seAnalysis.adjustment_available && seAnalysis.unavailable_reason && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2">
+                <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-900">
+                  No standard error is available for this curve:{" "}
+                  {seAnalysis.unavailable_reason}
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/60">
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  Policy on the active curve
+                </p>
+                <p className="mt-1.5 text-sm font-semibold text-[#022C4F]">
+                  {activeCurveRow?.se_adjustment_method_display ||
+                    SE_ADJUSTMENT_LABEL[seAnalysis.method]}
+                </p>
+                {seAnalysis.method === "confidence_margin" && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    Confidence factor k = {seAnalysis.factor}. This reports a
+                    characteristic (lower-bound) strength rather than the central
+                    estimate, and uses s/√n when a figure averages n test points.
+                  </p>
+                )}
+                {seAnalysis.method === "bias_correction" && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    Adds the measured mean residual, so the reported figure moves with
+                    the calibration data as further pairs are recorded.
+                  </p>
+                )}
+                {seAnalysis.method === "none" && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    Reported strengths are the curve estimate as fitted. No
+                    standard-error correction is applied.
+                  </p>
+                )}
+                {seAnalysis.recommendation && (
+                  <p className="mt-2 text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2">
+                    {seAnalysis.recommendation}
+                  </p>
+                )}
+                <p className="mt-2 text-[11px] text-gray-500">
+                  Change the policy on a curve in the Curve Library below, or in the
+                  Nexucon Link System Settings.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl border border-gray-200">
+                <button
+                  onClick={() => setSeExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-gray-700 uppercase tracking-wide cursor-pointer"
+                >
+                  <span>What these statistics mean — and where they come from</span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${seExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+                <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed">
+                  R², the standard error, the mean residual and AIC — what each figure
+                  measures, and the document that governs it. Open for the full
+                  definition of each, so the panel can be presented without narration.
+                </p>
+                {seExpanded && (
+                  <dl className="mt-3 space-y-2.5">
+                    {Object.entries(seAnalysis.definitions).map(([key, text]) => (
+                      <div key={key}>
+                        <dt className="text-[11px] font-bold text-gray-800">
+                          {SE_STAT_LABEL[key] || key}
+                        </dt>
+                        <dd className="text-[11px] text-gray-600 leading-relaxed mt-0.5">
+                          {text}
+                        </dd>
+                        {/* Where the statistic comes from. Served by the
+                            backend alongside the definition, so no surface
+                            can cite a document the registry does not hold. */}
+                        {seAnalysis.references?.[key]?.length ? (
+                          <dd className="text-[10px] text-gray-500 mt-1">
+                            <span className="font-semibold uppercase tracking-wide">
+                              Source:
+                            </span>{" "}
+                            {seAnalysis.references[key]
+                              .map((code) =>
+                                standardByCode.get(code)
+                                  ? `${code} — ${standardByCode.get(code)!.title}`
+                                  : code
+                              )
+                              .join(" · ")}
+                          </dd>
+                        ) : null}
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+          </div>
+        </div>
+      </div>
+
+        
+      {/* STEP 4: Test Active Calibration */}
+      <div className="mb-10 relative">
+        <div className="absolute -left-3 md:-left-5 top-6 w-10 h-10 rounded-full bg-emerald-500 text-white font-black text-lg flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10 border-4 border-white">
+          4
+        </div>
+        <div className="ml-5 md:ml-10 bg-white/70 backdrop-blur-xl rounded-2xl border border-gray-200/80 shadow-xl shadow-gray-200/40 p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="font-black text-gray-900 text-2xl tracking-tight mb-2">Test Active Calibration</h3>
+            <p className="text-gray-600 text-sm leading-relaxed max-w-3xl">
+              Test your active calibration curve below. Enter a transit time and path length to see what strength the system will report, complete with all error adjustments.
+            </p>
+          </div>
+          <div className="space-y-6">
+            
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="lg:col-span-1"><div className="bg-white/80 backdrop-blur-md rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
+                <Zap size={18} className="text-amber-500" />
+                <span>Active Calibration Curve</span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                The exact formula every new f_cu on this project flows through
+                {selectedProjectId ? "" : " — select a project above"}
+              </p>
+            </div>
+            <span
+              className={`px-3 py-1 text-xs font-mono font-bold rounded-lg border ${
+                active?.source === "project_setting"
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {selectedProjectId ? activeSourceLabel : "No project selected"}
+            </span>
+          </div>
+
+          {active ? (
+            <div className="space-y-3">
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">
+                  f_cu formula (V in m/s)
+                </p>
+                <p className="text-lg font-mono font-bold text-sky-300 break-words">
+                  {active.curve_snapshot.formula}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Standard</p>
+                  <p className="font-mono font-bold text-gray-900 mt-1 break-words">
+                    {active.curve_snapshot.standard || "—"}
+                  </p>
+                  {/* A bare code tells a reader nothing. Name what it governs
+                      here; the full entry is in the registry below. */}
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    The record this curve is stored under — see the standards
+                    registry below for what it actually covers.
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Valid range</p>
+                  <p className="font-mono font-bold text-gray-900 mt-1">
+                    {active.curve_snapshot.valid_range_ms
+                      ? `${active.curve_snapshot.valid_range_ms[0]}–${active.curve_snapshot.valid_range_ms[1]} m/s`
+                      : "—"}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                  <p className="text-gray-500 font-semibold uppercase text-[10px]">R² (fit)</p>
+                  <p className="font-mono font-bold text-gray-900 mt-1">
+                    {active.curve_snapshot.r2_score != null
+                      ? active.curve_snapshot.r2_score.toFixed(4)
+                      : "n/a (fixed curve)"}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-gray-100">
+                  <p className="text-gray-500 font-semibold uppercase text-[10px]">Curve</p>
+                  <p className="font-mono font-bold text-gray-900 mt-1">
+                    {activeCurveRow ? activeCurveRow.name : active.curve_snapshot.name}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 flex items-start gap-1.5">
+                <Info size={13} className="shrink-0 mt-0.5 text-blue-600" />
+                <span>
+                  Provenance: {active.curve_snapshot.provenance_source || "—"}
+                  {active.curve_snapshot.temperature_correction_applied
+                    ? " · temperature correction is applied outside the 5–30 °C band, per the NDT correlation reference (ACI 228.2R) in the standards registry below, inside this computation"
+                    : ""}
+                </span>
+              </p>
+            </div>
+          ) : (
+            <div className="py-10 text-center text-xs text-gray-500">
+              {isLoading ? "Resolving active curve…" : "Select a project to resolve its active calibration."}
+            </div>
+          )}
+        </div>
+
+        {/* LIVE f_cu PREVIEW through the active curve */}</div>
+      <div className="lg:col-span-1"><div className="bg-[#0F172A] text-whiterounded-2xl p-6 border border-slate-800">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+              <Sigma size={16} className="text-amber-400" />
+              <span>Live f_cu Preview</span>
+            </h3>
+            <span className="text-[10px] font-mono text-slate-400">V = L / t</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <label className="space-y-1">
+              <span className="text-slate-400 font-semibold">Path L (mm)</span>
+              <input
+                value={pvPathMm}
+                onChange={(e) => setPvPathMm(e.target.value)}
+                inputMode="decimal"
+                placeholder="e.g. 400"
+                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-slate-400 font-semibold">Transit t (µs)</span>
+              <input
+                value={pvTimeUs}
+                onChange={(e) => setPvTimeUs(e.target.value)}
+                inputMode="decimal"
+                placeholder="e.g. 94.2"
+                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-slate-400 font-semibold">Temp (°C, optional)</span>
+              <input
+                value={pvTempC}
+                onChange={(e) => setPvTempC(e.target.value)}
+                inputMode="decimal"
+                placeholder="—"
+                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-slate-400 font-semibold">Rebound R (SonReb)</span>
+              <input
+                value={pvRebound}
+                onChange={(e) => setPvRebound(e.target.value)}
+                inputMode="decimal"
+                placeholder="—"
+                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-slate-400 font-semibold">Points averaged</span>
+              <input
+                value={pvPoints}
+                onChange={(e) => setPvPoints(e.target.value)}
+                inputMode="numeric"
+                placeholder="e.g. 3"
+                title="How many test points this velocity averages. A confidence-margin adjustment uses the standard error of that mean (s/√n)."
+                className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 font-mono text-slate-100 focus:border-sky-500 outline-none placeholder:text-slate-600"
+              />
+            </label>
+          </div>
+          <button
+            onClick={runPreview}
+            disabled={isPreviewing || !selectedProjectId}
+            className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:text-slate-400 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+          >
+            <Sigma size={14} />
+            <span>{isPreviewing ? "Computing…" : "Compute f_cu via active curve"}</span>
+          </button>
+
+          {preview && (
+            <div
+              className={`mt-4 p-4 rounded-xl border ${
+                preview.status === "ok"
+                  ? preview.f_cu_mpa != null && preview.f_cu_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA
+                    ? "bg-emerald-950/40 border-emerald-500/40"
+                    : "bg-rose-950/40 border-rose-500/40"
+                  : "bg-slate-900/60 border-slate-600/60"
+              }`}
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-400 uppercase font-bold">f_cu</span>
+                <span
+                  className={`text-2xl font-black font-mono ${
+                    preview.status === "ok"
+                      ? preview.f_cu_mpa != null && preview.f_cu_mpa >= CRITICAL_STRENGTH_THRESHOLD_MPA
+                        ? "text-emerald-400"
+                        : "text-rose-400"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {preview.status === "ok" && preview.f_cu_mpa != null
+                    ? `${preview.f_cu_mpa.toFixed(2)} MPa`
+                    : "—"}
+                </span>
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-700/60 space-y-1 text-[11px] font-mono text-slate-300">
+                <div className="flex justify-between">
+                  <span>Velocity V</span>
+                  <span className="text-amber-300 font-bold">
+                    {preview.velocity_m_s != null ? `${formatVelocityMs(preview.velocity_m_s)} m/s` : "—"}
+                  </span>
+                </div>
+                {preview.temperature_correction_applied && preview.corrected_velocity_m_s != null && (
+                  <div className="flex justify-between">
+                    <span>Temp-corrected V</span>
+                    <span className="text-sky-300 font-bold">
+                      {formatVelocityMs(preview.corrected_velocity_m_s)} m/s
+                    </span>
+                  </div>
+                )}
+                {/* The velocity the reported f_cu actually came from. The
+                    client's method folds the standard error into the pulse
+                    velocity BEFORE the conversion (15 Sep 2026), so without
+                    this row the panel would show a velocity that does not
+                    produce the figure beside it — the one thing a preview
+                    exists to let the reader check. Absent when the
+                    correction stayed on the strength instead: a lookup
+                    table, a curve flat at this velocity, or a move that
+                    would leave the calibrated range. */}
+                {preview.se_adjustment?.velocity_step && (
+                  <div className="flex justify-between">
+                    <span>
+                      SE-corrected V{" "}
+                      <span className="text-slate-500">
+                        ({preview.se_adjustment.velocity_step.delta_velocity_ms >= 0 ? "+" : ""}
+                        {preview.se_adjustment.velocity_step.delta_velocity_ms.toFixed(1)} m/s)
+                      </span>
+                    </span>
+                    <span className="text-amber-300 font-bold">
+                      {formatVelocityMs(preview.se_adjustment.velocity_step.adjusted_velocity_ms)} m/s
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Curve</span>
+                  <span className="text-slate-400 truncate max-w-[160px]" title={preview.curve_snapshot.formula}>
+                    {preview.curve_snapshot.name}
+                  </span>
+                </div>
+              </div>
+
+              {/* Standard-error disclosure: when the curve carries an
+                  adjustment policy, the raw curve estimate is shown beside
+                  the reported figure so the correction is never hidden
+                  inside a single number (15 Sep 2026 direction). */}
+              {preview.se_adjustment?.applied && (
+                <div className="mt-2 pt-2 border-t border-slate-700/60 space-y-1 text-[11px] font-mono text-slate-300">
+                  <div className="flex justify-between">
+                    <span>Curve estimate (unadjusted)</span>
+                    <span className="text-slate-400">
+                      {preview.f_cu_unadjusted_mpa != null
+                        ? `${preview.f_cu_unadjusted_mpa.toFixed(2)} MPa`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{preview.se_adjustment.method_label.split("—")[0].trim()}</span>
+                    <span className="text-amber-300 font-bold">
+                      {preview.f_cu_unadjusted_mpa != null && preview.f_cu_mpa != null
+                        ? `${preview.f_cu_mpa - preview.f_cu_unadjusted_mpa >= 0 ? "+" : ""}${(
+                            preview.f_cu_mpa - preview.f_cu_unadjusted_mpa
+                          ).toFixed(2)} MPa`
+                        : "—"}
+                    </span>
+                  </div>
+                  {preview.se_adjustment.n_points_averaged != null &&
+                    preview.se_adjustment.n_points_averaged > 1 && (
+                      <div className="flex justify-between">
+                        <span>Test points averaged</span>
+                        <span className="text-slate-400">
+                          {preview.se_adjustment.n_points_averaged} (s/√n)
+                        </span>
+                      </div>
+                    )}
+                </div>
+              )}
+              {preview.se_adjustment && (
+                <p className="mt-2 pt-2 border-t border-slate-700/60 text-[10px] leading-relaxed text-slate-400">
+                  {preview.se_adjustment.detail}
+                </p>
+              )}
+              {preview.status !== "ok" && (
+                <p className="mt-2 text-[11px] font-bold flex items-center gap-1.5 text-amber-300">
+                  <Info size={13} />
+                  <span>
+                    {preview.status === "rebound_number_required"
+                      ? "This SonReb curve needs a rebound number R."
+                      : preview.status === "below_valid_range"
+                      ? "Velocity below the curve's valid range — record nothing rather than extrapolate."
+                      : preview.status === "above_valid_range"
+                      ? "Velocity above the curve's valid range."
+                      : "Not computable with these inputs."}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+        </div></div>
+    </div>
+
+          </div>
+        </div>
+      </div>
+
+        
+        <div className="ml-5 md:ml-10 space-y-8 mt-12">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-bold text-[#022C4F]">Calibration Curve Library</h2>
+            </div>
+            <p className="text-xs text-gray-500">
+              {selectedProjectId
+                ? "This project's curves plus the platform default"
+                : "All curves visible to you (select a project to narrow)"}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              <strong>Activate</strong> sets the project&apos;s active calibration: every new f_cu
+              computed for that project flows through that curve (already-stored records keep the
+              snapshot of the curve that produced them — history is never rewritten).
+            </p>
+          </div>
+          <span className="text-xs text-gray-500 font-mono">{curves.length} curve(s) on record</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          {isLoading ? (
+            <div className="py-12 text-center text-xs font-semibold text-gray-400 animate-pulse">
+              Loading curves from server…
+            </div>
+          ) : curves.length === 0 ? (
+            <div className="py-12 text-center text-xs text-gray-500">
+              No calibration curves on record yet.
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
+                  <th className="py-3 px-5">Curve</th>
+                  <th className="py-3 px-5">Type</th>
+                  {/* The spec's Curve Manager is Name │ Type │ Standard │ Date │
+                      Status, and Standard is the column the client asked for
+                      directly on 15 Sep ("which standard did you use? there
+                      must be a BS code"). It was stored on every curve and
+                      served by the API all along — it simply was not shown. */}
+                  <th className="py-3 px-5">Standard</th>
+                  <th className="py-3 px-5">Formula (V in m/s)</th>
+                  <th className="py-3 px-5">Valid range</th>
+                  <th className="py-3 px-5">R²</th>
+                  <th className="py-3 px-5">Provenance</th>
+                  <th className="py-3 px-5">Added</th>
+                  <th className="py-3 px-5">Status</th>
+                  <th className="py-3 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {curves.map((c) => {
+                  const isActiveForProject =
+                    active?.source === "project_setting" && active.curve?.id === c.id;
+                  // The platform default row is "active" for the project in a
+                  // different sense: the project has no curve of its own, so
+                  // this is the calibration in force. Derived from the resolved
+                  // source rather than from the row, so it states what the
+                  // server actually resolves the project to — not what a flag
+                  // on the curve claims.
+                  const isPlatformDefaultInEffect =
+                    !!c.is_default && active?.source === "platform_default";
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-slate-50 transition-colors ${
+                        selectedCurveId === c.id
+                          ? "bg-sky-50/60"
+                          : isActiveForProject
+                          ? "bg-emerald-50/40"
+                          : c.is_default
+                          ? "bg-amber-50/30"
+                          : ""
+                      }`}
+                    >
+                      <td className="py-3 px-5 font-bold font-mono text-gray-900">
+                        {c.name}
+                        {c.version != null && (
+                          <span className="block text-[10px] text-gray-400 mt-0.5">v{c.version}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-5 text-gray-700">
+                        {c.curve_type_display || CURVE_TYPE_LABEL[c.curve_type] || c.curve_type}
+                      </td>
+                      {/* `standard` is a blank-able field: a curve may
+                          genuinely have no standard recorded (a hand-entered
+                          lookup table, say), and blank is not a missing value
+                          to be filled in — it is the honest absence of one. */}
+                      <td className="py-3 px-5 text-gray-700 max-w-[180px] break-words">
+                        {c.standard || "—"}
+                      </td>
+                      <td className="py-3 px-5 font-mono text-gray-600 break-words max-w-[220px]">
+                        {c.formula_display || "—"}
+                      </td>
+                      <td className="py-3 px-5 font-mono text-gray-600">
+                        {c.valid_range_min_ms}–{c.valid_range_max_ms} m/s
+                      </td>
+                      <td className="py-3 px-5 font-mono text-gray-600">
+                        {c.r2_score != null ? c.r2_score.toFixed(4) : "n/a"}
+                      </td>
+                      <td className="py-3 px-5 text-gray-600 max-w-[200px] break-words">
+                        {/* `standard` used to be the fallback here, because it
+                            was the only place a standard could appear. It now
+                            has its own column, so leaving the fallback would
+                            print one value under two headings and make
+                            "Provenance" mean two different things. */}
+                        {c.provenance?.source || "—"}
+                        {c.data_points && c.data_points.length > 0 && (
+                          <span className="block text-[10px] text-gray-400 mt-0.5">
+                            {c.data_points.length} calibration pair(s)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-5 text-gray-600 whitespace-nowrap font-mono text-[11px]">
+                        {formatRecordedDate(c.created_at)}
+                      </td>
+                      {/* Status is deliberately three states, not the spec's
+                          Active/Inactive binary. There is no is_active on a
+                          curve — "active" is a PROJECT setting, so one curve
+                          can be active for project A and inactive for project
+                          B. A binary would state as a global fact something
+                          that is only true of one project. "Inactive" is
+                          likewise only meaningful once a project is chosen, so
+                          with none selected this reads "—" rather than
+                          defaulting to a status the reader would take as
+                          global. The platform default is a fourth case: a
+                          project with no curve of its own resolves TO the
+                          default, so that row is genuinely the one in force
+                          and reads "Active" — derived from the resolved
+                          source, not from anything on the curve's own row.
+                          This cell and the marker in the Actions cell are
+                          both derived from the same resolved `active`
+                          response, so they can never disagree. */}
+                      <td className="py-3 px-5">
+                        {isActiveForProject || isPlatformDefaultInEffect ? (
+                          <span
+                            className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-[10px] font-bold whitespace-nowrap"
+                            title={
+                              isPlatformDefaultInEffect
+                                ? "The selected project has no curve of its own, so every new f_cu it computes flows through this platform default"
+                                : "The selected project's active calibration"
+                            }
+                          >
+                            Active
+                          </span>
+                        ) : c.is_default ? (
+                          <span
+                            className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-[10px] font-bold whitespace-nowrap"
+                            title="The platform's built-in default calibration — not tied to any one project"
+                          >
+                            Platform default
+                          </span>
+                        ) : selectedProjectId ? (
+                          <span
+                            className="px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 rounded-full text-[10px] font-bold whitespace-nowrap"
+                            title="Not the selected project's active calibration"
+                          >
+                            Inactive
+                          </span>
+                        ) : (
+                          <span
+                            className="text-gray-400"
+                            title="Active is a project setting — select a project to see whether this curve is its active calibration"
+                          >
+                            —
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-5 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => inspectCurve(c)}
+                            className="px-2.5 py-1 border border-sky-200 hover:border-sky-400 hover:text-sky-700 rounded-lg text-xs font-bold text-sky-700 cursor-pointer"
+                            title="Show this curve's stored parameters and pairs in the Regression Fits & Selection panel above"
+                          >
+                            {selectedCurveId === c.id ? "Hide" : "View"}
+                          </button>
+                          {isActiveForProject && (
+                            <span
+                              className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1"
+                              title="This project's active calibration — every new f_cu computed for the project flows through this curve"
+                            >
+                              <ShieldCheck size={12} />
+                              Active
+                            </span>
+                          )}
+                          {!c.is_default && (
+                            <>
+                              {!isActiveForProject && (
+                                <button
+                                  onClick={() => activate(c.id, c.name)}
+                                  disabled={isActivating === c.id || !selectedProjectId}
+                                  title={
+                                    selectedProjectId
+                                      ? "Make this the project's active calibration"
+                                      : "Select a project first"
+                                  }
+                                  className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
+                                >
+                                  {isActivating === c.id ? "…" : "Activate"}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removeCurve(c)}
+                                className="p-1 border border-gray-200 hover:border-rose-300 hover:text-rose-600 rounded-lg text-gray-500"
+                                title="Delete curve (stored strengths keep their snapshots)"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                          {c.is_default && (
+                            <>
+                              {/* The platform default is a real, selectable
+                                  calibration, so it needs the same reachable
+                                  action as every other row — the column reads
+                                  "Activate" throughout. What that action
+                                  *stores* differs (it clears the project's own
+                                  curve rather than pointing at one, since
+                                  there is no is_active flag to point with),
+                                  but what it *means* is identical: this
+                                  becomes the project's active calibration.
+                                  The mechanism belongs in the tooltip, not in
+                                  the label. Once the project resolves to the
+                                  default there is nothing left to do, and the
+                                  row reports that instead. */}
+                              {active?.source === "platform_default" ? (
+                                <span
+                                  className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1"
+                                  title="The selected project's active calibration — it has no curve of its own, so every new f_cu flows through this platform default"
+                                >
+                                  <ShieldCheck size={12} />
+                                  Active
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={restorePlatformDefault}
+                                  disabled={
+                                    isActivating === PLATFORM_DEFAULT_PENDING ||
+                                    !selectedProjectId
+                                  }
+                                  title={
+                                    selectedProjectId
+                                      ? "Make this the project's active calibration (the project's own curve, if any, is dropped — stored strengths keep their snapshots)"
+                                      : "Select a project first"
+                                  }
+                                  className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
+                                >
+                                  {isActivating === PLATFORM_DEFAULT_PENDING
+                                    ? "…"
+                                    : "Activate"}
+                                </button>
+                              )}
+                              {/* Separate statement, and still true either
+                                  way: the default is the platform's, so it is
+                                  not editable or deletable from a project. */}
+                              <span
+                                className="text-[10px] text-gray-400 font-semibold"
+                                title="The platform's built-in default — it can be chosen for a project but not edited or deleted"
+                              >
+                                Locked
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Save-fit name modal (replaces the old window.prompt popup) */}
+      {isNameModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-xl border border-gray-100">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="font-bold text-sm text-[#022C4F]">Save calibration curve</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Name this curve — it becomes the provenance quoted in the generated NDT report.
+              </p>
+            </div>
+            <div className="p-5">
+              <label className="space-y-1 block">
+                <span className="text-gray-500 font-semibold uppercase text-[10px]">Curve name</span>
+                <input
+                  autoFocus
+                  value={curveName}
+                  onChange={(e) => setCurveName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveFitAsCurve();
+                    }
+                  }}
+                  placeholder="e.g. Lekki Tower A — cube series Aug 2026"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#0A66C2] outline-none placeholder:text-gray-300"
+                />
+              </label>
+              {chosenFit && (
+                <p className="mt-3 p-3 rounded-xl bg-slate-50 border border-gray-200/80 font-mono text-[11px] text-slate-600 break-words">
+                  {chosenFit.formula}
+                </p>
+              )}
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-2">
+              <button
+                onClick={() => setIsNameModalOpen(false)}
+                className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveFitAsCurve}
+                disabled={isSaving || !curveName.trim()}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
+              >
+                {isSaving ? "Saving…" : "Save & activate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
         <details className="group">
           <summary className="cursor-pointer list-none flex items-center justify-between gap-3 select-none">
             <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
@@ -1666,14 +2652,23 @@ export default function NeuralLinkPage() {
             )}
             {(manualType === "exponential" || manualType === "sonreb") && (
               <>
-                <ManualParam label="a" value={manualParams.a || ""} onChange={(v) => setManualParams((p) => ({ ...p, a: v }))} placeholder="a" />
-                <ManualParam label="b" value={manualParams.b || ""} onChange={(v) => setManualParams((p) => ({ ...p, b: v }))} placeholder="b" />
-                <ManualParam
-                  label={manualType === "sonreb" ? "c (R exponent)" : "c"}
-                  value={manualParams.c || ""}
-                  onChange={(v) => setManualParams((p) => ({ ...p, c: v }))}
-                  placeholder="c"
-                />
+                {/* 15 Sep 2026: the client asked "we have ABC — what are those
+                    ABC stands for?" of a form that showed bare a / b / c. The
+                    explanations already existed in CURVE_PARAM_FIELDS and were
+                    never rendered; they are the legend, so they are read from
+                    there rather than restated here. */}
+                {CURVE_PARAM_FIELDS[manualType].map((field) => (
+                  <ManualParam
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    value={manualParams[field.key] || ""}
+                    onChange={(v) =>
+                      setManualParams((p) => ({ ...p, [field.key]: v }))
+                    }
+                    placeholder={field.key.toUpperCase()}
+                  />
+                ))}
               </>
             )}
             {manualType === "lookup" && (
@@ -1706,215 +2701,128 @@ export default function NeuralLinkPage() {
           </div>
         </details>
       </div>
-
-      {/* CURVE LIBRARY */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <details className="group bg-white rounded-2xl border border-gray-100 shadow-sm mb-8">
+        <summary className="cursor-pointer list-none select-none p-6 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-[#022C4F]">Calibration Curve Library</h2>
-            <p className="text-xs text-gray-500">
-              {selectedProjectId
-                ? "This project's curves plus the platform default"
-                : "All curves visible to you (select a project to narrow)"}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">
-              <strong>Activate</strong> sets the project&apos;s active calibration: every new f_cu
-              computed for that project flows through that curve (already-stored records keep the
-              snapshot of the curve that produced them — history is never rewritten).
+            <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
+              <BookOpen size={18} className="text-slate-500" />
+              <span>Standards and references behind this model</span>
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Which document governs each part of the number this platform reports: how the
+              pulse velocity is measured, how it becomes a strength, and how the curve type
+              is selected
+              {standards.length > 0
+                ? ` — ${standards.length} reference documents, open for the detail`
+                : ""}
+              .
             </p>
           </div>
-          <span className="text-xs text-gray-500 font-mono">{curves.length} curve(s) on record</span>
-        </div>
+          <span
+            className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200 bg-slate-50 text-gray-500 group-open:bg-[#022C4F] group-open:text-white transition-colors"
+            aria-hidden="true"
+          >
+            <ChevronDown
+              size={16}
+              className="transition-transform duration-200 group-open:rotate-180"
+            />
+          </span>
+        </summary>
 
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="py-12 text-center text-xs font-semibold text-gray-400 animate-pulse">
-              Loading curves from server…
-            </div>
-          ) : curves.length === 0 ? (
-            <div className="py-12 text-center text-xs text-gray-500">
-              No calibration curves on record yet.
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
-                  <th className="py-3 px-5">Curve</th>
-                  <th className="py-3 px-5">Type</th>
-                  <th className="py-3 px-5">Formula (V in m/s)</th>
-                  <th className="py-3 px-5">Valid range</th>
-                  <th className="py-3 px-5">R²</th>
-                  <th className="py-3 px-5">Provenance</th>
-                  <th className="py-3 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {curves.map((c) => {
-                  const isActiveForProject =
-                    active?.source === "project_setting" && active.curve?.id === c.id;
-                  return (
-                    <tr
-                      key={c.id}
-                      className={`hover:bg-slate-50 transition-colors ${
-                        selectedCurveId === c.id
-                          ? "bg-sky-50/60"
-                          : isActiveForProject
-                          ? "bg-emerald-50/40"
-                          : c.is_default
-                          ? "bg-amber-50/30"
-                          : ""
-                      }`}
-                    >
-                      <td className="py-3 px-5 font-bold font-mono text-gray-900">
-                        <span className="flex items-center gap-1.5">
-                          {c.name}
-                          {c.is_default && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
-                              PLATFORM DEFAULT
-                            </span>
-                          )}
-                          {isActiveForProject && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-0.5">
-                              <ShieldCheck size={9} />
-                              ACTIVE
-                            </span>
-                          )}
-                        </span>
-                        {c.version != null && (
-                          <span className="block text-[10px] text-gray-400 mt-0.5">v{c.version}</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-5 text-gray-700">
-                        {c.curve_type_display || CURVE_TYPE_LABEL[c.curve_type] || c.curve_type}
-                      </td>
-                      <td className="py-3 px-5 font-mono text-gray-600 break-words max-w-[220px]">
-                        {c.formula_display || "—"}
-                      </td>
-                      <td className="py-3 px-5 font-mono text-gray-600">
-                        {c.valid_range_min_ms}–{c.valid_range_max_ms} m/s
-                      </td>
-                      <td className="py-3 px-5 font-mono text-gray-600">
-                        {c.r2_score != null ? c.r2_score.toFixed(4) : "n/a"}
-                      </td>
-                      <td className="py-3 px-5 text-gray-600 max-w-[200px] break-words">
-                        {c.provenance?.source || c.standard || "—"}
-                        {c.data_points && c.data_points.length > 0 && (
-                          <span className="block text-[10px] text-gray-400 mt-0.5">
-                            {c.data_points.length} calibration pair(s)
+        <div className="px-6 pb-6 -mt-2">
+
+        {standardsError ? (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2">
+            <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-900">
+              The standards registry could not be read — {standardsError}. No substitute
+              list is shown in its place.
+            </p>
+          </div>
+        ) : isStandardsLoading ? (
+          <p className="py-6 text-center text-xs text-gray-500">
+            Loading the standards registry…
+          </p>
+        ) : standards.length === 0 ? (
+          <p className="py-6 text-center text-xs text-gray-500">
+            The standards registry is empty — no reference documents are registered on
+            this deployment.
+          </p>
+        ) : (
+          <div className="space-y-5">
+            {STANDARD_ROLE_ORDER.filter((role) =>
+              standards.some((s) => s.role === role)
+            ).map((role) => (
+              <div key={role}>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+                  {STANDARD_ROLE_GROUP[role]}
+                </p>
+                <div className="space-y-2">
+                  {standards
+                    .filter((s) => s.role === role)
+                    .map((s) => (
+                      <details
+                        key={s.code}
+                        className="group rounded-xl border border-gray-200 bg-gray-50/60"
+                      >
+                        <summary className="cursor-pointer list-none flex flex-wrap items-center gap-2 px-3 py-2.5 select-none">
+                          <span className="font-mono text-xs font-bold text-[#022C4F]">
+                            {s.code}
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-5 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            onClick={() => inspectCurve(c)}
-                            className="px-2.5 py-1 border border-sky-200 hover:border-sky-400 hover:text-sky-700 rounded-lg text-xs font-bold text-sky-700 cursor-pointer"
-                            title="Show this curve's stored parameters and pairs in the Regression Fits & Selection panel above"
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${STANDARD_ROLE_BADGE[s.role]}`}
                           >
-                            {selectedCurveId === c.id ? "Hide" : "View"}
-                          </button>
-                          {isActiveForProject && (
-                            <span
-                              className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1"
-                              title="This project's active calibration — every new f_cu computed for the project flows through this curve"
-                            >
-                              <ShieldCheck size={12} />
-                              Active
-                            </span>
-                          )}
-                          {!c.is_default && (
-                            <>
-                              {!isActiveForProject && (
-                                <button
-                                  onClick={() => activate(c.id, c.name)}
-                                  disabled={isActivating === c.id || !selectedProjectId}
-                                  title={
-                                    selectedProjectId
-                                      ? "Make this the project's active calibration"
-                                      : "Select a project first"
-                                  }
-                                  className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
-                                >
-                                  {isActivating === c.id ? "…" : "Activate"}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => removeCurve(c)}
-                                className="p-1 border border-gray-200 hover:border-rose-300 hover:text-rose-600 rounded-lg text-gray-500"
-                                title="Delete curve (stored strengths keep their snapshots)"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </>
-                          )}
-                          {c.is_default && (
-                            <span className="text-[10px] text-gray-400 font-semibold">Locked</span>
+                            {s.role_label}
+                          </span>
+                          <span className="text-[11px] text-gray-600 flex-1 min-w-0">
+                            {s.title}
+                          </span>
+                          {/* Caret: rotated when open, matching the manual
+                              parameter entry below. */}
+                          <ChevronDown
+                            size={14}
+                            className="shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+                          />
+                        </summary>
+                        <div className="px-3 pb-3 pt-1 space-y-2">
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-700 uppercase tracking-wide">
+                              Scope
+                            </p>
+                            <p className="text-[11px] text-gray-600 leading-relaxed mt-0.5">
+                              {s.scope}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold text-gray-700 uppercase tracking-wide">
+                              How this platform uses it
+                            </p>
+                            <p className="text-[11px] text-gray-600 leading-relaxed mt-0.5">
+                              {s.platform_use}
+                            </p>
+                          </div>
+                          {s.note && (
+                            <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 text-[11px] text-amber-900">
+                              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                              <span>{s.note}</span>
+                            </p>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                      </details>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        </div>
+      </details>
         </div>
       </div>
-
-      {/* Save-fit name modal (replaces the old window.prompt popup) */}
-      {isNameModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-xl border border-gray-100">
-            <div className="p-5 border-b border-gray-100">
-              <h3 className="font-bold text-sm text-[#022C4F]">Save calibration curve</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Name this curve — it becomes the provenance quoted in the generated NDT report.
-              </p>
-            </div>
-            <div className="p-5">
-              <label className="space-y-1 block">
-                <span className="text-gray-500 font-semibold uppercase text-[10px]">Curve name</span>
-                <input
-                  autoFocus
-                  value={curveName}
-                  onChange={(e) => setCurveName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      saveFitAsCurve();
-                    }
-                  }}
-                  placeholder="e.g. Lekki Tower A — cube series Aug 2026"
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-[#0A66C2] outline-none placeholder:text-gray-300"
-                />
-              </label>
-              {chosenFit && (
-                <p className="mt-3 p-3 rounded-xl bg-slate-50 border border-gray-200/80 font-mono text-[11px] text-slate-600 break-words">
-                  {chosenFit.formula}
-                </p>
-              )}
-            </div>
-            <div className="px-5 pb-5 flex justify-end gap-2">
-              <button
-                onClick={() => setIsNameModalOpen(false)}
-                className="px-4 py-2 border border-gray-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-gray-700 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveFitAsCurve}
-                disabled={isSaving || !curveName.trim()}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold cursor-pointer disabled:cursor-not-allowed"
-              >
-                {isSaving ? "Saving…" : "Save & activate"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+
 
 /** One regression candidate card — shared by the fresh-regression view and
  *  the inspected library curve. A statistic shows n/a, honestly, when the
@@ -2082,11 +2990,13 @@ function CorrelationChart({
 
 function ManualParam({
   label,
+  hint,
   value,
   onChange,
   placeholder,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -2094,6 +3004,11 @@ function ManualParam({
   return (
     <label className="space-y-1 block">
       <span className="text-gray-500 font-semibold uppercase text-[10px]">{label}</span>
+      {hint && (
+        <span className="block text-[10px] leading-snug text-gray-400 normal-case font-normal">
+          {hint}
+        </span>
+      )}
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -2104,3 +3019,4 @@ function ManualParam({
     </label>
   );
 }
+

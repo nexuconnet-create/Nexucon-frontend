@@ -16,24 +16,35 @@ import {
 } from "lucide-react";
 import { getInspectorInspections } from "@/services/inspector";
 import { Inspection } from "@/services/inspections";
+import { orDash } from "@/lib/display";
 
 export default function InspectorInspectionsPage() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchInspections = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await getInspectorInspections({
         status: statusFilter !== "ALL" ? statusFilter : undefined,
         search: search.trim() || undefined,
       });
       setInspections(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to load inspections:", err);
+    } catch (err: any) {
+      // Previously this caught, logged, and set an empty list — so a failed
+      // request rendered the same "No Inspections Found" panel as a genuinely
+      // clear schedule. An inspector cannot tell a broken app from a quiet
+      // week, and the safe-looking conclusion is the wrong one.
       setInspections([]);
+      setLoadError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Could not reach the inspections service."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -122,6 +133,17 @@ export default function InspectorInspectionsPage() {
         <div className="py-20 flex items-center justify-center">
           <div className="w-8 h-8 border-3 border-[#022C4F] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : loadError ? (
+        <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200">
+          <h3 className="text-sm font-bold text-amber-900 mb-1">
+            Inspections could not be loaded
+          </h3>
+          <p className="text-xs text-amber-800">{loadError}</p>
+          <p className="text-xs text-amber-700 mt-2">
+            Nothing is listed because nothing could be read. This is not an
+            empty schedule.
+          </p>
+        </div>
       ) : filtered.length > 0 ? (
         <div className="space-y-3">
           {filtered.map((insp) => (
@@ -158,7 +180,7 @@ export default function InspectorInspectionsPage() {
                   <span>&bull;</span>
                   <div className="flex items-center gap-1 truncate">
                     <MapPin size={13} className="text-slate-400 shrink-0" />
-                    <span className="truncate">{insp.project_location || "Lekki, Lagos"}</span>
+                    <span className="truncate">{orDash(insp.project_location, "Location not recorded")}</span>
                   </div>
                   {insp.scheduled_date && (
                     <>
