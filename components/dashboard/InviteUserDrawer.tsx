@@ -11,6 +11,32 @@ interface InviteUserDrawerProps {
   onSuccess?: () => void;
 }
 
+// Roles the API treats as state-wide, for which a zone is optional because a
+// zone does not scope them. Every other role is scoped BY its zone, so the
+// server refuses the invitation without one — the zone is the scope, and the
+// officer cannot see anything until it is set.
+const STATE_WIDE_ROLES = new Set(['Director']);
+
+// What the platform will actually grant, stated plainly next to the picker.
+// The label a governor chooses maps onto one of the platform's recognised
+// standings, and that standing — not the label — decides project visibility.
+// Saying so up front is the difference between an informed choice and a
+// support ticket when the officer's dashboard comes up empty.
+const ROLE_SCOPE_NOTE: Record<string, string> = {
+  'Inspector': 'Sees the projects they are assigned, plus their zone.',
+  'Lead Inspector': 'Sees the projects they are assigned, plus their zone.',
+  'Director':
+    'State-wide: sees every project. A zone is optional. Only a State HQ or Agency Head officer can appoint one.',
+  'City Planner':
+    'Not a field standing — project visibility comes from the zone alone.',
+  'Reviewer':
+    'Not a field standing — project visibility comes from the zone alone.',
+  'Compliance Officer':
+    'Not a field standing — project visibility comes from the zone alone.',
+  'System Administrator':
+    'Platform administration only: this grants no project visibility. Grant platform access as a Django superuser instead.',
+};
+
 export default function InviteUserDrawer({
   isOpen,
   onClose,
@@ -67,10 +93,28 @@ export default function InviteUserDrawer({
     }
   };
 
+  // A zone is required for every role it actually scopes. A state-wide role
+  // keeps whatever zone was already chosen rather than clearing it — it does
+  // not scope them, so it is harmless, and clearing it would lose the
+  // officer's selection if they flip back to a scoped role.
+  const zoneRequired = !STATE_WIDE_ROLES.has(role);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Name and email are required', type: 'error' } }));
+      return;
+    }
+    // Checked here as well as on the server so the officer gets the reason
+    // before a round trip. The server check is the one that counts — this is
+    // only the earlier of the two.
+    if (zoneRequired && !districtId) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          message: `A zone is required for ${role}: it decides which projects this officer can see, and it cannot be changed after the invitation is accepted.`,
+          type: 'error',
+        },
+      }));
       return;
     }
 
@@ -196,6 +240,10 @@ export default function InviteUserDrawer({
                       <option value="Director">State Director / HOD</option>
                       <option value="System Administrator">System Administrator</option>
                     </select>
+                    <p className="mt-1.5 text-[11px] text-gray-500">
+                      {ROLE_SCOPE_NOTE[role] ||
+                        'Scoped to the zone selected below.'}
+                    </p>
                   </div>
 
                   <div>
@@ -219,6 +267,13 @@ export default function InviteUserDrawer({
                 <div>
                   <label htmlFor="invite-zone" className="block text-xs font-bold text-[#022C4F] uppercase tracking-wider mb-2">
                     Zonal District Jurisdiction
+                    {zoneRequired ? (
+                      <span className="ml-1 text-rose-600">*</span>
+                    ) : (
+                      <span className="ml-1 font-medium normal-case tracking-normal text-gray-400">
+                        (optional for this role)
+                      </span>
+                    )}
                   </label>
                   {zonesLoading ? (
                     <div className="flex items-center gap-2 h-12 px-4 rounded-xl border border-gray-200 bg-gray-50 text-xs text-gray-500">
@@ -228,8 +283,10 @@ export default function InviteUserDrawer({
                     <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50">
                       <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
                       <p className="text-[11px] leading-relaxed text-amber-800">
-                        {zonesError} The officer can still be invited without a
-                        zone and scoped to one later.
+                        {zonesError}{' '}
+                        {zoneRequired
+                          ? 'This role must be scoped to a zone, so the invitation cannot be dispatched until the register loads.'
+                          : 'This role is state-wide, so it does not need a zone.'}
                       </p>
                     </div>
                   ) : zones.length === 0 ? (
@@ -252,9 +309,19 @@ export default function InviteUserDrawer({
                         id="invite-zone"
                         value={districtId}
                         onChange={(e) => setDistrictId(e.target.value)}
+                        required={zoneRequired}
                         className="w-full h-12 bg-white rounded-xl border border-gray-200 px-4 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                       >
-                        <option value="">No zone — state-wide scope</option>
+                        {/* What this option means depends on the role, so it
+                            says which: for a scoped role "no zone" is not a
+                            scope, it is NO VISIBILITY AT ALL, and the server
+                            now refuses it rather than letting the officer in
+                            to an empty dashboard. */}
+                        <option value="">
+                          {zoneRequired
+                            ? 'Select a zone — required'
+                            : 'No zone — state-wide scope'}
+                        </option>
                         {zones.map((zone) => (
                           <option key={zone.id} value={zone.id}>
                             {zone.name}

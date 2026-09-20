@@ -1793,6 +1793,7 @@ export const getPunditAIAnalyses = async (params?: { project?: string }): Promis
     params: {
       project: params?.project || undefined,
       analysis_type: 'pundit',
+      is_rollup: 'true',
     },
   });
   const rows = unwrap<any[]>(res, []);
