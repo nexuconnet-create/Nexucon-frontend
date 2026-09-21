@@ -13,6 +13,7 @@ export interface User {
   role_name: string | null;
   agency_code: string | null;
   stakeholder_profile?: any;
+  phone_number?: string;
   permissions: string[];
 }
 

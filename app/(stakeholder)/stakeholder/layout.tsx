@@ -56,7 +56,7 @@ export default function StakeholderLayout({
       {/* Main Content Area */}
       <div 
         className={`flex-1 flex flex-col min-w-0 bg-[#FAFAFA] lg:rounded-[30px] shadow-sm transition-all duration-300 min-h-screen lg:min-h-0 lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
-          isSidebarCollapsed ? "lg:ml-[106px]" : "lg:ml-[306px]"
+          isSidebarCollapsed ? "lg:ml-[116px]" : "lg:ml-[316px]"
         }`}
       >
         {/* Mobile Header */}

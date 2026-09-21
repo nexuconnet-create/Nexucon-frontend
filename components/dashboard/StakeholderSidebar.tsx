@@ -22,6 +22,10 @@ import {
   Activity,
   Layers,
   Sparkles,
+  Settings,
+  Bell,
+  User,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,10 +52,10 @@ type SidebarItem = {
 
 const stakeholderLinks: SidebarItem[] = [
   {
-    name: "Command & Control",
+    name: "Dashboard",
     icon: Home,
     subItems: [
-      { name: "Stakeholder Hub", href: "/stakeholder", icon: Home },
+      { name: "Stakeholder Command Center", href: "/stakeholder", icon: Home },
       { name: "Client Control Center", href: "/stakeholder#client-control", icon: Activity },
     ],
   },
@@ -106,6 +110,24 @@ const stakeholderLinks: SidebarItem[] = [
       { name: "Messages & Channels", href: "/stakeholder/messages", icon: MessageSquare },
     ],
   },
+  {
+    sectionHeader: "Account & Settings",
+    name: "Corporate Profile",
+    icon: User,
+    href: "/stakeholder/profile",
+    subItems: [
+      { name: "Statutory Enterprise Profile", href: "/stakeholder/profile", icon: User },
+    ],
+  },
+  {
+    name: "Settings",
+    icon: Settings,
+    subItems: [
+      { name: "Operational Preferences", href: "/stakeholder/settings", icon: Settings },
+      { name: "Notification Preferences", href: "/stakeholder/settings/notifications", icon: Bell },
+      { name: "Security & Access", href: "/stakeholder/settings/security", icon: ShieldCheck },
+    ],
+  },
 ];
 
 export default function StakeholderSidebar({
@@ -119,7 +141,7 @@ export default function StakeholderSidebar({
   const { user, logout } = useAuth();
 
   const [openSections, setOpenSections] = useState<string[]>([
-    "Command & Control",
+    "Dashboard",
     "Building Inspection",
     "Project Timeline",
     "Financial Activities",
@@ -127,181 +149,265 @@ export default function StakeholderSidebar({
   ]);
 
   useEffect(() => {
-    const activeSection = stakeholderLinks.find(link =>
-      (link.href && (pathname === link.href || pathname.startsWith(`${link.href}/`))) ||
-      link.subItems?.some(sub => pathname === sub.href || pathname.startsWith(`${sub.href}/`))
+    const activeSection = stakeholderLinks.find(
+      (link) =>
+        (link.href && (pathname === link.href || pathname.startsWith(`${link.href}/`))) ||
+        link.subItems?.some((sub) => pathname === sub.href || pathname.startsWith(`${sub.href}/`))
     );
     if (activeSection && !openSections.includes(activeSection.name)) {
-      setOpenSections(prev => [...prev, activeSection.name]);
+      setOpenSections((prev) => [...prev, activeSection.name]);
     }
   }, [pathname]);
 
-  const toggleSection = (name: string) => {
-    setOpenSections(prev =>
-      prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+  const toggleSection = (name: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setOpenSections((prev) =>
+      prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]
     );
   };
 
   const navContent = (
-    <div className="flex flex-col h-full justify-between bg-[#022C4F] text-white">
-      {/* Brand Header */}
-      <div className="p-5 border-b border-white/10 flex items-center justify-between">
-        <Link href="/stakeholder" className="flex items-center gap-3">
+    <>
+      {/* Top Area - Logo and Toggle / Close */}
+      <div
+        className={`flex items-center shrink-0 ${
+          isMobile
+            ? "justify-between px-6 pt-6 pb-4"
+            : isCollapsed
+            ? "justify-center pt-8 pb-12"
+            : "justify-between px-8 pt-8 pb-12"
+        }`}
+      >
+        <div
+          className={`flex items-center overflow-hidden transition-all duration-300 ${
+            !isMobile && isCollapsed ? "w-12 h-12 cursor-pointer" : "w-auto"
+          }`}
+          onClick={!isMobile && isCollapsed ? onToggleCollapse : undefined}
+          title={!isMobile && isCollapsed ? "Expand Sidebar" : undefined}
+        >
           <Image
-            src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
+            src={
+              !isMobile && isCollapsed
+                ? "https://res.cloudinary.com/depeqzb6z/image/upload/v1774500774/gaskia_logo-04_112538_1_1_ye9l2c.png"
+                : "https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
+            }
             alt="Nexucon Logo"
-            width={140}
-            height={36}
-            className="h-8 w-auto object-contain brightness-0 invert"
+            width={!isMobile && isCollapsed ? 48 : 150}
+            height={48}
+            priority
+            className={`transition-all duration-300 brightness-0 invert ${
+              !isMobile && isCollapsed ? "h-12 w-12 object-contain" : "h-9 w-auto object-contain"
+            }`}
           />
-        </Link>
-        {!isMobile && onToggleCollapse && (
+        </div>
+
+        {isMobile ? (
           <button
-            onClick={onToggleCollapse}
-            className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={onCloseMobile}
+            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+            aria-label="Close Navigation Menu"
           >
-            <ChevronLeft size={18} className={`transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} />
+            <X size={18} />
           </button>
+        ) : (
+          !isCollapsed && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-1.5 rounded-full bg-white text-[#022C4F] hover:scale-110 transition-transform shrink-0 shadow-lg cursor-pointer"
+              aria-label="Collapse Sidebar"
+            >
+              <ChevronLeft size={16} strokeWidth={3} />
+            </button>
+          )
         )}
       </div>
 
-      {/* Subdomain Tag */}
-      <div className="px-5 py-2.5 bg-blue-950/40 border-b border-white/5 flex items-center justify-between text-[11px]">
-        <span className="text-blue-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-          <Sparkles size={12} className="text-blue-400" />
-          Stakeholder Portal
-        </span>
-        <span className="text-white/50 text-[10px] font-mono">stakeholder.nexucon.net</span>
-      </div>
+      {(!isCollapsed || isMobile) && <div className="w-full h-px bg-white/20 mb-4 shrink-0"></div>}
 
-      {/* Navigation List */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {stakeholderLinks.map((item, idx) => {
-          const isOpen = openSections.includes(item.name);
-          const hasActiveSub = item.subItems?.some(
-            sub => pathname === sub.href || pathname.startsWith(`${sub.href}/`)
+      {/* Navigation Links */}
+      <div
+        className={`flex-1 overflow-y-auto pb-6 flex flex-col gap-1 scrollbar-hide hide-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
+          isMobile ? "px-4" : isCollapsed ? "px-0 items-center" : "px-6"
+        }`}
+      >
+        {stakeholderLinks.map((link) => {
+          const isParent = !!(link.subItems && link.subItems.length > 0);
+          const targetHref = link.href || (isParent ? link.subItems![0].href : "#");
+
+          const isActive = link.href ? pathname === link.href || pathname.startsWith(`${link.href}/`) : false;
+          const isSubActive = link.subItems?.some(
+            (sub) => pathname === sub.href || pathname.startsWith(`${sub.href}/`)
           );
 
+          const isItemActive = isActive || isSubActive;
+          const Icon = link.icon;
+          const isOpen = openSections.includes(link.name);
+
           return (
-            <div key={idx} className="mb-2">
-              {item.sectionHeader && !isCollapsed && (
-                <div className="px-3 pt-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-white/40">
-                  {item.sectionHeader}
+            <div key={link.name} className="flex flex-col mb-1 w-full">
+              {link.sectionHeader && (isMobile || !isCollapsed) && (
+                <div className="pt-4 pb-1.5 px-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-cyan-300/80 block">
+                    {link.sectionHeader}
+                  </span>
                 </div>
               )}
+              {link.sectionHeader && !isMobile && isCollapsed && (
+                <div className="w-8 h-px bg-white/20 my-2 mx-auto" />
+              )}
 
-              {item.subItems ? (
-                <div>
-                  <button
-                    onClick={() => toggleSection(item.name)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                      hasActiveSub
-                        ? "bg-blue-600/30 text-white"
-                        : "text-white/80 hover:bg-white/5 hover:text-white"
+              {/* Main Item */}
+              <Link
+                href={isParent && isMobile ? "#" : targetHref}
+                onClick={(e) => {
+                  if (isParent && isMobile) {
+                    toggleSection(link.name, e);
+                    return;
+                  }
+                  if (!isParent && isMobile) {
+                    onCloseMobile?.();
+                  }
+                }}
+                className={`flex items-center justify-between rounded-xl transition-all duration-200 group ${
+                  !isMobile && isCollapsed
+                    ? "justify-center p-3 w-12 h-12 mx-auto"
+                    : "px-3.5 py-2.5 sm:px-4 sm:py-3 w-full min-h-[44px]"
+                } ${
+                  isItemActive
+                    ? "bg-white/15 text-white font-bold shadow-sm"
+                    : "text-white/70 hover:text-white hover:bg-white/5"
+                }`}
+                title={!isMobile && isCollapsed ? link.name : undefined}
+              >
+                <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                  <Icon
+                    size={!isMobile && isCollapsed ? 24 : 18}
+                    className={`shrink-0 transition-transform duration-200 ${
+                      isItemActive ? "text-white scale-105" : "text-white/70 group-hover:text-white"
                     }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon size={16} className={hasActiveSub ? "text-blue-400" : "text-white/60"} />
-                      {!isCollapsed && <span>{item.name}</span>}
-                    </div>
-                    {!isCollapsed && (
-                      <div className="flex items-center gap-2">
-                        {item.badge && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500 text-white font-bold">
-                            {item.badge}
-                          </span>
-                        )}
-                        <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Sub-items */}
-                  {isOpen && !isCollapsed && (
-                    <div className="ml-5 pl-2 border-l border-white/10 mt-1 space-y-1">
-                      {item.subItems.map((sub, sIdx) => {
-                        const isSubActive = pathname === sub.href;
-                        return (
-                          <Link
-                            key={sIdx}
-                            href={sub.href}
-                            onClick={() => isMobile && onCloseMobile && onCloseMobile()}
-                            className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              isSubActive
-                                ? "bg-blue-600 text-white font-bold shadow-sm"
-                                : "text-white/70 hover:bg-white/10 hover:text-white"
-                            }`}
-                          >
-                            <span className="truncate">{sub.name}</span>
-                            {sub.badge && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500 text-white font-bold">
-                                {sub.badge}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
+                    strokeWidth={isItemActive ? 2.5 : 1.5}
+                  />
+                  {(isMobile || !isCollapsed) && (
+                    <span className="tracking-wide text-xs sm:text-[13px] truncate">{link.name}</span>
                   )}
                 </div>
-              ) : (
-                <Link
-                  href={item.href || "#"}
-                  onClick={() => isMobile && onCloseMobile && onCloseMobile()}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    pathname === item.href
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-white/80 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <item.icon size={16} className="text-white/60" />
-                  {!isCollapsed && <span>{item.name}</span>}
-                </Link>
+                {isParent && (isMobile || !isCollapsed) && (
+                  <button
+                    onClick={(e) => toggleSection(link.name, e)}
+                    className="p-1 rounded hover:bg-white/10 transition-colors ml-2 shrink-0 cursor-pointer"
+                    aria-label={`Toggle ${link.name} section`}
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                )}
+              </Link>
+
+              {/* Sub Items */}
+              {isParent && (isMobile || !isCollapsed) && isOpen && (
+                <div className="flex flex-col ml-6 pl-2 border-l border-white/10 mt-1 gap-1">
+                  {link.subItems?.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubItemActive =
+                      pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+                    return (
+                      <Link
+                        key={sub.name}
+                        href={sub.href}
+                        onClick={() => {
+                          if (isMobile) onCloseMobile?.();
+                        }}
+                        className={`flex items-center gap-3 px-3.5 py-2 rounded-lg transition-all duration-200 group min-h-[38px] text-xs ${
+                          isSubItemActive
+                            ? "bg-white/10 text-white font-bold"
+                            : "text-white/60 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        <SubIcon
+                          size={15}
+                          className={`shrink-0 transition-transform duration-200 ${
+                            isSubItemActive ? "text-blue-400" : "text-white/50 group-hover:text-white"
+                          }`}
+                          strokeWidth={isSubItemActive ? 2.5 : 1.5}
+                        />
+                        <span className="tracking-wide truncate">{sub.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* User Footer */}
-      <div className="p-4 border-t border-white/10 bg-black/10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm">
-              {user?.first_name ? user.first_name[0] : "S"}
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-white truncate">
-                  {user?.first_name ? `${user.first_name} ${user.last_name || ''}` : "Stakeholder"}
-                </div>
-                <div className="text-[10px] text-white/60 truncate">
-                  {user?.role_name || "Client / Stakeholder"}
-                </div>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => logout && logout("/stakeholder/login")}
-            className="p-1.5 text-white/60 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-            title="Log Out"
+      {/* Bottom Area - User Profile & Logout */}
+      <div
+        className={`border-t border-white/10 flex shrink-0 ${
+          isMobile
+            ? "p-4 bg-black/10 items-center justify-between"
+            : isCollapsed
+            ? "p-6 flex-col items-center justify-center gap-8"
+            : "p-6 items-center justify-between"
+        }`}
+      >
+        <Link
+          href="/stakeholder/profile"
+          onClick={() => isMobile && onCloseMobile?.()}
+          className="flex items-center gap-3 overflow-hidden min-w-0 hover:opacity-90 transition-opacity cursor-pointer group"
+          title="View Statutory Profile"
+        >
+          <div
+            className={`shrink-0 rounded-full bg-white text-[#022C4F] font-extrabold flex items-center justify-center shadow-inner uppercase ${
+              isMobile ? "w-10 h-10 text-sm" : "w-12 h-12 text-base"
+            }`}
           >
-            <LogOut size={16} />
-          </button>
-        </div>
+            {user?.first_name?.[0] || "S"}
+            {user?.last_name?.[0] || "T"}
+          </div>
+          {(isMobile || !isCollapsed) && (
+            <div className="flex flex-col whitespace-nowrap min-w-0">
+              <span className="font-bold text-xs sm:text-sm truncate max-w-[140px] group-hover:text-cyan-200 transition-colors">
+                {user ? `${user.first_name} ${user.last_name || ""}` : "Stakeholder Enterprise"}
+              </span>
+              <span className="text-[10px] sm:text-xs text-white/60 truncate max-w-[140px]">
+                {user?.role_name || "Client / Developer"}
+              </span>
+            </div>
+          )}
+        </Link>
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            if (isMobile) onCloseMobile?.();
+            logout("/stakeholder/login");
+          }}
+          className="shrink-0 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+          title="Log Out"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
-    </div>
+    </>
   );
 
   if (isMobile) {
-    return <div className="h-full w-full">{navContent}</div>;
+    return (
+      <div className="w-full h-full bg-[#022C4F] text-white flex flex-col overflow-hidden">
+        {navContent}
+      </div>
+    );
   }
 
   return (
     <aside
-      className={`hidden lg:flex fixed top-0 bottom-0 left-0 z-40 my-2 ml-2 rounded-[24px] overflow-hidden shadow-2xl transition-all duration-300 ${
-        isCollapsed ? "w-[90px]" : "w-[290px]"
+      className={`fixed top-4 bottom-4 left-4 z-40 bg-[#022C4F] rounded-[30px] text-white flex flex-col hidden lg:flex transition-all duration-300 ${
+        isCollapsed ? "w-[100px]" : "w-[300px]"
       }`}
     >
       {navContent}
