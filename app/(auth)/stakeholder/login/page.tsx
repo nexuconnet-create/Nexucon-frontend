@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, EyeOff, Eye, Building2, Calendar, CreditCard, ShieldCheck } from "lucide-react";
@@ -15,6 +15,30 @@ export default function StakeholderLogin() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [homeUrl, setHomeUrl] = useState("/");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname;
+      if (hostname.startsWith("stakeholder.") || hostname.includes("stakeholder.localhost")) {
+        setHomeUrl("https://nexucon.net");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      const cleanEmail = user.email?.toLowerCase();
+      const localOnboarded = typeof window !== 'undefined' && cleanEmail
+        ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`) 
+        : null;
+      if (user.is_onboarded || localOnboarded) {
+        router.push('/stakeholder');
+      } else {
+        router.push('/stakeholder/onboarding');
+      }
+    }
+  }, [user, isLoading, router]);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -78,7 +102,7 @@ export default function StakeholderLogin() {
       <div className="hidden lg:flex relative z-10 w-1/2 h-full flex-col justify-between p-10 min-h-[calc(100vh)] text-white">
         <div>
           <Link
-            href="/"
+            href={homeUrl}
             className="inline-flex items-center text-white/80 hover:text-white transition-colors font-medium text-sm sm:text-base"
           >
             <ChevronLeft className="w-5 h-5 mr-2" />
@@ -142,7 +166,7 @@ export default function StakeholderLogin() {
           {/* Mobile Top Navigation */}
           <div className="flex lg:hidden justify-between items-center w-full mb-10 mt-2">
             <Link
-              href="/"
+              href={homeUrl}
               className="inline-flex items-center text-gray-700 hover:text-gray-900 transition-colors font-medium text-xs sm:text-sm"
             >
               <ChevronLeft className="w-4 h-4 mr-1" />

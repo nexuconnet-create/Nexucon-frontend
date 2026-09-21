@@ -68,7 +68,7 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
         } else if (hostname.startsWith("stakeholder.")) {
           router.push(`/${mode}`);
         } else {
-          router.push(`/stakeholder/${mode}`);
+          window.location.href = `https://stakeholder.nexucon.net/${mode === "register" ? "register" : ""}`;
         }
       } else {
         router.push(`/stakeholder/${mode}`);

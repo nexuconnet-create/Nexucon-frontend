@@ -59,8 +59,14 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Rewrite root or relative paths under stakeholder domain to /stakeholder equivalents
+    // Rewrite root to /stakeholder/login so the first page that shows is the login page
     if (pathname === '/') {
+      url.pathname = '/stakeholder/login';
+      return NextResponse.rewrite(url);
+    }
+
+    // Rewrite /dashboard to /stakeholder
+    if (pathname === '/dashboard') {
       url.pathname = '/stakeholder';
       return NextResponse.rewrite(url);
     }

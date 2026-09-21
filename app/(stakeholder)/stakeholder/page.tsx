@@ -25,11 +25,29 @@ import {
   TrendingUp,
   AlertTriangle,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export default function StakeholderHub() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && !authLoading) {
+      const token = localStorage.getItem("nexucon_access_token");
+      const localUser = localStorage.getItem("nexucon_auth_user");
+      if (!token && !localUser && !user) {
+        router.replace("/stakeholder/login");
+      } else if (user && user.is_onboarded === false) {
+        const cleanEmail = user.email?.toLowerCase();
+        const localOnboarded = localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`);
+        if (!localOnboarded) {
+          router.replace("/stakeholder/onboarding");
+        }
+      }
+    }
+  }, [user, authLoading, router]);
 
   // Mock KPI data for initial presentation
   const stats = {
