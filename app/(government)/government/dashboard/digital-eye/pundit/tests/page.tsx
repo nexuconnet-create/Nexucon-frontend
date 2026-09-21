@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
+import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
 import {
   FolderViewToggle,
@@ -13,7 +14,7 @@ import {
   ratingBadgeClass,
   useFloorStationFolders,
 } from "@/components/dashboard/digital-eye/PunditFolderTree";
-import { PunditTest, getPunditTests, downloadNdtReport, exportPunditResults, formatVelocityMs } from "@/services/digitalEye";
+import { PunditTest, SEAdjustmentDisclosure, getPunditTests, downloadNdtReport, exportPunditResults, formatVelocityMs } from "@/services/digitalEye";
 
 export default function PunditTestsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -86,6 +87,11 @@ export default function PunditTestsPage() {
         selectedProjectId={selectedProjectId}
         onProjectChange={setSelectedProjectId}
       />
+
+      {/* The Nexucon Link navigation layer (client's "castle-like" structure). */}
+      <div className="mb-6">
+        <NexuconLinkNav subtitle="Measurements" />
+      </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
         <div className="p-5 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
@@ -193,6 +199,17 @@ export default function PunditTestsPage() {
   );
 }
 
+/** The standard-error disclosure stored alongside a test's strength, when
+ *  the curve that produced it carried a policy — whether the policy was
+ *  applied or was requested and honestly refused. Null when the curve has no
+ *  policy at all: the figure is then the curve estimate as fitted and there
+ *  is nothing to disclose. */
+function strengthAdjustment(t: PunditTest): SEAdjustmentDisclosure | null {
+  const d = t.strength_curve_snapshot?.se_adjustment;
+  if (!d) return null;
+  return d.applied || (d.method && d.method !== 'none') ? d : null;
+}
+
 /** One registry test row (shared by the flat table and the folder view) —
  *  expandable to its per-point readings. */
 function TestRow({
@@ -210,6 +227,9 @@ function TestRow({
   handleDownloadReport: () => void;
   showFloor?: boolean;
 }) {
+  // Resolved once: the row badge and the expanded disclosure are the same
+  // statement, and they must never disagree about whether a policy applied.
+  const adjustment = strengthAdjustment(t);
   return (
     <React.Fragment>
       <tr
@@ -231,7 +251,19 @@ function TestRow({
         </td>
         <td className="py-3.5 px-5 font-mono text-gray-600">{t.transducer_type ? `${t.transducer_type} (${t.transducer_frequency_khz || '—'}kHz)` : `${t.transducer_frequency_khz || '—'} kHz`}</td>
         <td className="py-3.5 px-5 font-mono font-bold text-amber-700">{t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}</td>
-        <td className="py-3.5 px-5 font-mono font-bold text-gray-800" title={t.readings.length > 1 ? 'Element mean across its test points' : undefined}>{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : '—'}</td>
+        <td className="py-3.5 px-5 font-mono font-bold text-gray-800" title={t.readings.length > 1 ? 'Element mean across its test points' : undefined}>
+          {t.estimated_compressive_strength_mpa != null
+            ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa`
+            : '—'}
+          {adjustment?.applied && (
+            <span
+              className="ml-1.5 align-super px-1 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold"
+              title={`Standard-error policy applied to this figure — ${adjustment.detail}`}
+            >
+              SE
+            </span>
+          )}
+        </td>
         <td className="py-3.5 px-5">
           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ratingBadgeClass(t.concrete_quality_rating)}`}>
             {t.concrete_quality_rating}
@@ -256,6 +288,48 @@ function TestRow({
       {expandedId === t.id && (
         <tr className="bg-slate-50/70">
           <td colSpan={showFloor ? 10 : 9} className="px-5 py-4">
+            {/* Outside the readings branch on purpose: a legacy
+                single-measurement record can still carry a policy-adjusted
+                verdict, and this figure must never print without the
+                statement of what moved it. */}
+            {adjustment && (
+              <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-900">
+                <span className="font-bold uppercase tracking-wider">
+                  Standard-error policy — {adjustment.method_label}
+                </span>
+                {adjustment.base_f_cu_mpa != null &&
+                  adjustment.adjusted_f_cu_mpa != null && (
+                    <span className="font-mono">
+                      {' '}
+                      {adjustment.base_f_cu_mpa.toFixed(2)} →{' '}
+                      {adjustment.adjusted_f_cu_mpa.toFixed(2)} N/mm²
+                    </span>
+                  )}
+                {/* Where the correction was actually applied. The client's
+                    method folds the standard error into the PULSE VELOCITY
+                    before the conversion to f_cu (15 Sep 2026), so the
+                    increment is shown in m/s next to the strength it
+                    produced — otherwise the only visible number is the
+                    result, and the step itself cannot be checked. Absent
+                    when the correction stayed on the strength: a lookup
+                    table, a curve flat at this velocity, or a move that
+                    would leave the calibrated range. */}
+                {adjustment.velocity_step && (
+                  <span className="font-mono">
+                    {' · applied to the pulse velocity '}
+                    {formatVelocityMs(adjustment.velocity_step.base_velocity_ms)} →{' '}
+                    {formatVelocityMs(adjustment.velocity_step.adjusted_velocity_ms)} m/s
+                    {' ('}
+                    {adjustment.velocity_step.delta_velocity_ms >= 0 ? '+' : ''}
+                    {adjustment.velocity_step.delta_velocity_ms.toFixed(1)} m/s
+                    {' at '}
+                    {adjustment.velocity_step.slope_mpa_per_ms} N/mm² per m/s)
+                  </span>
+                )}
+                <br />
+                {adjustment.detail}
+              </p>
+            )}
             {t.readings.length > 0 ? (
               <div className="overflow-x-auto">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">

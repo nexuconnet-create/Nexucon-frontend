@@ -64,6 +64,9 @@ export default function ProjectsDynamicPage() {
           name: p.name,
           developer: p.developer_name || 'Pending Assignment',
           location: p.lga || p.site_address || 'Unknown',
+          // The operational zone, resolved server-side. Null rather than a
+          // placeholder when the project sits in none.
+          districtName: p.district_name || null,
           type: p.project_type || 'Mixed-Use',
           status: p.status === 'PLANNING' ? 'Pending' : p.status === 'ACTIVE' ? 'Active' : p.status === 'COMPLETED' ? 'Completed' : 'Flagged',
           progress: p.status === 'COMPLETED' ? 100 : (typeof p.progress_percentage === 'number' ? p.progress_percentage : null),
@@ -454,7 +457,12 @@ export default function ProjectsDynamicPage() {
 
                   <div className="flex items-center gap-2 w-full md:w-1/4">
                     <MapPin size={14} className="text-slate-400 shrink-0" />
-                    <span className="text-xs font-medium text-slate-600 truncate">{project.location}</span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-slate-600 truncate block">{project.location}</span>
+                      <span className="text-[10px] font-semibold text-slate-400 truncate block">
+                        {project.districtName ? `Zone: ${project.districtName}` : 'No zone assigned'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-1/4 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
@@ -541,7 +549,12 @@ export default function ProjectsDynamicPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin size={12} className="text-slate-400 shrink-0" />
-                        <span className="text-[11px] font-medium text-slate-600 truncate">{project.location}</span>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-slate-600 truncate block">{project.location}</span>
+                          <span className="text-[10px] font-semibold text-slate-400 truncate block">
+                            {project.districtName ? `Zone: ${project.districtName}` : 'No zone assigned'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>

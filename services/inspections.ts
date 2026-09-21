@@ -1,10 +1,30 @@
 import api from './api';
 
+/**
+ * A checklist row on an inspection.
+ *
+ * Two writers produce two different shapes and both are real:
+ *
+ *  * the manual/create path writes `{id, item, status}`;
+ *  * `POST /inspections/{id}/execution/submit/` overwrites the field with the
+ *    sealed execution rows it stores on `InspectionSubmission` —
+ *    `{item_id, title, result, notes, evidence_hashes}`.
+ *
+ * Every field is therefore optional. An earlier version of this type declared
+ * only the first shape, so a reader could index `item.status` on a row that has
+ * no `status` key and get `undefined` with no type error at all — the two
+ * writers disagree about field names and the compiler was told they do not.
+ */
 export interface InspectionChecklistItem {
-  id: string;
-  item: string;
-  status: 'PASSED' | 'FAILED' | 'PENDING';
+  id?: string;
+  item?: string;
+  status?: 'PASSED' | 'FAILED' | 'PENDING';
   notes?: string;
+  /** Execution-flow shape. `result` is stored verbatim (house value: PASS/FAIL). */
+  item_id?: string;
+  title?: string;
+  result?: string | null;
+  evidence_hashes?: string[];
 }
 
 export interface InspectionFinding {

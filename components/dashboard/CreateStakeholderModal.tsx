@@ -12,6 +12,7 @@ import {
 } from '@/services/stakeholders';
 import { inviteStaffUser } from '@/services/settings';
 import { sendEmailViaResend } from '@/services/email';
+import CreateDistrictModal from './CreateDistrictModal';
 
 export type StakeholderCategory = 'developer' | 'contractor' | 'consultant' | 'inspector' | 'professional';
 
@@ -40,6 +41,40 @@ export default function CreateStakeholderModal({
   const [authority, setAuthority] = useState('COREN');
   const [sendInviteEmail, setSendInviteEmail] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState<any>({
+    name: '',
+    email: '',
+    role_title: '',
+    phone: '',
+    assigned_zone: '',
+    // Additional fields for developers/contractors
+    company_registration_no: '',
+    headquarters_address: '',
+    primary_contact_name: '',
+    primary_contact_phone: '',
+    // Special field to map to backend Role
+    custom_role_id: ''
+  });
+  const [districts, setDistricts] = useState<{name: string, description: string}[]>([]);
+  const [isCreateDistrictModalOpen, setIsCreateDistrictModalOpen] = useState(false);
+
+  const fetchDistricts = () => {
+    import('@/services/settings').then(module => {
+      module.getDistricts().then(data => {
+        setDistricts(data.map(d => ({
+          name: d.name || d.id || 'Unknown',
+          description: d.description || 'Assigned district/zone'
+        })));
+      });
+    });
+  };
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetchDistricts();
+    }
+  }, [isOpen]);
+
   const [errorMsg, setErrorMsg] = useState('');
 
   const [createdInspectorCredentials, setCreatedInspectorCredentials] = useState<{
@@ -848,16 +883,30 @@ export default function CreateStakeholderModal({
                       <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
                         Assigned Field Zone
                       </label>
-                      <select
-                        value={locationOrZone}
-                        onChange={(e) => setLocationOrZone(e.target.value)}
-                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="Zone A (Lekki / Victoria Island)">Zone A (Lekki / Victoria Island)</option>
-                        <option value="Zone B (Ikeja / Central Business District)">Zone B (Ikeja / Central Business District)</option>
-                        <option value="Zone C (East Corridor)">Zone C (East Corridor)</option>
-                        <option value="Zone D (Harbor &amp; Maritime Hub)">Zone D (Harbor &amp; Maritime Hub)</option>
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={locationOrZone}
+                          onChange={(e) => setLocationOrZone(e.target.value)}
+                          className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="" disabled>Select operational zone...</option>
+                          {districts.length === 0 ? (
+                            <option value="" disabled>No districts available. Add in settings.</option>
+                          ) : (
+                            districts.map((d: any) => (
+                              <option key={d.name} value={d.name}>{d.name} - {d.description}</option>
+                            ))
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setIsCreateDistrictModalOpen(true)}
+                          className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors"
+                          title="Create New Operational Zone"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -967,9 +1016,13 @@ export default function CreateStakeholderModal({
             </div>
           </form>
           )}
-
         </div>
       </div>
+      <CreateDistrictModal
+        isOpen={isCreateDistrictModalOpen}
+        onClose={() => setIsCreateDistrictModalOpen(false)}
+        onSuccess={fetchDistricts}
+      />
     </div>
   );
 }

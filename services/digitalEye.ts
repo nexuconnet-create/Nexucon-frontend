@@ -138,6 +138,7 @@ export interface PunditReading {
   ecs_mpa: number | null;
   crack_depth_mm: number | null;
   notes?: string;
+  strength_curve_snapshot?: CurveSnapshot | null;
 }
 
 export interface PunditTest {
@@ -178,10 +179,24 @@ export interface PunditTest {
   surface_temperature_c: number | null;
   pulse_velocity_ms: number; // m/s; 0 until the server-side BS 1881-203 analysis has run
   estimated_compressive_strength_mpa: number | null; // E.C.S via the platform calibration curve; null outside its 2.0-5.0 km/s validity
+  /** Provenance of the figure above, stored with it at write time: which
+   *  curve produced it and what its standard-error policy did to it. The
+   *  server returns this on every test row; the UI reads it so a strength
+   *  that was adjusted can say so instead of showing a bare number. */
+  strength_curve_snapshot?: CurveSnapshot | null;
+  /** Honest confidence metrics (server-computed from the recorded readings;
+   *  null when the active curve carries no regression to derive them from). */
+  ai_ci_lower_mpa?: number | null;
+  ai_ci_upper_mpa?: number | null;
+  ai_pof_pct?: number | null;
+  ai_data_quality?: string;
+  ai_reasoning_traces?: string[];
   concrete_quality_rating: 'EXCELLENT' | 'GOOD' | 'DOUBTFUL' | 'POOR' | 'VERY_POOR' | 'PENDING';
   estimated_crack_depth_mm?: number | null;
   operator_name: string;
   test_date: string;
+  latitude?: number | null;
+  longitude?: number | null;
   notes?: string;
   created_at: string;
   file_count: number; // attached SensorDataFile artifacts (photos / raw exports)
@@ -260,25 +275,45 @@ export interface ProcessingQueueJob {
   logs: string[];
 }
 
+/**
+ * A recorded spatial evidence point, exactly as `EvidenceSpatialPointSerializer`
+ * (`fields = '__all__'`) returns it.
+ *
+ * The shape here previously disagreed with the server on four fields:
+ * `latitude` and `longitude` were declared as optional aliases that the
+ * serializer never sends, `accuracy_cm` was declared and does not exist on the
+ * model at all, and `lat`/`lng`/`elevation_m`/`accuracy_mm` were declared
+ * non-nullable when the model makes every one of them `null=True`. The canvas
+ * that consumed this fell back to the aliases and to a millimetre-to-centimetre
+ * conversion off `accuracy_cm`, so its precision readout was reading a field
+ * that is always `undefined` and then dividing a value that might be `null`.
+ * Corrected to the server's own contract: a point with no measured position is
+ * a real state, and the type now says so.
+ */
 export interface EvidenceSpatialPoint {
   id: string;
-  project: string;
-  project_name?: string;
-  beacon_code?: string;
+  /**
+   * The related project's id. Nullable on the model, but the viewset withholds
+   * a point that names no project at all — an unattributable statutory record
+   * has no scope to be checked against — so a row served here always has one.
+   */
+  project: string | null;
+  project_id_str?: string | null;
+  project_name?: string | null;
+  beacon_code?: string | null;
   name: string;
-  title?: string;
-  description?: string;
-  layer_type: 'GNSS_RTK_BEACON' | 'GPR_TRANSECT' | 'PUNDIT_STATION' | 'AI_ANOMALY' | 'BIM_ANCHOR' | 'DRONE_POINT';
-  lat: number;
-  lng: number;
-  latitude?: number;
-  longitude?: number;
-  elevation_m: number;
-  accuracy_mm: number;
-  accuracy_cm?: number;
-  deviation_mm?: number;
-  severity?: 'NORMAL' | 'WARNING' | 'CRITICAL';
-  structural_element_name?: string;
+  title?: string | null;
+  description?: string | null;
+  /** Free text on the model — not a constrained choice set. */
+  layer_type: string;
+  /** Null until the point was actually measured. A null pair is not plottable. */
+  lat: number | null;
+  lng: number | null;
+  elevation_m: number | null;
+  accuracy_mm: number | null;
+  deviation_mm: number | null;
+  severity?: string | null;
+  structural_element_name?: string | null;
   timestamp: string;
 }
 
@@ -383,6 +418,7 @@ function mapPunditTest(row: any): PunditTest {
       velocity_km_s: r.velocity_km_s ?? null,
       ecs_mpa: r.ecs_mpa ?? null,
       crack_depth_mm: r.crack_depth_mm ?? null,
+      strength_curve_snapshot: r.strength_curve_snapshot ?? null,
       notes: r.notes || undefined,
     })),
     weather_condition: row.weather_condition || '',
@@ -402,7 +438,11 @@ function mapPunditTest(row: any): PunditTest {
     concrete_quality_rating: GRADE_TO_RATING[row.quality_grade] ?? 'PENDING',
     estimated_crack_depth_mm: row.crack_depth_mm ?? null,
     operator_name: row.operator_name ?? '',
-    test_date: row.tested_at ?? row.created_at ?? '',
+    // The recorded test date is the real field; tested_at/created_at remain
+    // only as fallbacks for rows written before it existed.
+    test_date: row.test_date ?? row.tested_at ?? row.created_at ?? '',
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
     notes: row.notes || undefined,
     created_at: row.created_at ?? '',
     file_count: Array.isArray(row.files) ? row.files.length : 0,
@@ -807,6 +847,84 @@ export const linkGPRSurveyToElement = async (surveyId: string, elementName: stri
   return mapGPRSurvey(unwrap<any>(res, res));
 };
 
+/**
+ * What one of an instrument's own columns is mapped to.
+ *
+ * A plain string is the common case: the instrument's column renamed to a
+ * contract key. The object form adds the scale from the instrument's unit to
+ * the contract's — `{ to: 'path_length_l_mm', scale: 1000 }` for a PL-200 whose
+ * `Distance` is in metres.
+ *
+ * The scale is not a nicety. Without it the metres a PUNDIT writes read as
+ * millimetres, and every pulse velocity from that file lands a thousand times
+ * too low: positive, plausible, and impossible to tell from a slow reading
+ * once it is on a record.
+ *
+ * `null` is the third answer, and it is not the same as leaving the column
+ * out. An omitted column is one nobody has accounted for, and the importer
+ * refuses the whole file for it. `null` says the column was looked at and set
+ * aside — which is what lets a PL-200, whose export has six columns and whose
+ * contract reads two, be imported at all.
+ */
+export type ColumnMappingValue =
+  | string
+  | { to: string; scale: number }
+  | null;
+
+/** An instrument's export headers mapped to the platform's contract keys. */
+export type ColumnMapping = Record<string, ColumnMappingValue>;
+
+/**
+ * One column of an instrument's export, as the platform read it.
+ *
+ * `header` and `samples` are read from the file — facts. `target`, `scale` and
+ * `note` are what the platform makes of them — a proposal, which is why the
+ * panel shows them beside the values they were drawn from and asks before
+ * anything is saved.
+ */
+export interface SuggestedColumn {
+  /** The header exactly as the file spells it. Never typed, only read. */
+  header: string;
+  /** Up to five of its values as written, so a unit can be checked by eye. */
+  samples: string[];
+  /** A contract key, or null when the platform will not read this column. */
+  target: string | null;
+  target_label: string;
+  /** 1 unless the column's unit needs converting on the way in. */
+  scale: number;
+  /**
+   * Why this target: `exact` (the header already is a contract key), `alias`
+   * (a known instrument name for one), `declined` (recognised and deliberately
+   * not read — `note` says why), `unknown` (nothing to go on).
+   */
+  basis: "exact" | "alias" | "declined" | "unknown";
+  /** One sentence for the operator, empty when there is nothing to say. */
+  note: string;
+}
+
+/** A contract column, for the picker. Sent by the server so it cannot drift. */
+export interface AcceptedColumn {
+  key: string;
+  label: string;
+  group: "measurement" | "context";
+}
+
+/** What `suggestColumnMapping` returns. */
+export interface ColumnSuggestionResult {
+  device: string;
+  device_reference: string;
+  file_name: string;
+  columns: SuggestedColumn[];
+  /**
+   * A ready-to-save mapping: every column the platform could place, plus a
+   * `null` for each one it recognised and deliberately declines. Columns
+   * nothing is known about are absent — the inspector decides those, and the
+   * editor records the decision on save.
+   */
+  mapping: ColumnMapping;
+  accepted: AcceptedColumn[];
+}
+
 /** Registered Digital Eye field hardware (GET /digital-eye/devices/). */
 export interface FieldDeviceRecord {
   id: string;
@@ -823,7 +941,50 @@ export interface FieldDeviceRecord {
   battery_level: number | null;
   last_seen: string | null;
   calibration_date: string | null;
+  calibration_expiry: string | null;
+  assigned_project: string | null;
+  notes: string;
+  /**
+   * This instrument's own export headers mapped to the platform's contract
+   * keys. Empty means its export already speaks the documented template.
+   *
+   * Read by the importer on every file from this device, so it is the fix for
+   * a refused export — and it lives here rather than on a field laptop so one
+   * correction applies to every site at once.
+   */
+  column_mapping: ColumnMapping;
+  /**
+   * Whether the platform has written this instrument's config for the field
+   * gateway, so its exports are pushed without anyone opening an upload form.
+   *
+   * `false` means sync was never set up — not that it was set up and is idle.
+   * The two are different things to tell an officer, and the panel says the
+   * first rather than the second.
+   *
+   * Read-only on the server: it is set by `setDeviceGateway`, which mints the
+   * credential and writes the config in one step. A plain PATCH cannot turn it
+   * on, because a flag saying "sync is on" with no config behind it would be
+   * the exact failure this feature exists to remove.
+   */
+  gateway_enabled: boolean;
+  /**
+   * The folder this instrument's exports are watched in, **as the gateway
+   * container sees it** (`/inbox/DE-XXXXXXXX`).
+   *
+   * Stated by the server because it is a deployment setting there and cannot be
+   * derived here. It is not the path the site syncs to — that is a host path
+   * only the deployment knows — so the panel shows the folder *name* as the
+   * actionable half and this as the one to check a gateway log against.
+   *
+   * `null` means this deployment cannot say: gateway provisioning is switched
+   * off, or the inbox root is unset. Shown as "not reported", never as a
+   * guessed path — a folder that does not exist would have the site syncing
+   * into nothing.
+   */
+  gateway_inbox: string | null;
   is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export const getFieldDevices = async (params?: { device_type?: string; project?: string }): Promise<FieldDeviceRecord[]> => {
@@ -837,12 +998,123 @@ export const getFieldDevices = async (params?: { device_type?: string; project?:
   return Array.isArray(rows) ? rows : [];
 };
 
+/** The fields a person may set when registering an instrument. */
+export interface FieldDeviceInput {
+  device_id: string;
+  device_type: string;
+  name?: string;
+  model?: string;
+  manufacturer?: string;
+  firmware_version?: string;
+  assigned_project?: string | null;
+  calibration_date?: string | null;
+  calibration_expiry?: string | null;
+  notes?: string;
+  column_mapping?: ColumnMapping;
+}
+
+/**
+ * `POST /digital-eye/devices/` — register an instrument.
+ *
+ * `device_id` is the serial or asset tag and is unique across the registry.
+ * It is the provenance stamped on every reading the instrument produces, so it
+ * is the one field a statutory record cannot be wrong about — which is why the
+ * form asks for it and never generates one.
+ *
+ * `device_reference`, `status` and the telemetry fields (battery, position,
+ * last seen) are the server's: a device is `registered` until it reports, and
+ * nothing here may claim otherwise.
+ */
+export const createFieldDevice = async (input: FieldDeviceInput): Promise<FieldDeviceRecord> => {
+  const res = await api.post('/digital-eye/devices/', input);
+  return unwrap<any>(res, res);
+};
+
+/**
+ * `PATCH /digital-eye/devices/<id>/` — correct a device record.
+ *
+ * Partial by design: the common use is changing one thing — the column
+ * mapping after an export was refused — and sending the whole record back
+ * would risk overwriting a field the form does not carry.
+ */
+export const updateFieldDevice = async (
+  deviceId: string,
+  input: Partial<FieldDeviceInput>
+): Promise<FieldDeviceRecord> => {
+  const res = await api.patch(`/digital-eye/devices/${deviceId}/`, input);
+  return unwrap<any>(res, res);
+};
+
+/**
+ * `POST /digital-eye/devices/<id>/column-mapping/suggest/` — read one of this
+ * instrument's exports and say what its columns are.
+ *
+ * Uploading the file here records nothing. The server reads the header row,
+ * works out which contract column each one looks like, and hands back a
+ * proposal; saving it is a separate `updateFieldDevice`. That separation is
+ * deliberate — a column mapping is indistinguishable from a correct one once
+ * rows have been written from it, so the platform may read a file and say what
+ * it makes of it, but a person has to accept it.
+ *
+ * The instrument's own header names come back verbatim, which is the point:
+ * they are the words the inspector can see in their export, not a guess at
+ * them, and nobody has to type them.
+ *
+ * `file` is optional. Without one the call returns the accepted contract and
+ * nothing else, which is what an inspector editing a mapping they already
+ * recorded needs — they have no export in hand, but the picker still has to
+ * offer the platform's own columns, and the server has to be the one to say
+ * which those are.
+ */
+export const suggestColumnMapping = async (
+  deviceId: string,
+  file?: File | null
+): Promise<ColumnSuggestionResult> => {
+  const form = new FormData();
+  if (file) form.append("file", file);
+  const res = await api.post(
+    `/digital-eye/devices/${deviceId}/column-mapping/suggest/`,
+    form
+  );
+  return unwrap<any>(res, res);
+};
+
+/**
+ * `POST /digital-eye/devices/<id>/gateway/` — turn automatic sending on or off.
+ *
+ * Turning it on mints a credential for this instrument and writes the field
+ * gateway's config for it, in one step. **The credential is never returned**:
+ * it goes from the mint straight into the config file the gateway reads, so
+ * nobody — including this client — ever holds it. That is the whole reason
+ * this is one call rather than a token to copy somewhere by hand.
+ *
+ * Returns the device with its new `gateway_enabled` state; the caller re-reads
+ * nothing else, because nothing else changed.
+ *
+ * A refusal arrives as a message worth showing verbatim: an instrument whose
+ * captures have no file contract yet is told why, and a deployment with no
+ * config directory says so rather than appearing to have worked.
+ */
+export const setDeviceGateway = async (
+  deviceId: string,
+  enabled: boolean
+): Promise<FieldDeviceRecord> => {
+  const res = await api.post(`/digital-eye/devices/${deviceId}/gateway/`, { enabled });
+  return unwrap<any>(res, res);
+};
+
 export const getPunditTests = async (params?: {
   project?: string;
   element_name?: string;
   search?: string;
   test_type?: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
   quality_grade?: string;
+  /** Measurement-browser filters (spec A5). All opt-in — omitting them
+   *  returns exactly what this call returned before they existed. */
+  date_from?: string;   // YYYY-MM-DD, inclusive
+  date_to?: string;     // YYYY-MM-DD, inclusive
+  operator?: string;    // exact operator_name
+  curve?: string;       // StrengthCurve id
 }): Promise<PunditTest[]> => {
   const res = await api.get('/digital-eye/pundit-tests/', {
     params: {
@@ -850,6 +1122,10 @@ export const getPunditTests = async (params?: {
       search: params?.search || undefined,
       test_type: params?.test_type || undefined,
       quality_grade: params?.quality_grade || undefined,
+      date_from: params?.date_from || undefined,
+      date_to: params?.date_to || undefined,
+      operator: params?.operator || undefined,
+      curve: params?.curve || undefined,
     },
   });
   const rows = unwrap<any[]>(res, []);
@@ -906,15 +1182,18 @@ export interface PunditTestInput {
   crack_path_length_mm?: number;
   crack_pulse_time_us?: number;
   uncracked_pulse_time_us?: number;
-  // Surface-quality / homogeneity observations.
+  // Surface-quality / homogeneity observations. Both are nullable because the
+  // operator may simply not have taken them — `surface_temperature_c` is a
+  // nullable column on the model, and the request builder already drops a null
+  // rather than sending it, so `null` here means "not measured", not "0 °C".
   surface_condition?: string;
-  surface_temperature_c?: number;
+  surface_temperature_c?: number | null;
   rebound_number?: number;
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
   floor?: string;
   // Optional concrete age at test time in days (7 Sep review item 18).
-  concrete_age_days?: number;
+  concrete_age_days?: number | null;
   // Multi-point readings (A/B/C…): the operator types the raw field
   // measurements only — transit times (pulse velocity), cracked/uncracked
   // times (crack depth) or surface conditions (surface quality). Velocity /
@@ -1120,6 +1399,163 @@ export const exportPunditResults = async (projectId: string): Promise<string> =>
   a.remove();
   window.URL.revokeObjectURL(url);
   return filename;
+};
+
+/** One per-point row of a measurement export (spec A5). Values are the stored
+ *  ones: a strength that was never computed is null, never 0. */
+export interface MeasurementExportRow {
+  test_reference: string;
+  test_date: string | null;
+  structural_element: string | null;
+  point_label: string | null;
+  operator_name: string | null;
+  path_length_mm: number | null;
+  transit_time_us: number | null;
+  /** m/s. Null when no velocity was derived for the point. */
+  velocity_ms: number | null;
+  /** Null when no curve applied, or the velocity fell outside the curve's
+   *  recorded valid range — never 0, which would read as a real strength. */
+  estimated_strength_mpa: number | null;
+  rebound_number: number | null;
+  crack_depth_mm: number | null;
+  curve_id: string | null;
+  curve_name: string | null;
+  curve_type: string | null;
+  curve_standard: string | null;
+}
+
+/** The self-describing payload of GET /digital-eye/pundit-tests/export_json/.
+ *  Mirrors apps/digital_eye/views.py::export_json. `meta.filters` is the
+ *  reason this file exists as a type: it records which filters produced it, so
+ *  the file can never be mistaken for a whole-project dump once it has left
+ *  the screen it was taken from. */
+export interface MeasurementExportPayload {
+  meta: {
+    exported_at: string;
+    project: { id: string; name: string } | null;
+    filters: Record<string, string>;
+    row_count: number;
+    test_count: number;
+    filters_note: string;
+    unit_note: string;
+    provenance_note: string;
+  };
+  /** The distinct curves behind the rows, with the parameters that were
+   *  actually used — read from each reading's stored snapshot, so this is a
+   *  record of what was applied, not a re-read of today's curves. */
+  curves_used: Array<{
+    curve_id: string;
+    curve_name: string | null;
+    curve_type: string | null;
+    standard: string | null;
+    formula: string | null;
+    formula_params: Record<string, any> | null;
+    valid_range_ms: [number, number] | null;
+  }>;
+  rows: MeasurementExportRow[];
+  provenance_log: Array<{
+    timestamp: string;
+    action: string;
+    user_name: string | null;
+    user_role: string | null;
+    severity: string | null;
+    details: Record<string, any>;
+  }>;
+}
+
+/** The filters the reporting browser can put on an export. Every one is
+ *  opt-in and mirrors a query param get_queryset understands. */
+export interface MeasurementExportFilters {
+  project?: string;
+  test_type?: string;
+  quality_grade?: string;
+  structural_element?: string;
+  date_from?: string;
+  date_to?: string;
+  operator?: string;
+  curve?: string;
+  search?: string;
+}
+
+/**
+ * Export exactly the measurements the reporting browser is showing as JSON
+ * (spec A5 "Export JSON"), and hand back the parsed payload.
+ *
+ * The same filters the table was built from are sent, so the file can never be
+ * a wider dump than the view it was taken from — and the backend records them
+ * in `meta.filters` so the file says so itself.
+ *
+ * The payload is returned rather than only saved because the caller states the
+ * verified row count afterwards. A download that silently wrote a different
+ * number of rows than the screen showed is exactly the failure this export
+ * exists to prevent.
+ */
+export const exportPunditMeasurementsJson = async (
+  filters: MeasurementExportFilters,
+): Promise<{ filename: string; payload: MeasurementExportPayload }> => {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) query.set(key, String(value));
+  });
+
+  let blob: Blob;
+  try {
+    const res = await api.get(
+      `/digital-eye/pundit-tests/export_json/?${query.toString()}`,
+      { responseType: 'blob' },
+    );
+    blob = res instanceof Blob
+      ? res
+      : new Blob([res as any], { type: 'application/json' });
+  } catch (err: any) {
+    // The endpoint answers errors as JSON, but this request asks for a blob,
+    // so the reason arrives wrapped in one. Read it out rather than showing
+    // the transport's "Request failed with status code 404" — an out-of-scope
+    // project is a specific refusal and the user should be told which it is.
+    let detail = err?.message || 'The export could not be produced.';
+    const body = err?.response?.data;
+    if (body instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await body.text());
+        detail = parsed?.detail || parsed?.message || parsed?.errors?.[0] || detail;
+      } catch {
+        // Not JSON (a proxy error page, say) — keep the transport message.
+      }
+    }
+    throw new Error(detail);
+  }
+
+  let payload: MeasurementExportPayload;
+  try {
+    payload = JSON.parse(await blob.text()) as MeasurementExportPayload;
+  } catch {
+    // Never save a file that will not open. Nothing is downloaded.
+    throw new Error(
+      'The export did not come back as JSON, so nothing was downloaded.',
+    );
+  }
+
+  // Named to match the backend's own Content-Disposition convention. The
+  // response interceptor unwraps the body before the caller sees it, so the
+  // header is not reachable here (exportPunditResults has the same blind spot
+  // and silently falls back to a fixed name).
+  const scope = payload?.meta?.project?.name
+    ? payload.meta.project.name.slice(0, 40).replace(/ /g, '_')
+    : 'all_projects';
+  const filename = `nexucon_pundit_measurements_${scope}.json`;
+
+  const file = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json',
+  });
+  const url = window.URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return { filename, payload };
 };
 export interface PunditProjectAnalysis {
   project: string;
@@ -1357,6 +1793,7 @@ export const getPunditAIAnalyses = async (params?: { project?: string }): Promis
     params: {
       project: params?.project || undefined,
       analysis_type: 'pundit',
+      is_rollup: 'true',
     },
   });
   const rows = unwrap<any[]>(res, []);
@@ -1421,7 +1858,14 @@ export const getProcessingQueue = async (params?: { project?: string; status?: s
   return Array.isArray(list) ? list : [];
 };
 
-export const getEvidenceSpatialPoints = async (params?: { project?: string; layer?: string }): Promise<EvidenceSpatialPoint[]> => {
+/**
+ * Recorded spatial evidence points for a project.
+ *
+ * The filter is `layer_type`, matching the viewset's own query parameter — a
+ * `layer` parameter was sent here in this module's signature but is not a name
+ * the server reads, so filtering by it silently returned every layer.
+ */
+export const getEvidenceSpatialPoints = async (params?: { project?: string; layer_type?: string }): Promise<EvidenceSpatialPoint[]> => {
   const res = await api.get('/digital-eye/spatial-map/', { params });
   const list = unwrap<EvidenceSpatialPoint[]>(res, []);
   return Array.isArray(list) ? list : [];
@@ -1559,6 +2003,12 @@ export interface ReportCmsSection {
   requires_project?: boolean;
   /** True when the section needs recorded data that does not exist yet. */
   requires_data?: boolean;
+  /**
+   * §2.2 wireframe: advisory character limit for the editor's
+   * character-count display (advice, not a hard reject); null when the
+   * section has no limit.
+   */
+  max_length?: number | null;
 }
 
 export interface ReportCmsSectionsResponse {
@@ -1658,6 +2108,96 @@ export const downloadNdtReportWord = async (projectId: string): Promise<string> 
   return filename;
 };
 
+// ---- Report structure (REFINED EXECUTIVE SUMMARY §2.5) ----
+// The per-project section order, enable/disable state and custom sections
+// for the statutory NDT report. Both emitters (certified PDF + .docx
+// working copy) render exactly this configuration, and the §2.1 preview
+// sidebar reflects it too.
+
+export interface ReportStructureEntry {
+  key: string;
+  label: string;
+  is_custom: boolean;
+  title: string | null;
+  body: string | null;
+  is_enabled: boolean;
+}
+
+export interface ReportStructureResponse {
+  project: string;
+  sections: ReportStructureEntry[];
+}
+
+const structureResponse = (res: unknown): ReportStructureResponse => {
+  const data = unwrap<ReportStructureResponse | null>(res, null);
+  if (!data || !Array.isArray(data.sections)) {
+    throw new Error('The report structure could not be loaded.');
+  }
+  return data;
+};
+
+/** The project's report structure as both emitters will render it. */
+export const getReportStructure = async (
+  projectId: string,
+): Promise<ReportStructureResponse> => {
+  const res = await api.get(`/reports/projects/${projectId}/structure/`);
+  return structureResponse(res);
+};
+
+/** Drag-to-reorder: the complete key list in its new order. Directors only. */
+export const reorderReportStructure = async (
+  projectId: string,
+  order: string[],
+): Promise<ReportStructureResponse> => {
+  const res = await api.post(
+    `/reports/projects/${projectId}/structure/reorder/`, { order });
+  return structureResponse(res);
+};
+
+/** Enable/disable one section (built-in or custom). Directors only. */
+export const toggleReportSection = async (
+  projectId: string,
+  sectionKey: string,
+  isEnabled: boolean,
+): Promise<ReportStructureResponse> => {
+  const res = await api.post(
+    `/reports/projects/${projectId}/structure/${sectionKey}/toggle/`,
+    { is_enabled: isEnabled });
+  return structureResponse(res);
+};
+
+/** Append a custom section at the end of the document. Directors only. */
+export const addReportCustomSection = async (
+  projectId: string,
+  title: string,
+  body: string,
+): Promise<ReportStructureResponse> => {
+  const res = await api.post(
+    `/reports/projects/${projectId}/structure/custom/`, { title, body });
+  return structureResponse(res);
+};
+
+/** Edit a custom section's title/body. Directors only. */
+export const updateReportCustomSection = async (
+  projectId: string,
+  sectionKey: string,
+  fields: { title?: string; body?: string },
+): Promise<ReportStructureResponse> => {
+  const res = await api.patch(
+    `/reports/projects/${projectId}/structure/${sectionKey}/`, fields);
+  return structureResponse(res);
+};
+
+/** Remove a custom section entirely (built-ins are disabled, not deleted). */
+export const deleteReportCustomSection = async (
+  projectId: string,
+  sectionKey: string,
+): Promise<ReportStructureResponse> => {
+  const res = await api.delete(
+    `/reports/projects/${projectId}/structure/${sectionKey}/`);
+  return structureResponse(res);
+};
+
 /**
  * Download an archived dossier — the exact bytes the platform generated and
  * sealed (SHA-256 checksummed) at generation time — via
@@ -1716,6 +2256,156 @@ export const openArchivedReport = async (reportId: string): Promise<void> => {
 
 export type CurveType = 'linear' | 'polynomial' | 'exponential' | 'sonreb' | 'lookup';
 
+/**
+ * Human label for a curve type. The single source of truth: the Curve Manager
+ * and the measurement browser both name curve types, and a second copy would
+ * let the same curve be called two things in two places.
+ *
+ * Mirrors apps/digital_eye/strength_curves.py CURVE_TYPES / the models'
+ * get_curve_type_display — when the server sends `curve_type_display` that
+ * wins, because a label added server-side should not be silently overridden by
+ * this map not knowing it yet.
+ */
+export const CURVE_TYPE_LABEL: Record<CurveType, string> = {
+  linear: 'Linear',
+  polynomial: 'Polynomial (deg 2)',
+  exponential: 'Exponential',
+  sonreb: 'SonReb (UPV + Rebound)',
+  lookup: 'Lookup table',
+};
+
+/** The label for a curve type as stored on a strength snapshot, where only the
+ *  raw `curve_type` is available (no `curve_type_display`). Falls back to the
+ *  raw value rather than to a guess, so an unrecognised type still says what
+ *  it is instead of being labelled something it is not. */
+export function curveTypeLabel(curveType: string | null | undefined): string | null {
+  if (!curveType) return null;
+  return CURVE_TYPE_LABEL[curveType as CurveType] || curveType;
+}
+
+/** How a curve's residual standard error is factored into the reported f_cu
+ *  (15 Sep 2026 client direction). Mirrors
+ *  apps/digital_eye/se_adjustment.py ADJUSTMENT_METHODS.
+ *
+ *  'bias_correction' is the platform's measured form of Lagos State's
+ *  "add 2 to close the error gap" practice: the correction is
+ *  mean(observed − predicted) over the curve's OWN calibration pairs, so it
+ *  is data, not a constant. 'confidence_margin' subtracts k × s, reporting a
+ *  conservative characteristic (lower-bound) strength in the BS EN 13791
+ *  sense. */
+export type SEAdjustmentMethod = 'none' | 'bias_correction' | 'confidence_margin';
+
+/** The increment the correction was applied AS, when it was folded into the
+ *  pulse velocity rather than the strength directly — the client's method
+ *  (15 Sep 2026: "consider the standard error in the post velocity before we
+ *  convert it to FCU"). A standard error is in N/mm² and a velocity in m/s,
+ *  so the two are not directly additive: the error is converted through the
+ *  curve's own slope, df/dV, into the velocity increment that PRODUCES it.
+ *  Null when the correction stayed on the strength instead — a lookup table,
+ *  a curve that is flat at this velocity, or a move that would leave the
+ *  calibrated range, where the platform never extrapolates. Every field is
+ *  computed server-side; nothing here is derived in the browser. */
+export interface SEVelocityStep {
+  /** df/dV at this velocity, N/mm² per m/s — the exchange rate. */
+  slope_mpa_per_ms: number;
+  /** The velocity increment, m/s. Its sign is the policy's: a confidence
+   *  margin deducts, a bias correction adds. */
+  delta_velocity_ms: number;
+  base_velocity_ms: number;
+  adjusted_velocity_ms: number;
+}
+
+/** The account of what was done to one reported figure. Always present —
+ *  a figure is never returned without the statement of whether an
+ *  adjustment moved it. Mirrors apply_se_adjustment()'s disclosure dict. */
+export interface SEAdjustmentDisclosure {
+  method: SEAdjustmentMethod;
+  method_label: string;
+  factor: number;
+  n_points_averaged: number | null;
+  base_f_cu_mpa: number | null;
+  adjusted_f_cu_mpa: number | null;
+  standard_error_mpa: number | null;
+  mean_residual_mpa: number | null;
+  applied: boolean;
+  /** The policy narrative without the resulting figure — the sentence
+   *  describing WHAT the policy does, kept apart from the sentence quoting
+   *  the number it produced. */
+  summary: string;
+  detail: string;
+  velocity_step?: SEVelocityStep | null;
+}
+
+/** The curve's standard-error picture. Every figure is computed from the
+ *  curve's real calibration pairs; `standard_error_mpa` is null — with an
+ *  honest `unavailable_reason` — when the data cannot support one (a lookup
+ *  table, fewer than 3 pairs, or zero residual degrees of freedom). */
+export interface SEAnalysis {
+  n_pairs: number;
+  standard_error_mpa: number | null;
+  mean_residual_mpa: number | null;
+  r2_score: number | null;
+  aic: number | null;
+  adjustment_available: boolean;
+  unavailable_reason: string | null;
+  method: SEAdjustmentMethod;
+  factor: number;
+  min_pairs_required: number;
+  recommendation: string | null;
+  /** Plain-English explanation of each statistic (r2_score, standard_error,
+   *  mean_residual, aic) — the 15 Sep 2026 "self-explanatory document" item,
+   *  served from the backend so every surface says the same thing. */
+  definitions: Record<string, string>;
+  /** Which registered standard governs each statistic, keyed the same as
+   *  `definitions` — the codes resolve against `StandardEntry.code`. Served
+   *  from the backend (STAT_REFERENCES) so a surface cannot cite a document
+   *  the registry does not hold, or cite a different one from its neighbour.
+   *  The 15 Sep 2026 review asked for exactly this: "show me a literature on
+   *  this". */
+  references: Record<string, string[]>;
+}
+
+/** One standard the mathematical model rests on. `role` is what the UI
+ *  groups by: 'measurement' = a test method, 'correlation' = how an
+ *  indirect measurement becomes a strength, 'statistics' = the literature
+ *  behind the model-quality figures (AIC), which is a paper rather than a
+ *  standard and is labelled as such. */
+export interface StandardEntry {
+  code: string;
+  title: string;
+  role: 'measurement' | 'correlation' | 'statistics';
+  role_label: string;
+  scope: string;
+  platform_use: string;
+  /** Set when the reference needs qualifying — e.g. the "BS 1881-23"
+   *  recorded on 15 Sep 2026, which does not exist as a published standard,
+   *  or the limits of what AIC can be read to mean. */
+  note: string | null;
+}
+
+/** Body returned by GET …/curves/se-analysis/?project=<id>. */
+export interface SEAnalysisResponse {
+  project: string;
+  curve: StrengthCurve | null;
+  curve_snapshot: CurveSnapshot;
+  analysis: SEAnalysis;
+}
+
+/** Nexucon Link platform system settings (the wireframe's "System
+ *  Settings" layer). `preferred_curve_type` is what the calibration
+ *  workflow pre-selects — exponential by default, per the direction that
+ *  concrete behaviour is non-linear. It activates nothing by itself. */
+export interface NexuconLinkSettings {
+  preferred_curve_type: CurveType;
+  preferred_curve_type_display?: string;
+  default_standard: string;
+  velocity_unit: string;
+  strength_unit: string;
+  updated_by?: string | null;
+  updated_by_name?: string | null;
+  updated_at?: string;
+}
+
 /** A calibration curve row (GET/POST /digital-eye/nexucon-link/curves/).
  *  Formula parameters are in the m/s velocity domain. */
 export interface StrengthCurve {
@@ -1735,6 +2425,14 @@ export interface StrengthCurve {
   r2_score?: number | null;
   standard_error?: number | null;
   aic?: number | null;
+  /** The standard-error policy configured on this curve. 'none' until a
+   *  Director deliberately enables one. */
+  se_adjustment_method: SEAdjustmentMethod;
+  se_adjustment_method_display?: string;
+  /** k for the confidence margin (1.0 ≈ 84% one-sided, 1.645 ≈ 95%
+   *  one-sided). Unused by the other methods. */
+  se_adjustment_factor: number;
+  se_analysis?: SEAnalysis;
   is_default?: boolean;
   provenance?: { source?: string; notes?: string; [key: string]: any } | null;
   version?: number;
@@ -1756,6 +2454,9 @@ export interface CurveSnapshot {
   r2_score?: number | null;
   provenance_source?: string | null;
   temperature_correction_applied?: boolean;
+  /** What the standard-error policy did to the figure this snapshot
+   *  produced. Null only on the built-in fallback, which has no regression. */
+  se_adjustment?: SEAdjustmentDisclosure | null;
 }
 
 /** Built-in fallback curve — identical to the backend engine's last resort
@@ -1869,7 +2570,17 @@ export interface CurvePreviewResponse {
   velocity_m_s: number | null;
   temperature_correction_applied: boolean;
   corrected_velocity_m_s: number | null;
+  /** The reported figure — the curve estimate with the curve's
+   *  standard-error policy applied. */
   f_cu_mpa: number | null;
+  /** The curve estimate BEFORE the standard-error policy moved it, so the
+   *  adjustment is never hidden inside a single number. */
+  f_cu_unadjusted_mpa: number | null;
+  /** How many test points this velocity averages (the client's three-point
+   *  aggregation), when supplied. The confidence margin uses the standard
+   *  error of that mean. */
+  n_points: number | null;
+  se_adjustment: SEAdjustmentDisclosure;
   status: 'ok' | 'rebound_number_required' | 'below_valid_range' | 'above_valid_range' | 'not_computable';
   curve_snapshot: CurveSnapshot;
 }
@@ -1904,6 +2615,11 @@ export const createStrengthCurve = async (input: {
   valid_range_min_ms?: number;
   valid_range_max_ms?: number;
   provenance?: Record<string, any>;
+  /** The standard-error policy to record on the curve. The backend refuses
+   *  anything but 'none' unless the curve carries at least 3 real
+   *  calibration pairs, since no error estimate could exist without them. */
+  se_adjustment_method?: SEAdjustmentMethod;
+  se_adjustment_factor?: number;
 }): Promise<StrengthCurve> => {
   const res = await api.post('/digital-eye/nexucon-link/curves/', input);
   return unwrap<any>(res, res);
@@ -1922,14 +2638,52 @@ export const getActiveCurve = async (projectId: string): Promise<ActiveCurveResp
   return unwrap<any>(res, null);
 };
 
-/** Make a saved curve the project's active calibration (Director-level). */
+/**
+ * Make a saved curve the project's active calibration (Director-level).
+ *
+ * `active_curve` is the curve's **name**, not the curve — the server answers
+ * with the label so the caller can report what was activated without holding
+ * a copy of the record. It was typed as a whole `StrengthCurve` before, which
+ * was simply wrong: a consumer reading `.curve_type` or `.id` off it got
+ * `undefined` at runtime with no type error to catch it.
+ */
 export const activateStrengthCurve = async (
   curveId: string,
   projectId: string
-): Promise<{ project: string; active_curve: StrengthCurve; curve_snapshot: CurveSnapshot }> => {
+): Promise<{ project: string; active_curve: string; curve_snapshot: CurveSnapshot }> => {
   const res = await api.post(`/digital-eye/nexucon-link/curves/${curveId}/activate/`, {
     project: projectId,
   });
+  return unwrap<any>(res, res);
+};
+
+/**
+ * Return a project to the platform default calibration (Director-level).
+ *
+ * There is no is_active flag on a curve — "active" is a per-project setting,
+ * and the platform default is what applies when a project's own choice is
+ * unset. So choosing the default for a project means clearing that choice,
+ * not pointing at a curve. `changed` reports whether anything actually
+ * moved, so a project already on the default is not reported as having been
+ * switched. Records already stored keep the snapshot of the curve that
+ * produced them.
+ *
+ * Named verb-first, like every other call here — deliberately NOT `use…`,
+ * which React's rules-of-hooks reads as a hook and refuses to see called
+ * from an async handler (it lint-errored on exactly that).
+ */
+export const restorePlatformDefaultCurve = async (
+  projectId: string,
+): Promise<{
+  project: string;
+  previous_active_curve: string | null;
+  changed: boolean;
+  curve_snapshot: CurveSnapshot;
+}> => {
+  const res = await api.post(
+    '/digital-eye/nexucon-link/curves/use-platform-default/',
+    { project: projectId },
+  );
   return unwrap<any>(res, res);
 };
 
@@ -2068,21 +2822,93 @@ export const getCoreSamplePairs = async (
 };
 
 /** Live f_cu preview for one measurement through the project's active
- *  curve — the same maths (incl. temperature correction) the server applies
- *  when the reading is actually stored. */
+ *  curve — the same maths (incl. temperature correction and the curve's
+ *  standard-error policy) the server applies when the reading is actually
+ *  stored. `n_points` is how many test points this velocity averages. */
 export const previewCurve = async (input: {
   project: string;
   path_length_mm: number;
   transit_time_us: number;
   temperature_c?: number | null;
   rebound_number?: number | null;
+  n_points?: number | null;
 }): Promise<CurvePreviewResponse> => {
   const res = await api.post('/digital-eye/nexucon-link/curves/preview/', input);
   return unwrap<any>(res, res);
 };
 
+/** The standard-error analysis behind a project's active curve: the standard
+ *  error, the measured mean residual (the figure behind the "+2 close the
+ *  gap" convention), R², AIC, whether the data supports an adjustment, and
+ *  the plain-English definition of each statistic. Everything is computed
+ *  from the curve's real calibration pairs. */
+export const getSEAnalysis = async (projectId: string): Promise<SEAnalysisResponse> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/se-analysis/', {
+    params: { project: projectId },
+  });
+  return unwrap<any>(res, res);
+};
+
+/** The standards the mathematical model rests on — which document covers
+ *  the measurement and which governs turning it into a strength. Static
+ *  registry, so a failure here is a real error, not a missing record. */
+export const getStandards = async (): Promise<StandardEntry[]> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/standards/');
+  const body = unwrap<any>(res, {});
+  const rows = body?.standards;
+  return Array.isArray(rows) ? rows : [];
+};
+
+/** Read the Nexucon Link platform system settings. */
+export const getNexuconLinkSettings = async (): Promise<NexuconLinkSettings> => {
+  const res = await api.get('/digital-eye/nexucon-link/settings/');
+  return unwrap<any>(res, res);
+};
+
+/** Update the platform settings (Director-level on the backend). Only the
+ *  fields sent are changed. */
+export const updateNexuconLinkSettings = async (
+  patch: Partial<Pick<NexuconLinkSettings,
+    'preferred_curve_type' | 'default_standard' | 'velocity_unit' | 'strength_unit'>>
+): Promise<NexuconLinkSettings> => {
+  const res = await api.patch('/digital-eye/nexucon-link/settings/', patch);
+  return unwrap<any>(res, res);
+};
+
+/** The adjustment policies, in the order the UI offers them, with the
+ *  client-facing label for each. */
+export const SE_ADJUSTMENT_OPTIONS: Array<{
+  value: SEAdjustmentMethod;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'none',
+    label: 'No adjustment',
+    hint: 'Report the curve estimate as fitted. The default.',
+  },
+  {
+    value: 'bias_correction',
+    label: 'Bias correction',
+    hint:
+      'Add the mean residual measured from this curve’s own calibration pairs — the ' +
+      '“add 2 to close the gap” practice, computed rather than assumed.',
+  },
+  {
+    value: 'confidence_margin',
+    label: 'Confidence margin',
+    hint:
+      'Subtract k × the standard error, reporting a conservative lower-bound ' +
+      '(characteristic) strength. Uses s/√n when a figure averages n test points.',
+  },
+];
+
 /** Curve-parameter field layout per type, for the calibration UI. All
- *  velocities in m/s, strength in MPa — matching the engine's domain. */
+ *  velocities in m/s, strength in MPa — matching the engine's domain.
+ *
+ *  The exponential labels are descriptive (15 Sep 2026 client direction):
+ *  A, B and C are the standard exponential coefficients, but a Director
+ *  reading a saved curve should not have to remember which is which. */
 export const CURVE_PARAM_FIELDS: Record<CurveType, Array<{ key: string; label: string; hint?: string }>> = {
   linear: [
     { key: 'm', label: 'm (slope)', hint: 'MPa per (m/s)' },
@@ -2090,9 +2916,9 @@ export const CURVE_PARAM_FIELDS: Record<CurveType, Array<{ key: string; label: s
   ],
   polynomial: [{ key: 'coeffs', label: 'coefficients', hint: 'comma-separated, ascending order: c0,c1,c2' }],
   exponential: [
-    { key: 'a', label: 'a' },
-    { key: 'b', label: 'b' },
-    { key: 'c', label: 'c' },
+    { key: 'a', label: 'A — strength scaling factor', hint: 'sets the overall strength level of the curve' },
+    { key: 'b', label: 'B — velocity growth rate', hint: 'how steeply strength rises with pulse velocity' },
+    { key: 'c', label: 'C — intercept offset', hint: 'MPa added to the curve; 0 for the plain exponential form' },
   ],
   sonreb: [
     { key: 'a', label: 'a' },
@@ -2168,6 +2994,48 @@ export const fetchNdtReportPreview = async (projectId: string): Promise<Blob> =>
     responseType: 'blob',
   });
   return new Blob([res as any], { type: 'application/pdf' });
+};
+
+/**
+ * One section of the preview sidebar (REFINED EXECUTIVE SUMMARY §2.1):
+ * the wireframe's section list, each entry carrying the physical page it
+ * starts on in the bundled PDF. Conditional sections (AI interpretation)
+ * are absent when the render skipped them — never fabricated.
+ */
+export interface NdtPreviewSection {
+  key: string;
+  label: string;
+  page: number;
+}
+
+/** The preview document + its §2.1 sidebar map, from ONE render pass. */
+export interface NdtReportPreviewBundle {
+  blob: Blob;
+  sections: NdtPreviewSection[];
+  pageCount: number;
+}
+
+/**
+ * Preview bundle (§2.1 wireframe): GET
+ * /reports/projects/<id>/ndt-report-preview/sections/ — the section→page
+ * map, the page count and the exact preview PDF arrive together from a
+ * single backend render, so the sidebar can never describe a different
+ * document than the one it navigates.
+ */
+export const fetchNdtReportPreviewBundle = async (
+  projectId: string
+): Promise<NdtReportPreviewBundle> => {
+  const res: any = await api.get(
+    `/reports/projects/${projectId}/ndt-report-preview/sections/`
+  );
+  const binary = atob(res.pdf_base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return {
+    blob: new Blob([bytes], { type: 'application/pdf' }),
+    sections: (res.sections ?? []) as NdtPreviewSection[],
+    pageCount: Number(res.page_count ?? 0),
+  };
 };
 
 /** Branding configuration for a project's statutory report (§2.3). */
@@ -2307,6 +3175,10 @@ export interface ReportMapTestPoint {
     tested_at: string | null;
     velocity_m_s: number | null;
     strength_n_mm2: number | null;
+    /** The standard-error policy that moved `strength_n_mm2`, in the server's
+     *  own words; null when the active curve carries no policy (the figure is
+     *  then the curve estimate as fitted) or when no strength was computed. */
+    strength_note?: string | null;
     band: 'good' | 'poor' | 'unassessed' | 'no_velocity';
   };
 }

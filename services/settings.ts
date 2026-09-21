@@ -406,6 +406,64 @@ export async function deleteWebhookSubscription(id: string): Promise<void> {
 }
 
 // ----------------------------------------------------
+// OPERATIONAL ZONES (DISTRICTS)
+// ----------------------------------------------------
+// The state's zonal jurisdiction. `boundary_polygon` is real GeoJSON supplied
+// by the Survey/GIS client — the platform never invents a boundary, and this
+// client never sends one.
+export interface District {
+  id: string;
+  name: string;
+  code: string;
+  state_region: string;
+  description: string;
+  boundary_polygon?: unknown | null;
+  office_address: string;
+  lead_officer_name: string;
+  lead_officer_email: string;
+  is_active: boolean;
+  /** Annotated server-side, so these are real counts, not estimates. */
+  project_count: number;
+  staff_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DistrictInput {
+  name: string;
+  code: string;
+  state_region?: string;
+  description?: string;
+  office_address?: string;
+  lead_officer_name?: string;
+  lead_officer_email?: string;
+  is_active?: boolean;
+}
+
+/** The zone register. Defaults to active zones; pass `active: 'all'` for history. */
+export async function getDistricts(params?: {
+  active?: 'true' | 'false' | 'all';
+  search?: string;
+}): Promise<District[]> {
+  const res: any = await api.get('/government/districts/', { params });
+  if (Array.isArray(res)) return res;
+  return res?.results || res?.data || [];
+}
+
+export async function createDistrict(data: DistrictInput): Promise<District> {
+  const res: any = await api.post('/government/districts/', data);
+  return res?.data || res;
+}
+
+export async function updateDistrict(
+  id: string,
+  data: Partial<DistrictInput>,
+): Promise<District> {
+  const res: any = await api.patch(`/government/districts/${id}/`, data);
+  return res?.data || res;
+}
+
+// ----------------------------------------------------
 // BACKWARDS COMPATIBILITY ALIASES
 // ----------------------------------------------------
 export const addRoutingRule = createNotificationRoutingRule;

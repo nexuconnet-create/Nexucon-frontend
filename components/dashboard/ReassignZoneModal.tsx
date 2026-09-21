@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { X, MapPin, UserCheck, Shield, Loader2 } from 'lucide-react';
 import { Inspector, reassignInspectorZone } from '@/services/stakeholders';
+import CreateDistrictModal from './CreateDistrictModal';
 
 interface ReassignZoneModalProps {
   isOpen: boolean;
@@ -17,8 +19,36 @@ export default function ReassignZoneModal({
   inspector,
   onSuccess
 }: ReassignZoneModalProps) {
-  const [zone, setZone] = useState('Zone C (East Corridor)');
+  const [zone, setZone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [zones, setZones] = useState<{name: string, desc: string}[]>([]);
+  const [isLoadingZones, setIsLoadingZones] = useState(true);
+  const [isCreateDistrictModalOpen, setIsCreateDistrictModalOpen] = useState(false);
+
+  const fetchZones = () => {
+    setIsLoadingZones(true);
+    import('@/services/stakeholders').then(module => {
+      module.getDistricts().then(data => {
+        const formatted = data.map(d => ({
+          name: d.name || d.id || 'Unknown',
+          desc: d.description || 'Assigned district/zone'
+        }));
+        setZones(formatted);
+        if (formatted.length > 0 && !zone) {
+          setZone(formatted[0].name);
+        }
+        setIsLoadingZones(false);
+      }).catch(() => {
+        setIsLoadingZones(false);
+      });
+    });
+  };
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetchZones();
+    }
+  }, [isOpen]);
 
   if (!isOpen || !inspector) return null;
 
@@ -38,13 +68,6 @@ export default function ReassignZoneModal({
       setIsSubmitting(false);
     }
   };
-
-  const zones = [
-    { name: 'Zone A (Lekki / Victoria Island)', desc: 'High-density commercial and high-rise developments' },
-    { name: 'Zone B (Ikeja / Central Business District)', desc: 'Government infrastructure and industrial facilities' },
-    { name: 'Zone C (East Corridor)', desc: 'Rapid residential and mixed-use expansions' },
-    { name: 'Zone D (Harbor & Maritime Hub)', desc: 'Port infrastructure and maritime terminals' },
-  ];
 
   return (
     <div className="fixed inset-0 z-[150] overflow-hidden">
@@ -103,31 +126,58 @@ export default function ReassignZoneModal({
 
               {/* Zone Selection */}
               <div>
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
-                  Select New Operational Zone
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                    Select New Operational Zone
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateDistrictModalOpen(true)}
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded transition-colors"
+                  >
+                    + Create Zone
+                  </button>
+                </div>
                 <div className="space-y-2">
-                  {zones.map((z) => {
-                    const isSelected = zone === z.name;
-                    return (
-                      <button
-                        type="button"
-                        key={z.name}
-                        onClick={() => setZone(z.name)}
-                        className={`w-full p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 text-blue-900 font-bold'
-                            : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
-                        }`}
+                  {isLoadingZones ? (
+                    <div className="p-4 text-center text-slate-500 text-xs font-medium flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin" /> Loading operational zones...
+                    </div>
+                  ) : zones.length === 0 ? (
+                    <div className="p-4 text-center text-xs bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-slate-500">
+                        No operational zone has been created yet.
+                      </p>
+                      <Link
+                        href="/government/dashboard/settings/districts"
+                        className="mt-2 inline-block font-bold text-blue-600 hover:text-blue-700"
                       >
-                        <div>
-                          <p className="text-xs font-bold">{z.name}</p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">{z.desc}</p>
-                        </div>
-                        {isSelected && <UserCheck size={16} className="text-blue-600 shrink-0" />}
-                      </button>
-                    );
-                  })}
+                        Create one in Operational Zones →
+                      </Link>
+                    </div>
+                  ) : (
+                    zones.map((z) => {
+                      const isSelected = zone === z.name;
+                      return (
+                        <button
+                          type="button"
+                          key={z.name}
+                          onClick={() => setZone(z.name)}
+                          className={`w-full p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs font-bold">{z.name}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{z.desc}</p>
+                          </div>
+                          {isSelected && <UserCheck size={16} className="text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -163,6 +213,11 @@ export default function ReassignZoneModal({
 
         </div>
       </div>
+      <CreateDistrictModal
+        isOpen={isCreateDistrictModalOpen}
+        onClose={() => setIsCreateDistrictModalOpen(false)}
+        onSuccess={fetchZones}
+      />
     </div>
   );
 }

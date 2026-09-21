@@ -153,7 +153,7 @@ function InspectorLoginContent() {
       return;
     }
     if (!cleanCredential) {
-      setErrorMessage("Strict verification required: Please enter your official Invite Code (e.g. INS-XXXXXX or 1E96-1973) or Temporary Password issued by the Agency Directorate.");
+      setErrorMessage("Strict verification required: Please enter your official Invite Code (format XXXX-XXXX) or Temporary Password issued by the Agency Directorate.");
       return;
     }
     if (!newPassword || newPassword.length < 8) {
@@ -453,12 +453,28 @@ function InspectorLoginContent() {
                     Invite Code OR Temporary Password
                   </label>
                   <div className="relative">
+                    {/*
+                      The placeholder used to read "e.g. INS-549182 or
+                      Nexucon@XXXX2026!" — a live sample of the temporary
+                      password's shape, prefix, year suffix and four-digit body
+                      included, published to anyone who opens the login page.
+
+                      It then read "e.g. INS-549182", which is the wrong shape
+                      entirely: `settings.services` mints an invite code as two
+                      groups of four hex characters (`f"{hex[:4]}-{hex[4:8]}"`),
+                      and `accounts.views` accepts that code *in place of the
+                      password* while the invitation is pending — so an invite
+                      code is a credential, not the reference an earlier comment
+                      here claimed. Showing the format is useful; showing a
+                      value in that format is a credential sample. `XXXX-XXXX`
+                      teaches the shape and cannot be mistaken for one.
+                    */}
                     <input
                       type={showInviteCredential ? "text" : "password"}
                       value={inviteCredential}
                       onChange={(e) => setInviteCredential(e.target.value)}
                       required
-                      placeholder="e.g. INS-549182 or Nexucon@XXXX2026!"
+                      placeholder="e.g. XXXX-XXXX"
                       className="w-full px-4 py-3.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#022C4F] text-sm text-[#0F181F] bg-white font-mono placeholder:font-sans pr-12"
                     />
                     <button

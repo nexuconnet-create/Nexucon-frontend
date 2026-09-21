@@ -27,6 +27,7 @@ import {
   Eye,
   ShieldCheck,
   Map,
+  MapPin,
   ShieldAlert,
   Box,
   FolderOpen,
@@ -184,10 +185,11 @@ const sidebarLinks: SidebarItem[] = [
       { name: "Nexucon Link (Calibration)", href: "/government/dashboard/digital-eye/pundit/neural-link", icon: LinkIcon },
       { name: "Waveform Oscillograms", href: "/government/dashboard/digital-eye/pundit/waveforms", icon: Sparkles },
       { name: "Data Collection & Ingestion", href: "/government/dashboard/digital-eye/pundit/data-collection", icon: UploadCloud },
-      { name: "BS 1881-203 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
+      { name: "BS 1881-203:1986 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
       { name: "UPV Test Registry", href: "/government/dashboard/digital-eye/pundit/tests", icon: FileText },
       { name: "AI Analysis", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: PieChart },
       { name: "Reports", href: "/government/dashboard/digital-eye/pundit/reports", icon: FileText },
+      { name: "System Settings", href: "/government/dashboard/digital-eye/pundit/settings", icon: Settings },
     ],
   },
   {
@@ -313,6 +315,7 @@ const sidebarLinks: SidebarItem[] = [
     icon: Settings,
     subItems: [
       { name: "Agency Profile", href: "/government/dashboard/settings/profile", icon: Settings },
+      { name: "Operational Zones", href: "/government/dashboard/settings/districts", icon: MapPin },
       { name: "User Management", href: "/government/dashboard/settings/users", icon: Users },
       { name: "Roles & Permissions", href: "/government/dashboard/settings/roles", icon: ShieldCheck },
       { name: "Approval Workflows", href: "/government/dashboard/settings/workflows", icon: Settings },

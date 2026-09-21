@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, Marker, Popup, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Download, MapPin, Ruler, RefreshCw, Satellite, Layers, X } from "lucide-react";
+import { Download, Map as MapIcon, MapPin, Ruler, RefreshCw, Satellite, ImageDown, X } from "lucide-react";
 import {
   getReportMapData,
   type ReportMapData,
@@ -127,12 +127,16 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
   const [data, setData] = useState<ReportMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [satellite, setSatellite] = useState(false);
+  // §2.4 wireframe toolbar: two explicit basemap buttons, not a toggle.
+  const [basemap, setBasemap] = useState<'satellite' | 'street'>('street');
   // Distance measurement (spec §2.4): vertices are real map clicks.
   const [measuring, setMeasuring] = useState(false);
   const [measureVertices, setMeasureVertices] = useState<[number, number][]>([]);
   // Live cursor coordinates (spec §2.4).
   const [hover, setHover] = useState<L.LatLng | null>(null);
+  // PNG export (spec §2.4 [📥 Export]): html2canvas snapshot of the map.
+  const [exporting, setExporting] = useState(false);
+  const mapDivRef = React.useRef<HTMLDivElement | null>(null);
 
   const load = React.useCallback(async () => {
     if (!projectId) {
@@ -238,6 +242,53 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
     URL.revokeObjectURL(url);
   };
 
+  const toast = (message: string, type: 'success' | 'error' | 'info') => {
+    window.dispatchEvent(
+      new CustomEvent('show-toast', { detail: { message, type } }),
+    );
+  };
+
+  /**
+   * PNG export (spec §2.4 [📥 Export]): a raster snapshot of exactly the map
+   * on screen — markers, boundary, legend and all. Tile servers must permit
+   * cross-origin reads (the TileLayers set crossOrigin) or the snapshot
+   * degrades; on any failure the user is told honestly instead of getting a
+   * blank image.
+   */
+  const exportPng = async () => {
+    const el = mapDivRef.current;
+    if (!el || exporting) return;
+    setExporting(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(el, {
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#e2e8f0',
+        scale: 2,
+      });
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          toast('⚠️ The map snapshot could not be produced — try again.', 'error');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nexucon-map-${projectId ?? 'project'}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } catch {
+      toast('⚠️ The map could not be exported as an image (the imagery '
+        + 'provider blocked it). The GeoJSON export still works.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Fit to every test point + boundary ring; fall back to the recorded
   // project centre.
   const fitPoints: [number, number][] = useMemo(() => {
@@ -286,7 +337,37 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
               : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* §2.4 wireframe toolbar: explicit basemap buttons with the
+              active one highlighted. */}
+          <button
+            type="button"
+            onClick={() => setBasemap('satellite')}
+            aria-pressed={basemap === 'satellite'}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              basemap === 'satellite'
+                ? 'border-[#022C4F] bg-[#022C4F] text-white'
+                : 'border-slate-300 text-[#0F181F] hover:bg-slate-50'
+            }`}
+            title="Esri World Imagery satellite basemap"
+          >
+            <Satellite className="w-3.5 h-3.5" />
+            Satellite
+          </button>
+          <button
+            type="button"
+            onClick={() => setBasemap('street')}
+            aria-pressed={basemap === 'street'}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              basemap === 'street'
+                ? 'border-[#022C4F] bg-[#022C4F] text-white'
+                : 'border-slate-300 text-[#0F181F] hover:bg-slate-50'
+            }`}
+            title="OpenStreetMap street basemap"
+          >
+            <MapIcon className="w-3.5 h-3.5" />
+            Street
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -306,6 +387,16 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
           </button>
           <button
             type="button"
+            onClick={exportPng}
+            disabled={!data || exporting}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50 disabled:opacity-50"
+            title="Download the map exactly as displayed as a PNG image"
+          >
+            <ImageDown className={`w-3.5 h-3.5 ${exporting ? 'animate-pulse' : ''}`} />
+            {exporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button
+            type="button"
             onClick={exportGeoJSON}
             disabled={!data}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50 disabled:opacity-50"
@@ -313,15 +404,6 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
           >
             <Download className="w-3.5 h-3.5" />
             GeoJSON
-          </button>
-          <button
-            type="button"
-            onClick={() => setSatellite((s) => !s)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50"
-            aria-pressed={satellite}
-          >
-            {satellite ? <Layers className="w-3.5 h-3.5" /> : <Satellite className="w-3.5 h-3.5" />}
-            {satellite ? 'Street' : 'Satellite'}
           </button>
           <button
             type="button"
@@ -397,21 +479,27 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
 
       {!loading && !error
         && (features.length > 0 || showProjectSite || boundaryPolygons.length > 0) && (
-        <div className="h-[400px] w-full rounded-xl overflow-hidden shadow-sm relative z-0">
+        <>
+        <div
+          ref={mapDivRef}
+          className="h-[400px] w-full rounded-xl overflow-hidden shadow-sm relative z-0"
+        >
           <MapContainer
             center={center}
             zoom={fitPoints.length === 1 ? 15 : 13}
             className="h-full w-full z-0"
           >
-            {satellite ? (
+            {basemap === 'satellite' ? (
               <TileLayer
                 attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Maxar, Earthstar Geographics'
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                crossOrigin="anonymous"
               />
             ) : (
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                crossOrigin="anonymous"
               />
             )}
             <FitToPoints points={fitPoints} />
@@ -497,6 +585,11 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
                             ? `${p.strength_n_mm2.toFixed(1)} N/mm²`
                             : 'outside calibrated range'}
                         </p>
+                        {p.strength_note && (
+                          <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-relaxed text-amber-900">
+                            {p.strength_note}
+                          </p>
+                        )}
                         <p className="text-[11px] text-gray-600">
                           <span className="font-semibold">Tested:</span> {fmtDate(p.tested_at)}
                         </p>
@@ -562,6 +655,32 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
               : '— move over the map —'}
           </div>
         </div>
+
+        {/* §2.4 wireframe footer: COORDINATES (live cursor position, or
+            the map centre when the cursor is off the map) + SITE ADDRESS
+            from the project record — "not recorded" when absent, never a
+            guessed value. */}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-baseline gap-2 min-w-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7A85] shrink-0">
+              Coordinates
+            </span>
+            <span className="font-mono text-xs text-[#0F181F] truncate">
+              {hover
+                ? `${hover.lat.toFixed(5)}, ${hover.lng.toFixed(5)}`
+                : `${center[0].toFixed(5)}, ${center[1].toFixed(5)}`}
+            </span>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-baseline gap-2 min-w-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7A85] shrink-0">
+              Site address
+            </span>
+            <span className="text-xs text-[#0F181F] truncate" title={data?.site_address || undefined}>
+              {data?.site_address || 'Not recorded'}
+            </span>
+          </div>
+        </div>
+      </>
       )}
     </section>
   );

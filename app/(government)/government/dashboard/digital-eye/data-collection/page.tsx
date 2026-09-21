@@ -36,6 +36,7 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
 import BIMModelPreview from "@/components/dashboard/digital-eye/BIMModelPreview";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
+
 import {
   FolderViewToggle,
   FloorStationTreeBody,
@@ -70,6 +71,10 @@ import {
   ActiveCurveResponse,
   getActiveCurve,
 } from "@/services/digitalEye";
+import {
+  getTelemetrySessions,
+  type TelemetrySession,
+} from "@/services/telemetry";
 
 const CRITICAL_STRENGTH_THRESHOLD_MPA = 25.0; // 25 MPa Statutory Concrete Acceptance Rule
 
@@ -88,9 +93,16 @@ export default function DataCollectionPage() {
   const [activeTest, setActiveTest] = useState<PunditTest | null>(null);
   const [isLoadingRegistry, setIsLoadingRegistry] = useState<boolean>(true);
   const [registryError, setRegistryError] = useState<string | null>(null);
-  const [isSyncingDevice, setIsSyncingDevice] = useState<boolean>(false);
   const [isSubmittingManual, setIsSubmittingManual] = useState<boolean>(false);
   const [isCreateFindingOpen, setIsCreateFindingOpen] = useState<boolean>(false);
+
+  // Instrument sessions received for the selected project, and how each one
+  // reached the platform. Read-only: this dashboard observes what the field
+  // sent. It has no path that writes a session, because a receiving station
+  // that could also author the reading would not be a receiver.
+  const [telemetrySessions, setTelemetrySessions] = useState<TelemetrySession[]>([]);
+  const [isLoadingTelemetry, setIsLoadingTelemetry] = useState<boolean>(false);
+  const [telemetryError, setTelemetryError] = useState<string | null>(null);
 
   // Active Nexucon Link calibration curve for the selected project — the same
   // curve the server applies when a recorded reading is actually stored.
@@ -619,43 +631,44 @@ export default function DataCollectionPage() {
       });
   };
 
-  // Cloud Telemetry Ingestion — logs the entered measurements straight into the
-  // regulatory registry through the real PUNDIT tests endpoint.
-  const handleCloudStreamSync = () => {
+  /**
+   * Read the instrument sessions recorded for the selected project.
+   *
+   * This is the receiving side, and it only reads. A session is opened by the
+   * instrument (or imported from its export file by the inspector who was on
+   * site), and it reaches the statutory registry only when that inspector
+   * promotes it through the all-or-nothing `/end`. A government dashboard that
+   * could also author a reading would not be an observer of the field.
+   */
+  const refreshTelemetry = React.useCallback(async () => {
     if (!selectedProjectId) {
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: '⚠️ Select a project before ingesting telemetry.', type: "error" }
-      }));
+      setTelemetrySessions([]);
+      setTelemetryError(null);
       return;
     }
-    if (formPathLengthMm <= 0 || formTransitTimeUs <= 0) {
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: '⚠️ Enter the measured Acoustic Path (L) and Transit Time (t) — measurements cannot be blank or zero.', type: "error" }
-      }));
-      return;
+    setIsLoadingTelemetry(true);
+    setTelemetryError(null);
+    try {
+      setTelemetrySessions(await getTelemetrySessions({ project: selectedProjectId }));
+    } catch (err: any) {
+      // Emptied and said so. An empty list left in place of a failed read
+      // would read as "the field has sent nothing", which is a different and
+      // much more reassuring claim than "this could not be checked".
+      setTelemetrySessions([]);
+      setTelemetryError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          'The telemetry intake list could not be read from the server.'
+      );
+    } finally {
+      setIsLoadingTelemetry(false);
     }
-    setIsSyncingDevice(true);
-    createPunditTest({
-      project: selectedProjectId,
-      test_type: 'pulse_velocity',
-      structural_element: formElementName || selectedElement?.name || undefined,
-      transducer_frequency_khz: formTransducerFreq,
-      transducer_type: formTransducerType,
-      path_length_mm: formPathLengthMm,
-      pulse_time_us: formTransitTimeUs,
-      notes: 'Ingested via PUNDIT Cloud Telemetry Receiver.',
-      ...(registeredDevice ? { device: registeredDevice.id } : {}),
-    }).then((created) => {
-      setTests(prev => [created, ...prev]);
-      setActiveTest(created);
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: {
-          message: `☁️ Cloud Receiver: Ingested ${created.test_reference}${created.pulse_velocity_ms ? ` (${formatVelocityMs(created.pulse_velocity_ms)} m/s${created.estimated_compressive_strength_mpa != null ? `, ${created.estimated_compressive_strength_mpa.toFixed(1)} MPa` : ''})` : ''}.`,
-          type: "success"
-        }
-      }));
-    }).catch(reportCreateError).finally(() => setIsSyncingDevice(false));
-  };
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (activeTab !== 'CLOUD_RECEIVER') return;
+    void refreshTelemetry();
+  }, [activeTab, refreshTelemetry]);
 
   // Manual Offline Import Submission (Anti-Doctoring Protected)
   const handleManualImportSubmit = async (e: React.FormEvent) => {
@@ -804,7 +817,7 @@ export default function DataCollectionPage() {
   return (
     <div className="w-full min-h-screen pb-16 animate-in fade-in duration-300">
       <DigitalEyeHeader
-        activePillar="PUNDIT: Data Collection & Direct Cloud Receiver Hub"
+        activePillar="PUNDIT: Data Collection & Telemetry Intake"
         selectedProjectId={selectedProjectId}
         onProjectChange={setSelectedProjectId}
         selectedElementId={selectedElementId}
@@ -837,19 +850,8 @@ export default function DataCollectionPage() {
               NDT Field Data Collection & Government Telemetry Receiver
             </h2>
             <p className="text-xs text-blue-100/80 leading-relaxed">
-              To guarantee absolute data integrity and eliminate human falsification, the platform automatically captures ultrasonic acoustic transit times (t) directly from on-site transducers. In offline field conditions, manual input is restricted so that field inspectors input only raw physical geometry, while calculations and compliance grades remain cryptographically locked server-side.
+              To guarantee absolute data integrity and eliminate human falsification, the platform takes ultrasonic acoustic transit times (t) from the instrument itself — a unit with a radio streams them, and a unit without one exports a file the inspector imports. Either way the readings are recorded as the device reported them. In offline field conditions, manual input is restricted so that field inspectors input only raw physical geometry, while calculations and compliance grades remain cryptographically locked server-side.
             </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-            <button
-              onClick={handleCloudStreamSync}
-              disabled={isSyncingDevice}
-              className="px-5 py-3 bg-white hover:bg-slate-100 text-[#022C4F] rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50"
-            >
-              <UploadCloud size={16} className={isSyncingDevice ? "animate-bounce text-blue-600" : "text-blue-600"} />
-              <span>{isSyncingDevice ? "Ingesting Stream..." : "Ingest Telemetry from Field Device"}</span>
-            </button>
           </div>
         </div>
       </div>
@@ -1120,8 +1122,8 @@ export default function DataCollectionPage() {
                   : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
-              <Radio size={14} className={activeTab === 'CLOUD_RECEIVER' ? 'text-blue-600 animate-pulse' : ''} />
-              <span>Live Cloud Telemetry Ingestion</span>
+              <Radio size={14} className={activeTab === 'CLOUD_RECEIVER' ? 'text-blue-600' : ''} />
+              <span>Telemetry Intake</span>
             </button>
 
             <button
@@ -1149,19 +1151,21 @@ export default function DataCollectionPage() {
             </button>
           </div>
 
-          {/* Tab 1: Cloud Receiver Live Hardware Listener */}
+          {/* Tab 1: Telemetry Intake — what the field sent, and how it arrived */}
           {activeTab === 'CLOUD_RECEIVER' && (
             <div className="p-6 space-y-6">
               <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <span className={`h-3 w-3 rounded-full ${registeredDevice?.status === 'online' ? 'bg-emerald-400 animate-ping' : registeredDevice ? 'bg-amber-400' : 'bg-slate-500'}`}></span>
+                    {/* The dot reports the device registry's own status field.
+                        It is not a listener: nothing here is watching for a
+                        connection, and a device can be "online" for days while
+                        sending nothing. */}
+                    <span className={`h-3 w-3 rounded-full ${registeredDevice?.status === 'online' ? 'bg-emerald-400' : registeredDevice ? 'bg-amber-400' : 'bg-slate-500'}`}></span>
                     <span className={`font-mono text-xs font-bold ${registeredDevice?.status === 'online' ? 'text-emerald-300' : registeredDevice ? 'text-amber-300' : 'text-slate-300'}`}>
-                      {registeredDevice?.status === 'online'
-                        ? 'ON-SITE HARDWARE GATEWAY LISTENER ACTIVE'
-                        : registeredDevice
-                          ? `REGISTERED DEVICE: ${registeredDevice.status_display.toUpperCase()}`
-                          : 'NO PUNDIT DEVICE REGISTERED FOR THIS PROJECT'}
+                      {registeredDevice
+                        ? `REGISTERED DEVICE: ${registeredDevice.status_display.toUpperCase()}`
+                        : 'NO PUNDIT DEVICE REGISTERED FOR THIS PROJECT'}
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-slate-400">
@@ -1181,7 +1185,7 @@ export default function DataCollectionPage() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">Last Telemetry:</span>
+                    <span className="text-slate-500 block text-[10px]">Last Heard From:</span>
                     <span className="text-sky-400 font-bold">
                       {registeredDevice?.last_seen ? new Date(registeredDevice.last_seen).toLocaleString() : 'Never'}
                     </span>
@@ -1196,97 +1200,121 @@ export default function DataCollectionPage() {
               </div>
 
               <div className="bg-slate-50 p-5 rounded-xl border border-gray-200/80 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#022C4F] flex items-center gap-2">
-                  <Cloud size={14} className="text-blue-600" />
-                  <span>Stream Incoming Test Station Telemetry</span>
-                </h4>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#022C4F] flex items-center gap-2">
+                    <Cloud size={14} className="text-blue-600" />
+                    <span>Instrument Sessions Received</span>
+                  </h4>
+                  <button
+                    onClick={() => void refreshTelemetry()}
+                    disabled={!selectedProjectId || isLoadingTelemetry}
+                    className="px-3 py-1.5 border border-gray-200 hover:bg-white rounded-lg text-[11px] font-bold text-gray-700 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={isLoadingTelemetry ? 'animate-spin' : ''} />
+                    <span>Re-read</span>
+                  </button>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Target Structural Element</label>
-                    {elements.length > 0 ? (
-                      <select
-                        value={formElementName}
-                        onChange={(e) => { setFormElementName(e.target.value); setLastElementSource('form'); }}
-                        className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Every capture the field has sent for this project, and the leg
+                  it arrived on. A unit with a radio opens a session and streams
+                  into it; a unit without one exports a file that the inspector
+                  imports. Either way the readings reach the statutory registry
+                  only when that inspector promotes the session — this view
+                  observes, and writes nothing.
+                </p>
+
+                {!selectedProjectId ? (
+                  <p className="text-xs text-gray-500">
+                    Select a project to see the sessions recorded against it.
+                  </p>
+                ) : isLoadingTelemetry ? (
+                  <div className="py-6 flex items-center justify-center gap-2 text-xs text-gray-500">
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Reading the telemetry intake register…</span>
+                  </div>
+                ) : telemetryError ? (
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                    <span className="font-bold">Intake could not be read: </span>
+                    {telemetryError}
+                    <div className="mt-1 text-amber-800">
+                      An empty list is deliberately not shown in its place — &ldquo;the
+                      field has sent nothing&rdquo; and &ldquo;this could not be
+                      checked&rdquo; are different facts.
+                    </div>
+                  </div>
+                ) : telemetrySessions.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    No telemetry session has been recorded for this project.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {telemetrySessions.map((session) => (
+                      <div
+                        key={session.id}
+                        className="p-3.5 rounded-xl bg-white border border-gray-200/80 space-y-1.5"
                       >
-                        <option value="">— Select target element —</option>
-                        {elements.map(el => (
-                          <option key={el.id} value={el.name}>
-                            {el.name}{el.level ? ` — ${el.level}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="e.g. COL-C24 (no BIM elements imported yet)"
-                        value={formElementName}
-                        onChange={(e) => { setFormElementName(e.target.value); setLastElementSource('form'); }}
-                        className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
-                      />
-                    )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-gray-800">
+                            {session.session_reference}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md border bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-semibold">
+                            {session.status}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold ${
+                              session.sync_status === 'SYNCED'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : session.sync_status === 'FAILED'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
+                          >
+                            Registry: {session.sync_status}
+                          </span>
+                          {/* How it arrived, or an honest absence. Never
+                              inferred from the device's status: a device being
+                              online says nothing about how its readings
+                              travelled, and a session recorded before the
+                              platform asked the question has no answer. */}
+                          <span
+                            className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold ${
+                              session.transport
+                                ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                : 'bg-white text-gray-500 border-dashed border-gray-300'
+                            }`}
+                          >
+                            {session.transport_display || 'Transport not recorded'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          {session.data_type_display} · {session.device_id} ·{" "}
+                          {session.packet_count} packet
+                          {session.packet_count === 1 ? '' : 's'} ·{" "}
+                          {session.session_start
+                            ? new Date(session.session_start).toLocaleString()
+                            : 'start time not reported by the instrument'}
+                        </div>
+                        {session.source_file_name && (
+                          <div className="text-[11px] text-gray-500 break-all">
+                            Imported from{" "}
+                            <span className="font-mono">
+                              {session.source_file_name}
+                            </span>
+                            {session.source_file_sha256
+                              ? ` · SHA-256 ${session.source_file_sha256.slice(0, 16)}…`
+                              : ''}
+                          </div>
+                        )}
+                        {session.sync_status === 'FAILED' && session.sync_error && (
+                          <div className="text-[11px] text-rose-700">
+                            Promotion refused: {session.sync_error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Transducer Frequency</label>
-                    <select
-                      value={formTransducerFreq}
-                      onChange={(e) => setFormTransducerFreq(Number(e.target.value))}
-                      className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
-                    >
-                      <option value={25}>25 kHz (Mass Concrete / Deep Foundations / Long Paths)</option>
-                      <option value={54}>54 kHz (Standard Structural Concrete)</option>
-                      <option value={150}>150 kHz (High Precision Mortar / Core)</option>
-                      <option value={250}>250 kHz (Micro-Crack Depth Measurement)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Transducer Arrangement (BS 1881-203)</label>
-                    <select
-                      value={formTransducerType}
-                      onChange={(e) => setFormTransducerType(e.target.value as 'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT')}
-                      className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
-                    >
-                      <option value="DIRECT">Direct Transmission (Face-to-Face)</option>
-                      <option value="SEMI_DIRECT">Semi-Direct Transmission</option>
-                      <option value="INDIRECT">Indirect (Surface) Transmission</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Acoustic Path Length L (mm)</label>
-                    <input
-                      type="number"
-                      value={formPathLengthMm || ''}
-                      onChange={(e) => setFormPathLengthMm(Number(e.target.value))}
-                      className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-700 font-semibold mb-1">Measured Transit Time t (µs) [Variable]</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={formTransitTimeUs || ''}
-                      onChange={(e) => setFormTransitTimeUs(Number(e.target.value))}
-                      className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleCloudStreamSync}
-                  disabled={isSyncingDevice}
-                  className="w-full py-3 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <UploadCloud size={15} className={isSyncingDevice ? "animate-bounce" : ""} />
-                  <span>{isSyncingDevice ? "Streaming Telemetry to Government Dashboard..." : "Ingest & Log Direct to Regulatory Registry"}</span>
-                </button>
+                )}
               </div>
             </div>
           )}

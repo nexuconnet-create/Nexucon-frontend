@@ -1,13 +1,182 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Image as ImageIcon, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import {
   getReportBranding,
   removeReportBranding,
   updateReportBranding,
   type ReportBrandingConfig,
 } from "@/services/digitalEye";
+
+/** Object URL for a pending file's local preview, revoked when the file
+ *  changes or the component unmounts. */
+function usePendingPreview(file: File | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return url;
+}
+
+/**
+ * §2.3 wireframe upload card: a drag-and-drop zone ("Drag & Drop or
+ * Browse") with an instant local preview of the pending file, plus the
+ * saved server-side image beneath it. The PNG/JPEG check happens here,
+ * before the parent ever accepts the file.
+ */
+function UploadZone({
+  id,
+  label,
+  inputRef,
+  file,
+  onFile,
+  savedUrl,
+  savedAlt,
+  onRemoveSaved,
+  removeSavedLabel,
+  saving,
+}: {
+  id: string;
+  label: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  file: File | null;
+  onFile: (f: File | null) => void;
+  savedUrl?: string | null;
+  savedAlt: string;
+  onRemoveSaved?: () => void;
+  removeSavedLabel?: string;
+  saving: boolean;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const pendingUrl = usePendingPreview(file);
+
+  const accept = (f?: File | null) => {
+    if (!f) return;
+    if (!["image/png", "image/jpeg"].includes(f.type)) {
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: `⚠️ ${label}: PNG or JPEG images only.`,
+            type: "error",
+          },
+        }),
+      );
+      return;
+    }
+    onFile(f);
+  };
+
+  return (
+    <div>
+      <span className="block text-xs font-medium text-[#4B5B66] mb-1">{label}</span>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Upload ${label.toLowerCase()} — drag and drop or browse`}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          accept(e.dataTransfer.files?.[0]);
+        }}
+        className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-5 text-center cursor-pointer transition-colors ${
+          dragOver
+            ? "border-[#0A3D2E] bg-[#0A3D2E]/5"
+            : "border-slate-300 bg-slate-50 hover:border-[#0A3D2E]/50 hover:bg-slate-100"
+        }`}
+      >
+        {file && pendingUrl ? (
+          <>
+            {/* Local preview of the pending file (§2.4-style honest state:
+                this is what will be uploaded, not yet what is stored). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={pendingUrl}
+              alt={`Pending ${label.toLowerCase()} preview`}
+              className="max-h-16 w-auto rounded border border-slate-200 bg-white p-1"
+            />
+            <span className="text-xs font-medium text-[#0F181F]">
+              {file.name}{" "}
+              <span className="text-[#6B7A85]">
+                ({(file.size / 1024).toFixed(0)} KB)
+              </span>
+            </span>
+            <span className="text-[10px] text-[#6B7A85]">
+              Pending upload — click or drop to replace
+            </span>
+          </>
+        ) : (
+          <>
+            <Upload className="w-5 h-5 text-[#6B7A85]" />
+            <span className="text-xs font-medium text-[#0F181F]">
+              Drag &amp; Drop or <span className="underline">Browse</span>
+            </span>
+            <span className="text-[10px] text-[#6B7A85]">PNG or JPEG</span>
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="hidden"
+        onChange={(e) => accept(e.target.files?.[0])}
+      />
+      {file && (
+        <button
+          type="button"
+          onClick={() => {
+            onFile(null);
+            if (inputRef.current) inputRef.current.value = "";
+          }}
+          className="mt-1.5 inline-flex items-center gap-1 text-xs text-[#4B5B66] hover:text-[#0F181F]"
+        >
+          <X className="w-3.5 h-3.5" /> Discard pending file
+        </button>
+      )}
+      {!file && savedUrl && (
+        <div className="mt-2 flex items-center gap-3">
+          {/* Real stored preview, served by the backend */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={savedUrl}
+            alt={savedAlt}
+            className="h-10 w-auto rounded border border-slate-200 bg-white p-1"
+          />
+          {onRemoveSaved && (
+            <button
+              type="button"
+              onClick={onRemoveSaved}
+              disabled={saving}
+              className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> {removeSavedLabel || "Remove"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Report branding panel (REFINED EXECUTIVE SUMMARY §2.3): upload a client /
@@ -78,21 +247,6 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
     window.dispatchEvent(
       new CustomEvent("show-toast", { detail: { message, type } }),
     );
-  };
-
-  const pickImage = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    set: (f: File | null) => void,
-    label: string,
-  ) => {
-    const file = e.target.files?.[0] || null;
-    if (!file) return;
-    if (!["image/png", "image/jpeg"].includes(file.type)) {
-      toast(`⚠️ ${label}: PNG or JPEG images only.`, "error");
-      e.target.value = "";
-      return;
-    }
-    set(file);
   };
 
   const handleSave = async () => {
@@ -259,41 +413,20 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
       )}
 
       <div className="grid md:grid-cols-3 gap-5">
-        {/* Logo ---------------------------------------------------------- */}
-        <div>
-          <label className={labelCls} htmlFor="branding-logo-upload">Logo (PNG / JPEG)</label>
-          <input
-            ref={logoInputRef}
+        {/* LOGO card (§2.3 wireframe) ------------------------------------ */}
+        <div className="rounded-xl border border-slate-200 p-4">
+          <UploadZone
             id="branding-logo-upload"
-            type="file"
-            accept="image/png,image/jpeg"
-            onChange={(e) => pickImage(e, setLogoFile, "Logo")}
-            className="block w-full text-xs text-[#4B5B66] file:mr-3 file:rounded-lg file:border-0 file:bg-[#0A3D2E] file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-[#0A3D2E]/90"
+            label="Logo (PNG / JPEG)"
+            inputRef={logoInputRef}
+            file={logoFile}
+            onFile={setLogoFile}
+            savedUrl={config?.branding_configured ? config.logo_url : null}
+            savedAlt="Saved report logo"
+            onRemoveSaved={() => handleRemoveImage("logo")}
+            removeSavedLabel="Remove logo"
+            saving={saving}
           />
-          {logoFile && (
-            <p className="mt-1 text-xs text-emerald-700">
-              Pending upload: {logoFile.name}
-            </p>
-          )}
-          {config?.branding_configured && config.logo_url && (
-            <div className="mt-2 flex items-center gap-3">
-              {/* Real stored preview, served by the backend */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={config.logo_url}
-                alt="Saved report logo"
-                className="h-10 w-auto rounded border border-slate-200 bg-white p-1"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage("logo")}
-                disabled={saving}
-                className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove logo
-              </button>
-            </div>
-          )}
 
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
@@ -306,6 +439,7 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
               >
                 <option value="top-left">Top left</option>
                 <option value="top-right">Top right</option>
+                <option value="center">Centre</option>
                 <option value="bottom-left">Bottom left</option>
                 <option value="bottom-right">Bottom right</option>
               </select>
@@ -326,43 +460,20 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
           </div>
         </div>
 
-        {/* Cover logo ---------------------------------------------------- */}
-        <div>
-          <label className={labelCls} htmlFor="branding-cover-logo-upload">
-            Cover Logo — replaces the Lagos State coat of arms (PNG / JPEG)
-          </label>
-          <input
-            ref={coverLogoInputRef}
+        {/* Cover logo card ------------------------------------------------ */}
+        <div className="rounded-xl border border-slate-200 p-4">
+          <UploadZone
             id="branding-cover-logo-upload"
-            type="file"
-            accept="image/png,image/jpeg"
-            onChange={(e) => pickImage(e, setCoverLogoFile, "Cover logo")}
-            className="block w-full text-xs text-[#4B5B66] file:mr-3 file:rounded-lg file:border-0 file:bg-[#0A3D2E] file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-[#0A3D2E]/90"
+            label="Cover Logo — replaces the Lagos State coat of arms (PNG / JPEG)"
+            inputRef={coverLogoInputRef}
+            file={coverLogoFile}
+            onFile={setCoverLogoFile}
+            savedUrl={config?.branding_configured ? config.cover_logo_url : null}
+            savedAlt="Saved cover logo"
+            onRemoveSaved={() => handleRemoveImage("cover_logo")}
+            removeSavedLabel="Remove — revert to default"
+            saving={saving}
           />
-          {coverLogoFile && (
-            <p className="mt-1 text-xs text-emerald-700">
-              Pending upload: {coverLogoFile.name}
-            </p>
-          )}
-          {config?.branding_configured && config.cover_logo_url && (
-            <div className="mt-2 flex items-center gap-3">
-              {/* Real stored preview, served by the backend */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={config.cover_logo_url}
-                alt="Saved cover logo"
-                className="h-10 w-auto rounded border border-slate-200 bg-white p-1"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage("cover_logo")}
-                disabled={saving}
-                className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove — revert to default
-              </button>
-            </div>
-          )}
 
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <label className="flex items-start gap-2 text-xs text-[#4B5B66]">
@@ -385,42 +496,20 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
           </div>
         </div>
 
-        {/* Watermark ----------------------------------------------------- */}
-        <div>
-          <label className={labelCls} htmlFor="branding-watermark-upload">
-            Watermark (optional, PNG / JPEG)
-          </label>
-          <input
-            ref={watermarkInputRef}
+        {/* WATERMARK card (§2.3 wireframe) ------------------------------- */}
+        <div className="rounded-xl border border-slate-200 p-4">
+          <UploadZone
             id="branding-watermark-upload"
-            type="file"
-            accept="image/png,image/jpeg"
-            onChange={(e) => pickImage(e, setWatermarkFile, "Watermark")}
-            className="block w-full text-xs text-[#4B5B66] file:mr-3 file:rounded-lg file:border-0 file:bg-[#0A3D2E] file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-[#0A3D2E]/90"
+            label="Watermark (optional, PNG / JPEG)"
+            inputRef={watermarkInputRef}
+            file={watermarkFile}
+            onFile={setWatermarkFile}
+            savedUrl={config?.branding_configured ? config.watermark_url : null}
+            savedAlt="Saved report watermark"
+            onRemoveSaved={() => handleRemoveImage("watermark")}
+            removeSavedLabel="Remove watermark"
+            saving={saving}
           />
-          {watermarkFile && (
-            <p className="mt-1 text-xs text-emerald-700">
-              Pending upload: {watermarkFile.name}
-            </p>
-          )}
-          {config?.branding_configured && config.watermark_url && (
-            <div className="mt-2 flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={config.watermark_url}
-                alt="Saved report watermark"
-                className="h-10 w-auto rounded border border-slate-200 bg-white p-1"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage("watermark")}
-                disabled={saving}
-                className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove watermark
-              </button>
-            </div>
-          )}
 
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>

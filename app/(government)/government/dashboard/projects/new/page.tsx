@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createProject, uploadProjectDocument, Project, ProjectProfessional } from '@/services/projects';
-import { 
-  ArrowLeft, Save, ChevronRight, ChevronLeft, Check, Upload, Plus, Trash2, 
-  Building2, Users, MapPin, FileCheck, ClipboardList, HardHat, FileText, Settings, ShieldCheck
+import { getDistricts, District } from '@/services/settings';
+import {
+  ArrowLeft, Save, ChevronRight, ChevronLeft, Check, Upload, Plus, Trash2,
+  Building2, Users, MapPin, FileCheck, ClipboardList, HardHat, FileText, Settings, ShieldCheck,
+  AlertTriangle, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -52,6 +54,7 @@ export default function RegisterProjectWizard() {
     site_address: '',
     state: '',
     lga: '',
+    district: null,
     ward_area: '',
     plot_number: '',
     block_number: '',
@@ -98,7 +101,31 @@ export default function RegisterProjectWizard() {
   });
 
   const [professionals, setProfessionals] = useState<ProjectProfessional[]>([]);
-  
+
+  // Operational zones — the real register, never a fixed list. A failed read
+  // is surfaced rather than rendered as "no zones", which would tell an
+  // officer that a zone they created does not exist.
+  const [zones, setZones] = useState<District[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
+  const [zonesError, setZonesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDistricts({ active: 'true' })
+      .then((data) => {
+        if (!cancelled) setZones(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setZonesError('The zone register could not be read from the server.');
+      })
+      .finally(() => {
+        if (!cancelled) setZonesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -129,7 +156,7 @@ export default function RegisterProjectWizard() {
         break;
       case 3:
         if (!formData.state) return 'State is required';
-        if (!formData.lga) return 'LGA / District is required';
+        if (!formData.lga) return 'LGA is required';
         break;
       case 4:
         for (const prof of professionals) {
@@ -324,8 +351,67 @@ export default function RegisterProjectWizard() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {renderInput('State', 'state', 'text', 'e.g. Lagos')}
-        {renderInput('LGA / District', 'lga', 'text', 'e.g. Eti-Osa')}
+        {renderInput('LGA', 'lga', 'text', 'e.g. Eti-Osa')}
         {renderInput('Ward / Area', 'ward_area', 'text', 'e.g. Victoria Island')}
+      </div>
+
+      {/* Operational zone — the jurisdiction that scopes which officers and
+          which district heatmap this project appears against. This used to be
+          conflated with the free-text LGA field above, which is why no project
+          ever carried a zone. */}
+      <div>
+        <label htmlFor="project-zone" className="block text-sm font-bold text-[#022C4F] mb-1.5">
+          Operational Zone
+        </label>
+        {zonesLoading ? (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500">
+            <Loader2 size={14} className="animate-spin" /> Loading the zone register...
+          </div>
+        ) : zonesError ? (
+          <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50">
+            <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-800">
+              {zonesError} The project can still be registered without a zone and
+              placed later from its project page.
+            </p>
+          </div>
+        ) : zones.length === 0 ? (
+          <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <AlertTriangle size={15} className="text-slate-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-slate-600">
+              No operational zone has been created yet. A zone scopes which
+              projects an officer can see — create one in{' '}
+              <Link
+                href="/government/dashboard/settings/districts"
+                className="font-bold text-blue-600 hover:text-blue-700"
+              >
+                Operational Zones
+              </Link>{' '}
+              to assign this project.
+            </p>
+          </div>
+        ) : (
+          <>
+            <select
+              id="project-zone"
+              name="district"
+              value={formData.district || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-transparent text-sm transition-all"
+            >
+              <option value="">No zone assigned</option>
+              {zones.map((zone) => (
+                <option key={zone.id} value={zone.id}>
+                  {zone.name}{zone.code ? ` (${zone.code})` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Determines which district office holds jurisdiction over this
+              project. It can be changed later from the project page.
+            </p>
+          </>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {renderInput('Plot Number', 'plot_number')}
@@ -619,6 +705,13 @@ export default function RegisterProjectWizard() {
           <div className="flex items-start gap-2">
             <Check size={16} className="text-emerald-500 mt-0.5 shrink-0" />
             <p><strong>Location:</strong> {formData.lga || 'Not provided'} LGA</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <Check size={16} className="text-emerald-500 mt-0.5 shrink-0" />
+            <p>
+              <strong>Operational Zone:</strong>{' '}
+              {zones.find((z) => z.id === formData.district)?.name || 'Not assigned'}
+            </p>
           </div>
           <div className="flex items-start gap-2">
             <Check size={16} className="text-emerald-500 mt-0.5 shrink-0" />

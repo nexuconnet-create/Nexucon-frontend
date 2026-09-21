@@ -17,7 +17,23 @@ import {
   FileText,
   ShieldAlert,
 } from "lucide-react";
-import { getInspectorProjectById } from "@/services/inspector";
+import {
+  getInspectorProjectById,
+  getInspectorInspections,
+  getInspectorEvidence,
+} from "@/services/inspector";
+import { dateOr, orDash } from "@/lib/display";
+import { Inspection } from "@/services/inspections";
+
+const STATUS_STYLES: Record<string, string> = {
+  COMPLETED: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  IN_PROGRESS: "text-amber-700 bg-amber-50 border-amber-200",
+  SCHEDULED: "text-blue-700 bg-blue-50 border-blue-200",
+  REQUESTED: "text-slate-700 bg-slate-100 border-slate-200",
+  RE_INSPECTION_REQUIRED: "text-amber-700 bg-amber-50 border-amber-200",
+  FAILED: "text-rose-700 bg-rose-50 border-rose-200",
+  CANCELLED: "text-slate-500 bg-slate-100 border-slate-200",
+};
 
 export default function InspectorProjectDetailPage() {
   const params = useParams();
@@ -27,14 +43,73 @@ export default function InspectorProjectDetailPage() {
   const [project, setProject] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "inspections" | "evidence" | "findings" | "digital-eye">("overview");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // The site's own inspections and evidence, instead of the invented ones this
+  // overview used to print: a "Foundation Depth & Pile Verification — Passed"
+  // and a "Structural Frame & Slab Rebar Cover — Scheduled for Today" that
+  // existed for no project, plus a telemetry summary reading "Linked v2.1",
+  // "14 Profiles", "32 Measured".
+  //
+  // `null` means "could not be read", which is deliberately distinct from an
+  // empty array ("none recorded").
+  const [siteInspections, setSiteInspections] = useState<Inspection[] | null>([]);
+  const [evidenceCounts, setEvidenceCounts] = useState<{
+    gpr: number;
+    pundit: number;
+    bim: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
+    let cancelled = false;
     setIsLoading(true);
+    setLoadError(null);
+
     getInspectorProjectById(projectId)
-      .then((data) => setProject(data))
-      .catch((err) => console.error("Failed to load project:", err))
-      .finally(() => setIsLoading(false));
+      .then((data) => {
+        if (!cancelled) setProject(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLoadError(
+            err?.response?.data?.detail ||
+              err?.message ||
+              "Could not read this project from the server."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    getInspectorInspections({ project: projectId })
+      .then((rows) => {
+        if (!cancelled) setSiteInspections(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSiteInspections(null);
+      });
+
+    getInspectorEvidence({ project: projectId })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setEvidenceCounts({
+          gpr: list.filter((r: any) => r.source_type === "gpr").length,
+          pundit: list.filter((r: any) => r.source_type === "pundit").length,
+          bim: list.filter((r: any) => r.source_type === "bim_element").length,
+          total: list.length,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setEvidenceCounts(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   if (isLoading) {
@@ -45,18 +120,34 @@ export default function InspectorProjectDetailPage() {
     );
   }
 
-  const proj = project || {
-    id: projectId,
-    name: "Lekki Pearl Residences",
-    reference_number: "NXC-GOV-2026-9B41",
-    site_address: "Plot 14, Block 3, Admiralty Way, Lekki Phase 1, Lagos",
-    status: "ACTIVE",
-    project_type: "Residential High-Rise",
-    developer_name: "Apex Global Properties Ltd",
-    permit_number: "LASBCA/2026/LKK/0491",
-    number_of_floors: 8,
-    estimated_project_value: "1,450,000,000 NGN",
-  };
+  if (loadError || !project) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-[#022C4F] transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={14} />
+          <span>Back to Projects</span>
+        </button>
+        <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200">
+          <h2 className="text-sm font-bold text-amber-900 mb-1">
+            This project could not be loaded
+          </h2>
+          <p className="text-xs text-amber-800">
+            {loadError || "The server returned no record for this project."}
+          </p>
+          <p className="text-xs text-amber-700 mt-2">
+            Nothing is shown because nothing could be read. This is not a site
+            with no details.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const proj = project;
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 min-w-0">
@@ -87,18 +178,18 @@ export default function InspectorProjectDetailPage() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                {proj.reference_number}
+                {orDash(proj.reference_number, "No reference recorded")}
               </span>
-              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                {proj.status || "ACTIVE"}
+              <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                {orDash(proj.status, "Status not recorded")}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-[#022C4F]">
-              {proj.name}
+              {orDash(proj.name, "Project name not recorded")}
             </h1>
             <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-1.5">
               <MapPin size={14} className="text-slate-400 shrink-0" />
-              <span>{proj.site_address}</span>
+              <span>{orDash(proj.site_address || proj.lga, "Site address not recorded")}</span>
             </div>
           </div>
         </div>
@@ -140,19 +231,23 @@ export default function InspectorProjectDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <span className="text-slate-500 block text-[11px] font-medium uppercase">Building Permit #</span>
-                  <span className="text-slate-800 font-bold">{proj.permit_number || "LASBCA/2026/0491"}</span>
+                  <span className="text-slate-800 font-bold">{orDash(proj.permit_number, "Not recorded")}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[11px] font-medium uppercase">Structure Type</span>
-                  <span className="text-slate-800 font-semibold">{proj.project_type || "Commercial Development"}</span>
+                  <span className="text-slate-800 font-semibold">{orDash(proj.project_type, "Not recorded")}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[11px] font-medium uppercase">Authorized Developer</span>
-                  <span className="text-slate-800 font-semibold">{proj.developer_name || "Lekki Horizon Consortium"}</span>
+                  <span className="text-slate-800 font-semibold">{orDash(proj.developer_name, "Not recorded")}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Height & Floors</span>
-                  <span className="text-slate-800 font-semibold">{proj.number_of_floors || 6} Storeys</span>
+                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Height &amp; Floors</span>
+                  <span className="text-slate-800 font-semibold">
+                    {typeof proj.number_of_floors === "number"
+                      ? `${proj.number_of_floors} Storeys`
+                      : "Not recorded"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -165,20 +260,46 @@ export default function InspectorProjectDetailPage() {
                 Statutory inspections mandatory under the Lagos State Urban and Regional Planning and Development Law.
               </p>
               <div className="space-y-2.5">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-slate-800">Foundation Depth & Pile Verification</div>
-                    <div className="text-[11px] text-slate-500">Completed & GPS verified</div>
-                  </div>
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Passed</span>
-                </div>
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-slate-800">Structural Frame & Slab Rebar Cover</div>
-                    <div className="text-[11px] text-slate-500">Scheduled for Today</div>
-                  </div>
-                  <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">Scheduled</span>
-                </div>
+                {/* The two inspections listed here used to be literals, one
+                    already "Passed" and one "Scheduled for Today", on a page
+                    reachable from any project in the register. */}
+                {siteInspections === null ? (
+                  <p className="text-xs text-amber-700">
+                    This site&rsquo;s inspections could not be read, so none are
+                    listed. This is not an empty schedule.
+                  </p>
+                ) : siteInspections.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No inspections have been recorded for this site yet.
+                  </p>
+                ) : (
+                  siteInspections.slice(0, 6).map((insp) => (
+                    <Link
+                      key={insp.id}
+                      href={`/inspector/dashboard/inspections/${insp.id}`}
+                      className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs hover:border-slate-300 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 truncate">
+                          {orDash(insp.inspection_type, "Inspection type not recorded")}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {insp.scheduled_date
+                            ? `Scheduled ${dateOr(insp.scheduled_date)}`
+                            : "Not scheduled"}
+                          {insp.checkin_time ? ` • Checked in ${dateOr(insp.checkin_time)}` : ""}
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
+                          STATUS_STYLES[insp.status] || "text-slate-600 bg-slate-100 border-slate-200"
+                        }`}
+                      >
+                        {orDash(insp.status, "Unknown")}
+                      </span>
+                    </Link>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -189,17 +310,32 @@ export default function InspectorProjectDetailPage() {
                 Digital Eye Quick Telemetry
               </h3>
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5 text-xs">
+                {/* Real counts, from this project's own evidence records. The
+                    card previously reported a BIM link "v2.1", "14 Profiles"
+                    and "32 Measured" regardless of what had been captured. */}
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Trimble Connect BIM:</span>
-                  <span className="text-emerald-700 font-bold">Linked v2.1</span>
+                  <span className="text-slate-600">BIM element records:</span>
+                  <span className="text-slate-800 font-bold">
+                    {evidenceCounts === null ? "Not read" : evidenceCounts.bim}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">GPR Radargrams:</span>
-                  <span className="text-slate-800 font-bold">14 Profiles</span>
+                  <span className="text-slate-600">GPR radargram records:</span>
+                  <span className="text-slate-800 font-bold">
+                    {evidenceCounts === null ? "Not read" : evidenceCounts.gpr}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600">UPV Ultrasonic Points:</span>
-                  <span className="text-slate-800 font-bold">32 Measured</span>
+                  <span className="text-slate-600">PUNDIT UPV records:</span>
+                  <span className="text-slate-800 font-bold">
+                    {evidenceCounts === null ? "Not read" : evidenceCounts.pundit}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
+                  <span className="text-slate-600">All evidence records:</span>
+                  <span className="text-slate-800 font-bold">
+                    {evidenceCounts === null ? "Not read" : evidenceCounts.total}
+                  </span>
                 </div>
               </div>
 
