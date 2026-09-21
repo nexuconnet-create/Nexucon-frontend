@@ -168,7 +168,12 @@ export default function GovernmentLogin() {
               </div>
 
               <div className="flex flex-col gap-2 relative">
-                <label className="text-sm font-bold text-[#022C4F]">Password</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-bold text-[#022C4F]">Password</label>
+                  <Link href="/government/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
