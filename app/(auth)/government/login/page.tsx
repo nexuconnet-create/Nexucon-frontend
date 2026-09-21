@@ -180,7 +180,7 @@ export default function GovernmentLogin() {
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`w-full px-4 py-3.5 rounded-xl border ${errors.email ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  placeholder="SiteIQ@nexucon.net"
+                  placeholder="name@agency.gov.ng"
                   autoFocus
                 />
                 {errors.email && (
