@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, KeyboardEvent, ClipboardEvent, useEffect } from "react";
-import { ChevronLeft, ChevronRight, EyeOff, Eye, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, EyeOff, Eye, CheckCircle2, ShieldCheck, Landmark, Building2, MapPin, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Country, State } from "country-state-city";
-import { CustomSelect } from "../../../../components/CustomSelect";
+import { CustomSelect } from "@/components/CustomSelect";
 import { useAuth } from "@/context/AuthContext";
 
 export default function GovernmentRegister() {
@@ -21,7 +21,7 @@ export default function GovernmentRegister() {
   const [formData, setFormData] = useState({
     fullName: '', email: '', phone: '', role: 'government',
     agencyName: '', agencyWebsite: '', jurisdictionLevel: '', department: '',
-    country: '', stateRegion: '', officeAddress: '',
+    country: 'NG', stateRegion: 'Lagos', officeAddress: '',
     password: '', confirmPassword: '',
     termsAccepted: false, privacyAccepted: false, marketingAccepted: false,
     otp: ['', '', '', '', '', '']
@@ -129,6 +129,12 @@ export default function GovernmentRegister() {
       first_name: formData.fullName.split(' ')[0] || '',
       last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
       phone_number: formData.phone,
+      agency_name: formData.agencyName,
+      jurisdiction_level: formData.jurisdictionLevel,
+      department: formData.department,
+      country: formData.country,
+      state_region: formData.stateRegion,
+      office_address: formData.officeAddress,
     };
 
     const success = await register(userData);
@@ -196,6 +202,27 @@ export default function GovernmentRegister() {
     }
   };
 
+  // Country & State options
+  const countryOptions = Country.getAllCountries().map(c => ({ value: c.isoCode, label: c.name }));
+  const stateOptions = formData.country
+    ? State.getStatesOfCountry(formData.country).map(s => ({ value: s.name, label: s.name }))
+    : [];
+
+  const jurisdictionOptions = [
+    { value: 'State', label: 'State Level Authority (e.g. LASBCA)' },
+    { value: 'Federal', label: 'Federal Regulatory Agency' },
+    { value: 'Municipal', label: 'Local Government / Municipal Council' },
+    { value: 'Regional', label: 'Regional Development Board' },
+  ];
+
+  const departmentOptions = [
+    { value: 'Building Control', label: 'Building Control & Inspection' },
+    { value: 'Urban Planning', label: 'Urban Planning & Approvals' },
+    { value: 'Structural Integrity', label: 'Structural Integrity & Materials' },
+    { value: 'Enforcement & Compliance', label: 'Enforcement & Compliance' },
+    { value: 'Safety & Environment', label: 'Environmental & Fire Safety' },
+  ];
+
   return (
     <div className="min-h-screen w-full relative flex flex-col lg:flex-row items-center justify-between font-sans bg-white lg:bg-transparent">
       {/* Background Image with Overlay */}
@@ -205,466 +232,432 @@ export default function GovernmentRegister() {
           backgroundImage: `url('https://res.cloudinary.com/depeqzb6z/image/upload/v1784137456/Want_to_build_your_dream_business_or_investment_property__%EF%B8%8F_1_bsoz7j.png')`,
         }}
       >
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
+        <div className="absolute inset-0 bg-[#022C4F]/85 backdrop-blur-[2px]"></div>
       </div>
 
-      {/* Left Content Area */}
-      <div className="hidden lg:flex relative z-10 w-1/2 h-full flex-col justify-between p-10 min-h-[calc(100vh)]">
+      {/* Left Content Area (Desktop) */}
+      <div className="hidden lg:flex relative z-10 w-1/2 h-full flex-col justify-between p-10 min-h-[calc(100vh)] text-white">
         <div>
           <Link
             href="/home"
-            className="inline-flex items-center text-white hover:text-gray-200 transition-colors font-medium text-sm sm:text-base"
+            className="inline-flex items-center text-white/80 hover:text-white transition-colors font-medium text-sm sm:text-base"
           >
             <ChevronLeft className="w-5 h-5 mr-2" />
             Back to homepage
           </Link>
         </div>
 
-        <div className="max-w-xl pb-20 pt-0">
+        <div className="max-w-xl pb-16 pt-0">
           <div className="mb-6">
             <Image
               src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
               alt="Nexucon Logo"
               width={220}
               height={70}
-              className="h-16 w-auto object-contain brightness-0 invert"
+              className="h-14 w-auto object-contain brightness-0 invert"
+              priority
             />
           </div>
 
-          <h1 className="text-[40px] font-extrabold text-[#022C4F] mb-6 leading-tight drop-shadow-sm">
-            Create Agency Account
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-300/30 text-xs font-bold text-blue-200 uppercase tracking-wider mb-4">
+            <ShieldCheck size={14} />
+            Official Agency Onboarding
+          </div>
+
+          <h1 className="text-[38px] font-extrabold text-white mb-4 leading-tight">
+            Register Government Regulatory Agency
           </h1>
 
-          <p className="text-white text-lg font-medium leading-relaxed max-w-lg drop-shadow-md">
-            Join Nexucon to streamline permit approvals, review architectural plans efficiently,
-            and ensure compliance across all projects in your jurisdiction.
+          <p className="text-white/80 text-base font-medium leading-relaxed max-w-lg mb-8">
+            Connect your agency to the national regulatory platform to manage permit approvals, assign site inspectors, review architectural models, and enforce building standards across your jurisdiction.
           </p>
+
+          {/* Stepper Dots */}
+          <div className="flex items-center gap-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div 
+                  className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                    step === i 
+                      ? "bg-white text-[#022C4F] scale-110 shadow-lg" 
+                      : step > i 
+                      ? "bg-emerald-400 text-white" 
+                      : "bg-white/20 text-white/70"
+                  }`}
+                >
+                  {step > i ? "✓" : i}
+                </div>
+                {i < 5 && <div className={`w-6 h-0.5 ${step > i ? "bg-emerald-400" : "bg-white/20"}`} />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-xs text-white/50">
+          nexucon.net &bull; Protected by Multi-Tenant Zero-Trust RBAC
         </div>
       </div>
 
-      {/* Right Content Area */}
+      {/* Right Content Area (Card) */}
       <div className="relative z-10 w-full lg:w-1/2 flex justify-center items-center h-full min-h-screen lg:min-h-0 lg:p-10">
         <div className="bg-white lg:rounded-3xl lg:shadow-2xl w-full max-w-[550px] lg:max-w-[627px] lg:w-[627px] p-6 sm:p-8 lg:p-12 flex flex-col h-full min-h-screen lg:min-h-[760px] lg:h-[760px] lg:max-h-[760px] overflow-y-auto">
 
-          {/* Mobile Top Navigation */}
-          <div className="flex lg:hidden justify-between items-center w-full mb-12 mt-4">
-            <Link
-              href="/home"
-              className="inline-flex items-center text-gray-700 hover:text-gray-900 transition-colors font-medium text-xs sm:text-sm"
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Back to homepage
-            </Link>
-            <p className="text-[11px] sm:text-xs font-medium text-gray-500">
-              Already have account? <Link href="/government/login" className="text-[#022C4F] font-semibold hover:underline">Sign In</Link>
+          {/* Top Bar */}
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-wider">
+                Step {step} of 5
+              </span>
+            </div>
+            <p className="text-xs font-medium text-gray-500">
+              Already registered? <Link href="/government/login" className="text-[#022C4F] font-bold hover:underline">Sign In</Link>
             </p>
           </div>
 
-          {/* Desktop Card Header */}
-          <div className="hidden lg:flex justify-between items-start mb-12">
-            <Image
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
-              alt="Nexucon Icon"
-              width={40}
-              height={40}
-              className="h-10 w-auto object-contain"
-            />
-            <p className="text-sm font-medium text-gray-500 mt-2">
-              Already have account? <Link href="/government/login" className="text-[#022C4F] font-semibold hover:underline">Sign In</Link>
+          {/* Form Header */}
+          <div className="mb-6">
+            <h2 className="text-2xl sm:text-[26px] font-extrabold text-[#022C4F]">
+              {step === 1 && "Official Personal Details"}
+              {step === 2 && "Agency & Department"}
+              {step === 3 && "Jurisdiction & Location"}
+              {step === 4 && "Account Security"}
+              {step === 5 && "Identity Verification"}
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1">
+              {step === 1 && "Provide your official agency representative credentials."}
+              {step === 2 && "Select your statutory agency name, tier, and oversight department."}
+              {step === 3 && "Enter your regional jurisdiction and headquarters office address."}
+              {step === 4 && "Establish an encrypted credential to safeguard statutory enforcement logs."}
+              {step === 5 && "Confirm your official email by entering the 6-digit passcode."}
             </p>
+            {authError && (
+              <p className="mt-3 text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+                {authError}
+              </p>
+            )}
           </div>
 
-          {/* Mobile Logo */}
-          <div className="flex lg:hidden justify-center mb-8">
-            <Image
-              src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
-              alt="Nexucon Logo"
-              width={160}
-              height={50}
-              className="h-10 sm:h-12 w-auto object-contain"
-            />
-          </div>
-
+          {/* Step 1: Personal Details */}
           {step === 1 && (
-            <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Personal Details</h2>
-                <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  Complete your account setup to start overseeing projects and ensuring compliance.
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Official Representative Full Name</label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => handleInputChange('fullName', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.fullName ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F]`}
+                  placeholder="Engr. Arc. Olawale Sanwo"
+                />
+                {errors.fullName && <span className="text-[11px] text-red-500 font-bold">{errors.fullName}</span>}
               </div>
 
-              <form className="flex flex-col gap-5 mb-10 lg:mb-8">
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Full Name</label>
-                  <input
-                    type="text"
-                    value={formData.fullName}
-                    onChange={(e) => handleInputChange('fullName', e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-xl border ${errors.fullName ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  />
-                  {errors.fullName && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.fullName}</span>}
-                </div>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Official Agency Email Address</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.email ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F]`}
+                  placeholder="director@lasbca.gov.ng"
+                />
+                {errors.email && <span className="text-[11px] text-red-500 font-bold">{errors.email}</span>}
+              </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Email Address</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-xl border ${errors.email ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  />
-                  {errors.email && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.email}</span>}
-                </div>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Direct Official Phone Number</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.phone ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F]`}
+                  placeholder="+234 803 000 1122"
+                />
+                {errors.phone && <span className="text-[11px] text-red-500 font-bold">{errors.phone}</span>}
+              </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Phone Number</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-xl border ${errors.phone ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  />
-                  {errors.phone && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.phone}</span>}
-                </div>
-
-                <div className="flex flex-col gap-2 relative z-50">
-                  <label className="text-sm font-bold text-[#022C4F]">Select Roles</label>
-                  <CustomSelect
-                    value={formData.role}
-                    onChange={(val) => handleInputChange('role', val)}
-                    options={[
-                      { value: "Agency Head", label: "Agency Head" },
-                      { value: "Director", label: "Director" },
-                      { value: "Inspector", label: "Inspector" }
-                    ]}
-                    placeholder="Select Role"
-                    error={errors.role}
-                  />
-                </div>
-              </form>
-
-              <div className="flex justify-end mt-auto lg:mt-0 mb-6 lg:mb-0">
+              <div className="mt-6 flex justify-end">
                 <button
+                  type="button"
                   onClick={handleNextStep1}
-                  type="button"
-                  className="flex items-center justify-center gap-2 px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] w-full lg:w-auto"
+                  className="w-full py-3.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex justify-center items-center gap-2 cursor-pointer"
                 >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
+                  <span>Proceed to Agency Details</span>
+                  <ChevronRight size={18} />
                 </button>
               </div>
-            </>
+            </div>
           )}
 
+          {/* Step 2: Agency & Department */}
           {step === 2 && (
-            <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Agency Information</h2>
-                <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  Provide details about your government agency or department.
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Statutory Agency Name</label>
+                <input
+                  type="text"
+                  value={formData.agencyName}
+                  onChange={(e) => handleInputChange('agencyName', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.agencyName ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F]`}
+                  placeholder="e.g. Lagos State Building Control Agency (LASBCA)"
+                />
+                {errors.agencyName && <span className="text-[11px] text-red-500 font-bold">{errors.agencyName}</span>}
               </div>
 
-              <form className="flex flex-col gap-5 mb-10 lg:mb-8">
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Agency Name</label>
-                  <input
-                    type="text"
-                    value={formData.agencyName}
-                    onChange={(e) => handleInputChange('agencyName', e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-xl border ${errors.agencyName ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  />
-                  {errors.agencyName && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.agencyName}</span>}
-                </div>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Official Portal / Agency Website</label>
+                <input
+                  type="text"
+                  value={formData.agencyWebsite}
+                  onChange={(e) => handleInputChange('agencyWebsite', e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm font-medium focus:outline-none focus:border-[#022C4F]"
+                  placeholder="https://lasbca.lagosstate.gov.ng"
+                />
+              </div>
 
-                <div className="flex flex-col sm:flex-row gap-5">
-                  <div className="flex flex-col gap-2 w-full sm:w-1/2">
-                    <label className="text-sm font-bold text-[#022C4F]">Agency Website (Optional)</label>
-                    <input
-                      type="url"
-                      value={formData.agencyWebsite}
-                      onChange={(e) => handleInputChange('agencyWebsite', e.target.value)}
-                      className="w-full px-4 py-3.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 w-full sm:w-1/2 relative">
-                    <label className="text-sm font-bold text-[#022C4F]">Jurisdiction Level</label>
-                    <CustomSelect
-                      value={formData.jurisdictionLevel}
-                      onChange={(val) => handleInputChange('jurisdictionLevel', val)}
-                      options={[
-                        { value: "municipal", label: "Municipal / City" },
-                        { value: "county", label: "County / District" },
-                        { value: "state", label: "State / Provincial" },
-                        { value: "federal", label: "Federal / National" }
-                      ]}
-                      placeholder="Select jurisdiction"
-                      error={errors.jurisdictionLevel}
-                    />
-                    {errors.jurisdictionLevel && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.jurisdictionLevel}</span>}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Jurisdiction Authority Tier</label>
+                <CustomSelect
+                  options={jurisdictionOptions}
+                  value={formData.jurisdictionLevel}
+                  onChange={(val) => handleInputChange('jurisdictionLevel', val)}
+                  placeholder="Select Jurisdiction Tier"
+                  error={errors.jurisdictionLevel}
+                />
+              </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Department</label>
-                  <CustomSelect
-                    value={formData.department}
-                    onChange={(val) => handleInputChange('department', val)}
-                    options={[
-                      { value: "planning", label: "Planning & Zoning" },
-                      { value: "building", label: "Building & Safety" },
-                      { value: "public_works", label: "Public Works" },
-                      { value: "transportation", label: "Transportation" },
-                      { value: "environmental", label: "Environmental Protection" },
-                      { value: "other", label: "Other" }
-                    ]}
-                    placeholder="Select department"
-                    error={errors.department}
-                  />
-                  {errors.department && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.department}</span>}
-                </div>
-              </form>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Primary Operational Department</label>
+                <CustomSelect
+                  options={departmentOptions}
+                  value={formData.department}
+                  onChange={(val) => handleInputChange('department', val)}
+                  placeholder="Select Primary Department"
+                  error={errors.department}
+                />
+              </div>
 
-              <div className="flex flex-col sm:flex-row justify-between gap-3 mt-auto lg:mt-0 mb-6 lg:mb-0">
+              <div className="mt-6 flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setStep(1)}
-                  type="button"
-                  className="flex items-center justify-center gap-2 px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto"
+                  className="w-1/3 py-3.5 border border-gray-300 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-50 transition-colors"
                 >
                   Back
-                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleNextStep2}
-                  type="button"
-                  className="flex items-center justify-center gap-2 px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto"
+                  className="w-2/3 py-3.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex justify-center items-center gap-2 cursor-pointer"
                 >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
+                  <span>Continue</span>
+                  <ChevronRight size={18} />
                 </button>
               </div>
-            </>
+            </div>
           )}
 
+          {/* Step 3: Location */}
           {step === 3 && (
-            <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Location Details</h2>
-                <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  Provide your agency's primary office location.
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs font-bold text-[#022C4F]">Country</label>
+                  <CustomSelect
+                    options={countryOptions}
+                    value={formData.country}
+                    onChange={(val) => handleInputChange('country', val)}
+                    placeholder="Select Country"
+                    error={errors.country}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-xs font-bold text-[#022C4F]">State / Region</label>
+                  <CustomSelect
+                    options={stateOptions}
+                    value={formData.stateRegion}
+                    onChange={(val) => handleInputChange('stateRegion', val)}
+                    placeholder="Select State"
+                    error={errors.stateRegion}
+                  />
+                </div>
               </div>
 
-              <form className="flex flex-col gap-5 mb-10 lg:mb-8">
-                <div className="flex flex-col sm:flex-row gap-5">
-                  <div className="flex flex-col gap-2 w-full sm:w-1/2 relative">
-                    <label className="text-sm font-bold text-[#022C4F]">Country</label>
-                    <CustomSelect
-                      value={formData.country}
-                      onChange={(val) => handleInputChange('country', val)}
-                      options={Country.getAllCountries().map(country => ({ value: country.isoCode, label: country.name }))}
-                      placeholder="Select Country"
-                      searchable={true}
-                      error={errors.country}
-                    />
-                    {errors.country && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.country}</span>}
-                  </div>
-                  <div className="flex flex-col gap-2 w-full sm:w-1/2 relative">
-                    <label className="text-sm font-bold text-[#022C4F]">State/Region</label>
-                    <CustomSelect
-                      value={formData.stateRegion}
-                      onChange={(val) => handleInputChange('stateRegion', val)}
-                      options={formData.country ? State.getStatesOfCountry(formData.country).map(state => ({ value: state.isoCode, label: state.name })) : []}
-                      placeholder="Select State/Region"
-                      searchable={true}
-                      error={errors.stateRegion}
-                      disabled={!formData.country}
-                      disabledText="Select Country First"
-                    />
-                    {errors.stateRegion && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.stateRegion}</span>}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Headquarters Office Address</label>
+                <textarea
+                  rows={3}
+                  value={formData.officeAddress}
+                  onChange={(e) => handleInputChange('officeAddress', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border ${errors.officeAddress ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F] resize-none`}
+                  placeholder="Muiz Banire Street, Old Secretariat, Ikeja, Lagos"
+                />
+                {errors.officeAddress && <span className="text-[11px] text-red-500 font-bold">{errors.officeAddress}</span>}
+              </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Office Address</label>
-                  <input
-                    type="text"
-                    value={formData.officeAddress}
-                    onChange={(e) => handleInputChange('officeAddress', e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-xl border ${errors.officeAddress ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  />
-                  {errors.officeAddress && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.officeAddress}</span>}
-                </div>
-              </form>
-
-              <div className="flex flex-col sm:flex-row justify-between gap-3 mt-auto lg:mt-0 mb-6 lg:mb-0">
+              <div className="mt-6 flex gap-3">
                 <button
-                  onClick={() => setStep(2)}
                   type="button"
-                  className="flex items-center justify-center gap-2 px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto"
+                  onClick={() => setStep(2)}
+                  className="w-1/3 py-3.5 border border-gray-300 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-50 transition-colors"
                 >
                   Back
-                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={handleNextStep3}
                   type="button"
-                  className="flex items-center justify-center gap-2 px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto"
+                  onClick={handleNextStep3}
+                  className="w-2/3 py-3.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex justify-center items-center gap-2 cursor-pointer"
                 >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
+                  <span>Continue</span>
+                  <ChevronRight size={18} />
                 </button>
               </div>
-            </>
+            </div>
           )}
 
+          {/* Step 4: Password & Security */}
           {step === 4 && (
-            <>
-              <div className="text-center mb-8">
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-3">Secure Your Account</h2>
-                <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  Create a secure password for your agency account.
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Create Master Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border ${errors.password ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F] pr-12`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                  </button>
+                </div>
+                {errors.password && <span className="text-[11px] text-red-500 font-bold">{errors.password}</span>}
               </div>
 
-              <form className="flex flex-col gap-5 mb-10 lg:mb-8">
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={formData.password}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
-                      className={`w-full px-4 py-3.5 rounded-xl border ${errors.password ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium pr-12`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none p-0 flex items-center justify-center"
-                    >
-                      {showPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-                    </button>
-                  </div>
-                  {errors.password && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.password}</span>}
+              <div className="flex flex-col gap-1.5 relative">
+                <label className="text-xs font-bold text-[#022C4F]">Confirm Password</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'} text-sm font-medium focus:outline-none focus:border-[#022C4F] pr-12`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                  </button>
+                </div>
+                {errors.confirmPassword && <span className="text-[11px] text-red-500 font-bold">{errors.confirmPassword}</span>}
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-gray-600 space-y-1">
+                <p className="font-bold text-[#022C4F]">Password Guidelines:</p>
+                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                  <li>Minimum 8 characters long</li>
+                  <li>Include uppercase, lowercase, number, and symbol (@$!%*?&)</li>
+                </ul>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="w-1/3 py-3.5 border border-gray-300 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-50 transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextStep4}
+                  className="w-2/3 py-3.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex justify-center items-center gap-2 cursor-pointer"
+                >
+                  <span>Review &amp; Accept Terms</span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: OTP Verification */}
+          {step === 5 && (
+            <div className="flex flex-col h-full justify-between py-2">
+              <div>
+                <div className="w-14 h-14 bg-blue-50 text-[#022C4F] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                  <CheckCircle2 className="w-7 h-7 text-blue-600" />
+                </div>
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-[#022C4F] mb-1">Verify Agency Credential</h3>
+                  <p className="text-xs text-gray-500">
+                    We dispatched a 6-digit statutory verification passcode to:
+                  </p>
+                  <span className="inline-block mt-2 px-3 py-1 bg-slate-100 text-[#022C4F] text-xs font-bold rounded-full border border-slate-200">
+                    {formData.email}
+                  </span>
                 </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-sm font-bold text-[#022C4F]">Confirm Password</label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={formData.confirmPassword}
-                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                      className={`w-full px-4 py-3.5 rounded-xl border ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium pr-12`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-400 hover:text-gray-600 transition-colors bg-transparent border-none p-0 flex items-center justify-center"
-                    >
-                      {showConfirmPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-                    </button>
+                <div className="flex flex-col gap-2 mb-6">
+                  <label className="text-xs font-bold text-[#022C4F] uppercase tracking-wider text-center">
+                    Enter 6-Digit Passcode
+                  </label>
+                  <div className="flex gap-2 sm:gap-3 justify-center w-full">
+                    {[...Array(6)].map((_, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => { otpRefs.current[i] = el; }}
+                        type="text"
+                        maxLength={1}
+                        value={formData.otp[i]}
+                        onChange={(e) => handleOtpChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                        onPaste={handleOtpPaste}
+                        className={`w-11 h-12 sm:w-12 sm:h-14 text-center rounded-xl border ${errors.otp ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-xl font-bold text-[#022C4F]`}
+                      />
+                    ))}
                   </div>
-                  {errors.confirmPassword && <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10 animate-pulse">{errors.confirmPassword}</span>}
+                  {errors.otp && <span className="text-[11px] text-center text-red-500 font-bold">{errors.otp}</span>}
                 </div>
-              </form>
 
-              <div className="flex flex-col gap-6 mt-auto lg:mt-0 mb-6 lg:mb-0">
-                {authError && (
-                  <div className="p-3.5 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
-                    {authError}
+                {/* Resend Code Section */}
+                <div className="flex justify-between items-center py-2 px-1 mb-4 border-b border-gray-100 text-xs">
+                  <span className="text-gray-500">Didn't receive the email?</span>
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={resendCooldown > 0}
+                    className="font-bold text-[#022C4F] hover:underline disabled:text-gray-400 cursor-pointer"
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                  </button>
+                </div>
+
+                {resendMessage && (
+                  <div className={`p-3 rounded-xl text-xs font-medium mb-4 border ${resendMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                    {resendMessage.text}
                   </div>
                 )}
-                <button
-                  onClick={handleNextStep4}
-                  type="button"
-                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98]"
-                >
-                  Complete Setup
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  type="button"
-                  className="text-[#022C4F] font-semibold hover:underline w-full text-center"
-                >
-                  Back
-                </button>
-              </div>
-            </>
-          )}
-
-          {step === 5 && (
-            <>
-              <div className="text-center mb-6">
-                <div className="w-12 h-12 bg-blue-50 text-[#022C4F] rounded-2xl flex items-center justify-center mx-auto mb-3 border border-blue-100">
-                  <CheckCircle2 className="w-6 h-6 text-[#0A66C2]" />
-                </div>
-                <h2 className="text-2xl sm:text-[28px] font-bold text-[#022C4F] mb-2">Verify Your Account</h2>
-                <p className="text-xs sm:text-sm font-medium text-gray-500 max-w-sm mx-auto leading-relaxed">
-                  We've sent a 6-digit verification passcode to:
-                </p>
-                <div className="inline-block mt-2 px-3.5 py-1 bg-slate-100 text-[#022C4F] text-xs sm:text-sm font-bold rounded-full border border-slate-200">
-                  {formData.email}
-                </div>
               </div>
 
-              <div className="flex flex-col gap-3 mb-6 mt-2">
-                <label className="text-sm font-bold text-[#022C4F]">Enter 6-Digit Code</label>
-                <div className="flex gap-2 sm:gap-4 justify-between w-full">
-                  {[...Array(6)].map((_, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => { otpRefs.current[i] = el; }}
-                      type="text"
-                      maxLength={1}
-                      value={formData.otp[i]}
-                      onChange={(e) => handleOtpChange(i, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                      onPaste={handleOtpPaste}
-                      className={`w-12 h-12 sm:w-14 sm:h-14 text-center rounded-xl border ${errors.otp ? 'border-red-500' : 'border-gray-400'} focus:outline-none focus:border-[#022C4F] focus:ring-1 transition-all text-xl font-bold text-[#022C4F]`}
-                    />
-                  ))}
-                </div>
-                {errors.otp && <span className="text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm animate-pulse">{errors.otp}</span>}
-              </div>
-
-              {/* Resend Code Section */}
-              <div className="flex flex-col sm:flex-row justify-between items-center py-2 px-1 mb-4 border-b border-gray-100 gap-2">
-                <span className="text-xs text-gray-500 font-medium">
-                  Didn't receive the email?
-                </span>
-                <button
-                  type="button"
-                  onClick={handleResendCode}
-                  disabled={resendCooldown > 0}
-                  className="text-xs font-bold text-[#022C4F] hover:underline disabled:text-gray-400 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
-                </button>
-              </div>
-
-              {resendMessage && (
-                <div className={`p-3 rounded-lg text-xs font-medium mb-4 border ${resendMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
-                  {resendMessage.text}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-5 mt-auto lg:mt-0 mb-6 lg:mb-0">
-                <p className="text-[12px] text-gray-500 leading-relaxed text-left">
-                  Check your inbox and spam folder. Entering this statutory code confirms identity and activates your regulatory dashboard.
-                </p>
-                {authError && <p className="text-xs text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 font-medium">{authError}</p>}
+              <div className="flex flex-col gap-3 mt-6">
                 <button
                   onClick={handleFinalSubmit}
                   type="button"
                   disabled={isLoading}
-                  className="flex items-center justify-center w-full px-10 py-3.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-sm font-semibold transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
+                  className="w-full py-4 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] disabled:opacity-70 flex justify-center items-center cursor-pointer"
                 >
                   {isLoading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   ) : (
-                    "Verify Account & Continue"
+                    "Activate Agency Command Center"
                   )}
                 </button>
                 <button
@@ -675,73 +668,67 @@ export default function GovernmentRegister() {
                   ← Edit account details
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
 
+      {/* Terms Modal */}
       {showTermsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-[850px] p-8 md:p-14">
-            <h2 className="text-[28px] sm:text-[32px] font-bold text-[#022C4F] mb-6">
-              Terms of Service
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[700px] p-8 sm:p-10 border border-gray-100">
+            <h2 className="text-2xl sm:text-[28px] font-extrabold text-[#022C4F] mb-4">
+              Statutory Agency Protocol &amp; Terms
             </h2>
-            <p className="text-sm text-gray-700 leading-relaxed mb-6">
-              By creating an agency account on Nexucon, you agree to comply with our platform policies, confidentiality terms, and operational standards.
+            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed mb-6">
+              By establishing a regulatory agency account on Nexucon, you confirm authorized delegation to execute statutory building controls, review architectural submissions, and enforce compliance orders.
             </p>
             
-            <div className="flex flex-col gap-5 mb-10">
-              <label className="flex items-center gap-4 cursor-pointer group">
-                <div className={`relative flex items-center justify-center w-5 h-5 border ${errors.termsAccepted ? 'border-red-500' : 'border-gray-400'} rounded-sm group-hover:border-[#022C4F] transition-colors`}>
-                  <input
-                    type="checkbox"
-                    checked={formData.termsAccepted}
-                    onChange={(e) => handleInputChange('termsAccepted', e.target.checked)}
-                    className="opacity-0 absolute inset-0 cursor-pointer peer"
-                  />
-                  <div className="hidden peer-checked:block w-3 h-3 bg-[#022C4F] rounded-sm"></div>
-                </div>
-                <span className={`text-sm font-medium ${errors.termsAccepted ? 'text-red-500' : 'text-gray-700'}`}>I agree to Nexucon's Terms & Conditions</span>
+            <div className="flex flex-col gap-4 mb-8">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.termsAccepted}
+                  onChange={(e) => handleInputChange('termsAccepted', e.target.checked)}
+                  className="w-5 h-5 accent-[#022C4F] rounded cursor-pointer"
+                />
+                <span className={`text-xs sm:text-sm font-medium ${errors.termsAccepted ? 'text-red-500' : 'text-gray-700'}`}>
+                  I agree to the Statutory Regulatory Terms &amp; Conditions
+                </span>
               </label>
-              <label className="flex items-center gap-4 cursor-pointer group">
-                <div className={`relative flex items-center justify-center w-5 h-5 border ${errors.privacyAccepted ? 'border-red-500' : 'border-gray-400'} rounded-sm group-hover:border-[#022C4F] transition-colors`}>
-                  <input
-                    type="checkbox"
-                    checked={formData.privacyAccepted}
-                    onChange={(e) => handleInputChange('privacyAccepted', e.target.checked)}
-                    className="opacity-0 absolute inset-0 cursor-pointer peer"
-                  />
-                  <div className="hidden peer-checked:block w-3 h-3 bg-[#022C4F] rounded-sm"></div>
-                </div>
-                <span className={`text-sm font-medium ${errors.privacyAccepted ? 'text-red-500' : 'text-gray-700'}`}>I agree to Nexucon's Privacy Policy</span>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.privacyAccepted}
+                  onChange={(e) => handleInputChange('privacyAccepted', e.target.checked)}
+                  className="w-5 h-5 accent-[#022C4F] rounded cursor-pointer"
+                />
+                <span className={`text-xs sm:text-sm font-medium ${errors.privacyAccepted ? 'text-red-500' : 'text-gray-700'}`}>
+                  I agree to the National Data Protection &amp; Jurisdiction Privacy Policy
+                </span>
               </label>
             </div>
 
-            {authError && (
-              <div className="p-3.5 mb-4 rounded-xl text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
-                {authError}
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setShowTermsModal(false)}
                 type="button"
                 disabled={isLoading}
-                className="flex-1 py-4 border-2 border-[#022C4F] text-[#022C4F] font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                className="w-full sm:w-1/2 py-3.5 border border-gray-300 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-50 transition-colors"
               >
-                Not right now
+                Cancel
               </button>
               <button
                 onClick={handleTermsSubmit}
                 type="button"
                 disabled={isLoading}
-                className="flex-1 py-4 bg-[#022C4F] text-white font-semibold rounded-xl hover:bg-[#022C4F]/90 transition-colors flex items-center justify-center disabled:opacity-70"
+                className="w-full sm:w-1/2 py-3.5 bg-[#022C4F] hover:bg-[#033c6c] text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center cursor-pointer disabled:opacity-70"
               >
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
-                  "I Agree"
+                  "Accept & Dispatch Verification"
                 )}
               </button>
             </div>
@@ -749,23 +736,24 @@ export default function GovernmentRegister() {
         </div>
       )}
 
+      {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-[500px] p-8 md:p-12 flex flex-col items-center text-center">
-            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle2 className="w-10 h-10" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[480px] p-8 md:p-10 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-5 border border-emerald-100">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h2 className="text-[26px] sm:text-[30px] font-bold text-[#022C4F] mb-4">
-              Account Created Successfully!
+            <h2 className="text-2xl font-extrabold text-[#022C4F] mb-2">
+              Agency Account Activated!
             </h2>
-            <p className="text-sm text-gray-600 leading-relaxed mb-10">
-              Your Nexucon agency profile is now active. You can start reviewing projects and managing compliance.
+            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed mb-8">
+              Your official agency profile has been established. You can now access the regulatory command center to review applications and oversee building compliance.
             </p>
             <Link
               href="/government/onboarding"
-              className="flex items-center justify-center w-full py-4 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl font-semibold transition-all shadow-md active:scale-[0.98]"
+              className="w-full py-4 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-sm font-bold transition-all shadow-md flex items-center justify-center cursor-pointer"
             >
-              Start Onboarding
+              Enter Agency Command Center
             </Link>
           </div>
         </div>
