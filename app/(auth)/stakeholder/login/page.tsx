@@ -228,7 +228,7 @@ export default function StakeholderLogin() {
               <div className="flex flex-col gap-2 relative">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-bold text-[#022C4F]">Password</label>
-                  <Link href="/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
+                  <Link href="/stakeholder/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
                     Forgot password?
                   </Link>
                 </div>
