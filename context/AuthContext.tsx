@@ -9,8 +9,10 @@ export interface User {
   first_name: string;
   last_name: string;
   is_verified: boolean;
+  is_onboarded?: boolean;
   role_name: string | null;
   agency_code: string | null;
+  stakeholder_profile?: any;
   permissions: string[];
 }
 

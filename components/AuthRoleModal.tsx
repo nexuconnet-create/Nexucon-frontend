@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Building2, HardHat, GraduationCap, Users, Landmark, ShieldCheck } from "lucide-react";
+import { X, Building2, HardHat, GraduationCap, Users, Landmark, ShieldCheck, Briefcase } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface AuthRoleModalProps {
@@ -54,6 +54,28 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       }
       return;
     }
+
+    if (role === "stakeholder") {
+      if (typeof window !== "undefined") {
+        const hostname = window.location.hostname;
+        const isLocalhost =
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname.includes("localhost");
+
+        if (isLocalhost) {
+          router.push(`/stakeholder/${mode}`);
+        } else if (hostname.startsWith("stakeholder.")) {
+          router.push(`/${mode}`);
+        } else {
+          router.push(`/stakeholder/${mode}`);
+        }
+      } else {
+        router.push(`/stakeholder/${mode}`);
+      }
+      return;
+    }
+
     // Navigate to the appropriate auth page based on the role and mode
     router.push(`/${role}/${mode}`);
   };
@@ -73,6 +95,14 @@ export default function AuthRoleModal({ isOpen, onClose, initialMode = "register
       description: "Review plans, issue permits, and oversee building compliance.",
       icon: <Landmark size={24} />,
       color: "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-500",
+      loginOnly: false,
+    },
+    {
+      id: "stakeholder",
+      title: "Government Stakeholder",
+      description: "Coordinate building inspections, manage project timelines, and settle statutory financial activities.",
+      icon: <Briefcase size={24} />,
+      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:border-indigo-500",
       loginOnly: false,
     },
     {

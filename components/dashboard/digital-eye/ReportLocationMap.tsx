@@ -260,14 +260,16 @@ export default function ReportLocationMap({ projectId }: { projectId?: string })
     if (!el || exporting) return;
     setExporting(true);
     try {
-      const html2canvas = (await import('html2canvas')).default;
+      // @ts-ignore
+      const html2canvasModule: any = await import('html2canvas');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
       const canvas = await html2canvas(el, {
         useCORS: true,
         allowTaint: false,
         backgroundColor: '#e2e8f0',
         scale: 2,
       });
-      canvas.toBlob((blob) => {
+      canvas.toBlob((blob: Blob | null) => {
         if (!blob) {
           toast('⚠️ The map snapshot could not be produced — try again.', 'error');
           return;

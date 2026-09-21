@@ -42,6 +42,33 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
+  const isStakeholderHost =
+    hostname.startsWith('stakeholder.') ||
+    hostname.includes('stakeholder.localhost') ||
+    hostname.includes('stakeholder-');
+
+  if (isStakeholderHost) {
+    // Safety fallback: if someone on stakeholder domain is directed to other logins, redirect to /stakeholder/login
+    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+      url.pathname = '/stakeholder/login';
+      return NextResponse.redirect(url);
+    }
+
+    // If request is already pointing to /stakeholder, allow it
+    if (pathname.startsWith('/stakeholder')) {
+      return NextResponse.next();
+    }
+
+    // Rewrite root or relative paths under stakeholder domain to /stakeholder equivalents
+    if (pathname === '/') {
+      url.pathname = '/stakeholder';
+      return NextResponse.rewrite(url);
+    }
+
+    url.pathname = `/stakeholder${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   return NextResponse.next();
 }
 
