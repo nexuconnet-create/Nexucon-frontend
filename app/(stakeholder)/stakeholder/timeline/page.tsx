@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -20,6 +20,18 @@ import {
 
 export default function StakeholderTimelinePage() {
   const [selectedProject, setSelectedProject] = useState("Eko Atlantic Horizon Towers");
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (typeof window !== "undefined" && window.location.hash === "#gates") {
+        const el = document.getElementById("gates");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   const milestones = [
     {
@@ -162,7 +174,7 @@ export default function StakeholderTimelinePage() {
       </div>
 
       {/* Critical Path Gantt & Milestones Container */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-6 sm:p-8 shadow-sm">
+      <div id="gates" className="scroll-mt-8 bg-white rounded-3xl border border-gray-100 p-6 sm:p-8 shadow-sm">
         <div className="mb-6">
           <h2 className="text-lg font-bold text-[#022C4F]">Stage-Gate Regulatory Sequence</h2>
           <p className="text-xs text-gray-400">

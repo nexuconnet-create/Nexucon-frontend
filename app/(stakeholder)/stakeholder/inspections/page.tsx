@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileSearch,
@@ -21,6 +22,8 @@ import {
   ExternalLink,
   ChevronRight,
   UserCheck,
+  Activity,
+  ArrowRight
 } from "lucide-react";
 
 export default function StakeholderInspectionsPage() {
@@ -113,8 +116,28 @@ export default function StakeholderInspectionsPage() {
     },
   ];
 
-  const filtered = inspections.filter(ins => {
-    const matchesSearch = ins.project.toLowerCase().includes(search.toLowerCase()) ||
+  // Hash watcher for #ncrs and #dispatch
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash;
+      if (hash === "#ncrs") {
+        setStatusFilter("NCR");
+        const el = document.getElementById("ncrs");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      } else if (hash === "#dispatch") {
+        const el = document.getElementById("dispatch");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  const filtered = inspections.filter((ins) => {
+    const matchesSearch =
+      ins.project.toLowerCase().includes(search.toLowerCase()) ||
       ins.id.toLowerCase().includes(search.toLowerCase()) ||
       ins.stage.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "ALL" || ins.status.toUpperCase().includes(statusFilter.toUpperCase());
@@ -124,15 +147,17 @@ export default function StakeholderInspectionsPage() {
   const handleRequestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsRequestModalOpen(false);
-    window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: "Stage inspection request submitted to Government Agency!", type: "success" }
-    }));
+    window.dispatchEvent(
+      new CustomEvent("show-toast", {
+        detail: { message: "Stage inspection request submitted to Government Agency!", type: "success" },
+      })
+    );
   };
 
   return (
-    <div className="w-full min-h-screen pb-12">
+    <div className="w-full min-h-screen pb-16 space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-wider mb-2">
             <FileSearch size={14} />
@@ -148,15 +173,53 @@ export default function StakeholderInspectionsPage() {
 
         <button
           onClick={() => setIsRequestModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold shrink-0 cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl shadow-md transition-all text-xs font-bold shrink-0 cursor-pointer self-start sm:self-auto"
         >
           <Plus size={16} />
           <span>Request Stage Inspection</span>
         </button>
       </div>
 
+      {/* Pillar Nav Tabs */}
+      <div className="flex items-center gap-3 overflow-x-auto pb-1 border-b border-slate-200">
+        <button
+          onClick={() => {
+            setStatusFilter("ALL");
+            window.location.hash = "";
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+            statusFilter !== "NCR" && typeof window !== "undefined" && window.location.hash !== "#ncrs"
+              ? "bg-[#022C4F] text-white shadow-sm"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          <FileSearch size={14} />
+          <span>All Stage Inspections</span>
+        </button>
+
+        <a
+          href="#dispatch"
+          className="px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-[#022C4F]"
+        >
+          <Activity size={14} />
+          <span>Inspector Dispatch & ETA</span>
+        </a>
+
+        <Link
+          href="/stakeholder/inspections/ncrs"
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            statusFilter === "NCR"
+              ? "bg-rose-700 text-white shadow-sm"
+              : "bg-white text-rose-700 border border-rose-200 hover:bg-rose-50"
+          }`}
+        >
+          <AlertOctagon size={14} />
+          <span>NCR Remediation Desk &rarr;</span>
+        </Link>
+      </div>
+
       {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input
@@ -172,7 +235,10 @@ export default function StakeholderInspectionsPage() {
           {["ALL", "SCHEDULED", "PASSED", "NCR"].map((s) => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => {
+                setStatusFilter(s);
+                if (s === "NCR") window.location.hash = "#ncrs";
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === s
                   ? "bg-[#022C4F] text-white shadow-sm"
@@ -186,7 +252,7 @@ export default function StakeholderInspectionsPage() {
       </div>
 
       {/* Inspections Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {filtered.map((ins, idx) => (
           <div
             key={idx}
@@ -214,7 +280,7 @@ export default function StakeholderInspectionsPage() {
               </div>
 
               {/* Inspector Dispatch Box */}
-              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 my-4">
+              <div id="dispatch" className="scroll-mt-10 p-3.5 rounded-xl bg-gray-50 border border-gray-100 my-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                     <UserCheck size={14} className="text-[#022C4F]" />
@@ -275,9 +341,13 @@ export default function StakeholderInspectionsPage() {
               <span className="text-gray-400">Scheduled Date: {ins.date}</span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.dispatchEvent(new CustomEvent('show-toast', {
-                    detail: { message: `Opening detailed audit report for ${ins.id}`, type: "info" }
-                  }))}
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent("show-toast", {
+                        detail: { message: `Opening detailed audit report for ${ins.id}`, type: "info" },
+                      })
+                    )
+                  }
                   className="px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-bold text-[#022C4F] transition-colors cursor-pointer"
                 >
                   Inspection Log
@@ -287,6 +357,38 @@ export default function StakeholderInspectionsPage() {
           </div>
         ))}
       </div>
+
+      {/* Anchor Section for #ncrs */}
+      <section id="ncrs" className="scroll-mt-10 pt-6">
+        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-rose-950 via-[#022C4F] to-rose-900 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-rose-500/20 text-rose-300">
+                <AlertOctagon size={20} />
+              </span>
+              <span className="text-xs font-extrabold uppercase tracking-widest text-rose-300">
+                Non-Conformance Reports (NCR) Hub
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black">
+              Regulatory Remediation Proof & Audit Vault
+            </h2>
+            <p className="text-xs sm:text-sm text-white/80 max-w-xl">
+              Access the dedicated NCR registry to review issuing agency citations, upload certified NDT tests or photo evidence, and clear statutory stop-work hold points.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              href="/stakeholder/inspections/ncrs"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-rose-900 font-extrabold text-xs shadow-md hover:bg-slate-100 transition-all hover:scale-105 active:scale-95"
+            >
+              <span>Open Full NCR Desk</span>
+              <ArrowRight size={15} />
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Modal: Request Stage Inspection */}
       <AnimatePresence>
@@ -461,9 +563,14 @@ export default function StakeholderInspectionsPage() {
                     type="button"
                     onClick={() => {
                       setIsNcrModalOpen(false);
-                      window.dispatchEvent(new CustomEvent('show-toast', {
-                        detail: { message: "Remediation proof submitted to Government Inspector for verification!", type: "success" }
-                      }));
+                      window.dispatchEvent(
+                        new CustomEvent("show-toast", {
+                          detail: {
+                            message: "Remediation proof submitted to Government Inspector for verification!",
+                            type: "success",
+                          },
+                        })
+                      );
                     }}
                     className="w-2/3 py-2.5 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer"
                   >

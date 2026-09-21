@@ -66,8 +66,8 @@ const stakeholderLinks: SidebarItem[] = [
     badge: "Live",
     subItems: [
       { name: "Stage Inspections", href: "/stakeholder/inspections", icon: FileSearch },
-      { name: "Inspector Dispatch & ETA", href: "/stakeholder/inspections#dispatch", icon: Activity },
-      { name: "NCR Remediation Proof", href: "/stakeholder/inspections#ncrs", icon: ShieldCheck },
+      { name: "Inspector Dispatch & ETA", href: "/stakeholder/inspections/dispatch", icon: Activity },
+      { name: "NCR Remediation Proof", href: "/stakeholder/inspections/ncrs", icon: ShieldCheck },
     ],
   },
   {

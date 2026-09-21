@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CreditCard,
@@ -25,6 +25,21 @@ export default function StakeholderFinancialsPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentGateway, setPaymentGateway] = useState<"remita" | "paystack" | "flutterwave">("remita");
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (typeof window !== "undefined") {
+        if (window.location.hash === "#escrow") {
+          setActiveTab("escrow");
+        } else if (window.location.hash === "#invoices") {
+          setActiveTab("invoices");
+        }
+      }
+    };
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   const invoices = [
     {
@@ -272,7 +287,7 @@ export default function StakeholderFinancialsPage() {
         </>
       ) : (
         /* Escrow Tab */
-        <div className="space-y-4">
+        <div id="escrow" className="space-y-4 scroll-mt-8">
           <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl text-xs text-blue-900 leading-relaxed">
             <strong>Statutory Milestone Escrow Governance:</strong> Contractor milestone disbursements are securely held in escrow and can only be authorized for release once the corresponding government inspection certificate has been digitally signed off.
           </div>
