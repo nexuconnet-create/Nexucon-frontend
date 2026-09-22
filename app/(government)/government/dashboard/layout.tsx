@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import GovernmentSidebar from "@/components/dashboard/GovernmentSidebar";
 import Toast from "@/components/Toast";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import {
   Menu,
   Bell,
   HelpCircle,
   X,
+  ShieldAlert,
 } from "lucide-react";
 
 export default function GovernmentLayout({
@@ -19,10 +21,67 @@ export default function GovernmentLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const { user, isLoading, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user) {
+        router.replace('/government/login');
+        return;
+      }
+      const role = (user.role_name || '').toLowerCase();
+      const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse');
+      const isGov = (role.includes('agency') || role.includes('director') || role.includes('executive') || role.includes('admin') || role.includes('government') || role.includes('ministry') || role.includes('regulator')) && !isInspector;
+
+      if (!isGov) {
+        logout();
+        router.replace('/government/login');
+      }
+    }
+  }, [user, isLoading, router, logout]);
+
+  if (!isLoading && user) {
+    const role = (user.role_name || '').toLowerCase();
+    const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse');
+    const isGov = (role.includes('agency') || role.includes('director') || role.includes('executive') || role.includes('admin') || role.includes('government') || role.includes('ministry') || role.includes('regulator')) && !isInspector;
+
+    if (!isGov) {
+      return (
+        <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-red-100">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Access Restricted</h2>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              {isInspector
+                ? "This portal is reserved for Agency Directorate and Command Center personnel. Field Inspectors must sign in via the Inspector Terminal."
+                : "This portal is reserved for Government Agency personnel. Stakeholders must use the Stakeholder Portal."}
+            </p>
+            <div className="flex flex-col gap-3">
+              <a
+                href={isInspector ? "https://inspector.nexucon.net" : "https://stakeholder.nexucon.net"}
+                className="w-full py-3 px-4 bg-[#022C4F] text-white rounded-xl font-bold text-sm hover:bg-[#033c6c] transition-all shadow-md"
+              >
+                Go to {isInspector ? "Inspector Terminal" : "Stakeholder Portal"}
+              </a>
+              <button
+                onClick={() => { logout(); router.replace('/government/login'); }}
+                className="w-full py-2.5 px-4 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                Switch Account / Sign In
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#DFDFDF] flex text-[#0F181F] p-0 sm:p-2 lg:p-4">

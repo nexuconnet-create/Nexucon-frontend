@@ -21,8 +21,8 @@ export function middleware(request: NextRequest) {
     hostname.includes('inspector-');
 
   if (isInspectorHost) {
-    // Safety fallback: if someone on inspector domain is directed to /government/login or similar, redirect to /inspector/login
-    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+    // Safety fallback: if someone on inspector domain is directed to other logins, redirect to /inspector/login
+    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional') || pathname.startsWith('/stakeholder')) {
       url.pathname = '/inspector/login';
       return NextResponse.redirect(url);
     }
@@ -49,7 +49,7 @@ export function middleware(request: NextRequest) {
 
   if (isStakeholderHost) {
     // Safety fallback: if someone on stakeholder domain is directed to other logins, redirect to /stakeholder/login
-    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional') || pathname.startsWith('/inspector')) {
       url.pathname = '/stakeholder/login';
       return NextResponse.redirect(url);
     }
@@ -72,6 +72,35 @@ export function middleware(request: NextRequest) {
     }
 
     url.pathname = `/stakeholder${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  const isGovernmentHost =
+    hostname.startsWith('government.') ||
+    hostname.includes('government.localhost') ||
+    hostname.includes('government-');
+
+  if (isGovernmentHost) {
+    if (pathname.startsWith('/inspector') || pathname.startsWith('/stakeholder') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+      url.pathname = '/government/login';
+      return NextResponse.redirect(url);
+    }
+
+    if (pathname.startsWith('/government')) {
+      return NextResponse.next();
+    }
+
+    if (pathname === '/') {
+      url.pathname = '/government/login';
+      return NextResponse.rewrite(url);
+    }
+
+    if (pathname === '/dashboard') {
+      url.pathname = '/government/dashboard/command-center';
+      return NextResponse.rewrite(url);
+    }
+
+    url.pathname = `/government${pathname}`;
     return NextResponse.rewrite(url);
   }
 

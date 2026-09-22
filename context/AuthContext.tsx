@@ -44,6 +44,38 @@ function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
+export const getPortalType = (override?: string): 'stakeholder' | 'inspector' | 'government' | null => {
+  if (override) return override.toLowerCase() as any;
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname.toLowerCase();
+  const host = window.location.hostname.toLowerCase();
+  if (path.includes('/stakeholder') || host.startsWith('stakeholder.') || host.includes('stakeholder.localhost') || host.includes('stakeholder-')) {
+    return 'stakeholder';
+  }
+  if (path.includes('/inspector') || host.startsWith('inspector.') || host.includes('inspector.localhost') || host.includes('inspector-')) {
+    return 'inspector';
+  }
+  if (path.includes('/government') || host.startsWith('government.') || host.includes('government.localhost') || host.includes('government-')) {
+    return 'government';
+  }
+  return null;
+};
+
+export const isRoleAllowedOnPortal = (roleName: string | undefined | null, portal: 'stakeholder' | 'inspector' | 'government' | null): boolean => {
+  if (!portal || !roleName) return true;
+  const role = roleName.toLowerCase();
+  const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse') || role.includes('surveillance');
+  const isGovernment = !isInspector && (
+    role.includes('agency') || role.includes('director') || role.includes('executive') || role.includes('admin') || role.includes('government') || role.includes('ministry') || role.includes('regulator')
+  );
+  const isStakeholder = !isInspector && !isGovernment;
+
+  if (portal === 'stakeholder') return isStakeholder;
+  if (portal === 'inspector') return isInspector;
+  if (portal === 'government') return isGovernment;
+  return true;
+};
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,6 +139,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshUser = async () => {
     let hasToken = false;
     let hasCached = false;
+    const currentPortal = getPortalType();
+
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('nexucon_access_token');
       hasToken = !!token;
@@ -115,8 +149,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.email) {
-            setUser(parsed);
-            hasCached = true;
+            // Check if cached user role matches current portal
+            if (currentPortal && !isRoleAllowedOnPortal(parsed.role_name, currentPortal)) {
+              console.warn(`[Security] Session role '${parsed.role_name}' is not permitted on '${currentPortal}' portal. Purging cross-portal session.`);
+              localStorage.removeItem('nexucon_auth_user');
+              localStorage.removeItem('nexucon_access_token');
+              setUser(null);
+            } else {
+              setUser(parsed);
+              hasCached = true;
+            }
           }
         } catch {
           // ignore corrupted cache
@@ -141,7 +183,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (contentType && contentType.includes("application/json")) {
           const data = await res.json();
           if (data && data.data) {
-            handleSetUser(data.data);
+            const fetchedRole = data.data.role_name;
+            if (currentPortal && !isRoleAllowedOnPortal(fetchedRole, currentPortal)) {
+              console.warn(`[Security] /auth/me/ returned role '${fetchedRole}' forbidden on '${currentPortal}'. Invalidating session.`);
+              handleSetUser(null);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('nexucon_auth_user');
+                localStorage.removeItem('nexucon_access_token');
+              }
+            } else {
+              handleSetUser(data.data);
+            }
           }
         }
       } else if (res.status === 401) {
@@ -165,61 +217,135 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const email = credentials.email?.trim().toLowerCase();
     const password = credentials.password;
 
+    // Detect target portal from credentials, pathname, or hostname
+    const targetPortal = getPortalType(credentials.portal);
+
+    const payload = {
+      ...credentials,
+      email,
+      password,
+      portal: targetPortal || undefined,
+    };
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (targetPortal) {
+      headers['X-Portal-Type'] = targetPortal;
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(payload),
       });
 
       const contentType = res.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         const data = await res.json();
+        
         if (data && data.requires_activation) {
+          setIsLoading(false);
           return { success: false, requiresActivation: true, inviteCode: data.invite_code, message: data.message } as any;
         }
+
+        // Role mismatch error from backend
+        if (res.status === 403 || data.code === 'PORTAL_ROLE_MISMATCH') {
+          const mismatchMsg = data.detail || data.message || "Access Denied: Your account role cannot log in to this portal.";
+          setError(mismatchMsg);
+          setIsLoading(false);
+          return { success: false, isRoleMismatch: true, message: mismatchMsg, allowedPortal: data.allowed_portal } as any;
+        }
+
         if (res.ok && data.success) {
+          const userRole = (data.data?.user?.role_name || '').toLowerCase();
+
+          // Client-side role validation
+          if (targetPortal === 'stakeholder') {
+            if (userRole.includes('inspector')) {
+              const msg = "Access Denied: You are attempting to sign in with an Inspector account. Please log in at the Inspector Terminal (https://inspector.nexucon.net).";
+              setError(msg);
+              setIsLoading(false);
+              return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'inspector' } as any;
+            }
+            if (userRole.includes('agency') || userRole.includes('director') || userRole.includes('executive')) {
+              const msg = "Access Denied: Government Agency accounts cannot access the Stakeholder portal. Please log in at the Government Command Center (https://government.nexucon.net).";
+              setError(msg);
+              setIsLoading(false);
+              return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'government' } as any;
+            }
+          } else if (targetPortal === 'government') {
+            if (userRole.includes('stakeholder') || userRole === 'client') {
+              const msg = "Access Denied: Stakeholder accounts cannot access the Government Command Center. Please log in at the Stakeholder Portal (https://stakeholder.nexucon.net).";
+              setError(msg);
+              setIsLoading(false);
+              return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'stakeholder' } as any;
+            }
+            if (userRole.includes('inspector') && !userRole.includes('head') && !userRole.includes('director')) {
+              const msg = "Access Denied: Field Inspector accounts cannot log in to the Government Command Center. Please log in at the Inspector Terminal (https://inspector.nexucon.net).";
+              setError(msg);
+              setIsLoading(false);
+              return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'inspector' } as any;
+            }
+          } else if (targetPortal === 'inspector') {
+            if (!userRole.includes('inspector')) {
+              const msg = "Access Denied: This terminal is strictly for accredited Field Inspectors. Stakeholders and Agency executives must use their respective portals.";
+              setError(msg);
+              setIsLoading(false);
+              return { success: false, isRoleMismatch: true, message: msg } as any;
+            }
+          }
+
           if (data.data?.access && typeof window !== 'undefined') {
             localStorage.setItem('nexucon_access_token', data.data.access);
           }
           handleSetUser(data.data.user);
           return true;
         }
+
+        if (data.detail || data.message) {
+          setError(data.detail || data.message);
+        }
       }
     } catch (err: any) {
       console.warn('Remote login attempt notice:', err);
     }
 
-    // Fallback: Check for invited/onboarded user credentials saved on this device
+    // Fallback: Check for invited/onboarded user credentials saved on this device (Strictly portal-aligned)
     if (typeof window !== 'undefined' && email) {
       const storedCredsStr = localStorage.getItem(`nexucon_user_credentials_${email}`);
       if (storedCredsStr) {
         try {
           const storedCreds = JSON.parse(storedCredsStr);
           if (storedCreds.password === password) {
+            const rawRole = (storedCreds.role_name || storedCreds.role || '').toLowerCase();
+            if (targetPortal === 'stakeholder' && (rawRole.includes('inspector') || rawRole.includes('agency'))) {
+              setError("Access Denied: Account role is not permitted on this portal.");
+              setIsLoading(false);
+              return false;
+            }
+            if (targetPortal === 'government' && (rawRole.includes('stakeholder') || rawRole.includes('inspector'))) {
+              setError("Access Denied: Account role is not permitted on this portal.");
+              setIsLoading(false);
+              return false;
+            }
+            if (targetPortal === 'inspector' && !rawRole.includes('inspector')) {
+              setError("Access Denied: This terminal is strictly for Field Inspectors.");
+              setIsLoading(false);
+              return false;
+            }
+
             const userObj: User = {
               id: storedCreds.id || `usr-${Date.now()}`,
               email: storedCreds.email,
-              first_name: storedCreds.first_name || storedCreds.name?.split(' ')[0] || 'Government',
-              last_name: storedCreds.last_name || storedCreds.name?.split(' ')[1] || 'Official',
+              first_name: storedCreds.first_name || storedCreds.name?.split(' ')[0] || 'User',
+              last_name: storedCreds.last_name || storedCreds.name?.split(' ')[1] || '',
               is_verified: true,
-              role_name: storedCreds.role_name || storedCreds.role || 'Government Agency Head',
-              agency_code: 'LASBCA',
-              permissions: [
-                'admin',
-                'projects.view',
-                'projects.create',
-                'projects.edit',
-                'applications.view',
-                'applications.create',
-                'applications.approve',
-                'inspections.view',
-                'inspections.create',
-                'inspections.update',
-                'monitoring.view',
-                'analytics.view_industry'
-              ]
+              role_name: storedCreds.role_name || storedCreds.role || (targetPortal === 'stakeholder' ? 'Client' : 'Agency Officer'),
+              agency_code: targetPortal === 'government' ? 'LASBCA' : null,
+              permissions: ['*']
             };
             handleSetUser(userObj);
             setIsLoading(false);

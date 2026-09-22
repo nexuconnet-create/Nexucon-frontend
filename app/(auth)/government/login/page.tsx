@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, EyeOff, Eye, ShieldCheck, Landmark, FileCheck2, Scale, AlertCircle } from "lucide-react";
@@ -10,11 +10,25 @@ import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
 export default function GovernmentLogin() {
   const router = useRouter();
-  const { login, isLoading, error: authError } = useAuth();
+  const { login, logout, user, isLoading, error: authError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      const role = (user.role_name || '').toLowerCase();
+      const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse');
+      const isGov = (role.includes('agency') || role.includes('director') || role.includes('executive') || role.includes('admin') || role.includes('government') || role.includes('ministry') || role.includes('regulator')) && !isInspector;
+
+      if (!isGov) {
+        logout();
+        return;
+      }
+      router.push('/government/dashboard/command-center');
+    }
+  }, [user, isLoading, router, logout]);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -35,8 +49,12 @@ export default function GovernmentLogin() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      const success = await login({ email: formData.email.trim(), password: formData.password });
-      if (success) {
+      const success = await login({
+        email: formData.email.trim(),
+        password: formData.password,
+        portal: 'government'
+      });
+      if (success === true) {
         setShowSuccessModal(true);
       }
     }

@@ -3,14 +3,14 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, EyeOff, Eye, Building2, Calendar, CreditCard, ShieldCheck } from "lucide-react";
+import { ChevronLeft, EyeOff, Eye, Building2, Calendar, CreditCard, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
 export default function StakeholderLogin() {
   const router = useRouter();
-  const { login, user, isLoading, error: authError } = useAuth();
+  const { login, logout, user, isLoading, error: authError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -28,6 +28,15 @@ export default function StakeholderLogin() {
 
   useEffect(() => {
     if (!isLoading && user) {
+      const role = (user.role_name || '').toLowerCase();
+      const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse');
+      const isGov = (role.includes('agency') || role.includes('director') || role.includes('executive') || role.includes('admin') || role.includes('government')) && !isInspector;
+
+      if (isInspector || isGov) {
+        logout();
+        return;
+      }
+
       const cleanEmail = user.email?.toLowerCase();
       const localOnboarded = typeof window !== 'undefined' && cleanEmail
         ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`) 
@@ -38,7 +47,7 @@ export default function StakeholderLogin() {
         router.push('/stakeholder/onboarding');
       }
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, logout]);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -72,8 +81,12 @@ export default function StakeholderLogin() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      const success = await login({ email: formData.email.trim(), password: formData.password });
-      if (success) {
+      const success = await login({
+        email: formData.email.trim(),
+        password: formData.password,
+        portal: 'stakeholder'
+      });
+      if (success === true) {
         setShowSuccessModal(true);
       }
     }
@@ -200,9 +213,10 @@ export default function StakeholderLogin() {
               Sign in as a Client, Developer, Contractor, Licensed Professional, or Consultant to manage regulatory activities.
             </p>
             {authError && (
-              <p className="mt-4 text-xs sm:text-sm text-red-600 bg-red-50 p-3 rounded-xl border border-red-200">
-                {authError}
-              </p>
+              <div className="mt-4 text-xs sm:text-sm text-red-700 bg-red-50 p-3.5 rounded-xl border border-red-200 flex items-start gap-2.5 shadow-sm">
+                <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <span className="font-semibold leading-relaxed">{authError}</span>
+              </div>
             )}
           </div>
 
