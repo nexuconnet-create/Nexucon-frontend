@@ -230,9 +230,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (targetPortal) {
-      headers['X-Portal-Type'] = targetPortal;
-    }
 
     try {
       const res = await fetch(`${API_BASE_URL}/auth/login/`, {
