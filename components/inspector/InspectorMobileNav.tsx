@@ -10,6 +10,10 @@ import {
   Layers,
   MoreHorizontal,
   Eye,
+  Scan,
+  Activity,
+  Box,
+  MapPin,
   AlertTriangle,
   ShieldCheck,
   RefreshCw,
@@ -39,7 +43,13 @@ export default function InspectorMobileNav() {
   ];
 
   const SECONDARY_ITEMS = [
-    { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-emerald-600" },
+    { name: "Digital Eye Overview", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-cyan-600", exact: true },
+    { name: "T-S1 MVP Scanner", href: "/inspector/dashboard/digital-eye/ts-1", icon: Scan, color: "text-blue-600" },
+    { name: "PUNDIT Ultrasonic NDT", href: "/inspector/dashboard/digital-eye/pundit", icon: Activity, color: "text-emerald-600" },
+    { name: "GPR Radargram Analysis", href: "/inspector/dashboard/digital-eye/gpr", icon: Radio, color: "text-amber-600" },
+    { name: "Trimble Connect 3D BIM", href: "/inspector/dashboard/digital-eye/trimble", icon: Box, color: "text-indigo-600" },
+    { name: "Spatial Evidence Map", href: "/inspector/dashboard/digital-eye/spatial", icon: MapPin, color: "text-purple-600" },
+    { name: "Audit & SHA-256 Vault", href: "/inspector/dashboard/digital-eye/audit-vault", icon: ShieldCheck, color: "text-teal-600" },
     { name: "Defect Findings", href: "/inspector/dashboard/findings", icon: AlertTriangle, color: "text-rose-600" },
     { name: "Compliance & Orders", href: "/inspector/dashboard/compliance", icon: ShieldCheck, color: "text-blue-600" },
     { name: "Sync Status", href: "/inspector/dashboard/sync", icon: RefreshCw, color: "text-emerald-600" },
