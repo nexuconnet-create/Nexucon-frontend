@@ -97,7 +97,7 @@ export interface Project {
 
 export const getProjects = async (): Promise<Project[]> => {
   try {
-    let response: any = await api.get('/projects/');
+    const response: any = await api.get('/projects/');
     let data = response?.data !== undefined ? response.data : response;
 
     // Handle case where DRF DefaultRouter returns API root { milestones: '...', projects: '...' }

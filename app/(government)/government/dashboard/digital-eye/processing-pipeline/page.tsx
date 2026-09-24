@@ -106,7 +106,7 @@ export default function ProcessingPipeline() {
             const tasks = tasksRes.data;
             
             // Map tasks to pipeline stages
-            let ingestionStatus = active.status === 'initialized' ? 'pending' : 'completed';
+            const ingestionStatus = active.status === 'initialized' ? 'pending' : 'completed';
             let aiStatus = 'pending';
             
             if (tasks.length > 0) {
