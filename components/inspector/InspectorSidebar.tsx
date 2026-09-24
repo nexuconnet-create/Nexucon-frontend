@@ -15,6 +15,11 @@ import {
   ClipboardCheck,
   Layers,
   Eye,
+  Scan,
+  Activity,
+  Box,
+  MapPin,
+  Lock,
   AlertTriangle,
   ShieldCheck,
   RefreshCw,
@@ -27,6 +32,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   LogOut,
   ExternalLink,
   X,
@@ -46,6 +52,7 @@ interface NavItem {
   exact?: boolean;
   live?: boolean;
   badge?: string;
+  subItems?: NavItem[];
 }
 
 interface NavSection {
@@ -59,16 +66,33 @@ const SECTIONS: NavSection[] = [
     items: [
       { name: "Command Center", href: "/inspector/dashboard", icon: LayoutDashboard, exact: true },
       { name: "Assigned Projects", href: "/inspector/dashboard/projects", icon: Building2 },
-      // These two badges are filled in from the dashboard payload at render
-      // time. They were literals ("4" and "12") before.
       { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck },
       { name: "Evidence Vault", href: "/inspector/dashboard/evidence", icon: Layers },
     ]
   },
   {
+    header: "DIGITAL EYE INTEGRATION",
+    items: [
+      {
+        name: "Digital Eye",
+        href: "/inspector/dashboard/digital-eye",
+        icon: Eye,
+        exact: true,
+        badge: "Suite",
+        subItems: [
+          { name: "T-S1 MVP", href: "/inspector/dashboard/digital-eye/ts-1", icon: Scan, badge: "TS-1" },
+          { name: "PUNDIT Ultrasonic NDT", href: "/inspector/dashboard/digital-eye/pundit", icon: Activity, badge: "UPV" },
+          { name: "GPR Radargram Analysis", href: "/inspector/dashboard/digital-eye/gpr", icon: Radio },
+          { name: "Trimble Connect 3D BIM Viewer", href: "/inspector/dashboard/digital-eye/trimble", icon: Box, live: true },
+          { name: "Spatial Evidence Map", href: "/inspector/dashboard/digital-eye/spatial", icon: MapPin },
+          { name: "Audit & SHA-256 Vault", href: "/inspector/dashboard/digital-eye/audit-vault", icon: ShieldCheck, badge: "SHA" },
+        ]
+      },
+    ]
+  },
+  {
     header: "TECHNICAL ANALYSIS",
     items: [
-      { name: "TS-1 (MVP) Device & NDT", href: "/inspector/dashboard/digital-eye", icon: Eye, live: true, badge: "TS-1" },
       { name: "Findings & SWOs", href: "/inspector/dashboard/findings", icon: AlertTriangle },
       { name: "Compliance Standards", href: "/inspector/dashboard/compliance", icon: ShieldCheck },
     ]
@@ -76,11 +100,6 @@ const SECTIONS: NavSection[] = [
   {
     header: "SYNC CENTER",
     items: [
-      // "Sync Status" is `exact` because every other item in this section
-      // lives underneath its path — without it, /sync/import would light up
-      // both rows. Each of these is a distinct job: what has not reached the
-      // server, how to bring a file in by hand, what the instruments are
-      // doing, and which instruments exist to send at all.
       { name: "Sync Status", href: "/inspector/dashboard/sync", icon: RefreshCw, exact: true },
       { name: "Manual Import", href: "/inspector/dashboard/sync/import", icon: Upload },
       { name: "Telemetry Status", href: "/inspector/dashboard/sync/telemetry", icon: Radio },
@@ -114,6 +133,16 @@ export default function InspectorSidebar({
   // they are omitted rather than defaulted when the server has not been read.
   const [badges, setBadges] = useState<Record<string, string> | null>(null);
   const [accreditationLine, setAccreditationLine] = useState<string | null>(null);
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({
+    "/inspector/dashboard/digital-eye": true,
+  });
+
+  // Keep Digital Eye submenu open whenever the current path is inside digital-eye
+  useEffect(() => {
+    if (pathname.startsWith("/inspector/dashboard/digital-eye")) {
+      setOpenSubmenus((prev) => ({ ...prev, "/inspector/dashboard/digital-eye": true }));
+    }
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,65 +264,182 @@ export default function InspectorSidebar({
               </div>
             )}
             {section.items.map((item) => {
+              const hasSub = !!(item.subItems && item.subItems.length > 0);
+              const isSubOpen = !!openSubmenus[item.href];
+              const isChildActive = hasSub && item.subItems!.some((sub) =>
+                pathname === sub.href || pathname.startsWith(sub.href + "/")
+              );
               const isActive = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
 
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  title={isCollapsed && !isMobile ? item.name : undefined}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all relative group select-none ${
-                    isActive
-                      ? "bg-white text-[#022C4F] font-bold shadow-md"
-                      : "text-white/80 hover:bg-white/10 hover:text-white"
-                  } ${isCollapsed && !isMobile ? "justify-center px-0" : ""}`}
-                >
-                  <item.icon
-                    size={19}
-                    className={`shrink-0 transition-transform ${
-                      isActive ? "text-[#022C4F] scale-105" : "text-white/70 group-hover:text-white"
-                    }`}
-                  />
+                <div key={item.name} className="space-y-1">
+                  <div className="flex items-center gap-1 w-full">
+                    <Link
+                      href={item.href}
+                      title={isCollapsed && !isMobile ? item.name : undefined}
+                      className={`flex-1 flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all relative group select-none ${
+                        isActive && !isChildActive
+                          ? "bg-white text-[#022C4F] font-bold shadow-md"
+                          : isChildActive
+                          ? "bg-white/10 text-white font-bold"
+                          : "text-white/80 hover:bg-white/10 hover:text-white"
+                      } ${isCollapsed && !isMobile ? "justify-center px-0 w-full" : ""}`}
+                    >
+                      <item.icon
+                        size={19}
+                        className={`shrink-0 transition-transform ${
+                          isActive && !isChildActive
+                            ? "text-[#022C4F] scale-105"
+                            : isChildActive
+                            ? "text-cyan-400"
+                            : "text-white/70 group-hover:text-white"
+                        }`}
+                      />
 
-                  {(!isCollapsed || isMobile) && (
-                    <div className="flex-1 flex items-center justify-between min-w-0">
-                      <span className="truncate">{item.name}</span>
+                      {(!isCollapsed || isMobile) && (
+                        <div className="flex-1 flex items-center justify-between min-w-0">
+                          <span className="truncate">{item.name}</span>
 
-                      {item.live && (
-                        <span className="flex items-center gap-1 text-[9px] font-mono font-extrabold text-emerald-300 bg-emerald-950/60 border border-emerald-400/40 px-1.5 py-0.5 rounded-full">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          3D
-                        </span>
+                          <div className="flex items-center gap-1.5 ml-2">
+                            {item.live && (
+                              <span className="flex items-center gap-1 text-[9px] font-mono font-extrabold text-emerald-300 bg-emerald-950/60 border border-emerald-400/40 px-1.5 py-0.5 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                3D
+                              </span>
+                            )}
+
+                            {item.badge && !item.live && (
+                              <span
+                                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                                  isActive && !isChildActive
+                                    ? "bg-[#022C4F] text-white"
+                                    : "bg-white/15 text-white"
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+
+                            {!item.badge && !item.live && badges?.[item.href] && (
+                              <span
+                                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                                  isActive && !isChildActive
+                                    ? "bg-[#022C4F] text-white"
+                                    : "bg-white/15 text-white"
+                                }`}
+                              >
+                                {badges[item.href]}
+                              </span>
+                            )}
+
+                            {hasSub && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenSubmenus((prev) => ({
+                                    ...prev,
+                                    [item.href]: !prev[item.href],
+                                  }));
+                                }}
+                                className="p-1 rounded hover:bg-white/20 text-white/70 hover:text-white transition-colors cursor-pointer"
+                                aria-label="Toggle submenu"
+                              >
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform duration-200 ${
+                                    isSubOpen ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
+                    </Link>
+                  </div>
 
-                      {item.badge && !item.live && (
-                        <span
-                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                            isActive
-                              ? "bg-[#022C4F] text-white"
-                              : "bg-white/15 text-white"
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
+                  {/* Expanded Sub-items (Desktop expanded or Mobile) */}
+                  {hasSub && isSubOpen && (!isCollapsed || isMobile) && (
+                    <div className="ml-4 pl-3 border-l border-white/20 space-y-1 py-1">
+                      {item.subItems!.map((sub) => {
+                        const isSubActive =
+                          pathname === sub.href || pathname.startsWith(sub.href + "/");
 
-                      {!item.badge && !item.live && badges?.[item.href] && (
-                        <span
-                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                            isActive
-                              ? "bg-[#022C4F] text-white"
-                              : "bg-white/15 text-white"
-                          }`}
-                        >
-                          {badges[item.href]}
-                        </span>
-                      )}
+                        return (
+                          <Link
+                            key={sub.name}
+                            href={sub.href}
+                            onClick={() => {
+                              if (isMobile) onCloseMobile?.();
+                            }}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all relative group select-none ${
+                              isSubActive
+                                ? "bg-white text-[#022C4F] font-bold shadow-md"
+                                : "text-white/75 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            <sub.icon
+                              size={16}
+                              className={`shrink-0 transition-transform ${
+                                isSubActive
+                                  ? "text-[#022C4F] scale-105"
+                                  : "text-white/60 group-hover:text-white"
+                              }`}
+                            />
+                            <span className="flex-1 truncate">{sub.name}</span>
+
+                            {sub.live && (
+                              <span className="flex items-center gap-1 text-[8px] font-mono font-extrabold text-emerald-300 bg-emerald-950/60 border border-emerald-400/40 px-1 py-0.2 rounded-full">
+                                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                                3D
+                              </span>
+                            )}
+
+                            {sub.badge && !sub.live && (
+                              <span
+                                className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                                  isSubActive
+                                    ? "bg-[#022C4F] text-white"
+                                    : "bg-white/15 text-white/90"
+                                }`}
+                              >
+                                {sub.badge}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
-                </Link>
+
+                  {/* Collapsed Mode Sub-item Quick Icons */}
+                  {hasSub && isCollapsed && !isMobile && (
+                    <div className="flex flex-col items-center gap-1 py-1 border-t border-b border-white/10 my-1 w-full">
+                      {item.subItems!.map((sub) => {
+                        const isSubActive =
+                          pathname === sub.href || pathname.startsWith(sub.href + "/");
+                        return (
+                          <Link
+                            key={sub.name}
+                            href={sub.href}
+                            title={sub.name}
+                            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
+                              isSubActive
+                                ? "bg-white text-[#022C4F] font-bold shadow-md"
+                                : "text-white/60 hover:bg-white/10 hover:text-white"
+                            }`}
+                          >
+                            <sub.icon size={16} />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

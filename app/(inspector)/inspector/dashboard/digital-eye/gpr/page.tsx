@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Hash,
   Activity,
+  ChevronRight,
 } from "lucide-react";
 
 interface Anomaly {
@@ -61,9 +62,9 @@ export default function GprRadargramPage() {
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-[#0284C7] uppercase tracking-wider mb-2">
-            <Link href="/inspector/dashboard/digital-eye/ts-1" className="hover:underline">Digital Eye</Link>
-            <span className="text-gray-400">/</span>
-            <span>GPR Radargram Radar</span>
+            <Link href="/inspector/dashboard/digital-eye" className="hover:underline">Digital Eye</Link>
+            <ChevronRight size={13} />
+            <span>GPR Radargram Analysis</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F] tracking-tight flex items-center gap-3">
             <Radio className="text-[#0284C7]" />

@@ -21,8 +21,8 @@ export function middleware(request: NextRequest) {
     hostname.includes('inspector-');
 
   if (isInspectorHost) {
-    // Safety fallback: if someone on inspector domain is directed to /government/login or similar, redirect to /inspector/login
-    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+    // Safety fallback: if someone on inspector domain is directed to other logins, redirect to /inspector/login
+    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional') || pathname.startsWith('/stakeholder')) {
       url.pathname = '/inspector/login';
       return NextResponse.redirect(url);
     }
@@ -39,6 +39,68 @@ export function middleware(request: NextRequest) {
     }
 
     url.pathname = `/inspector${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  const isStakeholderHost =
+    hostname.startsWith('stakeholder.') ||
+    hostname.includes('stakeholder.localhost') ||
+    hostname.includes('stakeholder-');
+
+  if (isStakeholderHost) {
+    // Safety fallback: if someone on stakeholder domain is directed to other logins, redirect to /stakeholder/login
+    if (pathname.startsWith('/government') || pathname.startsWith('/client') || pathname.startsWith('/professional') || pathname.startsWith('/inspector')) {
+      url.pathname = '/stakeholder/login';
+      return NextResponse.redirect(url);
+    }
+
+    // If request is already pointing to /stakeholder, allow it
+    if (pathname.startsWith('/stakeholder')) {
+      return NextResponse.next();
+    }
+
+    // Rewrite root to /stakeholder/login so the first page that shows is the login page
+    if (pathname === '/') {
+      url.pathname = '/stakeholder/login';
+      return NextResponse.rewrite(url);
+    }
+
+    // Rewrite /dashboard to /stakeholder
+    if (pathname === '/dashboard') {
+      url.pathname = '/stakeholder';
+      return NextResponse.rewrite(url);
+    }
+
+    url.pathname = `/stakeholder${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  const isGovernmentHost =
+    hostname.startsWith('government.') ||
+    hostname.includes('government.localhost') ||
+    hostname.includes('government-');
+
+  if (isGovernmentHost) {
+    if (pathname.startsWith('/inspector') || pathname.startsWith('/stakeholder') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
+      url.pathname = '/government/login';
+      return NextResponse.redirect(url);
+    }
+
+    if (pathname.startsWith('/government')) {
+      return NextResponse.next();
+    }
+
+    if (pathname === '/') {
+      url.pathname = '/government/login';
+      return NextResponse.rewrite(url);
+    }
+
+    if (pathname === '/dashboard') {
+      url.pathname = '/government/dashboard/command-center';
+      return NextResponse.rewrite(url);
+    }
+
+    url.pathname = `/government${pathname}`;
     return NextResponse.rewrite(url);
   }
 

@@ -11,7 +11,7 @@ import api from "@/services/api";
 function InspectorLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoading } = useAuth();
+  const { login, logout, user, isLoading } = useAuth();
 
   const queryEmail = searchParams?.get("email") || "";
   const isNewUser = searchParams?.get("new") === "true";
@@ -41,6 +41,26 @@ function InspectorLoginContent() {
     }
   }, [queryEmail, isNewUser]);
 
+  useEffect(() => {
+    if (!isLoading && user) {
+      const role = (user.role_name || '').toLowerCase();
+      const isInsp = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse');
+      if (!isInsp) {
+        logout();
+        return;
+      }
+      const cleanEmail = user.email?.toLowerCase();
+      const localOnboarded = typeof window !== 'undefined' && cleanEmail
+        ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`)
+        : null;
+      if (user.is_onboarded || localOnboarded) {
+        router.replace('/inspector/dashboard');
+      } else {
+        router.replace('/inspector/onboarding');
+      }
+    }
+  }, [user, isLoading, router, logout]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -57,7 +77,7 @@ function InspectorLoginContent() {
     setIsSubmitting(true);
     try {
       // 1. Direct standard login attempt with backend
-      const loginRes: any = await login({ email: cleanEmail, password: cleanPassword });
+      const loginRes: any = await login({ email: cleanEmail, password: cleanPassword, portal: 'inspector' });
       if (loginRes === true) {
         const onboardingDone = typeof window !== 'undefined'
           ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`)
@@ -68,6 +88,11 @@ function InspectorLoginContent() {
         } else {
           router.replace("/inspector/dashboard");
         }
+        return;
+      }
+
+      if (loginRes?.isRoleMismatch) {
+        setErrorMessage(loginRes.message);
         return;
       }
 
@@ -183,7 +208,7 @@ function InspectorLoginContent() {
           localStorage.setItem('nexucon_access_token', token);
         }
         try {
-          await login({ email: cleanEmail, password: newPassword });
+          await login({ email: cleanEmail, password: newPassword, portal: 'inspector' });
         } catch (_) {}
         router.replace("/inspector/onboarding");
         return;
@@ -191,7 +216,7 @@ function InspectorLoginContent() {
     } catch (err: any) {
       const apiError = err?.response?.data?.error || err?.response?.data?.message || err?.message;
       if (apiError?.toLowerCase().includes('already activated') || apiError?.toLowerCase().includes('already accepted')) {
-        const loginSuccess = await login({ email: cleanEmail, password: newPassword });
+        const loginSuccess = await login({ email: cleanEmail, password: newPassword, portal: 'inspector' });
         if (loginSuccess) {
           router.replace("/inspector/onboarding");
           return;
