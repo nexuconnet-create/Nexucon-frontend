@@ -3,68 +3,58 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, LineChart, FileText, Settings, ChevronRight } from "lucide-react";
-
-/**
- * The NEXUCON LINK navigation layer.
- *
- * The client's "castle-like" structure (15 Sep 2026 review): the workspace is
- * organised in LAYERS — a top-level Digital Eye nav, then this Nexucon Link
- * layer, then the page. The wireframe draws it as a nested bar:
- *
- *   ┌──────────────────────────────────────────────────────────────┐
- *   │  NEXUCON LINK                                                │
- *   │  [📊 Measurements] [📈 Curve Mgr] [📄 Reports] [⚙️ Settings] │
- *   └──────────────────────────────────────────────────────────────┘
- *
- * Rendered at the top of every Nexucon Link page so the workflow reads as one
- * grouped section rather than a fragmented set of screens. The breadcrumb
- * above the tiles names the layer the operator is currently inside.
- */
+import { Activity, TrendingUp, FileText, Settings, ChevronRight, ShieldCheck, Cpu } from "lucide-react";
 
 export interface NexuconLinkNavItem {
-  /** The wireframe's tile label, kept verbatim. */
   label: string;
-  /** The fuller name used in the breadcrumb and the accessible title. */
   title: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  aliases?: string[];
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   description: string;
+  badge?: string;
 }
 
 export const NEXUCON_LINK_NAV: NexuconLinkNavItem[] = [
   {
-    label: "Measurements",
-    title: "Measurements",
-    href: "/government/dashboard/digital-eye/pundit/tests",
+    label: "Measurement",
+    title: "UPV Test Measurements",
+    href: "/government/dashboard/digital-eye/pundit/neural-link/measurement",
+    aliases: ["/government/dashboard/digital-eye/pundit/tests"],
     icon: Activity,
     description: "The UPV readings recorded in the field, with the curve that produced each strength.",
+    badge: "Field Data",
   },
   {
     label: "Curve Manager",
-    title: "Curve Manager",
+    title: "Strength Curve Manager",
     href: "/government/dashboard/digital-eye/pundit/neural-link",
-    icon: LineChart,
+    aliases: ["/government/dashboard/digital-eye/pundit/neural-link/curve-manager"],
+    icon: TrendingUp,
     description: "Calibrate, compare and activate the velocity-to-strength conversion curves.",
+    badge: "Regression Engine",
   },
   {
-    label: "Reports",
-    title: "Nexucon Link Reports",
-    href: "/government/dashboard/digital-eye/pundit/reports",
+    label: "Report",
+    title: "Official NDT Dossier",
+    href: "/government/dashboard/digital-eye/pundit/neural-link/report",
+    aliases: ["/government/dashboard/digital-eye/pundit/reports"],
     icon: FileText,
     description: "FCU dossiers carrying the calibration disclosure and the standard-error policy applied.",
+    badge: "Statutory PDF",
   },
   {
     label: "Settings",
-    title: "System Settings",
-    href: "/government/dashboard/digital-eye/pundit/settings",
+    title: "System & Standard Settings",
+    href: "/government/dashboard/digital-eye/pundit/neural-link/settings",
+    aliases: ["/government/dashboard/digital-eye/pundit/settings"],
     icon: Settings,
     description: "Platform defaults: preferred curve type, reference standard, display units and standards registry.",
+    badge: "BS 1881-203",
   },
 ];
 
 interface NexuconLinkNavProps {
-  /** Optional page-specific note shown beside the breadcrumb. */
   subtitle?: string;
   className?: string;
 }
@@ -72,54 +62,105 @@ interface NexuconLinkNavProps {
 export default function NexuconLinkNav({ subtitle, className = "" }: NexuconLinkNavProps) {
   const pathname = usePathname();
 
-  // A tile is active on its own route and anything nested beneath it, so a
-  // detail page still reads as part of its parent layer.
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isItemActive = (item: NexuconLinkNavItem) => {
+    if (item.href === "/government/dashboard/digital-eye/pundit/neural-link") {
+      if (
+        pathname === "/government/dashboard/digital-eye/pundit/neural-link" ||
+        pathname === "/government/dashboard/digital-eye/pundit/neural-link/curve-manager"
+      ) {
+        return true;
+      }
+      return false;
+    }
+    if (pathname === item.href || pathname.startsWith(`${item.href}/`)) return true;
+    if (item.aliases?.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))) {
+      return true;
+    }
+    return false;
+  };
 
-  const current = NEXUCON_LINK_NAV.find((item) => isActive(item.href));
+  const current = NEXUCON_LINK_NAV.find((item) => isItemActive(item));
 
   return (
     <nav
-      aria-label="Nexucon Link"
-      className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}
+      aria-label="Neural Link Navigation"
+      className={`rounded-2xl border border-slate-700/60 bg-gradient-to-r from-[#0F172A] via-[#0A192F] to-[#022C4F] p-1.5 shadow-xl shadow-slate-950/20 text-white ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-4 py-2.5">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-          Nexucon Link
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
-        <span className="text-xs text-slate-500">
-          {current ? current.title : "Calibration workspace"}
-        </span>
-        {subtitle && (
-          <>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
-            <span className="text-xs text-slate-500">{subtitle}</span>
-          </>
-        )}
+      {/* Top Header & Telemetry Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-700/50">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+            <Cpu size={15} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                Neural Link NDT Suite
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <ShieldCheck size={11} />
+                <span>BS 1881-203 Verified</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
+              <span className="text-cyan-400 font-medium">Workspace</span>
+              <ChevronRight className="h-3 w-3 text-slate-400" aria-hidden="true" />
+              <span className="font-semibold text-white">{current ? current.title : "Calibration Console"}</span>
+              {subtitle && (
+                <>
+                  <ChevronRight className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                  <span className="text-amber-400 font-medium">{subtitle}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-white/10 text-slate-200 border border-white/15">
+            NON-DESTRUCTIVE TESTING (UPV + SONREB)
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
+      {/* 4 Core Sections */}
+      <div className="grid grid-cols-2 gap-1.5 p-1.5 sm:grid-cols-4">
         {NEXUCON_LINK_NAV.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.href);
+          const active = isItemActive(item);
           return (
             <Link
               key={item.href}
               href={item.href}
               title={item.description}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm transition-colors ${
+              className={`group relative flex flex-col justify-between rounded-xl px-3.5 py-2.5 transition-all duration-200 ${
                 active
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  ? "bg-gradient-to-b from-cyan-600/30 to-blue-600/20 border border-cyan-400/60 shadow-lg shadow-cyan-950/40 text-white"
+                  : "bg-slate-800/40 border border-slate-700/40 text-slate-300 hover:bg-slate-800/80 hover:border-slate-600 hover:text-white"
               }`}
             >
-              <Icon
-                className={`h-4 w-4 shrink-0 ${active ? "text-white" : "text-slate-400"}`}
-              />
-              <span className="truncate font-medium">{item.label}</span>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className={`p-1.5 rounded-lg ${active ? "bg-cyan-500 text-slate-950" : "bg-slate-700/50 text-slate-400 group-hover:text-cyan-400"}`}>
+                  <Icon size={16} />
+                </div>
+                {item.badge && (
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-semibold uppercase ${
+                    active ? "bg-cyan-400/20 text-cyan-200 border border-cyan-400/30" : "bg-slate-700/30 text-slate-300"
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-xs font-bold block tracking-tight text-white">{item.label}</span>
+                <span className="text-[10px] text-slate-300 line-clamp-1 group-hover:text-slate-200">
+                  {item.title}
+                </span>
+              </div>
+              {active && (
+                <div className="absolute -bottom-1.5 left-4 right-4 h-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full" />
+              )}
             </Link>
           );
         })}

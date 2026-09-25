@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
+import PaginationBar from "@/components/dashboard/PaginationBar";
 import {
   FolderViewToggle,
   FloorStationTreeBody,
@@ -22,6 +23,8 @@ export default function PunditTestsPage() {
   const [activeTest, setActiveTest] = useState<PunditTest | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   // A1: row expansion reveals the element's per-point readings (A, B, C…).
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // 8 Sep meeting: registry folder structure — Floor folder -> Station
@@ -132,27 +135,45 @@ export default function PunditTestsPage() {
               No PUNDIT tests recorded for this project yet.
             </div>
           ) : folders.viewMode === 'flat' ? (
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
-                  <th className="py-3 px-3 w-8"></th>
-                  <th className="py-3 px-5">Test Ref</th>
-                  <th className="py-3 px-5">Project & Location</th>
-                  <th className="py-3 px-5">Floor</th>
-                  <th className="py-3 px-5">Points</th>
-                  <th className="py-3 px-5">Transducer Mode</th>
-                  <th className="py-3 px-5">Velocity (m/s)</th>
-                  <th className="py-3 px-5">{strengthHeader}</th>
-                  <th className="py-3 px-5">Remarks</th>
-                  <th className="py-3 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {tests.map((t) => (
-                  <TestRow key={t.id} t={t} {...rowProps} />
-                ))}
-              </tbody>
-            </table>
+            <div>
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 font-semibold uppercase text-[11px] border-b border-gray-100">
+                    <th className="py-3 px-3 w-8"></th>
+                    <th className="py-3 px-5">Test Ref</th>
+                    <th className="py-3 px-5">Project & Location</th>
+                    <th className="py-3 px-5">Floor</th>
+                    <th className="py-3 px-5">Points</th>
+                    <th className="py-3 px-5">Transducer Mode</th>
+                    <th className="py-3 px-5">Velocity (m/s)</th>
+                    <th className="py-3 px-5">{strengthHeader}</th>
+                    <th className="py-3 px-5">Remarks</th>
+                    <th className="py-3 px-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {tests
+                    .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                    .map((t) => (
+                      <TestRow key={t.id} t={t} {...rowProps} />
+                    ))}
+                </tbody>
+              </table>
+
+              {tests.length > 0 && (
+                <PaginationBar
+                  currentPage={currentPage}
+                  totalItems={tests.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setCurrentPage(1);
+                  }}
+                  pageSizeOptions={[10, 25, 50, 100]}
+                />
+              )}
+            </div>
           ) : (
             <FloorStationTreeBody
               groups={folders.groups}
