@@ -1045,6 +1045,61 @@ export const updateFieldDevice = async (
   return unwrap<any>(res, res);
 };
 
+export interface DeviceConnectionLog {
+  id: string;
+  device: string;
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  event: 'connected' | 'disconnected' | 'failed';
+  event_display: string;
+  protocol: 'bluetooth' | 'wifi' | 'cloud';
+  protocol_display: string;
+  user: string;
+  user_name: string;
+  rssi_dbm: number | null;
+  ip_address: string | null;
+  cloud_workspace_id: string;
+  firmware_banner: string;
+  error_message: string;
+  notes: string;
+  created_at: string;
+}
+
+/**
+ * Log a direct device connection. Updates device status to online and saves connection details.
+ */
+export const connectFieldDevice = async (
+  deviceId: string,
+  params: {
+    protocol: 'bluetooth' | 'wifi' | 'cloud';
+    rssi_dbm?: number;
+    ip_address?: string;
+    cloud_workspace_id?: string;
+    firmware_banner?: string;
+    notes?: string;
+  }
+): Promise<DeviceConnectionLog> => {
+  const res = await api.post(`/digital-eye/devices/${deviceId}/connect/`, params);
+  return unwrap<any>(res, res);
+};
+
+/**
+ * Log a direct device disconnection or failure.
+ */
+export const disconnectFieldDevice = async (
+  deviceId: string,
+  params: {
+    protocol: 'bluetooth' | 'wifi' | 'cloud';
+    error?: boolean;
+    error_message?: string;
+    notes?: string;
+  }
+): Promise<DeviceConnectionLog> => {
+  const res = await api.post(`/digital-eye/devices/${deviceId}/disconnect/`, params);
+  return unwrap<any>(res, res);
+};
+
 /**
  * `POST /digital-eye/devices/<id>/column-mapping/suggest/` — read one of this
  * instrument's exports and say what its columns are.

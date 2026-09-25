@@ -335,8 +335,7 @@ export default function InspectorInvitePage() {
 
                 {/* Temporary Password Box.
                     Rendered only when the server actually issued one. This box
-                    used to display `validationResult.temporary_password ||
-                    "Nexucon@8842-2026!"` with a Copy button — so an invitation
+                    used to display a hardcoded placeholder fallback with a Copy button — so an invitation
                     that came with no temporary password showed a real-looking
                     credential that is not the account's password. An inspector
                     who copied it would paste a string that cannot sign them in,

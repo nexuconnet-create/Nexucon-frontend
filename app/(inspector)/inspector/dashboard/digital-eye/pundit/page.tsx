@@ -20,6 +20,9 @@ import {
   X,
   RotateCcw,
   Sparkles,
+  Radio,
+  Wifi,
+  Bluetooth,
 } from "lucide-react";
 import {
   PunditTest,
@@ -43,6 +46,7 @@ import {
   punditStationSummary,
 } from "@/components/dashboard/digital-eye/PunditFolderTree";
 import { getAssignableProjects } from "@/services/inspector";
+import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -125,7 +129,7 @@ function estimateCompressiveStrength(velocityMs: number): number {
 
 function PunditWorkspaceInner() {
   const searchParams = useSearchParams();
-  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch">("live");
+  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device">("live");
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -140,6 +144,10 @@ function PunditWorkspaceInner() {
 
   // Projects assignable to inspector
   const [projects, setProjects] = useState<{ id: string; name: string; reference?: string }[]>([]);
+
+  // Pundit Devices
+  const [punditDevices, setPunditDevices] = useState<FieldDeviceRecord[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   // Manual Form
   const [manualForm, setManualForm] = useState<{
@@ -215,6 +223,13 @@ function PunditWorkspaceInner() {
         if (prev && rows.some((r) => r.id === prev.id)) return prev;
         return rows[0] ?? null;
       });
+
+      const devices = await getFieldDevices({ device_type: "pundit" });
+      const devRows = Array.isArray(devices) ? devices : [];
+      setPunditDevices(devRows);
+      if (devRows.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(devRows[0].id);
+      }
     } catch (err: any) {
       setPunditTests(null);
       setRecordsError(
@@ -543,6 +558,7 @@ function PunditWorkspaceInner() {
             { id: "live", label: "Recorded Tests", icon: Zap },
             { id: "manual", label: "Manual Station Entry", icon: Sliders },
             { id: "batch", label: "Session File Upload", icon: FileSpreadsheet },
+            { id: "device", label: "Live Device Connect", icon: Radio },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -991,6 +1007,61 @@ function PunditWorkspaceInner() {
               {batchHashError}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODE 4: LIVE DEVICE CONNECT */}
+      {punditMode === "device" && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="pb-4 border-b border-slate-100">
+            <h2 className="text-base font-bold text-[#022C4F]">
+              Live Instrument Connection
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Connect to Screening Eagle / Proceq instruments directly over Wi-Fi or Bluetooth.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Select Pundit Instrument
+              </label>
+              {punditDevices.length > 0 ? (
+                <select
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800"
+                >
+                  <option value="" disabled>-- Select a registered device --</option>
+                  {punditDevices.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.device_id} ({d.model || d.device_type_display})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    <span>No Pundit devices are registered or assigned to you.</span>
+                  </div>
+                  <Link
+                    href="/inspector/dashboard/sync/devices"
+                    className="font-bold underline text-amber-900 hover:text-amber-950 shrink-0"
+                  >
+                    Register Device &rarr;
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {selectedDeviceId && (
+              <DeviceConnectPanel 
+                device={punditDevices.find(d => d.id === selectedDeviceId)!} 
+              />
+            )}
+          </div>
         </div>
       )}
 
