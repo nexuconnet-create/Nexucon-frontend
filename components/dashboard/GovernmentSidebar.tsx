@@ -48,6 +48,9 @@ import {
   Sparkles,
   UploadCloud,
   Database,
+  TrendingUp,
+  BrainCircuit,
+  Cpu,
   type LucideIcon,
 } from "lucide-react";
 
@@ -182,14 +185,32 @@ const sidebarLinks: SidebarItem[] = [
     name: "PUNDIT (Ultrasonic NDT)",
     icon: Sparkles,
     subItems: [
-      { name: "Nexucon Link (Calibration)", href: "/government/dashboard/digital-eye/pundit/neural-link", icon: LinkIcon },
       { name: "Waveform Oscillograms", href: "/government/dashboard/digital-eye/pundit/waveforms", icon: Sparkles },
       { name: "Data Collection & Ingestion", href: "/government/dashboard/digital-eye/pundit/data-collection", icon: UploadCloud },
       { name: "BS 1881-203:1986 Compliance", href: "/government/dashboard/digital-eye/pundit/compliance", icon: ShieldCheck },
       { name: "UPV Test Registry", href: "/government/dashboard/digital-eye/pundit/tests", icon: FileText },
-      { name: "AI Analysis", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: PieChart },
       { name: "Reports", href: "/government/dashboard/digital-eye/pundit/reports", icon: FileText },
       { name: "System Settings", href: "/government/dashboard/digital-eye/pundit/settings", icon: Settings },
+    ],
+  },
+  {
+    name: "Neural Link",
+    icon: LinkIcon,
+    subItems: [
+      { name: "Measurement", href: "/government/dashboard/digital-eye/pundit/neural-link/measurement", icon: Activity },
+      { name: "Curve Manager", href: "/government/dashboard/digital-eye/pundit/neural-link", icon: TrendingUp },
+      { name: "Report", href: "/government/dashboard/digital-eye/pundit/neural-link/report", icon: FileText },
+      { name: "Settings", href: "/government/dashboard/digital-eye/pundit/neural-link/settings", icon: Settings },
+    ],
+  },
+  {
+    name: "AI Analysis",
+    icon: BrainCircuit,
+    subItems: [
+      { name: "Tomography & Inversion", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: Cpu },
+      { name: "Element Verdicts", href: "/government/dashboard/digital-eye/pundit/ai-analysis/verdicts", icon: Box },
+      { name: "Defect Detection", href: "/government/dashboard/digital-eye/pundit/ai-analysis/defects", icon: AlertTriangle },
+      { name: "Reasoning Log", href: "/government/dashboard/digital-eye/pundit/ai-analysis/reasoning", icon: Sparkles },
     ],
   },
   {
@@ -512,7 +533,11 @@ export default function GovernmentSidebar({
                 <div className="flex flex-col ml-6 pl-2 border-l border-white/10 mt-1 gap-1">
                   {link.subItems?.map((sub) => {
                     const SubIcon = sub.icon;
-                    const isSubItemActive = pathname === sub.href || pathname.startsWith(`${sub.href}/`);
+                    const isSubItemActive = sub.href === "/government/dashboard/digital-eye/pundit/neural-link"
+                      ? (pathname === "/government/dashboard/digital-eye/pundit/neural-link" || pathname === "/government/dashboard/digital-eye/pundit/neural-link/curve-manager")
+                      : sub.href === "/government/dashboard/digital-eye/pundit/ai-analysis"
+                      ? pathname === "/government/dashboard/digital-eye/pundit/ai-analysis"
+                      : (pathname === sub.href || pathname.startsWith(`${sub.href}/`));
                     return (
                       <Link
                         key={sub.name}
