@@ -32,6 +32,7 @@ import ColumnMappingEditor, {
   rowsToMapping,
   type MappingRow,
 } from "@/components/inspector/ColumnMappingEditor";
+import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import {
   getDeviceTokens,
   getTelemetryDevices,
@@ -1280,6 +1281,8 @@ export default function InspectorInstrumentsPage() {
                       </div>
                     )}
                   </div>
+
+                  <DeviceConnectPanel device={device} />
 
                   {/*
                     Gateway sync — the platform mints the credential and writes
