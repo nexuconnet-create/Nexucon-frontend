@@ -1041,9 +1041,17 @@ function PunditWorkspaceInner() {
                   ))}
                 </select>
               ) : (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-center gap-2">
-                  <AlertTriangle size={16} />
-                  <span>No Pundit devices are registered or assigned to you.</span>
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    <span>No Pundit devices are registered or assigned to you.</span>
+                  </div>
+                  <Link
+                    href="/inspector/dashboard/sync/devices"
+                    className="font-bold underline text-amber-900 hover:text-amber-950 shrink-0"
+                  >
+                    Register Device &rarr;
+                  </Link>
                 </div>
               )}
             </div>
