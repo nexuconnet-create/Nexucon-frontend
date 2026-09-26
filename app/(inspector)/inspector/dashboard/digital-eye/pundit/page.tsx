@@ -67,7 +67,7 @@ const PunditWaveformViewer = dynamic(
   }
 );
 
-// Concrete quality rating evaluation per BS 1881-203 / ASTM C597
+// Concrete quality rating evaluation per BS 1881-203 / ASTM C597 (Valid Range: 2,000 – 5,000 m/s)
 function getConcreteQuality(velocityMs: number): {
   rating: PunditTest["concrete_quality_rating"];
   label: string;
@@ -75,10 +75,19 @@ function getConcreteQuality(velocityMs: number): {
   badgeClass: string;
   description: string;
 } {
+  if (velocityMs > 5000) {
+    return {
+      rating: "UNVERIFIED" as any,
+      label: "ABOVE RANGE (> 5,000 m/s)",
+      color: "#8B5CF6",
+      badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
+      description: "Velocity exceeds the 5,000 m/s upper valid concrete boundary (probable rebar hit or wave reflection anomaly).",
+    };
+  }
   if (velocityMs >= 4500) {
     return {
       rating: "EXCELLENT",
-      label: "EXCELLENT",
+      label: "EXCELLENT (4,500 – 5,000 m/s)",
       color: "#10B981",
       badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       description: "Dense, void-free, high-durability structural concrete (BS 1881-203).",
@@ -87,7 +96,7 @@ function getConcreteQuality(velocityMs: number): {
   if (velocityMs >= 3500) {
     return {
       rating: "GOOD",
-      label: "GOOD",
+      label: "GOOD (3,500 – 4,500 m/s)",
       color: "#059669",
       badgeClass: "bg-teal-50 text-teal-700 border-teal-200",
       description: "Sound, well-compacted concrete meeting required structural specification.",
@@ -96,7 +105,7 @@ function getConcreteQuality(velocityMs: number): {
   if (velocityMs >= 3000) {
     return {
       rating: "GOOD",
-      label: "MEDIUM (FAIR)",
+      label: "MEDIUM (FAIR) (3,000 – 3,500 m/s)",
       color: "#D97706",
       badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
       description: "Acceptable quality; minor micro-cracking or surface porosity observed.",
@@ -105,23 +114,23 @@ function getConcreteQuality(velocityMs: number): {
   if (velocityMs >= 2000) {
     return {
       rating: "DOUBTFUL",
-      label: "DOUBTFUL",
+      label: "DOUBTFUL (2,000 – 3,000 m/s)",
       color: "#DC2626",
-      badgeClass: "bg-rose-50 text-rose-700 border-rose-300 font-bold",
-      description: "Substandard compaction, internal voiding, or honeycomb defect suspected. Corroboration required.",
+      badgeClass: "bg-amber-50 text-amber-700 border-amber-300 font-bold",
+      description: "Lower boundary of project valid range (2,000 – 5,000 m/s). Substandard compaction, internal voiding, or honeycomb defect suspected.",
     };
   }
   return {
     rating: "VERY_POOR",
-    label: "VERY POOR",
+    label: "BELOW RANGE (< 2,000 m/s)",
     color: "#991B1B",
     badgeClass: "bg-rose-100 text-rose-900 border-rose-400 font-extrabold",
-    description: "Severe voiding, major structural discontinuity, or failed matrix integrity.",
+    description: "Below the 2,000 m/s minimum valid range. Severe voiding, major structural discontinuity, or failed matrix integrity.",
   };
 }
 
-function estimateCompressiveStrength(velocityMs: number): number {
-  if (velocityMs <= 0) return 0;
+function estimateCompressiveStrength(velocityMs: number): number | null {
+  if (velocityMs < 2000 || velocityMs > 5000) return null;
   const vKmS = velocityMs / 1000;
   const strength = 1.15 * Math.pow(vKmS, 2.45);
   return Math.round(Math.min(75, Math.max(10, strength)) * 10) / 10;
@@ -903,8 +912,14 @@ function PunditWorkspaceInner() {
                         <td className="p-2.5 font-mono text-slate-600">{pt.pathMm} mm</td>
                         <td className="p-2.5 font-mono text-slate-600">{pt.timeUs} µs</td>
                         <td className="p-2.5 font-mono font-bold text-[#022C4F]">{pt.velMs} m/s</td>
-                        <td className="p-2.5 font-mono text-emerald-700 font-semibold">
-                          ~{estimateCompressiveStrength(pt.velMs)} MPa
+                        <td className="p-2.5 font-mono">
+                          {estimateCompressiveStrength(pt.velMs) != null ? (
+                            <span className="text-emerald-700 font-semibold">~{estimateCompressiveStrength(pt.velMs)} MPa</span>
+                          ) : (
+                            <span className="text-[10px] text-rose-600 font-bold bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
+                              Outside valid range (2,000–5,000 m/s)
+                            </span>
+                          )}
                         </td>
                         <td className="p-2.5 text-right">
                           <button

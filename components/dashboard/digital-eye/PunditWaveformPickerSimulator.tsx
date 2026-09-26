@@ -41,19 +41,21 @@ export default function PunditWaveformPickerSimulator({
     return Math.round((pathLengthMm * 1000) / transitTimeUs);
   }, [pathLengthMm, transitTimeUs]);
 
-  // Compute fcu MPa via standard exponential calibration curve: fcu = 0.015 * exp(0.0018 * V)
+  // Compute fcu MPa via standard exponential calibration curve (valid 2,000 – 5,000 m/s)
   const fcuMpa = useMemo(() => {
-    if (velocityMs < 2000) return 0;
+    if (velocityMs < 2000 || velocityMs > 5000) return 0;
     const est = 0.015 * Math.exp(0.0018 * velocityMs);
     return Number(est.toFixed(1));
   }, [velocityMs]);
 
-  // Quality rating
+  // Quality rating with BS 1881-203 benchmarks
   const quality = useMemo(() => {
+    if (velocityMs > 5000) return { label: "ABOVE RANGE (> 5,000 m/s)", badge: "bg-purple-100 text-purple-800 border-purple-300" };
     if (velocityMs >= 4500) return { label: "EXCELLENT", badge: "bg-emerald-100 text-emerald-800 border-emerald-300" };
     if (velocityMs >= 3500) return { label: "GOOD", badge: "bg-blue-100 text-blue-800 border-blue-300" };
-    if (velocityMs >= 3000) return { label: "DOUBTFUL", badge: "bg-amber-100 text-amber-800 border-amber-300" };
-    return { label: "POOR", badge: "bg-rose-100 text-rose-800 border-rose-300" };
+    if (velocityMs >= 3000) return { label: "FAIR", badge: "bg-amber-100 text-amber-800 border-amber-300" };
+    if (velocityMs >= 2000) return { label: "DOUBTFUL", badge: "bg-amber-100 text-amber-800 border-amber-300" };
+    return { label: "BELOW RANGE (< 2,000 m/s)", badge: "bg-rose-100 text-rose-800 border-rose-300" };
   }, [velocityMs]);
 
   // Generate synthetic waveform path matching transit time

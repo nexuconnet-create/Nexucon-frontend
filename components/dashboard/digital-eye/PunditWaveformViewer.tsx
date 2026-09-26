@@ -101,13 +101,15 @@ export default function PunditWaveformViewer({
     ? Number(((2400 * Math.pow(computedVelocity, 2) * (1 + 0.2) * (1 - 2 * 0.2) / (1 - 0.2)) / 1e9).toFixed(1))
     : 0;
 
-  // Dynamic Concrete Quality Classification
+  // Dynamic Concrete Quality Classification (BS 1881-203, Valid Range 2,000 – 5,000 m/s)
   const getDynamicQuality = (velocity: number) => {
     if (velocity <= 0) return { rating: "NOT ASSESSED", badge: "bg-slate-500/20 text-slate-300 border-slate-500/30", color: "#94a3b8" };
+    if (velocity > 5000) return { rating: "ABOVE RANGE (> 5,000)", badge: "bg-purple-500/20 text-purple-300 border-purple-500/30", color: "#a855f7" };
     if (velocity >= 4500) return { rating: "EXCELLENT", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", color: "#34d399" };
     if (velocity >= 3500) return { rating: "GOOD", badge: "bg-blue-500/20 text-blue-300 border-blue-500/30", color: "#60a5fa" };
-    if (velocity >= 3000) return { rating: "DOUBTFUL", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30", color: "#fbbf24" };
-    return { rating: "POOR", badge: "bg-rose-500/20 text-rose-300 border-rose-500/30", color: "#f87171" };
+    if (velocity >= 3000) return { rating: "FAIR", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30", color: "#fbbf24" };
+    if (velocity >= 2000) return { rating: "DOUBTFUL", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30", color: "#fbbf24" };
+    return { rating: "BELOW RANGE (< 2,000)", badge: "bg-rose-500/20 text-rose-300 border-rose-500/30", color: "#f87171" };
   };
 
   const quality = getDynamicQuality(computedVelocity);
@@ -439,22 +441,25 @@ export default function PunditWaveformViewer({
           {/* Standards Benchmark Scale */}
           <div className="mt-4 p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
             <div className="flex justify-between text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-              <span>BS 1881-203 / ASTM C597 Velocity Classification Scale</span>
+              <span>BS 1881-203 / ASTM C597 Velocity Classification Scale (Valid Range: 2,000 – 5,000 m/s)</span>
               <span>Observed Velocity: {formatVelocityMs(computedVelocity)} m/s</span>
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold">
-              <div className={`p-2 rounded transition-colors ${computedVelocity < 3000 ? "bg-rose-500 text-white font-bold shadow-md shadow-rose-500/20" : "bg-slate-800 text-slate-400"}`}>
-                &lt; 3,000 m/s (Poor / Porous)
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center text-[10px] font-bold">
+              <div className={`p-2 rounded transition-colors ${computedVelocity > 0 && computedVelocity < 2000 ? "bg-rose-600 text-white font-bold shadow-md shadow-rose-600/30" : "bg-slate-800 text-slate-400"}`}>
+                &lt; 2,000 m/s (Below Valid Range)
+              </div>
+              <div className={`p-2 rounded transition-colors ${computedVelocity >= 2000 && computedVelocity < 3000 ? "bg-amber-600 text-white font-bold shadow-md shadow-amber-600/20" : "bg-slate-800 text-slate-400"}`}>
+                2,000 – 3,000 m/s (Doubtful)
               </div>
               <div className={`p-2 rounded transition-colors ${computedVelocity >= 3000 && computedVelocity < 3500 ? "bg-amber-500 text-white font-bold shadow-md shadow-amber-500/20" : "bg-slate-800 text-slate-400"}`}>
-                3,000 – 3,500 m/s (Doubtful)
+                3,000 – 3,500 m/s (Medium / Fair)
               </div>
               <div className={`p-2 rounded transition-colors ${computedVelocity >= 3500 && computedVelocity < 4500 ? "bg-blue-500 text-white font-bold shadow-md shadow-blue-500/20" : "bg-slate-800 text-slate-400"}`}>
                 3,500 – 4,500 m/s (Good Quality)
               </div>
-              <div className={`p-2 rounded transition-colors ${computedVelocity >= 4500 ? "bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20" : "bg-slate-800 text-slate-400"}`}>
-                &gt; 4,500 m/s (Excellent Sound)
+              <div className={`p-2 rounded transition-colors ${computedVelocity >= 4500 && computedVelocity <= 5000 ? "bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20" : computedVelocity > 5000 ? "bg-purple-600 text-white font-bold shadow-md" : "bg-slate-800 text-slate-400"}`}>
+                {computedVelocity > 5000 ? "> 5,000 m/s (Above Valid Range)" : "4,500 – 5,000 m/s (Excellent)"}
               </div>
             </div>
           </div>

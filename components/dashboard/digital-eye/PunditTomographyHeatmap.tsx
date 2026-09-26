@@ -44,31 +44,39 @@ export default function PunditTomographyHeatmap({
   // Compute color based on velocity and threshold
   const getCellColor = (vel: number) => {
     if (colorMode === "high-contrast") {
-      if (vel >= 4200) return "bg-cyan-500 text-slate-950";
+      if (vel > 5000) return "bg-purple-600 text-white font-bold";
+      if (vel >= 4500) return "bg-cyan-500 text-slate-950";
       if (vel >= threshold) return "bg-emerald-500 text-slate-950";
       if (vel >= 3000) return "bg-amber-400 text-slate-950 animate-pulse";
+      if (vel >= 2000) return "bg-orange-500 text-white font-semibold";
       return "bg-rose-600 text-white font-bold animate-bounce";
     }
 
     if (colorMode === "inverted") {
-      if (vel >= 4200) return "bg-blue-600 text-white";
+      if (vel > 5000) return "bg-purple-700 text-white";
+      if (vel >= 4500) return "bg-blue-600 text-white";
       if (vel >= threshold) return "bg-teal-600 text-white";
       if (vel >= 3000) return "bg-orange-500 text-white";
+      if (vel >= 2000) return "bg-rose-500 text-white";
       return "bg-rose-700 text-white";
     }
 
     // Standard acoustic gradient
-    if (vel >= 4200) return "bg-emerald-600 text-white";
+    if (vel > 5000) return "bg-purple-700 text-white font-bold";
+    if (vel >= 4500) return "bg-emerald-600 text-white";
     if (vel >= threshold) return "bg-emerald-500 text-white";
     if (vel >= 3000) return "bg-amber-500 text-slate-950";
+    if (vel >= 2000) return "bg-orange-500 text-white";
     return "bg-rose-600 text-white";
   };
 
   const getCellStatus = (vel: number) => {
-    if (vel >= 4200) return "EXCELLENT (Dense matrix)";
-    if (vel >= threshold) return "GOOD (BS compliant)";
-    if (vel >= 3000) return "DOUBTFUL (Internal microcracks)";
-    return "CRITICAL (Void / Honeycomb)";
+    if (vel > 5000) return "OUT OF RANGE (> 5,000 m/s - Rebar anomaly)";
+    if (vel >= 4500) return "EXCELLENT (4,500 – 5,000 m/s - Dense matrix)";
+    if (vel >= threshold) return `GOOD (≥ ${threshold} m/s - BS compliant)`;
+    if (vel >= 3000) return "FAIR / MEDIUM (3,000 – 3,500 m/s)";
+    if (vel >= 2000) return "DOUBTFUL (2,000 – 3,000 m/s - Lower valid limit)";
+    return "CRITICAL (< 2,000 m/s - Below Valid Range / Void)";
   };
 
   return (
@@ -86,9 +94,12 @@ export default function PunditTomographyHeatmap({
             <span className="text-[10px] font-mono font-bold bg-slate-900 text-amber-400 px-2 py-0.5 rounded">
               BS 1881-203 Inversion
             </span>
+            <span className="text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 px-2 py-0.5 rounded">
+              Valid Range: 2,000 – 5,000 m/s
+            </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Reconstructed ultrasonic velocity field across scanned structural elements. Visualizes internal density variations, micro-fracture planes, and honeycombs.
+            Reconstructed ultrasonic velocity field across scanned structural elements. Valid project bounds: 2,000 – 5,000 m/s.
           </p>
         </div>
 
@@ -98,15 +109,16 @@ export default function PunditTomographyHeatmap({
             <Sliders size={13} className="text-slate-400" />
             <span className="text-slate-500 font-semibold">Cutoff Threshold:</span>
             <span className="font-mono font-black text-amber-600">{threshold} m/s</span>
+            <span className="text-slate-400 text-[10px] font-mono">(2000–5000)</span>
             <input
               type="range"
-              min={2800}
-              max={4200}
+              min={2000}
+              max={5000}
               step={50}
               value={threshold}
               onChange={(e) => setThreshold(Number(e.target.value))}
-              className="w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              title="Adjust compliance threshold boundary"
+              className="w-28 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              title="Adjust compliance threshold boundary (Valid Range: 2,000 – 5,000 m/s)"
             />
           </div>
 
