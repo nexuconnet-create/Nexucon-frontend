@@ -148,7 +148,12 @@ export default function PunditAIReasoningPage() {
         typeof item === "string" ? item : JSON.stringify(item)
       );
     } else if (typeof raw === "string" && raw.trim()) {
-      lines = raw.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (raw.includes("\n")) {
+        lines = raw.split("\n").map((s) => s.trim()).filter(Boolean);
+      } else {
+        // Smart split on period sentence boundaries for single-line concatenated traces
+        lines = raw.split(/(?<=[.!?])\s+(?=[A-Z0-9\[])/).map((s) => s.trim()).filter(Boolean);
+      }
     }
 
     if (lines.length === 0) {
@@ -253,18 +258,18 @@ export default function PunditAIReasoningPage() {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
+          <div className="min-w-0 flex-1 mr-2">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
               Active Engine / Model
             </span>
-            <p className="text-lg font-bold text-gray-900 truncate mt-0.5 max-w-[170px]">
+            <p className="text-sm sm:text-base font-bold text-gray-900 truncate mt-0.5" title={activeAnalysis?.model_provider}>
               {activeAnalysis?.model_provider || "BS 1881-203 Engine"}
             </p>
-            <span className="text-[11px] text-emerald-600 font-mono font-semibold">
+            <span className="text-[11px] text-emerald-600 font-mono font-semibold truncate block" title={activeAnalysis?.model_version}>
               {activeAnalysis?.model_version || "Deterministic v2.4"}
             </span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <div className="w-11 h-11 shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Cpu size={22} />
           </div>
         </div>
