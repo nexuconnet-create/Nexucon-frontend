@@ -12,6 +12,7 @@ import {
   Filter
 } from "lucide-react";
 import { getPublicProjects, PublicProject } from "@/services/publicPortal";
+import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 
 // Dynamic import for Leaflet map to prevent SSR issues
 const ProjectMapView = dynamic(
@@ -54,33 +55,40 @@ export default function PtpMapPage() {
   ).length;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold uppercase tracking-wider mb-2">
-            <Compass size={14} className="text-emerald-700" />
-            <span>Interactive Geo-Spatial Safety Map</span>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Bar matching Government standard */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
+              <Compass size={20} />
+            </div>
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
+              Interactive Geo-Spatial Safety Map
+            </h1>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F]">
-            Lagos State Construction Geo-Spatial Map
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Visual inspection of permitted sites, active Stop-Work enforcement orders, and zoning boundaries.
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
+            Visual inspection of permitted construction sites, active Stop-Work enforcement seals, and coastal zoning setbacks across Lagos State.
           </p>
         </div>
+        <PtpTopRightControls />
+      </div>
 
-        {/* Legend / Stats */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center gap-2 shadow-2xs">
+      {/* Legend / Stats Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             <span>Permitted / Active ({filteredProjects.length - stopWorkCount})</span>
           </div>
-          <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center gap-2 shadow-2xs">
+          <div className="px-3.5 py-1.5 rounded-xl bg-red-50 text-red-800 border border-red-200 text-xs font-semibold flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
             <span>Stop-Work Enforced ({stopWorkCount})</span>
           </div>
         </div>
+        <span className="text-xs font-bold text-gray-500">
+          Total Mapped: <strong className="text-gray-900">{filteredProjects.length} sites</strong>
+        </span>
       </div>
 
       {/* LGA Fast Filters Strip */}

@@ -89,48 +89,64 @@ export default function PtpOnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 sm:px-6 lg:px-8 font-sans">
-      <div className="fixed inset-0 pointer-events-none opacity-30 bg-[radial-gradient(#022C4F_1px,transparent_1px)] [background-size:24px_24px]" />
+    <div className="min-h-screen w-full relative flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans bg-[#DFDFDF]">
+      {/* Background Image with Overlay */}
+      <div
+        className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `url('https://res.cloudinary.com/depeqzb6z/image/upload/v1784137456/Want_to_build_your_dream_business_or_investment_property__%EF%B8%8F_1_bsoz7j.png')`,
+        }}
+      >
+        <div className="absolute inset-0 bg-[#022C4F]/85 backdrop-blur-[2px]"></div>
+      </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-2xl relative z-10 px-4">
+      <div className="w-full max-w-2xl relative z-10">
         {/* Header */}
         <div className="text-center mb-8">
           <Link href="/transparency" className="inline-block mb-3">
             <Image
               src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
               alt="Nexucon Crest"
-              width={140}
-              height={44}
-              className="h-9 w-auto mx-auto object-contain"
+              width={160}
+              height={48}
+              className="h-10 w-auto mx-auto object-contain brightness-0 invert"
               priority
             />
           </Link>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-100 text-cyan-900 text-xs font-bold uppercase tracking-wider mb-2">
-            <Sparkles size={14} className="text-cyan-700" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-300/30 text-xs font-bold text-blue-200 uppercase tracking-wider mb-3">
+            <Sparkles size={14} className="text-blue-300" />
             <span>Civic Monitor Onboarding</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F]">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
             Set Up Your Monitoring Workspace
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
+          <p className="text-xs sm:text-sm text-white/80 mt-1">
             Personalize your statutory alert feeds, monitored LGAs, and civic credentials
           </p>
         </div>
 
         {/* Stepper Dots */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                step === s ? "w-8 bg-[#022C4F]" : step > s ? "w-4 bg-emerald-500" : "w-4 bg-slate-200"
-              }`}
-            />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div 
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                  step === i 
+                    ? "bg-white text-[#022C4F] scale-110 shadow-lg" 
+                    : step > i 
+                    ? "bg-emerald-400 text-white" 
+                    : "bg-white/20 text-white/70"
+                }`}
+              >
+                {step > i ? "✓" : i}
+              </div>
+              {i < 3 && <div className={`w-8 h-0.5 ${step > i ? "bg-emerald-400" : "bg-white/20"}`} />}
+            </div>
           ))}
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-xl shadow-slate-200/50">
+        <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-2xl border border-gray-100">
           {/* STEP 1: WELCOME & CIVIC ORIENTATION */}
           {step === 1 && (
             <div className="space-y-6">
@@ -139,20 +155,20 @@ export default function PtpOnboardingPage() {
               </div>
 
               <div>
-                <h2 className="text-xl font-bold text-slate-900">
+                <h2 className="text-xl font-extrabold text-[#022C4F]">
                   Welcome to the Lagos Civic Transparency Network
                 </h2>
-                <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                <p className="text-sm text-gray-600 mt-2 leading-relaxed">
                   As an accredited civic user, you hold statutory oversight tools designed to eliminate unpermitted construction, illegal extra storeys, and building collapse hazards across Lagos State.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex gap-3 items-start">
-                  <FileCheck2 size={20} className="text-blue-700 shrink-0 mt-0.5" />
+                  <FileCheck2 size={20} className="text-[#022C4F] shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">Cryptographic Verification</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
+                    <h4 className="text-xs font-bold text-[#022C4F]">Cryptographic Verification</h4>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       Verify genuine LASPPPA planning permit seals and stage clearances in real time.
                     </p>
                   </div>
@@ -161,8 +177,8 @@ export default function PtpOnboardingPage() {
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex gap-3 items-start">
                   <ShieldAlert size={20} className="text-amber-700 shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">Direct Tip-off Channel</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
+                    <h4 className="text-xs font-bold text-[#022C4F]">Direct Tip-off Channel</h4>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       Safely submit geotagged violation tip-offs routed directly to zonal LASBCA teams.
                     </p>
                   </div>
@@ -173,7 +189,7 @@ export default function PtpOnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#022C4F] text-white font-bold text-xs sm:text-sm hover:bg-[#033E6E] transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#022C4F] text-white font-bold text-sm hover:bg-[#033c6c] transition-all cursor-pointer shadow-md"
                 >
                   <span>Configure Watchlist &amp; Alerts</span>
                   <ChevronRight size={16} />
@@ -186,8 +202,8 @@ export default function PtpOnboardingPage() {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Select LGAs of Interest</h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <h2 className="text-xl font-extrabold text-[#022C4F]">Select LGAs of Interest</h2>
+                <p className="text-xs text-gray-500 mt-1">
                   Choose the Local Government Areas you want to track on your dashboard map and feed.
                 </p>
               </div>
@@ -203,14 +219,14 @@ export default function PtpOnboardingPage() {
                       className={`p-3 rounded-xl border text-xs font-medium cursor-pointer transition-all flex items-center justify-between ${
                         isChecked
                           ? "border-[#022C4F] bg-blue-50/70 text-[#022C4F] font-bold"
-                          : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white"
+                          : "border-gray-200 hover:border-gray-300 text-gray-700 bg-white"
                       }`}
                     >
                       <span className="truncate pr-2">{lga.name}</span>
                       {isChecked ? (
                         <CheckCircle2 size={16} className="text-[#022C4F] shrink-0" />
                       ) : (
-                        <div className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />
+                        <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0" />
                       )}
                     </div>
                   );
@@ -219,16 +235,16 @@ export default function PtpOnboardingPage() {
 
               {/* Alert Toggles */}
               <div className="pt-4 border-t border-slate-100">
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
+                <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider mb-3">
                   Instant Notification Triggers
                 </h3>
                 <div className="space-y-3">
                   <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-slate-50">
                     <div>
-                      <div className="text-xs font-bold text-slate-800">
+                      <div className="text-xs font-bold text-gray-800">
                         Stop-Work Orders &amp; Sealing Bulletins
                       </div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="text-[11px] text-gray-500">
                         Immediate alert when a site is sanctioned in your monitored LGAs
                       </div>
                     </div>
@@ -242,10 +258,10 @@ export default function PtpOnboardingPage() {
 
                   <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-slate-50">
                     <div>
-                      <div className="text-xs font-bold text-slate-800">
+                      <div className="text-xs font-bold text-gray-800">
                         New Statutory Approvals
                       </div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="text-[11px] text-gray-500">
                         Get notified when newly gazetted planning permits are registered
                       </div>
                     </div>
@@ -259,10 +275,10 @@ export default function PtpOnboardingPage() {
 
                   <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-slate-50">
                     <div>
-                      <div className="text-xs font-bold text-slate-800">
+                      <div className="text-xs font-bold text-gray-800">
                         Stage Completion Milestones
                       </div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="text-[11px] text-gray-500">
                         Foundation depth, concrete cube test results, and roofing passes
                       </div>
                     </div>
@@ -280,7 +296,7 @@ export default function PtpOnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-xs hover:bg-gray-50 cursor-pointer"
                 >
                   <ChevronLeft size={16} />
                   <span>Back</span>
@@ -288,7 +304,7 @@ export default function PtpOnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(3)}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#022C4F] text-white font-bold text-xs sm:text-sm hover:bg-[#033E6E] transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#022C4F] text-white font-bold text-sm hover:bg-[#033c6c] transition-all cursor-pointer shadow-md"
                 >
                   <span>Generate Monitor Pass</span>
                   <ChevronRight size={16} />
@@ -304,8 +320,8 @@ export default function PtpOnboardingPage() {
                 <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
                   <Award size={24} />
                 </div>
-                <h2 className="text-xl font-bold text-slate-900">Your Civic Monitor Pass is Ready</h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <h2 className="text-xl font-extrabold text-[#022C4F]">Your Civic Monitor Pass is Ready</h2>
+                <p className="text-xs text-gray-500 mt-1">
                   This digital credential identifies your active participation in public building safety.
                 </p>
               </div>
@@ -356,7 +372,7 @@ export default function PtpOnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-xs hover:bg-gray-50 cursor-pointer"
                 >
                   <ChevronLeft size={16} />
                   <span>Back</span>
@@ -365,7 +381,7 @@ export default function PtpOnboardingPage() {
                 <button
                   type="button"
                   onClick={handleFinish}
-                  className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
+                  className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white font-bold text-sm shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
                 >
                   <span>Launch My Transparency Dashboard</span>
                   <ArrowRight size={16} />

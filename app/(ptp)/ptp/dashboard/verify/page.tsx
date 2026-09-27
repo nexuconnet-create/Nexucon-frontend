@@ -18,6 +18,7 @@ import {
   Shield
 } from "lucide-react";
 import { verifyProjectPermit, PublicProject } from "@/services/publicPortal";
+import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 
 export default function PtpVerifyPage() {
   const [permitCode, setPermitCode] = useState("");
@@ -55,19 +56,23 @@ export default function PtpVerifyPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div>
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-900 text-xs font-bold uppercase tracking-wider mb-2">
-          <FileCheck2 size={14} className="text-blue-700" />
-          <span>Statutory Verification Desk</span>
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Bar matching Government standard */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
+              <FileCheck2 size={20} />
+            </div>
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
+              Permit &amp; Certificate Cryptographic Verification
+            </h1>
+          </div>
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
+            Validate authentic LASPPPA planning approvals, LASBCA stage clearances, and licensed professional stamps in real time.
+          </p>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F]">
-          Permit &amp; Certificate Cryptographic Verification
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Validate authentic LASPPPA planning approvals, LASBCA stage clearances, and licensed professional stamps.
-        </p>
+        <PtpTopRightControls />
       </div>
 
       {/* Verification Input Box */}

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getPublicProjects, PublicProject } from "@/services/publicPortal";
 import { ProjectStatusBadge, ComplianceBadge } from "@/components/transparency/ProjectStatusBadge";
+import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 
 export default function PtpWatchlistPage() {
   const [watchlist, setWatchlist] = useState<PublicProject[]>([]);
@@ -35,25 +36,33 @@ export default function PtpWatchlistPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-900 text-xs font-bold uppercase tracking-wider mb-2">
-            <Bookmark size={14} className="text-blue-700" />
-            <span>Monitored Properties</span>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Bar matching Government standard */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
+              <Bookmark size={20} />
+            </div>
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
+              My Civic Watchlist
+            </h1>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F]">
-            My Civic Watchlist
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
             Track real-time inspection passes, stage-gates, and statutory notices for your saved developments.
           </p>
         </div>
+        <PtpTopRightControls />
+      </div>
 
+      {/* Sub-header CTA bar */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+          Saved Properties ({watchlist.length})
+        </span>
         <Link
           href="/ptp/dashboard/search"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#022C4F] text-white font-bold text-xs hover:bg-[#033E6E] shadow-sm shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#022C4F] text-white font-bold text-xs hover:bg-[#033E6E] shadow-sm transition-all"
         >
           <Plus size={16} />
           <span>Add Development to Watchlist</span>

@@ -24,6 +24,8 @@ import {
   Download
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import MetricCard from "@/components/dashboard/MetricCard";
+import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 import {
   getPublicProjects,
   getPublicStats,
@@ -77,49 +79,49 @@ export default function PtpDashboardOverview() {
   const userName = user?.first_name ? `${user.first_name} ${user.last_name || ''}` : "Citizen Monitor";
 
   return (
-    <div className="space-y-6">
-      {/* WELCOME BANNER */}
-      <div className="relative rounded-3xl bg-gradient-to-r from-[#022C4F] via-[#033E6E] to-[#044B84] text-white p-6 sm:p-8 overflow-hidden shadow-md">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-cyan-200 text-xs font-semibold backdrop-blur-md mb-3">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Public Civic Command Center &bull; Lagos State</span>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Bar matching Government Command Center */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
+              <Building2 size={20} />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {userName}
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
+              Public Transparency Command Center
             </h1>
-            <p className="text-xs sm:text-sm text-slate-200 mt-1 max-w-2xl leading-relaxed">
-              Real-time statutory building oversight, permit verification, and stage inspection records across all 20 LGAs.
-            </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <Link
-              href="/ptp/dashboard/verify"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#022C4F] font-bold text-xs sm:text-sm hover:bg-slate-100 transition-all shadow-sm"
-            >
-              <FileCheck2 size={16} className="text-blue-700" />
-              <span>Verify Permit QR</span>
-            </Link>
-
-            <Link
-              href="/ptp/dashboard/report"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white font-bold text-xs sm:text-sm hover:bg-red-700 transition-all shadow-sm"
-            >
-              <Send size={16} />
-              <span>Report Violation</span>
-            </Link>
-          </div>
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
+            Official open-access civic monitoring dashboard for verified building approvals, stage-gate inspections, and real-time statutory enforcement notices across Lagos State.
+          </p>
         </div>
+        <PtpTopRightControls />
       </div>
 
-      {/* QUICK SEARCH & VERIFICATION BAR */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
+      {/* KPI METRIC CARDS matching Nexucon standard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <MetricCard
+          title="Verified Building Permits"
+          value={stats.verified_permits.toLocaleString()}
+        />
+        <MetricCard
+          title="Completed Stage Audits"
+          value={stats.completed_inspections.toLocaleString()}
+        />
+        <MetricCard
+          title="Active Stop-Work Seals"
+          value={stats.open_notices}
+        />
+        <MetricCard
+          title="Citizen Tips Resolved"
+          value={`${stats.citizens_reports_resolved}%`}
+        />
+      </div>
+
+      {/* QUICK ACTIONS & SEARCH TOOLBAR */}
+      <div className="bg-white rounded-2xl p-5 border border-[#022C4F]/20 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <form onSubmit={handleSearchSubmit} className="flex-1 w-full flex items-center gap-3">
+          <div className="relative flex-1">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Search size={18} />
             </div>
@@ -128,78 +130,32 @@ export default function PtpDashboardOverview() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by Permit ID (e.g. LASPPPA/ETI/2026/0481), Developer, or Street..."
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-[#022C4F] bg-slate-50/50"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-[#022C4F] bg-gray-50/50"
             />
           </div>
           <button
             type="submit"
-            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white font-bold text-xs sm:text-sm transition-all shadow-xs shrink-0 cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white font-bold text-xs sm:text-sm transition-all shadow-xs shrink-0 cursor-pointer"
           >
-            Find Development
+            Find Project
           </button>
         </form>
-      </div>
 
-      {/* KPI METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider">Permitted Sites</span>
-            <Building2 size={20} className="text-blue-600" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-              {stats.verified_permits.toLocaleString()}
-            </div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-              <span>+18 gazetted this week</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider">Stage Audits</span>
-            <FileCheck2 size={20} className="text-emerald-600" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-              {stats.completed_inspections.toLocaleString()}
-            </div>
-            <div className="text-[11px] text-slate-500 font-medium mt-1">
-              Foundation to Habitation
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider">Stop-Work Seals</span>
-            <AlertTriangle size={20} className="text-amber-600" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-amber-700">
-              {stats.open_notices}
-            </div>
-            <div className="text-[11px] text-amber-600 font-semibold mt-1">
-              Active enforcement in progress
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider">Resolved Reports</span>
-            <ShieldCheck size={20} className="text-cyan-600" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-              {stats.citizens_reports_resolved}%
-            </div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-              Average response: 48h
-            </div>
-          </div>
+        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end">
+          <Link
+            href="/ptp/dashboard/verify"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#022C4F] font-bold text-xs sm:text-sm transition-all flex items-center gap-2"
+          >
+            <FileCheck2 size={16} />
+            <span>Verify Permit QR</span>
+          </Link>
+          <Link
+            href="/ptp/dashboard/report"
+            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 shadow-xs"
+          >
+            <Send size={16} />
+            <span>Report Violation</span>
+          </Link>
         </div>
       </div>
 

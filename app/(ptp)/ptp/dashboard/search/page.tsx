@@ -25,6 +25,7 @@ import { VerificationBadge } from "@/components/transparency/VerificationBadge";
 import { InspectionTimeline } from "@/components/transparency/InspectionTimeline";
 import { PublicDocumentList } from "@/components/transparency/PublicDocumentList";
 import { PublicFindingCard } from "@/components/transparency/PublicFindingCard";
+import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 
 function SearchRegistryContent() {
   const searchParams = useSearchParams();
@@ -76,27 +77,23 @@ function SearchRegistryContent() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-900 text-xs font-bold uppercase tracking-wider mb-2">
-            <Search size={14} className="text-blue-700" />
-            <span>Statutory Project Registry</span>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Bar matching Government standard */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#022C4F] flex items-center justify-center text-white shadow-md shrink-0">
+              <Search size={20} />
+            </div>
+            <h1 className="text-2xl sm:text-[32px] font-bold text-[#022C4F] leading-tight">
+              Statutory Project Registry
+            </h1>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#022C4F]">
-            Lagos State Construction Project Registry
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Search, filter, and inspect verified planning approvals and stage audit records across 20 LGAs.
+          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed sm:ml-[52px]">
+            Search, filter, and inspect verified planning approvals, stage-gate inspections, and structural records across all 20 LGAs.
           </p>
         </div>
-
-        <div className="text-right shrink-0">
-          <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
-            Showing <strong className="text-slate-900">{projects.length}</strong> Verified Records
-          </span>
-        </div>
+        <PtpTopRightControls />
       </div>
 
       {/* Filter Bar */}

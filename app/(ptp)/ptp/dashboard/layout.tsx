@@ -101,20 +101,20 @@ export default function PtpDashboardLayout({
         {/* Main Content Area */}
         <div
           className={`flex-1 flex flex-col min-w-0 bg-[#FAFAFA] lg:rounded-[30px] shadow-sm transition-all duration-300 min-h-screen lg:min-h-0 lg:h-[calc(100vh-32px)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
-            isSidebarCollapsed ? "lg:ml-[96px]" : "lg:ml-[276px]"
+            isSidebarCollapsed ? "lg:ml-[116px]" : "lg:ml-[316px]"
           }`}
         >
           {/* Mobile Top Header */}
-          <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
+          <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-3.5 sm:px-6 py-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
             <Link href="/ptp/dashboard" className="flex items-center gap-2">
               <Image
                 src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
                 alt="Nexucon Logo"
-                width={110}
-                height={30}
-                className="h-6 w-auto object-contain"
+                width={120}
+                height={32}
+                className="h-7 w-auto object-contain"
               />
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 uppercase">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-[#022C4F] uppercase">
                 PTP
               </span>
             </Link>
@@ -122,7 +122,7 @@ export default function PtpDashboardLayout({
             <div className="flex items-center gap-2">
               <Link
                 href="/ptp/dashboard/report"
-                className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs"
               >
                 <Send size={12} />
                 <span>Tip-off</span>
@@ -138,7 +138,7 @@ export default function PtpDashboardLayout({
             </div>
           </div>
 
-          <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto min-w-0">
+          <main className="flex-1 p-3.5 sm:p-6 lg:p-10 max-w-[1600px] w-full mx-auto min-w-0">
             {children}
           </main>
         </div>

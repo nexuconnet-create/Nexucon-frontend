@@ -12,7 +12,6 @@ const navLinks = [
   { name: "Find Professionals", href: "/find-professionals" },
   { name: "Post a Project", href: "/post-project" },
   { name: "Mentorship", href: "/mentorship" },
-  { name: "Transparency", href: "/transparency" },
   { name: "Contact Us", href: "/contact" }
 ];
 
