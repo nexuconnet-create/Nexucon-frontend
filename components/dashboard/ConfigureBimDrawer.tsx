@@ -19,8 +19,8 @@ export default function ConfigureBimDrawer({
 }: ConfigureBimDrawerProps) {
   const [provider, setProvider] = useState(bimPlatform?.provider || 'Trimble Connect');
   const [environment, setEnvironment] = useState(bimPlatform?.environment || 'Production');
-  const [clientId, setClientId] = useState(bimPlatform?.client_id || 'trimble_connect_prod_01');
-  const [webhookUrl, setWebhookUrl] = useState(bimPlatform?.webhook_url || 'https://api.nexucon.gov.ng/api/v1/integrations/bim/webhook');
+  const [clientId, setClientId] = useState(bimPlatform?.client_id || '9287e302-7b46-4936-ac33-88d3c311c9cb');
+  const [webhookUrl, setWebhookUrl] = useState(bimPlatform?.webhook_url || 'https://api.nexucon.net/api/v1/digital-eye/trimble/callback/');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -28,8 +28,8 @@ export default function ConfigureBimDrawer({
   const handleProviderSelect = (p: string) => {
     setProvider(p);
     if (p === 'Trimble Connect') {
-      setClientId('trimble_connect_prod_01');
-      setWebhookUrl('https://api.nexucon.gov.ng/api/v1/integrations/bim/trimble');
+      setClientId('9287e302-7b46-4936-ac33-88d3c311c9cb');
+      setWebhookUrl('https://api.nexucon.net/api/v1/digital-eye/trimble/callback/');
     } else if (p === 'Autodesk Construction Cloud') {
       setClientId('acc_prod_9921');
       setWebhookUrl('https://api.nexucon.gov.ng/api/v1/integrations/bim/autodesk');
