@@ -104,6 +104,40 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
+  const isPtpHost =
+    hostname.startsWith('ptp.') ||
+    hostname.includes('ptp.localhost') ||
+    hostname.includes('ptp-');
+
+  if (isPtpHost) {
+    // Safety fallback: prevent internal dashboard routes from leaking on public transparency domain
+    if (
+      pathname.startsWith('/government') ||
+      pathname.startsWith('/client') ||
+      pathname.startsWith('/professional') ||
+      pathname.startsWith('/stakeholder') ||
+      pathname.startsWith('/inspector')
+    ) {
+      url.pathname = '/transparency';
+      return NextResponse.redirect(url);
+    }
+
+    // If request is already pointing to /transparency, allow it
+    if (pathname.startsWith('/transparency')) {
+      return NextResponse.next();
+    }
+
+    // Rewrite root to /transparency
+    if (pathname === '/') {
+      url.pathname = '/transparency';
+      return NextResponse.rewrite(url);
+    }
+
+    // Clean subdomain routing (e.g. /search, /map, /verify, /projects/...)
+    url.pathname = `/transparency${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   return NextResponse.next();
 }
 
