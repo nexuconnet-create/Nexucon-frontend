@@ -61,14 +61,14 @@ export const ProjectMapView: React.FC<ProjectMapViewProps> = ({
       {/* Interactive Map Area */}
       <div className="relative flex-1 h-full min-h-[350px]">
         {/* Top Floating LGA Filter Chips */}
-        <div className="absolute top-4 left-4 right-4 z-20 pointer-events-none flex flex-wrap items-center justify-between gap-2">
-          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-xl border border-slate-200/80 shadow-md">
-            <span className="text-[11px] font-bold text-slate-500 uppercase px-2">District:</span>
+        <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 z-20 pointer-events-none flex items-center justify-between gap-2">
+          <div className="pointer-events-auto flex items-center gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-xl border border-slate-200/80 shadow-md max-w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <span className="text-[11px] font-bold text-slate-500 uppercase px-2 shrink-0">District:</span>
             {lgas.map((lga) => (
               <button
                 key={lga}
                 onClick={() => setSelectedLgaFilter(lga)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
                   selectedLgaFilter === lga
                     ? 'bg-[#022C4F] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -79,7 +79,7 @@ export const ProjectMapView: React.FC<ProjectMapViewProps> = ({
             ))}
           </div>
 
-          <div className="pointer-events-auto hidden sm:flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-md text-xs font-semibold text-slate-700">
+          <div className="pointer-events-auto hidden sm:flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-md text-xs font-semibold text-slate-700 shrink-0">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             <span>{filteredProjects.length} Verified Sites</span>
           </div>
