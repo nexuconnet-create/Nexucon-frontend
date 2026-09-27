@@ -28,8 +28,6 @@ import {
   Send,
   Zap,
 } from 'lucide-react';
-import { PublicHeader } from '@/components/transparency/PublicHeader';
-import { PublicFooter } from '@/components/transparency/PublicFooter';
 import { useLanguage } from '@/components/transparency/LanguageContext';
 
 export default function PublicTransparencyInfoPage() {
@@ -64,9 +62,7 @@ export default function PublicTransparencyInfoPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F181F] flex flex-col font-sans">
-      <PublicHeader />
-
+    <div className="flex-1 bg-[#F8FAFC] text-[#0F181F] flex flex-col font-sans">
       <main className="flex-1">
         {/* HERO SECTION */}
         <section className="relative overflow-hidden bg-gradient-to-b from-[#022C4F] via-[#033E6E] to-[#022C4F] text-white pt-16 pb-24 lg:pt-24 lg:pb-32 px-4 sm:px-6 lg:px-8">
@@ -453,8 +449,6 @@ export default function PublicTransparencyInfoPage() {
           </div>
         </section>
       </main>
-
-      <PublicFooter />
     </div>
   );
 }
