@@ -175,14 +175,14 @@ export const PublicHeader: React.FC = () => {
             {/* Login & Register CTAs */}
             <Link
               href={loginHref}
-              className="text-xs font-bold text-[#022C4F] hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+              className="hidden sm:inline-flex text-xs font-bold text-[#022C4F] hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
             >
               Sign In
             </Link>
 
             <Link
               href={registerHref}
-              className="inline-flex items-center px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold shadow-xs hover:shadow transition-all"
+              className="hidden sm:inline-flex items-center px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold shadow-xs hover:shadow transition-all"
             >
               Register
             </Link>

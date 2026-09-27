@@ -135,21 +135,29 @@ export default function PtpDashboardLayout({
               </span>
             </Link>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Link
+                href="/ptp/dashboard/search"
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#022C4F] bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                title="Search Projects"
+              >
+                <Compass size={16} />
+              </Link>
+
               <Link
                 href="/ptp/dashboard/report"
-                className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs"
+                className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition-colors"
               >
                 <Send size={12} />
-                <span>Tip-off</span>
+                <span className="hidden sm:inline">Tip-off</span>
               </Link>
 
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="w-9 h-9 flex items-center justify-center text-[#022C4F] bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#022C4F] bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                 aria-label="Open Navigation Menu"
               >
-                <Menu size={20} />
+                <Menu size={18} />
               </button>
             </div>
           </div>
