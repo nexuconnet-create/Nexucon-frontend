@@ -28,11 +28,16 @@ import {
   Send,
   Zap,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { usePtpRoute } from '@/components/transparency/PublicHeader';
 import { useLanguage } from '@/components/transparency/LanguageContext';
 
 export default function PublicTransparencyInfoPage() {
+  const router = useRouter();
+  const { isPtp } = usePtpRoute();
   const { t } = useLanguage();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -88,18 +93,84 @@ export default function PublicTransparencyInfoPage() {
               A unified, civic-first transparency portal empowering citizens, real estate investors, and community watchdogs to verify building permits, track structural stage approvals, and protect our communities from unpermitted developments.
             </p>
 
+            {/* Quick Permit Search & Verification Bar */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (searchQuery.trim()) {
+                    const target = isPtp ? `/verify?permit=${encodeURIComponent(searchQuery.trim())}` : `/transparency/verify?permit=${encodeURIComponent(searchQuery.trim())}`;
+                    router.push(target);
+                  }
+                }}
+                className="relative flex items-center bg-white/10 backdrop-blur-xl border border-white/25 rounded-2xl p-1.5 shadow-2xl focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-400/30 transition-all"
+              >
+                <div className="pl-4 pr-2 text-cyan-300">
+                  <Search size={20} />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Enter permit number (e.g. LASBCA/PRM/2026/0419) or project name..."
+                  className="flex-1 bg-transparent py-3 px-2 text-sm sm:text-base text-white placeholder-slate-300 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#022C4F] font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Verify Now</span>
+                </button>
+              </form>
+
+              {/* Quick Actions Pills */}
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs">
+                <span className="text-slate-300 font-medium">Quick Access:</span>
+                <Link
+                  href={isPtp ? "/verify" : "/transparency/verify"}
+                  className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-cyan-200 transition-colors flex items-center gap-1"
+                >
+                  <ShieldCheck size={12} className="text-emerald-400" />
+                  <span>Verify Permit</span>
+                </Link>
+                <Link
+                  href={isPtp ? "/map" : "/transparency/map"}
+                  className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-cyan-200 transition-colors flex items-center gap-1"
+                >
+                  <Compass size={12} className="text-amber-400" />
+                  <span>GIS Safety Map</span>
+                </Link>
+                <Link
+                  href={isPtp ? "/report" : "/transparency/report-violation"}
+                  className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-cyan-200 transition-colors flex items-center gap-1"
+                >
+                  <AlertTriangle size={12} className="text-red-400" />
+                  <span>Report Hazard (Whistleblower)</span>
+                </Link>
+                <Link
+                  href={isPtp ? "/notices" : "/transparency/notices"}
+                  className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-cyan-200 transition-colors flex items-center gap-1"
+                >
+                  <Clock size={12} className="text-blue-300" />
+                  <span>Stop-Work Notices</span>
+                </Link>
+              </div>
+            </div>
+
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto sm:max-w-none">
               <Link
-                href="/ptp/login"
+                href={isPtp ? "/login" : "/ptp/login"}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#022C4F] font-bold text-base shadow-xl shadow-cyan-900/30 transition-all hover:scale-[1.02] cursor-pointer"
               >
+                <Lock size={18} className="text-[#022C4F]" />
                 <span>Enter Transparency Dashboard</span>
                 <ArrowRight size={18} />
               </Link>
 
               <Link
-                href="/ptp/register"
+                href={isPtp ? "/register" : "/ptp/register"}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold text-base backdrop-blur-md transition-all hover:scale-[1.02] cursor-pointer"
               >
                 <Users size={18} className="text-cyan-300" />
@@ -107,13 +178,22 @@ export default function PublicTransparencyInfoPage() {
               </Link>
             </div>
 
-            {/* Direct Verification Quick Link */}
-            <div className="mt-8 flex items-center justify-center gap-2 text-xs sm:text-sm text-cyan-200/80">
-              <ShieldCheck size={16} className="text-emerald-400" />
-              <span>Have a permit number or QR code?</span>
-              <Link href="/ptp/login?redirect=/ptp/dashboard/verify" className="underline text-white font-medium hover:text-cyan-300">
-                Jump directly to the Verification Desk
-              </Link>
+            {/* Security Guarantee Strip */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-cyan-200/90 border border-white/10 bg-white/5 backdrop-blur-md rounded-full px-5 py-2.5 max-w-3xl mx-auto">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-400" />
+                <span>Cryptographically Signed Records</span>
+              </div>
+              <span className="hidden sm:inline text-white/30">&bull;</span>
+              <div className="flex items-center gap-1.5">
+                <Lock size={14} className="text-cyan-300" />
+                <span>256-Bit SSL Encrypted</span>
+              </div>
+              <span className="hidden sm:inline text-white/30">&bull;</span>
+              <div className="flex items-center gap-1.5">
+                <Eye size={14} className="text-amber-300" />
+                <span>100% Anonymous Citizen Protection</span>
+              </div>
             </div>
           </div>
 

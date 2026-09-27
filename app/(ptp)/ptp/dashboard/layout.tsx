@@ -34,17 +34,15 @@ export default function PtpDashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isAuthenticatedSession, setIsAuthenticatedSession] = useState(false);
 
   // Authentication & Onboarding Guard
   useEffect(() => {
     if (!isLoading) {
-      if (!user) {
-        // Allow fallback user if local session credentials exist
-        const hasLocalUser = typeof window !== "undefined" && localStorage.getItem("nexucon_auth_user");
-        if (!hasLocalUser) {
-          router.replace("/ptp/login");
-          return;
-        }
+      const hasLocalUser = typeof window !== "undefined" && localStorage.getItem("nexucon_auth_user");
+      if (!user && !hasLocalUser) {
+        router.replace("/ptp/login");
+        return;
       }
 
       // Check onboarding
@@ -56,10 +54,28 @@ export default function PtpDashboardLayout({
 
         if (!user.is_onboarded && !localOnboarded) {
           router.replace("/ptp/onboarding");
+          return;
         }
       }
+
+      setIsAuthenticatedSession(true);
     }
   }, [user, isLoading, router]);
+
+  // Security guard: prevent rendering dashboard for unauthenticated sessions
+  if (isLoading || !isAuthenticatedSession) {
+    return (
+      <div className="min-h-screen bg-[#F1F5F9] flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-3xl p-8 shadow-xl max-w-sm w-full text-center flex flex-col items-center gap-4 border border-slate-100">
+          <div className="w-12 h-12 border-3 border-[#022C4F] border-t-transparent rounded-full animate-spin" />
+          <div>
+            <h3 className="font-bold text-base text-[#022C4F]">Securing Portal Session...</h3>
+            <p className="text-xs text-slate-500 mt-1">Verifying public monitor authorization</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <LanguageProvider>
