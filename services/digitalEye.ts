@@ -944,6 +944,7 @@ export interface FieldDeviceRecord {
   calibration_expiry: string | null;
   assigned_project: string | null;
   notes: string;
+  cloud_workspace_id?: string;
   /**
    * This instrument's own export headers mapped to the platform's contract
    * keys. Empty means its export already speaks the documented template.
