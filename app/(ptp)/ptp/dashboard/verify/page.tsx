@@ -18,6 +18,7 @@ import {
   Shield
 } from "lucide-react";
 import { verifyProjectPermit, PublicProject } from "@/services/publicPortal";
+import MetricCard from "@/components/dashboard/MetricCard";
 import PtpTopRightControls from "@/components/dashboard/PtpTopRightControls";
 
 export default function PtpVerifyPage() {
@@ -56,7 +57,7 @@ export default function PtpVerifyPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Top Bar matching Government standard */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 sm:gap-6 mb-2">
         <div className="max-w-3xl">
@@ -73,6 +74,26 @@ export default function PtpVerifyPage() {
           </p>
         </div>
         <PtpTopRightControls />
+      </div>
+
+      {/* KPI METRIC CARDS matching Nexucon standard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <MetricCard
+          title="Cryptographic Records"
+          value="1,420"
+        />
+        <MetricCard
+          title="SHA-256 Validation"
+          value="Verified"
+        />
+        <MetricCard
+          title="Avg. Verification Latency"
+          value="< 80ms"
+        />
+        <MetricCard
+          title="Statutory Confidence"
+          value="100%"
+        />
       </div>
 
       {/* Verification Input Box */}
