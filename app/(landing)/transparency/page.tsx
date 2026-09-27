@@ -139,7 +139,7 @@ export default function PublicTransparencyInfoPage() {
         </section>
 
         {/* WHY TRANSPARENCY MATTERS */}
-        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <section id="about" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto scroll-mt-20">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold uppercase tracking-wider mb-3">
               The Mission
@@ -189,7 +189,7 @@ export default function PublicTransparencyInfoPage() {
         </section>
 
         {/* 4 CORE PILLARS OF THE PORTAL */}
-        <section className="py-20 bg-slate-100 border-y border-slate-200 px-4 sm:px-6 lg:px-8">
+        <section id="features" className="py-20 bg-slate-100 border-y border-slate-200 px-4 sm:px-6 lg:px-8 scroll-mt-20">
           <div className="max-w-7xl mx-auto">
             <div className="text-center max-w-3xl mx-auto mb-16">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-100 text-cyan-800 text-xs font-bold uppercase tracking-wider mb-3">
@@ -276,7 +276,7 @@ export default function PublicTransparencyInfoPage() {
         </section>
 
         {/* HOW IT WORKS: THE 3-STEP USER ONBOARDING */}
-        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto scroll-mt-20">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-3">
               Simple Workflow
@@ -378,7 +378,7 @@ export default function PublicTransparencyInfoPage() {
         </section>
 
         {/* FREQUENTLY ASKED QUESTIONS */}
-        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <section id="faq" className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto scroll-mt-20">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold uppercase tracking-wider mb-3">
               FAQ

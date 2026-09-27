@@ -5,18 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  Shield,
-  Search,
-  MapPin,
-  FileCheck,
-  FileText,
-  AlertTriangle,
   Globe,
   Menu,
   X,
   ExternalLink,
   ChevronDown,
-  Building2
 } from 'lucide-react';
 import { useLanguage, LanguageCode } from './LanguageContext';
 
@@ -45,7 +38,7 @@ export function usePtpRoute() {
 
 export const PublicHeader: React.FC = () => {
   const pathname = usePathname();
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const { isPtp, getRoute } = usePtpRoute();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -56,13 +49,18 @@ export const PublicHeader: React.FC = () => {
     setLangMenuOpen(false);
   }, [pathname]);
 
+  const getSectionHref = (hash: string) => {
+    if (pathname === '/transparency' || pathname === '/') {
+      return hash;
+    }
+    return isPtp ? hash : `/transparency${hash}`;
+  };
+
   const navItems = [
-    { label: t('nav_home'), href: getRoute('/transparency'), icon: Building2 },
-    { label: t('nav_search'), href: getRoute('/transparency/search'), icon: Search },
-    { label: t('nav_map'), href: getRoute('/transparency/map'), icon: MapPin },
-    { label: t('nav_verify'), href: getRoute('/transparency/verify'), icon: FileCheck },
-    { label: t('nav_documents'), href: getRoute('/transparency/documents'), icon: FileText },
-    { label: t('nav_notices'), href: getRoute('/transparency/notices'), icon: AlertTriangle },
+    { label: 'About', href: getSectionHref('#about') },
+    { label: 'Features', href: getSectionHref('#features') },
+    { label: 'How It Works', href: getSectionHref('#how-it-works') },
+    { label: 'FAQ', href: getSectionHref('#faq') },
   ];
 
   const languages: { code: LanguageCode; label: string; flag: string }[] = [
@@ -71,6 +69,9 @@ export const PublicHeader: React.FC = () => {
     { code: 'ig', label: 'Igbo', flag: '🇳🇬' },
     { code: 'ha', label: 'Hausa', flag: '🇳🇬' },
   ];
+
+  const loginHref = isPtp ? '/login' : '/ptp/login';
+  const registerHref = isPtp ? '/register' : '/ptp/register';
 
   return (
     <header className="sticky top-0 z-50 bg-[#ffffff] border-b border-slate-200/90 shadow-xs">
@@ -84,15 +85,13 @@ export const PublicHeader: React.FC = () => {
             </span>
           </div>
           <div className="hidden md:flex items-center gap-4 text-slate-300">
-            <span>Statutory Verification Engine</span>
-            <span>&bull;</span>
             <a
               href="https://nexucon.net"
               target="_blank"
               rel="noreferrer"
               className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-medium transition-colors"
             >
-              Nexucon Enterprise Platform <ExternalLink className="w-3 h-3" />
+              Nexucon Platform <ExternalLink className="w-3 h-3" />
             </a>
           </div>
         </div>
@@ -100,59 +99,50 @@ export const PublicHeader: React.FC = () => {
 
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-18">
           {/* Logo & Portal Identity */}
-          <Link href={getRoute('/transparency')} className="flex items-center gap-3.5 group">
+          <Link href={getRoute('/transparency')} className="flex items-center gap-3 group">
             <div className="relative">
               <Image
                 src="https://res.cloudinary.com/depeqzb6z/image/upload/v1779869368/Artboard_5_2_wsumkf.png"
                 alt="Nexucon Crest"
-                width={140}
-                height={48}
-                className="h-10 sm:h-12 w-auto object-contain transition-transform group-hover:scale-[1.02]"
+                width={130}
+                height={44}
+                className="h-9 sm:h-10 w-auto object-contain transition-transform group-hover:scale-[1.02]"
                 priority
               />
             </div>
-            <div className="hidden sm:block border-l border-slate-300 pl-3.5">
+            <div className="hidden sm:block border-l border-slate-300 pl-3">
               <div className="text-xs uppercase font-extrabold tracking-wider text-[#022C4F]">
                 Public Transparency Portal
               </div>
               <div className="text-[10px] text-slate-500 font-medium">
-                Verified Building & Construction Registry
+                Verified Building &amp; Planning Registry
               </div>
             </div>
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-            {navItems.map((item) => {
-              const active = pathname === item.href;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${
-                    active
-                      ? 'bg-[#022C4F] text-white shadow-xs'
-                      : 'text-slate-700 hover:text-[#022C4F] hover:bg-slate-100/80'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          {/* Desktop Navigation Links - Clean, minimal text links */}
+          <nav className="hidden md:flex items-center gap-7 lg:gap-9">
+            {navItems.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="text-sm font-semibold text-slate-600 hover:text-[#022C4F] transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
           </nav>
 
           {/* Right Action Bar */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-3">
             {/* Language Selector Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 title="Select Language / Yan Èdè"
                 aria-label="Select Language"
               >
@@ -184,15 +174,15 @@ export const PublicHeader: React.FC = () => {
 
             {/* Login & Register CTAs */}
             <Link
-              href="/ptp/login"
-              className="hidden sm:inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold text-[#022C4F] hover:bg-slate-100 transition-colors"
+              href={loginHref}
+              className="text-xs font-bold text-[#022C4F] hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
             >
               Sign In
             </Link>
 
             <Link
-              href="/ptp/register"
-              className="hidden sm:inline-flex items-center px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold shadow-xs hover:shadow transition-all"
+              href={registerHref}
+              className="inline-flex items-center px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold shadow-xs hover:shadow transition-all"
             >
               Register
             </Link>
@@ -201,10 +191,10 @@ export const PublicHeader: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors ml-1"
               aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -212,33 +202,34 @@ export const PublicHeader: React.FC = () => {
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-2 shadow-lg animate-in slide-in-from-top duration-200">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
-            Transparency Navigation
+        <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-2 shadow-lg animate-in slide-in-from-top duration-200">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
+            Menu
           </div>
-          {navItems.map((item) => {
-            const active = pathname === item.href;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-                  active ? 'bg-[#022C4F] text-white' : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-          <div className="pt-3 border-t border-slate-100">
+          {navItems.map((item) => (
             <Link
-              href={getRoute('/transparency/report-violation')}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-sm font-bold hover:bg-red-100"
+              key={item.label}
+              href={item.href}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#022C4F] transition-colors"
             >
-              <AlertTriangle className="w-4 h-4" />
-              Submit Anonymous Site Violation Report
+              <span>{item.label}</span>
+            </Link>
+          ))}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <Link
+              href={loginHref}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center justify-center w-full py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-[#022C4F] hover:bg-slate-50"
+            >
+              Sign In
+            </Link>
+            <Link
+              href={registerHref}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center justify-center w-full py-2.5 rounded-xl bg-[#022C4F] text-white text-sm font-bold hover:bg-[#033E6E]"
+            >
+              Register Free Account
             </Link>
           </div>
         </div>
