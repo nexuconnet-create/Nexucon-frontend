@@ -515,7 +515,7 @@ export async function getPublicProjects(params?: {
 }): Promise<PublicProject[]> {
   try {
     const res = await api.get('/public-portal/transparency/projects/');
-    const apiProjects = res?.data?.projects || res?.projects;
+    const apiProjects = (res as any)?.data?.projects || (res as any)?.projects;
     if (Array.isArray(apiProjects) && apiProjects.length > 0) {
       // Merge with curated detailed dataset if available
       return apiProjects.map((ap: any) => {
@@ -666,7 +666,7 @@ export async function verifyPermit(reference: string): Promise<{
   // Attempt backend verification query
   try {
     const res = await api.get(`/public-portal/transparency/projects/?q=${encodeURIComponent(cleanRef)}`);
-    const matches = res?.data?.projects || res?.projects;
+    const matches = (res as any)?.data?.projects || (res as any)?.projects;
     if (Array.isArray(matches) && matches.length > 0) {
       const match = matches[0];
       const hydrated = await getPublicProjectBySlugOrId(match.id);
@@ -728,3 +728,12 @@ export async function submitCitizenViolationReport(
     };
   }
 }
+
+// Aliases for convenience
+export const verifyProjectPermit = async (reference: string): Promise<PublicProject | null> => {
+  const result = await verifyPermit(reference);
+  return result.verified && result.project ? result.project : null;
+};
+
+export const submitViolationReport = submitCitizenViolationReport;
+

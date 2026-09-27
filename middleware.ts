@@ -118,23 +118,63 @@ export function middleware(request: NextRequest) {
       pathname.startsWith('/stakeholder') ||
       pathname.startsWith('/inspector')
     ) {
-      url.pathname = '/transparency';
+      url.pathname = '/ptp/login';
       return NextResponse.redirect(url);
     }
 
-    // If request is already pointing to /transparency, allow it
-    if (pathname.startsWith('/transparency')) {
+    // If request is already pointing to /ptp, allow it
+    if (pathname.startsWith('/ptp')) {
       return NextResponse.next();
     }
 
-    // Rewrite root to /transparency
-    if (pathname === '/') {
+    // Allow informational landing page on /transparency or /about
+    if (pathname === '/transparency' || pathname === '/about' || pathname === '/info') {
       url.pathname = '/transparency';
       return NextResponse.rewrite(url);
     }
 
-    // Clean subdomain routing (e.g. /search, /map, /verify, /projects/...)
-    url.pathname = `/transparency${pathname}`;
+    // Dedicated auth and onboarding routes
+    if (pathname === '/login') {
+      url.pathname = '/ptp/login';
+      return NextResponse.rewrite(url);
+    }
+
+    if (pathname === '/register') {
+      url.pathname = '/ptp/register';
+      return NextResponse.rewrite(url);
+    }
+
+    if (pathname === '/onboarding') {
+      url.pathname = '/ptp/onboarding';
+      return NextResponse.rewrite(url);
+    }
+
+    // Root rewrites to /ptp/login
+    if (pathname === '/') {
+      url.pathname = '/ptp/login';
+      return NextResponse.rewrite(url);
+    }
+
+    // Rewrite /dashboard or clean paths like /search, /map, /verify
+    if (pathname === '/dashboard') {
+      url.pathname = '/ptp/dashboard';
+      return NextResponse.rewrite(url);
+    }
+
+    if (
+      pathname === '/search' ||
+      pathname === '/map' ||
+      pathname === '/verify' ||
+      pathname === '/notices' ||
+      pathname === '/report' ||
+      pathname === '/watchlist' ||
+      pathname === '/settings'
+    ) {
+      url.pathname = `/ptp/dashboard${pathname}`;
+      return NextResponse.rewrite(url);
+    }
+
+    url.pathname = `/ptp${pathname}`;
     return NextResponse.rewrite(url);
   }
 
