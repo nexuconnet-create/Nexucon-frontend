@@ -23,6 +23,8 @@ import {
   Radio,
   Wifi,
   Bluetooth,
+  Camera,
+  Users,
 } from "lucide-react";
 import {
   PunditTest,
@@ -34,6 +36,7 @@ import {
   FieldDeviceRecord,
   createDigitalEyeFinding,
   formatVelocityMs,
+  createPunditScanBatch,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -47,6 +50,8 @@ import {
 } from "@/components/dashboard/digital-eye/PunditFolderTree";
 import { getAssignableProjects } from "@/services/inspector";
 import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
+import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
+import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -129,16 +134,17 @@ function getConcreteQuality(velocityMs: number): {
   };
 }
 
+/** Non-linear exponential default model: f_cu = 1.20 * exp(0.85 * V_km/s) per review meeting */
 function estimateCompressiveStrength(velocityMs: number): number | null {
   if (velocityMs < 2000 || velocityMs > 5000) return null;
   const vKmS = velocityMs / 1000;
-  const strength = 1.15 * Math.pow(vKmS, 2.45);
+  const strength = 1.2 * Math.exp(0.85 * vKmS);
   return Math.round(Math.min(75, Math.max(10, strength)) * 10) / 10;
 }
 
 function PunditWorkspaceInner() {
   const searchParams = useSearchParams();
-  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device">("live");
+  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance">("live");
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -562,12 +568,14 @@ function PunditWorkspaceInner() {
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           {[
             { id: "live", label: "Recorded Tests", icon: Zap },
             { id: "manual", label: "Manual Station Entry", icon: Sliders },
             { id: "batch", label: "Session File Upload", icon: FileSpreadsheet },
             { id: "device", label: "Live Device Connect", icon: Radio },
+            { id: "observations", label: "Visual Observations", icon: Camera },
+            { id: "attendance", label: "Site Attendance Log", icon: Users },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -1078,6 +1086,20 @@ function PunditWorkspaceInner() {
             )}
           </div>
         </div>
+      )}
+
+      {/* MODE 5: VISUAL FIELD OBSERVATIONS & DEFECT PHOTOS */}
+      {punditMode === "observations" && (
+        <VisualObservationsPanel
+          projectId={manualForm.projectId || (projects[0]?.id ?? "")}
+        />
+      )}
+
+      {/* MODE 6: CLIENT & SITE ATTENDANCE REGISTER */}
+      {punditMode === "attendance" && (
+        <SiteAttendanceLogPanel
+          projectId={manualForm.projectId || (projects[0]?.id ?? "")}
+        />
       )}
 
       {/* SWO Defect Finding Escalation Modal */}
