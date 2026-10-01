@@ -349,8 +349,19 @@ export async function getInspectorProjectById(id: string): Promise<any> {
  * in scope.
  */
 export async function getAssignableProjects(): Promise<any[]> {
-  const res: any = await api.get('/projects/assignable/');
-  return Array.isArray(res) ? res : (res?.results || res?.data || []);
+  try {
+    const res: any = await api.get('/projects/assignable/');
+    const list = Array.isArray(res) ? res : (res?.results || res?.data || []);
+    if (list.length > 0) return list;
+  } catch {
+    // Backend may not have /projects/assignable/ routed yet; fall back to standard projects list
+  }
+  try {
+    const fallbackRes: any = await api.get('/projects/');
+    return Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes?.results || fallbackRes?.data || []);
+  } catch {
+    return [];
+  }
 }
 
 export async function getInspectorInspections(params?: {

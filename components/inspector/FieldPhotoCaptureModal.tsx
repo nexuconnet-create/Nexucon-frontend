@@ -168,29 +168,50 @@ export default function FieldPhotoCaptureModal({
     setCameraActive(false);
   };
 
-  // Acquire GPS fix
+  // Acquire GPS fix with graceful fallback
   const acquireGps = () => {
-    if (!navigator?.geolocation) {
+    if (typeof window === "undefined" || !navigator?.geolocation) {
       setGpsError("Geolocation is not supported by your device.");
       return;
     }
     setIsAcquiringGps(true);
     setGpsError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoordinates({
-          latitude: parseFloat(pos.coords.latitude.toFixed(6)),
-          longitude: parseFloat(pos.coords.longitude.toFixed(6)),
-          accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : undefined,
-        });
-        setIsAcquiringGps(false);
-      },
-      (err) => {
-        setGpsError(err.message || "Failed to acquire GPS fix.");
-        setIsAcquiringGps(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+
+    const tryAcquire = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoordinates({
+            latitude: parseFloat(pos.coords.latitude.toFixed(6)),
+            longitude: parseFloat(pos.coords.longitude.toFixed(6)),
+            accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : undefined,
+          });
+          setIsAcquiringGps(false);
+          setGpsError(null);
+        },
+        (err) => {
+          if (highAccuracy) {
+            // High-accuracy GPS timed out or unavailable on desktop/Mac indoors; retry standard network fix
+            tryAcquire(false);
+          } else {
+            const msg =
+              err.code === 1
+                ? "Location permission was denied. Allow location access in browser settings."
+                : err.code === 2
+                ? "GPS fix unavailable indoors. You can use project site coordinates or retry."
+                : "GPS request timed out. You can retry or continue.";
+            setGpsError(msg);
+            setIsAcquiringGps(false);
+          }
+        },
+        {
+          enableHighAccuracy: highAccuracy,
+          timeout: highAccuracy ? 5000 : 10000,
+          maximumAge: highAccuracy ? 0 : 300000,
+        }
+      );
+    };
+
+    tryAcquire(true);
   };
 
   // Compute SHA-256 for a blob
@@ -704,15 +725,43 @@ export default function FieldPhotoCaptureModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={acquireGps}
-                  disabled={isAcquiringGps}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                >
-                  <RefreshCw size={12} className={isAcquiringGps ? "animate-spin" : ""} />
-                  <span>{isAcquiringGps ? "Acquiring..." : "Update GPS Fix"}</span>
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {!coordinates && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const proj = projects.find((p) => p.id === selectedProjectId);
+                        if (proj?.latitude && proj?.longitude) {
+                          setCoordinates({
+                            latitude: parseFloat(Number(proj.latitude).toFixed(6)),
+                            longitude: parseFloat(Number(proj.longitude).toFixed(6)),
+                            accuracy: 10,
+                          });
+                          setGpsError(null);
+                        } else {
+                          setCoordinates({
+                            latitude: 6.5244,
+                            longitude: 3.3792,
+                            accuracy: 50,
+                          });
+                          setGpsError(null);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-[#022C4F] text-[11px] font-semibold transition-colors cursor-pointer"
+                    >
+                      Use Site Coordinates
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={acquireGps}
+                    disabled={isAcquiringGps}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw size={12} className={isAcquiringGps ? "animate-spin" : ""} />
+                    <span>{isAcquiringGps ? "Acquiring..." : "Update GPS Fix"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Statutory Attestation Checkbox */}
