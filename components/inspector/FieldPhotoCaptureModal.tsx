@@ -47,6 +47,7 @@ export default function FieldPhotoCaptureModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isCameraDesiredRef = useRef(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
@@ -80,9 +81,11 @@ export default function FieldPhotoCaptureModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successRecord, setSuccessRecord] = useState<any | null>(null);
 
-  // Initialize projects if needed
+  // Initialize projects and reset GPS state on modal toggle
   useEffect(() => {
     if (isOpen) {
+      setCoordinates(null);
+      setGpsError(null);
       if (initialProjectId) {
         setSelectedProjectId(initialProjectId);
       } else {
@@ -99,8 +102,12 @@ export default function FieldPhotoCaptureModal({
       if (initialElementId) {
         setStructuralElement(initialElementId);
       }
-      // Auto-acquire GPS coordinates
+      // Auto-acquire fresh GPS coordinates
       acquireGps();
+    } else {
+      stopCamera();
+      setCoordinates(null);
+      setGpsError(null);
     }
   }, [isOpen, initialProjectId, initialElementId]);
 
@@ -118,6 +125,7 @@ export default function FieldPhotoCaptureModal({
 
   const startCamera = async () => {
     stopCamera();
+    isCameraDesiredRef.current = true;
     setCameraError(null);
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -130,6 +138,11 @@ export default function FieldPhotoCaptureModal({
           height: { ideal: 1080 },
         },
       });
+      // If modal was closed or switched to upload while permission prompt was pending
+      if (!isCameraDesiredRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -137,6 +150,7 @@ export default function FieldPhotoCaptureModal({
         setCameraActive(true);
       }
     } catch (err: any) {
+      if (!isCameraDesiredRef.current) return;
       setCameraError(
         err?.message || "Could not access device camera. Please upload a photo or grant permissions."
       );
@@ -146,6 +160,7 @@ export default function FieldPhotoCaptureModal({
   };
 
   const stopCamera = () => {
+    isCameraDesiredRef.current = false;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -293,6 +308,9 @@ export default function FieldPhotoCaptureModal({
           file: fileToUpload,
           structuralElementId: structuralElement.trim(),
           description: fullDescription,
+          category,
+          severity,
+          batchId: batchId || undefined,
           sha256: sha256Digest || undefined,
           capturedAt: new Date().toISOString(),
           coordinates: coordinates || null,
@@ -322,6 +340,9 @@ export default function FieldPhotoCaptureModal({
     setSuccessRecord(null);
     setSubmitError(null);
     setDescription("");
+    setCoordinates(null);
+    setGpsError(null);
+    stopCamera();
     onClose();
   };
 

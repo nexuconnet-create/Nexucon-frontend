@@ -164,6 +164,7 @@ function PunditWorkspaceInner() {
   // Pundit Devices
   const [punditDevices, setPunditDevices] = useState<FieldDeviceRecord[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>("");
 
   // Manual Form
   const [manualForm, setManualForm] = useState<{
@@ -273,6 +274,10 @@ function PunditWorkspaceInner() {
           }))
           .filter((p) => p.id);
         setProjects(shaped);
+        if (shaped.length > 0) {
+          setActiveWorkspaceProjectId((prev) => prev || shaped[0].id);
+          setManualForm((prev) => ({ ...prev, projectId: prev.projectId || shaped[0].id }));
+        }
       } catch {
         if (!cancelled) setProjects([]);
       }
@@ -538,6 +543,27 @@ function PunditWorkspaceInner() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {projects.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Testing Site:</span>
+              <select
+                value={activeWorkspaceProjectId}
+                onChange={(e) => {
+                  const pid = e.target.value;
+                  setActiveWorkspaceProjectId(pid);
+                  setManualForm((prev) => ({ ...prev, projectId: pid }));
+                }}
+                className="text-xs font-bold bg-transparent text-[#022C4F] focus:outline-none max-w-[190px] truncate cursor-pointer"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setIsCaptureModalOpen(true)}
@@ -1101,14 +1127,14 @@ function PunditWorkspaceInner() {
       {/* MODE 5: VISUAL FIELD OBSERVATIONS & DEFECT PHOTOS */}
       {punditMode === "observations" && (
         <VisualObservationsPanel
-          projectId={manualForm.projectId || (projects[0]?.id ?? "")}
+          projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
         />
       )}
 
       {/* MODE 6: CLIENT & SITE ATTENDANCE REGISTER */}
       {punditMode === "attendance" && (
         <SiteAttendanceLogPanel
-          projectId={manualForm.projectId || (projects[0]?.id ?? "")}
+          projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
         />
       )}
 
@@ -1183,8 +1209,8 @@ function PunditWorkspaceInner() {
       <FieldPhotoCaptureModal
         isOpen={isCaptureModalOpen}
         onClose={() => setIsCaptureModalOpen(false)}
-        projectId={manualForm.projectId || (projects[0]?.id ?? "")}
-        projectName={projects.find((p) => p.id === (manualForm.projectId || projects[0]?.id))?.name}
+        projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
+        projectName={projects.find((p) => p.id === (activeWorkspaceProjectId || manualForm.projectId || projects[0]?.id))?.name}
         structuralElementId={manualForm.elementName || activePunditTest?.structural_element_name || ""}
         onEvidenceCreated={() => {
           showToast("Photo evidence sealed with SHA-256 and sent to Government Dashboard.");

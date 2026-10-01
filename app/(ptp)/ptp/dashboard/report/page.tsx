@@ -145,6 +145,7 @@ export default function PtpReportPage() {
   const [submittedToken, setSubmittedToken] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleCopyToken = () => {
     if (submittedToken) {
@@ -172,14 +173,25 @@ export default function PtpReportPage() {
     }
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      const res = await submitViolationReport({
+      const payload = {
         ...formData,
-        reporter_name: isAnonymous ? "Anonymous Whistleblower" : formData.reporter_name,
-      });
-      setSubmittedToken(res.tracking_number || `TIP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-    } catch {
-      setSubmittedToken(`TIP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+        reporter_name: isAnonymous ? "Anonymous Citizen" : (formData.reporter_name || "").trim(),
+        reporter_contact: isAnonymous ? "" : (formData.reporter_contact || "").trim(),
+        evidence_url: uploadedFiles.length > 0 ? `Uploaded Evidence: ${uploadedFiles.join(", ")}` : undefined,
+      };
+      const res = await submitViolationReport(payload);
+      if (res && res.tracking_number) {
+        setSubmittedToken(res.tracking_number);
+      } else {
+        throw new Error("Did not receive a tracking number from enforcement taskforce.");
+      }
+    } catch (err: any) {
+      setSubmitError(
+        err?.message ||
+          "Unable to register violation with the statutory enforcement taskforce. Please check your network connection or call the LASBCA hotline at 0800-LASBCA-GOV."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -390,6 +402,16 @@ export default function PtpReportPage() {
                   </p>
                 </div>
               </div>
+
+              {submitError && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-800 text-xs animate-in fade-in duration-200">
+                  <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Submission Notice</p>
+                    <p>{submitError}</p>
+                  </div>
+                </div>
+              )}
 
               {/* SECTION 1: VIOLATION CATEGORY */}
               <div className="space-y-3">

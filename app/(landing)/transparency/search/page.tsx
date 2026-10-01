@@ -36,7 +36,7 @@ function SearchPageContent() {
         });
 
         // Apply Sorting
-        let sorted = [...data];
+        const sorted = [...data];
         if (sortBy === 'name_asc') {
           sorted.sort((a, b) => a.name.localeCompare(b.name));
         } else if (sortBy === 'floors_desc') {

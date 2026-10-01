@@ -9,7 +9,7 @@ import { PublicProject } from '@/services/publicPortal';
 // Custom SVG map icons matching status
 function createCustomIcon(status: string, isSelected: boolean) {
   let bgColor = '#022C4F'; // default
-  let borderColor = '#ffffff';
+  const borderColor = '#ffffff';
 
   if (status === 'COMPLETED') bgColor = '#059669'; // Emerald
   else if (status === 'UNDER_CONSTRUCTION') bgColor = '#2563EB'; // Blue

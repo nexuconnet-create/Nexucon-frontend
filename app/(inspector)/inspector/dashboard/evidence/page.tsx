@@ -56,13 +56,21 @@ export default function InspectorEvidencePage() {
     setVerifyingMap((prev) => ({ ...prev, [ev.id]: true }));
     try {
       const result = await verifyInspectorEvidence(ev.id);
-      setVerifyOutcomeMap((prev) => ({ ...prev, [ev.id]: result }));
+      setVerifyOutcomeMap((prev) => ({
+        ...prev,
+        [ev.id]: {
+          ...result,
+          check_performed: true,
+        },
+      }));
     } catch (err: any) {
       setVerifyOutcomeMap((prev) => ({
         ...prev,
         [ev.id]: {
-          file_bytes_ok: false,
-          note: err?.message || "Verification request failed",
+          file_bytes_ok: null,
+          check_performed: false,
+          error: true,
+          note: err?.message || "Verification service unreachable",
         },
       }));
     } finally {
@@ -191,20 +199,27 @@ export default function InspectorEvidencePage() {
                     {verification ? (
                       <span
                         className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
-                          verification.file_bytes_ok
+                          verification.file_bytes_ok === true
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-rose-50 text-rose-700 border-rose-200"
+                            : verification.file_bytes_ok === false && verification.check_performed
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}
                       >
-                        {verification.file_bytes_ok ? (
+                        {verification.file_bytes_ok === true ? (
                           <>
                             <ShieldCheck size={12} />
                             <span>SHA-256 Validated</span>
                           </>
-                        ) : (
+                        ) : verification.file_bytes_ok === false && verification.check_performed ? (
                           <>
                             <AlertTriangle size={12} />
                             <span>Hash Mismatch</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle size={12} />
+                            <span>Check Unavailable</span>
                           </>
                         )}
                       </span>

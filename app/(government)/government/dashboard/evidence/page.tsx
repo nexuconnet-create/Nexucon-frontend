@@ -74,13 +74,21 @@ export default function GovernmentEvidenceRegistryPage() {
     setVerifyingMap((prev) => ({ ...prev, [ev.id]: true }));
     try {
       const result = await verifyInspectorEvidence(ev.id);
-      setVerifiedMap((prev) => ({ ...prev, [ev.id]: result }));
+      setVerifiedMap((prev) => ({
+        ...prev,
+        [ev.id]: {
+          ...result,
+          check_performed: true,
+        },
+      }));
     } catch (err: any) {
       setVerifiedMap((prev) => ({
         ...prev,
         [ev.id]: {
-          file_bytes_ok: false,
-          note: err?.message || "Cryptographic verification check failed",
+          file_bytes_ok: null,
+          check_performed: false,
+          error: true,
+          note: err?.message || "Cryptographic verification service unreachable",
         },
       }));
     } finally {
@@ -451,20 +459,27 @@ export default function GovernmentEvidenceRegistryPage() {
                     {verification ? (
                       <span
                         className={`font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                          verification.file_bytes_ok
+                          verification.file_bytes_ok === true
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-rose-50 text-rose-700 border-rose-200"
+                            : verification.file_bytes_ok === false && verification.check_performed
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}
                       >
-                        {verification.file_bytes_ok ? (
+                        {verification.file_bytes_ok === true ? (
                           <>
                             <ShieldCheck size={11} />
                             <span>Verified</span>
                           </>
-                        ) : (
+                        ) : verification.file_bytes_ok === false && verification.check_performed ? (
                           <>
                             <AlertTriangle size={11} />
                             <span>Seal Altered</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle size={11} />
+                            <span>Check Unavailable</span>
                           </>
                         )}
                       </span>

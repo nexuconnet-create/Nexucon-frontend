@@ -151,10 +151,9 @@ export default function PtpRegisterPage() {
     const firstName = nameParts[0] || "Citizen";
     const lastName = nameParts.slice(1).join(" ") || "Monitor";
 
-    // Store local profile and credentials
+    // Store local profile (never store plaintext password)
     const credentials = {
       email: cleanEmail,
-      password: formData.password,
       first_name: firstName,
       last_name: lastName,
       name: formData.fullName,

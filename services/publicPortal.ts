@@ -95,6 +95,7 @@ export interface PublicProject {
   inspections: PublicInspectionOutcome[];
   documents: PublicDocument[];
   findings: PublicFindingSummary[];
+  is_demo?: boolean;
 }
 
 export interface PublicNotice {
@@ -507,66 +508,19 @@ export async function getPublicStats(): Promise<PublicStats> {
   return CURATED_PUBLIC_STATS;
 }
 
-export async function getPublicProjects(params?: {
-  query?: string;
-  lga?: string;
-  status?: string;
-  category?: string;
-}): Promise<PublicProject[]> {
-  try {
-    const res = await api.get('/public-portal/transparency/projects/');
-    const apiProjects = (res as any)?.data?.projects || (res as any)?.projects;
-    if (Array.isArray(apiProjects) && apiProjects.length > 0) {
-      // Merge with curated detailed dataset if available
-      return apiProjects.map((ap: any) => {
-        const match = CURATED_PUBLIC_PROJECTS.find(cp => cp.id === ap.id || cp.permit_number === ap.permit_number);
-        if (match) {
-          return { ...match, ...ap };
-        }
-        return {
-          id: ap.id,
-          slug: (ap.name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-          public_reference: ap.reference_number || `PRJ-${ap.id.slice(0, 8)}`,
-          name: ap.name || 'Approved Development',
-          project_type: ap.project_type || 'Commercial',
-          status: ap.status || 'UNDER_CONSTRUCTION',
-          compliance_state: 'COMPLIANT',
-          permit_number: ap.permit_number || 'LASBCA/PRM/VERIFIED',
-          permit_status: ap.permit_status || 'VALID_ACTIVE',
-          permit_issued_date: ap.start_date || '2026-01-01',
-          permit_expiry_date: ap.estimated_completion || '2028-01-01',
-          issuing_authority: 'Lagos State Building Control Agency (LASBCA)',
-          developer_organization: ap.developer_organization || 'Verified Development Partner',
-          supervising_consultant: 'COREN Registered Consultant',
-          site_address: ap.site_address || 'Lagos State',
-          lga: ap.lga || 'Ikeja',
-          state: ap.state || 'Lagos State',
-          latitude: ap.latitude || 6.5244,
-          longitude: ap.longitude || 3.3792,
-          location_precision: 'EXACT',
-          number_of_floors: ap.number_of_floors || 4,
-          site_area_sqm: ap.site_area || 5000,
-          gross_floor_area_sqm: ap.gross_floor_area || 12000,
-          approved_use: 'Statutory Approved Use',
-          start_date: ap.start_date || '2026-01-01',
-          estimated_completion: ap.estimated_completion || '2027-12-31',
-          last_inspection_date: '2026-09-01',
-          cover_image: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=1200&q=80',
-          milestones: [],
-          inspections: [],
-          documents: [],
-          findings: []
-        };
-      });
-    }
-  } catch (err) {
-    // Network or backend unavailable — use curated high-fidelity dataset
+function filterProjectList(
+  list: PublicProject[],
+  filters?: {
+    query?: string;
+    lga?: string;
+    status?: string;
+    category?: string;
   }
-
-  // Filter curated dataset if filters are applied
-  let filtered = [...CURATED_PUBLIC_PROJECTS];
-  if (params?.query) {
-    const q = params.query.toLowerCase().trim();
+): PublicProject[] {
+  if (!filters) return list;
+  let filtered = [...list];
+  if (filters.query) {
+    const q = filters.query.toLowerCase().trim();
     filtered = filtered.filter(
       p =>
         p.name.toLowerCase().includes(q) ||
@@ -576,67 +530,109 @@ export async function getPublicProjects(params?: {
         p.lga.toLowerCase().includes(q)
     );
   }
-  if (params?.lga && params.lga !== 'ALL') {
-    filtered = filtered.filter(p => p.lga.toLowerCase() === params.lga?.toLowerCase());
+  if (filters.lga && filters.lga !== 'ALL') {
+    filtered = filtered.filter(p => p.lga.toLowerCase() === filters.lga?.toLowerCase());
   }
-  if (params?.status && params.status !== 'ALL') {
-    filtered = filtered.filter(p => p.status === params.status || p.compliance_state === params.status);
+  if (filters.status && filters.status !== 'ALL') {
+    filtered = filtered.filter(p => p.status === filters.status || p.compliance_state === filters.status);
   }
-  if (params?.category && params.category !== 'ALL') {
-    filtered = filtered.filter(p => p.project_type.toLowerCase().includes(params.category!.toLowerCase()));
+  if (filters.category && filters.category !== 'ALL') {
+    filtered = filtered.filter(p => p.project_type.toLowerCase().includes(filters.category!.toLowerCase()));
   }
   return filtered;
 }
 
+export async function getPublicProjects(params?: {
+  query?: string;
+  lga?: string;
+  status?: string;
+  category?: string;
+}): Promise<PublicProject[]> {
+  try {
+    const queryParams = new URLSearchParams();
+    if (params?.query) queryParams.set('q', params.query);
+    if (params?.lga && params.lga !== 'ALL') queryParams.set('lga', params.lga);
+    if (params?.status && params.status !== 'ALL') queryParams.set('status', params.status);
+    if (params?.category && params.category !== 'ALL') queryParams.set('category', params.category);
+
+    const queryString = queryParams.toString();
+    const endpoint = `/public-portal/transparency/projects/${queryString ? `?${queryString}` : ''}`;
+    const res = await api.get(endpoint);
+    const apiProjects = (res as any)?.data?.projects || (res as any)?.projects;
+
+    if (Array.isArray(apiProjects) && apiProjects.length > 0) {
+      const mapped = apiProjects.map((ap: any) => {
+        const match = CURATED_PUBLIC_PROJECTS.find(cp => cp.id === ap.id || cp.permit_number === ap.permit_number);
+        if (match) {
+          return { ...match, ...ap };
+        }
+        return {
+          id: String(ap.id),
+          slug: (ap.name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          public_reference: ap.public_reference || ap.reference_number || `PRJ-${String(ap.id).slice(0, 8)}`,
+          name: ap.name || 'Approved Development',
+          project_type: ap.project_type || 'Commercial',
+          status: ap.status || 'UNDER_CONSTRUCTION',
+          compliance_state: ap.compliance_state || 'COMPLIANT',
+          permit_number: ap.permit_number || 'LASBCA/PRM/VERIFIED',
+          permit_status: ap.permit_status || 'VALID_ACTIVE',
+          permit_issued_date: ap.permit_issued_date || ap.start_date || '2026-01-01',
+          permit_expiry_date: ap.permit_expiry_date || ap.estimated_completion || '2028-01-01',
+          issuing_authority: ap.issuing_authority || 'Lagos State Building Control Agency (LASBCA)',
+          developer_organization: ap.developer_organization || 'Verified Development Partner',
+          supervising_consultant: ap.supervising_consultant || 'COREN Registered Consultant',
+          site_address: ap.site_address || 'Lagos State',
+          lga: ap.lga || 'Ikeja',
+          state: ap.state || 'Lagos State',
+          latitude: ap.latitude || 6.5244,
+          longitude: ap.longitude || 3.3792,
+          location_precision: ap.location_precision || 'EXACT',
+          number_of_floors: ap.number_of_floors || 4,
+          site_area_sqm: ap.site_area_sqm || ap.site_area || 5000,
+          gross_floor_area_sqm: ap.gross_floor_area_sqm || ap.gross_floor_area || 12000,
+          approved_use: ap.approved_use || 'Statutory Approved Use',
+          start_date: ap.start_date || '2026-01-01',
+          estimated_completion: ap.estimated_completion || '2027-12-31',
+          last_inspection_date: ap.last_inspection_date || '2026-09-01',
+          cover_image: ap.cover_image || 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=1200&q=80',
+          milestones: ap.milestones || [],
+          inspections: ap.inspections || [],
+          documents: ap.documents || [],
+          findings: ap.findings || []
+        };
+      });
+      return filterProjectList(mapped, params);
+    }
+  } catch (err) {
+    // Network or backend unavailable — use curated high-fidelity dataset with demonstration indicator
+  }
+
+  // Filter curated dataset if filters are applied, marking records as demonstration samples
+  const curatedWithDemoFlag = CURATED_PUBLIC_PROJECTS.map(p => ({
+    ...p,
+    is_demo: true,
+  }));
+  return filterProjectList(curatedWithDemoFlag, params);
+}
+
 export async function getPublicProjectBySlugOrId(slugOrId: string): Promise<PublicProject | null> {
-  // First search curated list
+  // First attempt live backend API lookup
+  try {
+    const res = await api.get(`/public-portal/transparency/projects/${encodeURIComponent(slugOrId)}/`);
+    const project = (res as any)?.data?.project || (res as any)?.project || (res as any)?.data;
+    if (project && (project.id || project.slug || project.name)) {
+      return project;
+    }
+  } catch (err) {
+    // Fall back to check curated list
+  }
+
+  // Check curated list as fallback
   const found = CURATED_PUBLIC_PROJECTS.find(
     p => p.slug === slugOrId || p.id === slugOrId || p.public_reference === slugOrId || p.permit_number === slugOrId
   );
-  if (found) return found;
-
-  // Try API lookup
-  try {
-    const res = await api.get(`/public-portal/transparency/projects/${slugOrId}/`);
-    const data = res?.data || res;
-    if (data && data.name) {
-      return {
-        id: data.id || slugOrId,
-        slug: slugOrId,
-        public_reference: data.reference_number || `PRJ-${slugOrId.slice(0, 8)}`,
-        name: data.name,
-        project_type: data.project_type || 'Commercial',
-        status: data.status || 'UNDER_CONSTRUCTION',
-        compliance_state: 'COMPLIANT',
-        permit_number: data.permit_number || 'LASBCA/PRM/VERIFIED',
-        permit_status: data.permit_status || 'VALID_ACTIVE',
-        permit_issued_date: data.start_date || '2026-01-01',
-        permit_expiry_date: data.estimated_completion || '2028-01-01',
-        issuing_authority: 'Lagos State Building Control Agency (LASBCA)',
-        developer_organization: data.developer_organization || 'Verified Development Partner',
-        supervising_consultant: 'COREN Registered Consultant',
-        site_address: data.site_address || 'Lagos State',
-        lga: data.lga || 'Ikeja',
-        state: data.state || 'Lagos State',
-        latitude: data.latitude || 6.5244,
-        longitude: data.longitude || 3.3792,
-        location_precision: 'EXACT',
-        number_of_floors: data.number_of_floors || 4,
-        site_area_sqm: data.site_area || 5000,
-        gross_floor_area_sqm: data.gross_floor_area || 12000,
-        approved_use: 'Statutory Approved Use',
-        start_date: data.start_date || '2026-01-01',
-        estimated_completion: data.estimated_completion || '2027-12-31',
-        last_inspection_date: '2026-09-01',
-        cover_image: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=1200&q=80',
-        milestones: data.milestones || [],
-        inspections: data.inspection_outcomes || [],
-        documents: [],
-        findings: []
-      };
-    }
-  } catch (err) {
-    // Handled below
+  if (found) {
+    return { ...found, is_demo: true };
   }
 
   return null;
@@ -644,42 +640,71 @@ export async function getPublicProjectBySlugOrId(slugOrId: string): Promise<Publ
 
 export async function verifyPermit(reference: string): Promise<{
   verified: boolean;
+  is_demo?: boolean;
   project?: PublicProject;
   message: string;
 }> {
-  const cleanRef = reference.trim().toUpperCase();
-  const project = CURATED_PUBLIC_PROJECTS.find(
-    p =>
-      p.permit_number.toUpperCase() === cleanRef ||
-      p.public_reference.toUpperCase() === cleanRef ||
-      p.slug.toUpperCase() === cleanRef.toLowerCase()
-  );
-
-  if (project) {
+  const cleanRef = reference.trim();
+  if (!cleanRef) {
     return {
-      verified: true,
-      project,
-      message: `Permit ${project.permit_number} is authentic and recognized in the official Lagos State statutory registry.`
+      verified: false,
+      message: 'Please provide a valid permit or project reference number.'
     };
   }
 
-  // Attempt backend verification query
+  // 1. Attempt live statutory registry verification via backend endpoint
   try {
-    const res = await api.get(`/public-portal/transparency/projects/?q=${encodeURIComponent(cleanRef)}`);
-    const matches = (res as any)?.data?.projects || (res as any)?.projects;
-    if (Array.isArray(matches) && matches.length > 0) {
-      const match = matches[0];
-      const hydrated = await getPublicProjectBySlugOrId(match.id);
-      if (hydrated) {
-        return {
-          verified: true,
-          project: hydrated,
-          message: `Permit ${hydrated.permit_number} is authentic and recognized in the official statutory registry.`
-        };
-      }
+    const res = await api.get(`/public-portal/transparency/verify/permit/${encodeURIComponent(cleanRef)}/`);
+    if (res?.data?.verified && res.data.project) {
+      return {
+        verified: true,
+        project: res.data.project,
+        message: res.data.message || `Permit ${res.data.project.permit_number} is authentic and recognized in the official Lagos State statutory registry.`
+      };
     }
-  } catch (e) {
-    // Ignore and return unverified
+  } catch (err: any) {
+    // If not found in direct permit endpoint, try matching via projects query
+    try {
+      const res = await api.get(`/public-portal/transparency/projects/?q=${encodeURIComponent(cleanRef)}`);
+      const matches = (res as any)?.data?.projects || (res as any)?.projects;
+      if (Array.isArray(matches) && matches.length > 0) {
+        const match = matches.find(
+          (m: any) =>
+            (m.permit_number && m.permit_number.toUpperCase() === cleanRef.toUpperCase()) ||
+            (m.public_reference && m.public_reference.toUpperCase() === cleanRef.toUpperCase()) ||
+            m.id === cleanRef
+        );
+        if (match) {
+          const hydrated = await getPublicProjectBySlugOrId(match.id || match.slug);
+          if (hydrated) {
+            return {
+              verified: true,
+              project: hydrated,
+              message: `Permit ${hydrated.permit_number} is authentic and recognized in the official statutory registry.`
+            };
+          }
+        }
+      }
+    } catch {
+      // Continue to fallback check
+    }
+  }
+
+  // 2. Check if reference matches curated sample dataset — explicitly flag as DEMONSTRATION ONLY
+  const sampleMatch = CURATED_PUBLIC_PROJECTS.find(
+    p =>
+      p.permit_number.toUpperCase() === cleanRef.toUpperCase() ||
+      p.public_reference.toUpperCase() === cleanRef.toUpperCase() ||
+      p.slug.toLowerCase() === cleanRef.toLowerCase()
+  );
+
+  if (sampleMatch) {
+    return {
+      verified: false,
+      is_demo: true,
+      project: { ...sampleMatch, is_demo: true },
+      message: `Permit ${sampleMatch.permit_number} is a sample demonstration record and has not been authenticated in the live Lagos State statutory registry.`
+    };
   }
 
   return {
@@ -701,32 +726,33 @@ export async function getPublicNotices(): Promise<PublicNotice[]> {
 export async function submitCitizenViolationReport(
   payload: ViolationReportPayload
 ): Promise<ViolationReportResponse> {
-  try {
-    const res = await api.post('/public-portal/transparency/violation-reports/', {
-      reporter_name: payload.reporter_name,
-      reporter_contact: payload.reporter_contact,
-      address: payload.address,
-      description: `[Category: ${payload.violation_type}] ${payload.description}`,
-      evidence_url: payload.evidence_url,
-    });
-    const data = res?.data || res;
-    return {
-      id: data.id || `VIO-${Date.now()}`,
-      tracking_number: `VIO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'LOGGED_PENDING_INSPECTION',
-      reported_at: new Date().toISOString(),
-      message: 'Your violation report has been submitted to the Zonal Regulatory Enforcement Taskforce.'
-    };
-  } catch (err) {
-    // Mock successful submission for resilience
-    return {
-      id: `VIO-${Date.now()}`,
-      tracking_number: `VIO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'LOGGED_PENDING_INSPECTION',
-      reported_at: new Date().toISOString(),
-      message: 'Report registered successfully with the enforcement queue. An inspector will verify the site.'
-    };
+  const isAnonymous = Boolean(
+    payload.reporter_name?.toLowerCase().includes("anonymous") || !payload.reporter_name?.trim()
+  );
+
+  const res = await api.post('/public-portal/transparency/violation-reports/', {
+    reporter_name: isAnonymous ? 'Anonymous Citizen' : payload.reporter_name?.trim(),
+    reporter_contact: isAnonymous ? undefined : payload.reporter_contact?.trim() || undefined,
+    address: payload.address,
+    description: `[Category: ${payload.violation_type}] ${payload.description}`,
+    evidence_url: payload.evidence_url,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+    is_anonymous: isAnonymous,
+  });
+
+  const data = res?.data || res;
+  if (!data || (!data.id && !data.tracking_number)) {
+    throw new Error('Invalid response received from regulatory enforcement queue.');
   }
+
+  return {
+    id: String(data.id),
+    tracking_number: data.tracking_number || `VIO-${data.id}`,
+    status: data.status_label || data.status || 'LOGGED_PENDING_INSPECTION',
+    reported_at: data.reported_at || new Date().toISOString(),
+    message: data.message || 'Your violation report has been submitted to the Zonal Regulatory Enforcement Taskforce.'
+  };
 }
 
 // Aliases for convenience

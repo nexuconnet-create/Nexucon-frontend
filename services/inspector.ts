@@ -609,6 +609,9 @@ export async function uploadInspectorEvidence(
     inspection?: string | null;
     file: File;
     description?: string;
+    category?: string;
+    severity?: string;
+    batchId?: string;
     sha256?: string;
     structuralElementId?: string;
     capturedAt?: string;
@@ -621,6 +624,9 @@ export async function uploadInspectorEvidence(
   form.append('project', params.project);
   if (params.inspection) form.append('inspection', params.inspection);
   if (params.description) form.append('description', params.description);
+  if (params.category) form.append('category', params.category);
+  if (params.severity) form.append('severity', params.severity);
+  if (params.batchId) form.append('batch_id', params.batchId);
   if (params.sha256) form.append('sha256', params.sha256);
   if (params.structuralElementId) {
     form.append('structural_element_id', params.structuralElementId);
