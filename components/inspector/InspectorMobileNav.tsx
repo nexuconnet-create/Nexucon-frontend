@@ -27,6 +27,7 @@ import {
   X,
   ExternalLink,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -43,6 +44,7 @@ export default function InspectorMobileNav() {
   ];
 
   const SECONDARY_ITEMS = [
+    { name: "Agency Chat & Dispatch", href: "/inspector/dashboard/messages", icon: MessageSquare, color: "text-blue-600" },
     { name: "Digital Eye Overview", href: "/inspector/dashboard/digital-eye", icon: Eye, color: "text-cyan-600", exact: true },
     { name: "T-S1 MVP Scanner", href: "/inspector/dashboard/digital-eye/ts-1", icon: Scan, color: "text-blue-600" },
     { name: "PUNDIT Ultrasonic NDT", href: "/inspector/dashboard/digital-eye/pundit", icon: Activity, color: "text-emerald-600" },

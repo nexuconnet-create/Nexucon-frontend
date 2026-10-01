@@ -608,6 +608,7 @@ export async function uploadInspectorEvidence(
     project: string;
     inspection?: string | null;
     file: File;
+    source_type?: 'photo' | 'voice_note' | string;
     description?: string;
     category?: string;
     severity?: string;
@@ -616,12 +617,16 @@ export async function uploadInspectorEvidence(
     structuralElementId?: string;
     capturedAt?: string;
     coordinates?: Record<string, number> | null;
+    transcript?: string;
+    translations?: Record<string, string>;
+    duration_seconds?: number;
   },
   onProgress?: (fraction: number) => void
 ): Promise<EvidenceRecordWithFile> {
   const form = new FormData();
   form.append('file', params.file);
   form.append('project', params.project);
+  if (params.source_type) form.append('source_type', params.source_type);
   if (params.inspection) form.append('inspection', params.inspection);
   if (params.description) form.append('description', params.description);
   if (params.category) form.append('category', params.category);
@@ -634,6 +639,15 @@ export async function uploadInspectorEvidence(
   if (params.capturedAt) form.append('captured_at', params.capturedAt);
   if (params.coordinates) {
     form.append('coordinates', JSON.stringify(params.coordinates));
+  }
+  if (params.transcript) {
+    form.append('transcript', params.transcript);
+  }
+  if (params.translations) {
+    form.append('translations', JSON.stringify(params.translations));
+  }
+  if (typeof params.duration_seconds === 'number') {
+    form.append('duration_seconds', String(params.duration_seconds));
   }
 
   const res: any = await api.post('/evidence/upload/', form, {

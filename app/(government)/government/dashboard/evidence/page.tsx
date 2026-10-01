@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   Layers,
@@ -21,10 +21,137 @@ import {
   Building2,
   Sparkles,
   Download,
+  Mic,
+  Volume2,
+  Play,
+  Pause,
+  Globe,
 } from "lucide-react";
 import { getInspectorEvidence, verifyInspectorEvidence } from "@/services/inspector";
 import { dateOr, orDash } from "@/lib/display";
 import { getAssignableProjects } from "@/services/inspector";
+
+// Inline Voice Note Player for Evidence Cards
+function VoiceNoteCardPlayer({ url, duration = 0 }: { url: string; duration?: number }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [totalDuration, setTotalDuration] = useState(duration);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onLoadedMetadata = () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        setTotalDuration(Math.round(audio.duration));
+      }
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("ended", onEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, []);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    const newTime = parseFloat(e.target.value);
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const toggleSpeed = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+    audio.playbackRate = nextRate;
+    setPlaybackRate(nextRate);
+  };
+
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="p-3 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-md w-full space-y-2">
+      <audio ref={audioRef} src={url} preload="metadata" />
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={togglePlay}
+          className="w-9 h-9 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center transition-all shrink-0 shadow-md shadow-cyan-600/30 cursor-pointer"
+          title={isPlaying ? "Pause voice note" : "Play voice note"}
+        >
+          {isPlaying ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
+        </button>
+
+        <div className="flex-1 space-y-1 min-w-0">
+          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+            <span className="flex items-center gap-1 font-bold text-cyan-400">
+              <Volume2 size={11} className={isPlaying ? "animate-pulse text-cyan-400" : ""} />
+              <span>Voice Dispatch</span>
+            </span>
+            <span>
+              {formatTime(currentTime)} / {formatTime(totalDuration || duration || 0)}
+            </span>
+          </div>
+
+          <div className="relative flex items-center">
+            <input
+              type="range"
+              min={0}
+              max={totalDuration || duration || 1}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleSpeed}
+          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-mono font-bold text-slate-300 transition-colors shrink-0 cursor-pointer"
+          title="Toggle playback speed"
+        >
+          {playbackRate}x
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function GovernmentEvidenceRegistryPage() {
   const [evidenceList, setEvidenceList] = useState<any[]>([]);
@@ -39,6 +166,7 @@ export default function GovernmentEvidenceRegistryPage() {
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
   const [verifyingMap, setVerifyingMap] = useState<Record<string, boolean>>({});
   const [verifiedMap, setVerifiedMap] = useState<Record<string, any>>({});
+  const [cardLangMap, setCardLangMap] = useState<Record<string, "en" | "yo" | "ig">>({});
 
   const loadData = async () => {
     setIsLoading(true);
@@ -244,6 +372,7 @@ export default function GovernmentEvidenceRegistryPage() {
           {[
             { id: "ALL", label: "All Evidence" },
             { id: "photo", label: "Field Photos" },
+            { id: "voice_note", label: "Voice Notes" },
             { id: "pundit", label: "PUNDIT UPV" },
             { id: "gpr", label: "GPR Radar" },
             { id: "bim_element", label: "BIM Elements" },
@@ -326,13 +455,34 @@ export default function GovernmentEvidenceRegistryPage() {
         {!isLoading &&
           !loadError &&
           filteredList.map((ev) => {
+            const isVoiceNote =
+              ev.source_type === "voice_note" ||
+              Boolean(ev.payload?.audio_url || ev.audio_url || ev.payload?.transcript);
+
+            const audioUrl =
+              ev.audio_url ||
+              ev.payload?.audio_url ||
+              ev.payload?.voice_note_url ||
+              (isVoiceNote ? ev.file?.file_url : null);
+
             const photoUrl =
-              ev.photo_url ||
-              ev.payload?.photo_url ||
-              ev.payload?.url ||
-              ev.file?.file_url;
+              !isVoiceNote
+                ? ev.photo_url ||
+                  ev.payload?.photo_url ||
+                  ev.payload?.url ||
+                  ev.file?.file_url
+                : null;
+
             const verification = verifiedMap[ev.id];
             const isVerifying = verifyingMap[ev.id];
+
+            const currentLang = cardLangMap[ev.id] || "en";
+            const transcriptText = ev.payload?.transcript || ev.payload?.description || "";
+            const translations = ev.payload?.translations || {};
+            const activeText =
+              currentLang === "en"
+                ? transcriptText
+                : translations[currentLang] || transcriptText;
 
             return (
               <div
@@ -340,8 +490,67 @@ export default function GovernmentEvidenceRegistryPage() {
                 className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
               >
                 <div>
-                  {/* Photo Evidence Thumbnail Preview */}
-                  {photoUrl ? (
+                  {/* Voice Note Player & Translation Channel Deck */}
+                  {isVoiceNote && audioUrl ? (
+                    <div className="p-4 bg-slate-900 border-b border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/80 px-2.5 py-0.5 rounded-full border border-cyan-800/80 flex items-center gap-1">
+                          <Mic size={11} />
+                          <span>Voice Note Dispatch</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEvidence(ev)}
+                          className="text-[10px] text-white bg-indigo-600/90 hover:bg-indigo-500 px-2 py-0.5 rounded-md flex items-center gap-1 font-semibold cursor-pointer transition-colors"
+                        >
+                          <Eye size={11} />
+                          <span>Audit Dossier</span>
+                        </button>
+                      </div>
+
+                      <VoiceNoteCardPlayer
+                        url={audioUrl}
+                        duration={ev.payload?.duration_seconds || 0}
+                      />
+
+                      {/* Transcribed Notes Box & Nigerian Language Channel Tabs */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-slate-300 flex items-center gap-1">
+                            <FileText size={11} className="text-cyan-400" />
+                            <span>Voice Notes Transcript:</span>
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            {[
+                              { code: "en" as const, label: "EN" },
+                              { code: "yo" as const, label: "YO" },
+                              { code: "ig" as const, label: "IG" },
+                            ].map((lang) => (
+                              <button
+                                key={lang.code}
+                                type="button"
+                                onClick={() =>
+                                  setCardLangMap((prev) => ({ ...prev, [ev.id]: lang.code }))
+                                }
+                                className={`px-2 py-0.2 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                                  currentLang === lang.code
+                                    ? "bg-cyan-500 text-slate-950 font-extrabold"
+                                    : "bg-slate-800 text-slate-400 hover:text-white"
+                                }`}
+                              >
+                                {lang.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-200 line-clamp-2 italic leading-relaxed">
+                          &ldquo;{activeText || "No voice notes recorded."}&rdquo;
+                        </p>
+                      </div>
+                    </div>
+                  ) : photoUrl ? (
                     <div
                       onClick={() => setSelectedEvidence(ev)}
                       className="relative h-44 bg-slate-900 overflow-hidden cursor-pointer group"
@@ -507,13 +716,25 @@ export default function GovernmentEvidenceRegistryPage() {
           <div className="bg-white rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Camera size={18} className="text-cyan-400" />
+                {selectedEvidence.source_type === "voice_note" ||
+                selectedEvidence.payload?.audio_url ||
+                selectedEvidence.audio_url ? (
+                  <Mic size={18} className="text-cyan-400" />
+                ) : (
+                  <Camera size={18} className="text-cyan-400" />
+                )}
                 <div>
                   <h3 className="text-sm font-bold">
-                    {selectedEvidence.evidence_reference} — Official Inspection Artifact
+                    {selectedEvidence.evidence_reference} —{" "}
+                    {selectedEvidence.source_type === "voice_note" ||
+                    selectedEvidence.payload?.audio_url ||
+                    selectedEvidence.audio_url
+                      ? "Official Voice Note Artifact & Transcript"
+                      : "Official Inspection Artifact"}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Project: {selectedEvidence.project_name} | Element: {selectedEvidence.structural_element_id || "General"}
+                    Project: {selectedEvidence.project_name} | Element:{" "}
+                    {selectedEvidence.structural_element_id || "General"}
                   </p>
                 </div>
               </div>
@@ -526,28 +747,91 @@ export default function GovernmentEvidenceRegistryPage() {
               </button>
             </div>
 
-            <div className="flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[300px]">
-              <img
-                src={
-                  selectedEvidence.photo_url ||
-                  selectedEvidence.payload?.photo_url ||
-                  selectedEvidence.payload?.url ||
-                  selectedEvidence.file?.file_url
-                }
-                alt="High-resolution evidence"
-                className="max-h-[60vh] w-auto object-contain"
-              />
-            </div>
+            {/* Media Area: Voice Player or High-Res Photo */}
+            {selectedEvidence.source_type === "voice_note" ||
+            selectedEvidence.payload?.audio_url ||
+            selectedEvidence.audio_url ? (
+              <div className="p-6 bg-slate-950 flex flex-col justify-center items-center gap-3">
+                <VoiceNoteCardPlayer
+                  url={
+                    selectedEvidence.audio_url ||
+                    selectedEvidence.payload?.audio_url ||
+                    selectedEvidence.payload?.voice_note_url ||
+                    selectedEvidence.file?.file_url
+                  }
+                  duration={selectedEvidence.payload?.duration_seconds || 0}
+                />
+              </div>
+            ) : (
+              <div className="flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[300px]">
+                <img
+                  src={
+                    selectedEvidence.photo_url ||
+                    selectedEvidence.payload?.photo_url ||
+                    selectedEvidence.payload?.url ||
+                    selectedEvidence.file?.file_url
+                  }
+                  alt="High-resolution evidence"
+                  className="max-h-[60vh] w-auto object-contain"
+                />
+              </div>
+            )}
 
             <div className="p-5 bg-white text-xs text-slate-700 space-y-3 overflow-y-auto">
-              {selectedEvidence.payload?.description && (
+              {/* Transcribed Voice Channels or Remarks */}
+              {selectedEvidence.source_type === "voice_note" ||
+              selectedEvidence.payload?.transcript ||
+              selectedEvidence.payload?.translations ? (
+                <div className="space-y-2.5">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                    <Globe size={14} className="text-indigo-600" />
+                    <span>Multilingual Voice Channels (English, Yorùbá, Igbo):</span>
+                  </h4>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                      <span>🌐 English Original:</span>
+                      <span className="text-[10px] text-slate-500 font-mono">EN</span>
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      {selectedEvidence.payload?.transcript ||
+                        selectedEvidence.payload?.description ||
+                        "No transcript recorded."}
+                    </p>
+                  </div>
+
+                  {selectedEvidence.payload?.translations?.yo && (
+                    <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200 space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-950">
+                        <span>🇳🇬 Yorùbá Channel:</span>
+                        <span className="text-[10px] text-amber-800 font-mono">YO</span>
+                      </div>
+                      <p className="text-xs text-amber-900 leading-relaxed font-sans">
+                        {selectedEvidence.payload.translations.yo}
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedEvidence.payload?.translations?.ig && (
+                    <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-950">
+                        <span>🇳🇬 Igbo Channel:</span>
+                        <span className="text-[10px] text-emerald-800 font-mono">IG</span>
+                      </div>
+                      <p className="text-xs text-emerald-900 leading-relaxed font-sans">
+                        {selectedEvidence.payload.translations.ig}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : selectedEvidence.payload?.description ? (
                 <div>
                   <h4 className="font-bold text-slate-900 mb-0.5">Inspector Defect Notes:</h4>
                   <p className="text-xs text-slate-800 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
                     {selectedEvidence.payload.description}
                   </p>
                 </div>
-              )}
+              ) : null}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
