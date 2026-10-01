@@ -52,6 +52,7 @@ import { getAssignableProjects } from "@/services/inspector";
 import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -221,6 +222,7 @@ function PunditWorkspaceInner() {
   const [swoRecommendation, setSwoRecommendation] = useState("");
   const [isSubmittingSwo, setIsSubmittingSwo] = useState(false);
   const [swoError, setSwoError] = useState<string | null>(null);
+  const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -536,6 +538,14 @@ function PunditWorkspaceInner() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsCaptureModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+          >
+            <Camera size={14} />
+            <span>Take Photo Evidence</span>
+          </button>
           <button
             type="button"
             onClick={handleReload}
@@ -1168,6 +1178,19 @@ function PunditWorkspaceInner() {
           </div>
         </div>
       )}
+
+      {/* Field Photo Capture Modal */}
+      <FieldPhotoCaptureModal
+        isOpen={isCaptureModalOpen}
+        onClose={() => setIsCaptureModalOpen(false)}
+        projectId={manualForm.projectId || (projects[0]?.id ?? "")}
+        projectName={projects.find((p) => p.id === (manualForm.projectId || projects[0]?.id))?.name}
+        structuralElementId={manualForm.elementName || activePunditTest?.structural_element_name || ""}
+        onEvidenceCreated={() => {
+          showToast("Photo evidence sealed with SHA-256 and sent to Government Dashboard.");
+          loadRecords();
+        }}
+      />
     </div>
   );
 }

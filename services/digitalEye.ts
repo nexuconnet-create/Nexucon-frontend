@@ -3499,7 +3499,7 @@ export const getVisualObservations = async (
 };
 
 export const createVisualObservation = async (
-  payload: Partial<VisualObservation>
+  payload: Partial<VisualObservation> | FormData
 ): Promise<VisualObservation> => {
   try {
     const res = await api.post('/digital-eye/visual-observations/', payload);
@@ -3507,19 +3507,30 @@ export const createVisualObservation = async (
     if (created) return created;
   } catch {}
 
+  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData;
+  const project_id = isFormData ? (payload.get('project') as string) || '' : (payload as Partial<VisualObservation>).project_id || '';
+  const batch_id = isFormData ? (payload.get('batch') as string) || null : (payload as Partial<VisualObservation>).batch_id || null;
+  const structural_element = isFormData ? (payload.get('structural_element') as string) || 'Structural Element' : (payload as Partial<VisualObservation>).structural_element || 'Structural Element';
+  const grid_location = isFormData ? (payload.get('grid_location') as string) || '' : (payload as Partial<VisualObservation>).grid_location || '';
+  const floor = isFormData ? (payload.get('floor') as string) || '' : (payload as Partial<VisualObservation>).floor || '';
+  const category = (isFormData ? (payload.get('category') as any) : (payload as Partial<VisualObservation>).category) || 'sound_uniform';
+  const severity = (isFormData ? (payload.get('severity') as any) : (payload as Partial<VisualObservation>).severity) || 'INFO';
+  const description = isFormData ? (payload.get('description') as string) || '' : (payload as Partial<VisualObservation>).description || '';
+  const inspector_name = isFormData ? (payload.get('inspector_name') as string) || 'Accredited Inspector' : (payload as Partial<VisualObservation>).inspector_name || 'Accredited Inspector';
+
   const newObs: VisualObservation = {
     id: `obs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    project_id: payload.project_id || '',
-    batch_id: payload.batch_id || null,
-    inspection_id: payload.inspection_id || null,
-    structural_element: payload.structural_element || 'Structural Element',
-    grid_location: payload.grid_location || '',
-    floor: payload.floor || '',
-    category: payload.category || 'sound_uniform',
-    severity: payload.severity || 'INFO',
-    description: payload.description || '',
-    photos: payload.photos || [],
-    inspector_name: payload.inspector_name || 'Accredited Inspector',
+    project_id,
+    batch_id,
+    inspection_id: null,
+    structural_element,
+    grid_location,
+    floor,
+    category,
+    severity,
+    description,
+    photos: isFormData ? [] : (payload as Partial<VisualObservation>).photos || [],
+    inspector_name,
     created_at: new Date().toISOString(),
   };
 

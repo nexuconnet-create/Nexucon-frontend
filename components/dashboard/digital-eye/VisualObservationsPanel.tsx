@@ -12,6 +12,8 @@ import {
   X,
   FileText,
   Upload,
+  ShieldCheck,
+  Hash,
 } from "lucide-react";
 import {
   VisualObservation,
@@ -19,6 +21,7 @@ import {
   getVisualObservations,
   createVisualObservation,
 } from "@/services/digitalEye";
+import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 
 interface VisualObservationsPanelProps {
   projectId: string;
@@ -38,6 +41,7 @@ export default function VisualObservationsPanel({
   const [observations, setObservations] = useState<VisualObservation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<VisualObservationPhoto | null>(null);
 
   // New Observation Form State
@@ -48,6 +52,7 @@ export default function VisualObservationsPanel({
   const [severity, setSeverity] = useState<VisualObservation["severity"]>("MEDIUM");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<Array<{ url: string; caption: string; file_name: string }>>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [photoCaption, setPhotoCaption] = useState("");
 
   const loadObservations = async () => {
@@ -123,11 +128,10 @@ export default function VisualObservationsPanel({
     loadObservations();
   }, [projectId, batchId]);
 
-  const handlePhotoUploadMock = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Convert file to temporary object URL for instant preview
     const file = files[0];
     const objectUrl = URL.createObjectURL(file);
     setPhotos([
@@ -138,6 +142,7 @@ export default function VisualObservationsPanel({
         file_name: file.name,
       },
     ]);
+    setPhotoFiles([...photoFiles, file]);
     setPhotoCaption("");
   };
 
@@ -146,24 +151,43 @@ export default function VisualObservationsPanel({
     if (!elementName.trim() || !description.trim()) return;
 
     try {
-      const created = await createVisualObservation({
-        project_id: projectId,
-        batch_id: batchId || null,
-        structural_element: elementName.trim(),
-        grid_location: gridLocation.trim(),
-        floor: floor.trim(),
-        category,
-        severity,
-        description: description.trim(),
-        photos: photos.map((p, idx) => ({
-          id: `ph-new-${Date.now()}-${idx}`,
-          url: p.url,
-          caption: p.caption,
-          file_name: p.file_name,
-          created_at: new Date().toISOString(),
-        })),
-        inspector_name: "Field Inspector",
-      });
+      let created: VisualObservation;
+      if (photoFiles.length > 0) {
+        const formData = new FormData();
+        formData.append("project", projectId);
+        if (batchId) formData.append("batch", batchId);
+        formData.append("structural_element", elementName.trim());
+        if (gridLocation.trim()) formData.append("grid_location", gridLocation.trim());
+        if (floor.trim()) formData.append("floor", floor.trim());
+        formData.append("category", category);
+        formData.append("severity", severity);
+        formData.append("description", description.trim());
+        formData.append("inspector_name", "Field Inspector");
+        photoFiles.forEach((f) => {
+          formData.append("photos", f);
+        });
+        if (photoCaption.trim()) formData.append("caption", photoCaption.trim());
+        created = await createVisualObservation(formData);
+      } else {
+        created = await createVisualObservation({
+          project_id: projectId,
+          batch_id: batchId || null,
+          structural_element: elementName.trim(),
+          grid_location: gridLocation.trim(),
+          floor: floor.trim(),
+          category,
+          severity,
+          description: description.trim(),
+          photos: photos.map((p, idx) => ({
+            id: `ph-new-${Date.now()}-${idx}`,
+            url: p.url,
+            caption: p.caption,
+            file_name: p.file_name,
+            created_at: new Date().toISOString(),
+          })),
+          inspector_name: "Field Inspector",
+        });
+      }
 
       const updated = [created, ...observations];
       setObservations(updated);
@@ -176,6 +200,7 @@ export default function VisualObservationsPanel({
       setFloor("");
       setDescription("");
       setPhotos([]);
+      setPhotoFiles([]);
     } catch (err: any) {
       alert("Failed to save visual observation: " + (err.message || "Unknown error"));
     }
@@ -218,14 +243,26 @@ export default function VisualObservationsPanel({
         </div>
 
         {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setIsAdding(!isAdding)}
-            className="px-3 py-1.5 rounded-lg bg-[#022C4F] hover:bg-[#033B6B] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Plus size={14} className={isAdding ? "rotate-45 transition-transform" : ""} />
-            <span>{isAdding ? "Cancel" : "Add Observation"}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCameraModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              title="Open camera to capture sealed photo evidence"
+            >
+              <Camera size={14} />
+              <span>Take Photo Evidence</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAdding(!isAdding)}
+              className="px-3 py-1.5 rounded-lg bg-[#022C4F] hover:bg-[#033B6B] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Plus size={14} className={isAdding ? "rotate-45 transition-transform" : ""} />
+              <span>{isAdding ? "Cancel" : "Add Observation"}</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -331,7 +368,7 @@ export default function VisualObservationsPanel({
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handlePhotoUploadMock}
+                  onChange={handlePhotoUpload}
                   className="hidden"
                 />
               </label>
@@ -428,22 +465,34 @@ export default function VisualObservationsPanel({
                     Photographic Records ({obs.photos.length})
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {obs.photos.map((photo) => (
-                      <div
-                        key={photo.id}
-                        onClick={() => setSelectedPhoto(photo)}
-                        className="cursor-pointer relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-200 w-20 h-16"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={photo.caption || "Observation photo"}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                          <Eye size={14} />
+                    {obs.photos.map((photo) => {
+                      const photoSrc =
+                        (photo as any).photo_url ||
+                        photo.url ||
+                        (typeof (photo as any).photo === "string" ? (photo as any).photo : "");
+                      return (
+                        <div
+                          key={photo.id}
+                          onClick={() => setSelectedPhoto(photo)}
+                          className="cursor-pointer relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-200 w-20 h-16 shadow-xs"
+                        >
+                          <img
+                            src={photoSrc}
+                            alt={photo.caption || "Observation photo"}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          {(photo as any).sha256_checksum && (
+                            <span className="absolute bottom-1 left-1 bg-black/75 text-emerald-400 font-mono text-[8px] px-1 py-0.5 rounded leading-none flex items-center gap-0.5">
+                              <Hash size={7} />
+                              SHA-256
+                            </span>
+                          )}
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <Eye size={14} />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -462,31 +511,58 @@ export default function VisualObservationsPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200">
             <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
-              <span className="text-xs font-bold truncate">
-                {selectedPhoto.caption || selectedPhoto.file_name || "Photo Record"}
+              <span className="text-xs font-bold truncate flex items-center gap-2">
+                <Camera size={14} className="text-cyan-400" />
+                {selectedPhoto.caption || selectedPhoto.file_name || "Photo Evidence Record"}
               </span>
               <button
                 onClick={() => setSelectedPhoto(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
               >
                 <X size={16} />
               </button>
             </div>
             <div className="max-h-[70vh] bg-black flex items-center justify-center overflow-hidden">
               <img
-                src={selectedPhoto.url}
+                src={
+                  (selectedPhoto as any).photo_url ||
+                  selectedPhoto.url ||
+                  (typeof (selectedPhoto as any).photo === "string" ? (selectedPhoto as any).photo : "")
+                }
                 alt={selectedPhoto.caption || "Full resolution photo"}
                 className="max-h-[70vh] w-auto object-contain"
               />
             </div>
-            {selectedPhoto.caption && (
-              <div className="p-3 bg-white text-xs text-slate-700 border-t border-slate-200">
-                <strong>Caption:</strong> {selectedPhoto.caption}
-              </div>
-            )}
+            <div className="p-4 bg-white text-xs text-slate-700 border-t border-slate-200 space-y-1.5">
+              {selectedPhoto.caption && (
+                <div>
+                  <strong className="text-slate-900">Observation Notes:</strong> {selectedPhoto.caption}
+                </div>
+              )}
+              {(selectedPhoto as any).sha256_checksum && (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                  <span className="font-semibold text-slate-500">Cryptographic Seal:</span>
+                  <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 truncate max-w-[340px]" title={(selectedPhoto as any).sha256_checksum}>
+                    {(selectedPhoto as any).sha256_checksum}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Live Camera & Field Photo Capture Modal */}
+      <FieldPhotoCaptureModal
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        projectId={projectId}
+        batchId={batchId}
+        structuralElementId={elementName}
+        onEvidenceCreated={() => {
+          loadObservations();
+        }}
+      />
     </div>
   );
 }
