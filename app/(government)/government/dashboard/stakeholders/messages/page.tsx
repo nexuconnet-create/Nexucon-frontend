@@ -215,12 +215,55 @@ export default function StakeholderMessages() {
     { code: 'en' as const, label: 'English (Original)', flag: '🌐' },
   ];
 
-  const saveMessageToLocalCache = (msg: StakeholderMessage) => {
+  const deduplicateMessages = (msgList: StakeholderMessage[]): StakeholderMessage[] => {
+    const seenIds = new Set<string>();
+    const seenFingerprints = new Set<string>();
+    const result: StakeholderMessage[] = [];
+
+    // Prioritize official server IDs (UUIDs) over temporary optimistic IDs (msg-*)
+    const sorted = [...msgList].sort((a, b) => {
+      const aTemp = a.id?.startsWith('msg-') ? 1 : 0;
+      const bTemp = b.id?.startsWith('msg-') ? 1 : 0;
+      if (aTemp !== bTemp) return aTemp - bTemp;
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+    });
+
+    for (const msg of sorted) {
+      if (!msg.id || seenIds.has(msg.id)) continue;
+
+      const textKey = (msg.message_text || '').trim().toLowerCase();
+      const contentKey = textKey || msg.voice_note_url || msg.attachment_name || msg.id;
+      const timeMs = new Date(msg.created_at || 0).getTime();
+      const timeWindow = Math.floor(timeMs / 15000); // 15s window to match optimistic with server
+      const fp = `${msg.channel_name}::${(msg.sender_name || '').toLowerCase()}::${contentKey}::${timeWindow}`;
+
+      if (seenFingerprints.has(fp)) {
+        continue;
+      }
+
+      seenIds.add(msg.id);
+      seenFingerprints.add(fp);
+      result.push(msg);
+    }
+
+    return result.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+  };
+
+  const saveMessageToLocalCache = (msg: StakeholderMessage, replaceTempId?: string) => {
     try {
       const key = `nexucon_channel_msgs_${msg.channel_name}`;
       const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
       const current: StakeholderMessage[] = raw ? JSON.parse(raw) : [];
-      const updated = [...current.filter((m) => m.id !== msg.id), msg];
+      const filtered = current.filter((m) => {
+        if (m.id === msg.id) return false;
+        if (replaceTempId && m.id === replaceTempId) return false;
+        // Purge temporary optimistic items with matching text and channel
+        if (m.id?.startsWith('msg-') && m.message_text === msg.message_text && m.channel_name === msg.channel_name) {
+          return false;
+        }
+        return true;
+      });
+      const updated = deduplicateMessages([...filtered, msg]);
       localStorage.setItem(key, JSON.stringify(updated));
     } catch (e) {}
   };
@@ -230,29 +273,30 @@ export default function StakeholderMessages() {
     try {
       const data = await getMessages({ channel: activeChannel });
 
-      // Merge server messages with local storage cache so voice notes and attachments never disappear
+      // Merge server messages with local storage cache so offline dispatches are preserved without duplication
       let localCache: StakeholderMessage[] = [];
       try {
         const raw = typeof window !== 'undefined' ? localStorage.getItem(`nexucon_channel_msgs_${activeChannel}`) : null;
         if (raw) localCache = JSON.parse(raw);
       } catch (e) {}
 
-      const msgMap = new Map<string, StakeholderMessage>();
-
-      // 1. Add server messages
-      data.forEach((m) => msgMap.set(m.id, m));
-
-      // 2. Add local cached messages (ensuring no loss)
-      localCache.forEach((m) => {
-        if (!msgMap.has(m.id)) {
-          msgMap.set(m.id, m);
-        }
-      });
-
-      const merged = Array.from(msgMap.values()).sort(
-        (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      // Identify server fingerprints to purge matching temporary optimistic client items
+      const serverFingerprints = new Set(
+        data.map((m) => `${m.channel_name}::${(m.sender_name || '').toLowerCase()}::${(m.message_text || '').trim().toLowerCase()}`)
       );
 
+      const cleanedLocalCache = localCache.filter((m) => {
+        if (!m.id?.startsWith('msg-')) return true;
+        const fp = `${m.channel_name}::${(m.sender_name || '').toLowerCase()}::${(m.message_text || '').trim().toLowerCase()}`;
+        return !serverFingerprints.has(fp);
+      });
+
+      // Update localStorage with purged cache
+      try {
+        localStorage.setItem(`nexucon_channel_msgs_${activeChannel}`, JSON.stringify(cleanedLocalCache));
+      } catch (e) {}
+
+      const merged = deduplicateMessages([...data, ...cleanedLocalCache]);
       setMessages(merged);
     } catch (err: any) {
       console.error("Failed to load messages", err);
@@ -374,7 +418,7 @@ export default function StakeholderMessages() {
           created_at: new Date().toISOString()
         };
 
-        setMessages((prev) => [...prev, optimisticMsg]);
+        setMessages((prev) => deduplicateMessages([...prev, optimisticMsg]));
         saveMessageToLocalCache(optimisticMsg);
         setInputMessage('');
         setIsUrgent(false);
@@ -397,8 +441,10 @@ export default function StakeholderMessages() {
               voice_note_url: created.voice_note_url || audioDataUrl,
               voice_note_duration: created.voice_note_duration || duration
             };
-            setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m)));
-            saveMessageToLocalCache(finalItem);
+            setMessages((prev) => deduplicateMessages(
+              prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m))
+            ));
+            saveMessageToLocalCache(finalItem, optimisticMsg.id);
           }
 
           window.dispatchEvent(new CustomEvent('show-toast', {
@@ -442,7 +488,7 @@ export default function StakeholderMessages() {
       created_at: new Date().toISOString()
     };
 
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => deduplicateMessages([...prev, optimisticMsg]));
     saveMessageToLocalCache(optimisticMsg);
 
     setInputMessage('');
@@ -473,8 +519,10 @@ export default function StakeholderMessages() {
           attachment_type: created.attachment_type || prevAttached?.type,
           attachment_size: created.attachment_size || prevAttached?.size
         };
-        setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m)));
-        saveMessageToLocalCache(finalItem);
+        setMessages((prev) => deduplicateMessages(
+          prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m))
+        ));
+        saveMessageToLocalCache(finalItem, optimisticMsg.id);
       }
 
       window.dispatchEvent(new CustomEvent('show-toast', {

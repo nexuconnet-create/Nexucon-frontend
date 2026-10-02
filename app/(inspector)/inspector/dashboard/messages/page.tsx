@@ -33,6 +33,10 @@ import {
   Radio,
   Building2,
   Sparkles,
+  Users,
+  User,
+  ArrowLeft,
+  BadgeCheck,
 } from "lucide-react";
 import {
   StakeholderMessage,
@@ -41,6 +45,11 @@ import {
   translateMessage,
   MessageTranslation,
 } from "@/services/stakeholders";
+import {
+  getAssignableProjects,
+  getProjectInspectors,
+  ProjectInspectorItem,
+} from "@/services/inspector";
 import { useAuth } from "@/context/AuthContext";
 
 // Voice Note Player Component
@@ -179,6 +188,13 @@ export default function InspectorMessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
 
+  // Project and Peer Inspector States
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [projectInspectors, setProjectInspectors] = useState<ProjectInspectorItem[]>([]);
+  const [activeDirectInspector, setActiveDirectInspector] = useState<ProjectInspectorItem | null>(null);
+  const [chatMode, setChatMode] = useState<"AGENCY_CHANNEL" | "PROJECT_TEAM" | "DIRECT_INSPECTOR">("AGENCY_CHANNEL");
+
   // File Attachment State
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [attachedFile, setAttachedFile] = useState<{
@@ -239,18 +255,130 @@ export default function InspectorMessagesPage() {
     },
   ];
 
-  const currentChannelMeta = channels.find((c) => c.name === activeChannel) || channels[0];
+  const currentChannelMeta =
+    channels.find((c) => c.name === activeChannel) || {
+      name: activeChannel,
+      title: activeDirectInspector
+        ? `Direct Peer: ${activeDirectInspector.name}`
+        : activeChannel,
+      icon: activeDirectInspector ? User : Hash,
+      multilingual: true,
+      badge: activeDirectInspector ? "Direct Inspector Peer" : "Field Team",
+      description: activeDirectInspector
+        ? `Direct peer-to-peer field communication with ${activeDirectInspector.name} (${activeDirectInspector.badge_number})`
+        : "Field team coordination channel",
+    };
 
   const languages = [
     { code: "yo" as const, label: "Yorùbá (yo)", flag: "🇳🇬" },
     { code: "ig" as const, label: "Igbo (ig)", flag: "🇳🇬" },
-    { code: "en" as const, label: "English (en)", flag: "🌐" },
+    { code: "en" as const, label: "English (Original)", flag: "🌐" },
   ];
+
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  // Load assignable projects on mount
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const projs = await getAssignableProjects();
+        setProjects(projs || []);
+      } catch (err) {
+        console.warn("Failed to load assignable projects for inspector messaging", err);
+      }
+    }
+    loadProjects();
+  }, []);
+
+  // When selected project changes, fetch peer inspectors on that project
+  useEffect(() => {
+    async function loadPeerInspectors() {
+      if (!selectedProjectId) {
+        setProjectInspectors([]);
+        return;
+      }
+      try {
+        const inspectors = await getProjectInspectors(selectedProjectId);
+        setProjectInspectors(inspectors || []);
+      } catch (err) {
+        console.warn("Failed to load project peer inspectors", err);
+        setProjectInspectors([]);
+      }
+    }
+    loadPeerInspectors();
+  }, [selectedProjectId]);
+
+  // Robust Message Deduplication Helper
+  const deduplicateMessages = (msgList: StakeholderMessage[]): StakeholderMessage[] => {
+    const seenIds = new Set<string>();
+    const seenFingerprints = new Set<string>();
+    const result: StakeholderMessage[] = [];
+
+    // Prioritize real server IDs over temporary optimistic IDs
+    const sorted = [...msgList].sort((a, b) => {
+      const aTemp = a.id?.startsWith("msg-") ? 1 : 0;
+      const bTemp = b.id?.startsWith("msg-") ? 1 : 0;
+      if (aTemp !== bTemp) return aTemp - bTemp;
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+    });
+
+    for (const msg of sorted) {
+      if (!msg.id || seenIds.has(msg.id)) continue;
+
+      const textKey = (msg.message_text || "").trim().toLowerCase();
+      const contentKey = textKey || msg.voice_note_url || msg.attachment_name || msg.id;
+      const timeMs = new Date(msg.created_at || 0).getTime();
+      const timeWindow = Math.floor(timeMs / 15000); // 15-second window
+      const fp = `${msg.channel_name}::${(msg.sender_name || "").toLowerCase()}::${contentKey}::${timeWindow}`;
+
+      if (seenFingerprints.has(fp)) {
+        continue;
+      }
+
+      seenIds.add(msg.id);
+      seenFingerprints.add(fp);
+      result.push(msg);
+    }
+
+    return result.sort(
+      (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    );
+  };
+
+  const saveMessageToLocalCache = (msg: StakeholderMessage, replaceTempId?: string) => {
+    try {
+      const key = `nexucon_channel_msgs_${msg.channel_name}`;
+      const raw = typeof window !== "undefined" ? localStorage.getItem(key) : null;
+      const current: StakeholderMessage[] = raw ? JSON.parse(raw) : [];
+      const filtered = current.filter((m) => {
+        if (m.id === msg.id) return false;
+        if (replaceTempId && m.id === replaceTempId) return false;
+        if (
+          m.id?.startsWith("msg-") &&
+          m.message_text === msg.message_text &&
+          m.channel_name === msg.channel_name
+        ) {
+          return false;
+        }
+        return true;
+      });
+      const updated = deduplicateMessages([...filtered, msg]);
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch (e) {}
+  };
 
   const fetchMessages = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getMessages({ channel: activeChannel });
+      const params: any = { channel: activeChannel };
+      if (selectedProject?.name) {
+        params.project = selectedProject.name;
+      }
+      if (activeDirectInspector?.name) {
+        params.recipient = activeDirectInspector.name;
+      }
+
+      const data = await getMessages(params);
 
       // Merge with localStorage cache
       let localCache: StakeholderMessage[] = [];
@@ -262,25 +390,35 @@ export default function InspectorMessagesPage() {
         if (raw) localCache = JSON.parse(raw);
       } catch (e) {}
 
-      const msgMap = new Map<string, StakeholderMessage>();
-      data.forEach((m) => msgMap.set(m.id, m));
-      localCache.forEach((m) => {
-        if (!msgMap.has(m.id)) {
-          msgMap.set(m.id, m);
-        }
-      });
-
-      const merged = Array.from(msgMap.values()).sort(
-        (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      // Identify server fingerprints to purge matching temporary optimistic client items
+      const serverFingerprints = new Set(
+        data.map(
+          (m) =>
+            `${m.channel_name}::${(m.sender_name || "").toLowerCase()}::${(m.message_text || "").trim().toLowerCase()}`
+        )
       );
 
+      const cleanedLocalCache = localCache.filter((m) => {
+        if (!m.id?.startsWith("msg-")) return true;
+        const fp = `${m.channel_name}::${(m.sender_name || "").toLowerCase()}::${(m.message_text || "").trim().toLowerCase()}`;
+        return !serverFingerprints.has(fp);
+      });
+
+      try {
+        localStorage.setItem(
+          `nexucon_channel_msgs_${activeChannel}`,
+          JSON.stringify(cleanedLocalCache)
+        );
+      } catch (e) {}
+
+      const merged = deduplicateMessages([...data, ...cleanedLocalCache]);
       setMessages(merged);
     } catch (err: any) {
       console.error("Failed to load messages", err);
     } finally {
       setIsLoading(false);
     }
-  }, [activeChannel]);
+  }, [activeChannel, selectedProject, activeDirectInspector]);
 
   useEffect(() => {
     fetchMessages();
@@ -371,16 +509,17 @@ export default function InspectorMessagesPage() {
           is_urgent: isUrgent,
           sender_name: senderName,
           sender_role: senderRole,
-          project_name: "",
+          project_name: selectedProject?.name || "",
           created_at: new Date().toISOString(),
         };
 
-        setMessages((prev) => [...prev, optimisticMsg]);
+        setMessages((prev) => deduplicateMessages([...prev, optimisticMsg]));
+        saveMessageToLocalCache(optimisticMsg);
         setInputMessage("");
         setIsUrgent(false);
 
         try {
-          const created = await sendMessage({
+          const payload: any = {
             channel_name: activeChannel,
             message_text: optimisticMsg.message_text,
             voice_note_url: audioDataUrl,
@@ -388,21 +527,28 @@ export default function InspectorMessagesPage() {
             is_urgent: optimisticMsg.is_urgent,
             sender_name: senderName,
             sender_role: senderRole,
-            project_name: "",
-          });
+            project_name: selectedProject?.name || "",
+          };
+
+          if (activeDirectInspector) {
+            payload.recipient_name = activeDirectInspector.name;
+            payload.recipient_id = activeDirectInspector.id;
+          }
+
+          const created = await sendMessage(payload);
 
           if (created && created.id) {
+            const finalItem = {
+              ...created,
+              voice_note_url: created.voice_note_url || audioDataUrl,
+              voice_note_duration: created.voice_note_duration || duration,
+            };
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === optimisticMsg.id
-                  ? {
-                      ...created,
-                      voice_note_url: created.voice_note_url || audioDataUrl,
-                      voice_note_duration: created.voice_note_duration || duration,
-                    }
-                  : m
+              deduplicateMessages(
+                prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m))
               )
             );
+            saveMessageToLocalCache(finalItem, optimisticMsg.id);
           }
         } catch (err) {
           console.error("Failed to send voice note dispatch", err);
@@ -459,31 +605,53 @@ export default function InspectorMessagesPage() {
       is_urgent: isUrgent,
       sender_name: senderName,
       sender_role: senderRole,
-      project_name: "",
+      project_name: selectedProject?.name || "",
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => deduplicateMessages([...prev, optimisticMsg]));
+    saveMessageToLocalCache(optimisticMsg);
     setInputMessage("");
+    const prevAttached = attachedFile;
+    const prevUrgent = isUrgent;
     setAttachedFile(null);
     setIsUrgent(false);
 
     try {
-      const created = await sendMessage({
+      const payload: any = {
         channel_name: activeChannel,
         message_text: optimisticMsg.message_text,
-        attachment_url: optimisticMsg.attachment_url,
-        attachment_name: optimisticMsg.attachment_name,
-        attachment_type: optimisticMsg.attachment_type,
-        attachment_size: optimisticMsg.attachment_size,
-        is_urgent: optimisticMsg.is_urgent,
+        attachment_url: prevAttached?.dataUrl,
+        attachment_name: prevAttached?.name,
+        attachment_type: prevAttached?.type,
+        attachment_size: prevAttached?.size,
+        is_urgent: prevUrgent,
         sender_name: senderName,
         sender_role: senderRole,
-        project_name: "",
-      });
+        project_name: selectedProject?.name || "",
+      };
+
+      if (activeDirectInspector) {
+        payload.recipient_name = activeDirectInspector.name;
+        payload.recipient_id = activeDirectInspector.id;
+      }
+
+      const created = await sendMessage(payload);
 
       if (created && created.id) {
-        setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? created : m)));
+        const finalItem = {
+          ...created,
+          attachment_url: created.attachment_url || prevAttached?.dataUrl,
+          attachment_name: created.attachment_name || prevAttached?.name,
+          attachment_type: created.attachment_type || prevAttached?.type,
+          attachment_size: created.attachment_size || prevAttached?.size,
+        };
+        setMessages((prev) =>
+          deduplicateMessages(
+            prev.map((m) => (m.id === optimisticMsg.id ? finalItem : m))
+          )
+        );
+        saveMessageToLocalCache(finalItem, optimisticMsg.id);
       }
     } catch (err) {
       console.error("Failed to send message", err);
@@ -492,10 +660,25 @@ export default function InspectorMessagesPage() {
     }
   };
 
-  // Translation handler
-  const handleTranslate = async (messageId: string, targetLang: "yo" | "ig" | "en", text: string) => {
-    setTranslatingId(messageId);
+  // Translation Handler - Reverts when English is clicked or translates reliably
+  const handleTranslate = async (
+    messageId: string,
+    targetLang: "yo" | "ig" | "en",
+    text: string
+  ) => {
     setOpenTranslateMenuId(null);
+
+    // When English is selected, revert back to original message
+    if (targetLang === "en") {
+      setTranslatedMap((prev) => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+      return;
+    }
+
+    setTranslatingId(messageId);
     try {
       const res = await translateMessage(messageId, targetLang, text);
       if (res && res.translated_content) {
@@ -510,6 +693,33 @@ export default function InspectorMessagesPage() {
       setTranslatingId(null);
     }
   };
+
+  // Select a direct peer inspector for 1-to-1 messaging
+  const selectDirectInspector = (inspector: ProjectInspectorItem) => {
+    setActiveDirectInspector(inspector);
+    setChatMode("DIRECT_INSPECTOR");
+    setActiveChannel(`Direct: ${inspector.name}`);
+  };
+
+  // Select statutory agency channel
+  const selectAgencyChannel = (chanName: string) => {
+    setActiveDirectInspector(null);
+    setChatMode("AGENCY_CHANNEL");
+    setActiveChannel(chanName);
+  };
+
+  // Select project team channel
+  const selectProjectTeamChannel = () => {
+    if (!selectedProject) return;
+    setActiveDirectInspector(null);
+    setChatMode("PROJECT_TEAM");
+    setActiveChannel(`Project Team: ${selectedProject.name}`);
+  };
+
+  // Filter out the current logged-in inspector from the peer list
+  const otherInspectors = projectInspectors.filter(
+    (ins) => !ins.is_current_user && ins.name.toLowerCase() !== senderName.toLowerCase()
+  );
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200 min-w-0">
@@ -551,24 +761,132 @@ export default function InspectorMessagesPage() {
       </div>
 
       {/* Main Messaging Interface */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[680px]">
-        {/* Left Channel Sidebar */}
-        <div className="lg:col-span-1 border-r border-slate-200/90 bg-slate-50/70 p-4 space-y-4 flex flex-col justify-between">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[700px]">
+        {/* Left Channel & Inspector Directory Sidebar */}
+        <div className="lg:col-span-1 border-r border-slate-200/90 bg-slate-50/70 p-4 space-y-4 flex flex-col justify-between overflow-y-auto">
           <div className="space-y-4">
+            {/* Project Site Selector */}
             <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 px-1 flex items-center gap-1">
+                <Building2 size={12} className="text-cyan-600" />
+                <span>Project Jurisdiction</span>
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => {
+                  const newProjId = e.target.value;
+                  setSelectedProjectId(newProjId);
+                  if (!newProjId) {
+                    selectAgencyChannel("General Council");
+                  }
+                }}
+                className="w-full p-2.5 text-xs font-bold rounded-2xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-sm"
+              >
+                <option value="">🌐 All Statutory Agency Channels</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    🏗️ {p.name} {p.reference_number ? `(${p.reference_number})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Direct Project Peer Inspectors Section */}
+            {selectedProjectId && (
+              <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold text-cyan-900 uppercase tracking-wider flex items-center gap-1">
+                    <Users size={12} className="text-cyan-700" />
+                    <span>Project Inspectors ({otherInspectors.length})</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-200">
+                    Direct Peer Access
+                  </span>
+                </div>
+
+                {/* Broadcast to Project Team Channel */}
+                <button
+                  type="button"
+                  onClick={selectProjectTeamChannel}
+                  className={`w-full text-left p-2.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2.5 border text-xs ${
+                    chatMode === "PROJECT_TEAM"
+                      ? "bg-[#022C4F] text-white border-[#022C4F] shadow-md shadow-[#022C4F]/20 font-bold"
+                      : "bg-white hover:bg-cyan-50 text-slate-700 border-slate-200/80 font-semibold"
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-xl bg-cyan-600 text-white flex items-center justify-center shrink-0">
+                    <Users size={14} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate">Project Inspector Team</span>
+                    <span className="text-[10px] opacity-75 block truncate">
+                      Broadcast to site team
+                    </span>
+                  </div>
+                </button>
+
+                {/* Individual Peer Inspectors List */}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                  {otherInspectors.length === 0 ? (
+                    <div className="p-3 bg-white rounded-xl border border-dashed border-slate-200 text-center text-[11px] text-slate-400">
+                      No other inspectors assigned to this site yet.
+                    </div>
+                  ) : (
+                    otherInspectors.map((ins) => {
+                      const isSelected =
+                        chatMode === "DIRECT_INSPECTOR" &&
+                        activeDirectInspector?.name === ins.name;
+                      return (
+                        <button
+                          key={ins.id}
+                          type="button"
+                          onClick={() => selectDirectInspector(ins)}
+                          className={`w-full text-left p-2.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2.5 border text-xs ${
+                            isSelected
+                              ? "bg-gradient-to-r from-cyan-900 to-[#022C4F] text-white border-cyan-800 shadow-md font-bold"
+                              : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80 font-medium"
+                          }`}
+                        >
+                          <div className="relative shrink-0">
+                            <div className="w-8 h-8 rounded-xl bg-slate-200 text-[#022C4F] flex items-center justify-center font-extrabold text-xs">
+                              {ins.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold truncate text-xs">{ins.name}</span>
+                              <span className="text-[9px] font-mono opacity-80 shrink-0">
+                                {ins.badge_number}
+                              </span>
+                            </div>
+                            <p className="text-[10px] opacity-75 truncate">{ins.role}</p>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Statutory Agency Channels */}
+            <div className="pt-2 border-t border-slate-200/80">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2 px-1">
                 Statutory Agency Channels
               </span>
               <div className="space-y-1.5">
                 {channels.map((chan) => {
                   const Icon = chan.icon;
-                  const isActive = activeChannel === chan.name;
+                  const isActive =
+                    chatMode === "AGENCY_CHANNEL" && activeChannel === chan.name;
                   return (
                     <button
                       key={chan.name}
                       type="button"
-                      onClick={() => setActiveChannel(chan.name)}
-                      className={`w-full text-left p-3 rounded-2xl transition-all cursor-pointer flex flex-col gap-1 border ${
+                      onClick={() => selectAgencyChannel(chan.name)}
+                      className={`w-full text-left p-2.5 rounded-2xl transition-all cursor-pointer flex flex-col gap-1 border ${
                         isActive
                           ? "bg-[#022C4F] text-white border-[#022C4F] shadow-md shadow-[#022C4F]/20"
                           : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
@@ -576,11 +894,18 @@ export default function InspectorMessagesPage() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 font-bold text-xs">
-                          <Icon size={14} className={isActive ? "text-cyan-300" : "text-slate-500"} />
+                          <Icon
+                            size={14}
+                            className={isActive ? "text-cyan-300" : "text-slate-500"}
+                          />
                           <span>{chan.name}</span>
                         </div>
                       </div>
-                      <p className={`text-[10px] line-clamp-1 ${isActive ? "text-slate-200" : "text-slate-500"}`}>
+                      <p
+                        className={`text-[10px] line-clamp-1 ${
+                          isActive ? "text-slate-200" : "text-slate-500"
+                        }`}
+                      >
                         {chan.description}
                       </p>
                     </button>
@@ -612,19 +937,50 @@ export default function InspectorMessagesPage() {
         <div className="lg:col-span-3 flex flex-col justify-between bg-white h-full min-h-[600px]">
           {/* Active Channel Header */}
           <div className="p-4 border-b border-slate-200 bg-slate-50/40 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-extrabold text-[#022C4F]">
-                  #{currentChannelMeta.title}
-                </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
-                  {currentChannelMeta.badge}
-                </span>
+            <div className="flex items-center gap-3">
+              {activeDirectInspector && (
+                <button
+                  type="button"
+                  onClick={() => selectAgencyChannel("General Council")}
+                  className="p-1.5 rounded-xl hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+                  title="Return to general channels"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-extrabold text-[#022C4F]">
+                    {activeDirectInspector
+                      ? `💬 Direct Peer Chat: ${activeDirectInspector.name}`
+                      : `#${currentChannelMeta.title}`}
+                  </h2>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200 flex items-center gap-1">
+                    {activeDirectInspector ? (
+                      <>
+                        <BadgeCheck size={12} className="text-cyan-700" />
+                        <span>{activeDirectInspector.badge_number}</span>
+                      </>
+                    ) : (
+                      <span>{currentChannelMeta.badge}</span>
+                    )}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {activeDirectInspector
+                    ? `Site: ${selectedProject?.name || "Shared Project"} • Role: ${activeDirectInspector.role}`
+                    : currentChannelMeta.description}
+                </p>
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {currentChannelMeta.description}
-              </p>
             </div>
+
+            {selectedProject && (
+              <span className="hidden sm:inline-flex text-[10px] font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 items-center gap-1">
+                <Building2 size={11} className="text-cyan-700" />
+                <span>{selectedProject.name}</span>
+              </span>
+            )}
           </div>
 
           {/* Messages Feed */}
@@ -632,21 +988,22 @@ export default function InspectorMessagesPage() {
             {isLoading && messages.length === 0 ? (
               <div className="p-10 text-center text-slate-400">
                 <RefreshCw size={20} className="animate-spin mx-auto mb-2 text-slate-400" />
-                <p className="text-xs">Connecting to government channel...</p>
+                <p className="text-xs">Connecting to dispatch channel...</p>
               </div>
             ) : messages.length === 0 ? (
               <div className="p-12 text-center text-slate-400 space-y-2">
                 <MessageSquare size={32} className="mx-auto text-slate-300" />
                 <h4 className="text-xs font-bold text-slate-600">No Messages Yet</h4>
                 <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                  This channel is ready for communication with the Government Command Center and Ministry officials.
+                  {activeDirectInspector
+                    ? `Start a direct peer message with ${activeDirectInspector.name} for field coordination on this project.`
+                    : "This channel is ready for communication with the Government Command Center and Ministry officials."}
                 </p>
               </div>
             ) : (
               messages.map((msg) => {
                 const isFromMe =
-                  msg.sender_name?.toLowerCase() === senderName.toLowerCase() ||
-                  msg.sender_role?.toLowerCase().includes("inspector");
+                  msg.sender_name?.toLowerCase() === senderName.toLowerCase();
                 const translation = translatedMap[msg.id];
                 const isTranslatingThis = translatingId === msg.id;
 
@@ -755,7 +1112,19 @@ export default function InspectorMessagesPage() {
                               <Globe size={11} />
                               <span>{translation.language_name} Channel</span>
                             </span>
-                            <span className="text-[9px] text-indigo-600">Translated</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTranslatedMap((prev) => {
+                                  const next = { ...prev };
+                                  delete next[msg.id];
+                                  return next;
+                                });
+                              }}
+                              className="text-[9px] text-indigo-600 hover:text-indigo-900 underline cursor-pointer"
+                            >
+                              Revert
+                            </button>
                           </div>
                           <p className="text-xs italic leading-relaxed">{translation.translated_content}</p>
                         </div>
@@ -777,7 +1146,11 @@ export default function InspectorMessagesPage() {
                                 isFromMe ? "text-cyan-200/90" : "text-indigo-700"
                               }`}
                             >
-                              <Languages size={11} />
+                              {isTranslatingThis ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Languages size={11} />
+                              )}
                               <span>
                                 {isTranslatingThis ? "Translating..." : "Translate Channel"}
                               </span>
@@ -874,7 +1247,11 @@ export default function InspectorMessagesPage() {
                     type="text"
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder={`Message ${currentChannelMeta.title}...`}
+                    placeholder={
+                      activeDirectInspector
+                        ? `Direct message to ${activeDirectInspector.name}...`
+                        : `Message #${currentChannelMeta.title}...`
+                    }
                     className="flex-1 p-3 rounded-2xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
 
@@ -929,7 +1306,7 @@ export default function InspectorMessagesPage() {
                       className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                     />
                     <span className={isUrgent ? "font-bold text-rose-700" : "text-slate-600"}>
-                      Mark as Urgent Dispatch (Priority Escalation to Command Center)
+                      Mark as Urgent Dispatch (Priority Escalation)
                     </span>
                   </label>
 
