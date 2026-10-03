@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Boxes, ChevronDown, ChevronRight, Folder, FolderOpen, Sparkles } from "lucide-react";
+import { Boxes, ChevronDown, ChevronRight, Folder, FolderOpen, Sparkles, Trash2 } from "lucide-react";
 import { formatVelocityMs, PunditTest } from "@/services/digitalEye";
 
 /**
@@ -334,6 +334,7 @@ export function ProjectFloorStationTreeBody<T>({
   toggleStation,
   stationSummary,
   renderStationBody,
+  onClearProject,
 }: {
   groups: [string, Map<string, Map<string, T[]>>][];
   openProjects: Set<string>;
@@ -346,6 +347,8 @@ export function ProjectFloorStationTreeBody<T>({
   stationSummary: (rows: T[]) => StationSummary | null;
   /** The page's rows/cards for one open station (table, card grid…). */
   renderStationBody: (rows: T[]) => React.ReactNode;
+  /** Optional callback to clear the entire project/folder of tests. */
+  onClearProject?: (projectName: string, rows: T[]) => void;
 }) {
   return (
     <div className="divide-y divide-gray-100">
@@ -358,23 +361,42 @@ export function ProjectFloorStationTreeBody<T>({
         return (
           <div key={project}>
             {/* Project folder */}
-            <button
-              onClick={() => toggleProject(project)}
-              className="w-full px-5 py-3.5 flex flex-wrap items-center gap-3 bg-slate-100/80 hover:bg-slate-200/70 transition-colors text-left cursor-pointer"
-            >
-              {projectOpen ? <ChevronDown size={14} className="text-gray-600" /> : <ChevronRight size={14} className="text-gray-600" />}
-              {projectOpen ? <FolderOpen size={16} className="text-[#022C4F]" /> : <Folder size={16} className="text-[#022C4F]" />}
-              <span className="text-xs font-black uppercase tracking-wide text-[#022C4F]">{project}</span>
-              <span className="text-[10px] font-mono text-gray-500">
-                {floors.size} floor{floors.size === 1 ? '' : 's'} · {projectRows.length} test{projectRows.length === 1 ? '' : 's'}
-              </span>
-              {projectSummary && (
-                <span className="ml-auto text-[10px] font-mono text-gray-500">
-                  mean V {formatVelocityMs(projectSummary.meanV)} m/s · mean f_cu{' '}
-                  {projectSummary.meanF != null ? `${projectSummary.meanF.toFixed(1)} MPa` : '—'}
+            <div className="w-full px-5 py-3.5 flex flex-wrap items-center gap-3 bg-slate-100/80 hover:bg-slate-200/70 transition-colors text-left">
+              <button
+                type="button"
+                onClick={() => toggleProject(project)}
+                className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+              >
+                {projectOpen ? <ChevronDown size={14} className="text-gray-600 shrink-0" /> : <ChevronRight size={14} className="text-gray-600 shrink-0" />}
+                {projectOpen ? <FolderOpen size={16} className="text-[#022C4F] shrink-0" /> : <Folder size={16} className="text-[#022C4F] shrink-0" />}
+                <span className="text-xs font-black uppercase tracking-wide text-[#022C4F] truncate">{project}</span>
+                <span className="text-[10px] font-mono text-gray-500 shrink-0">
+                  {floors.size} floor{floors.size === 1 ? '' : 's'} · {projectRows.length} test{projectRows.length === 1 ? '' : 's'}
                 </span>
-              )}
-            </button>
+              </button>
+              <div className="ml-auto flex items-center gap-3">
+                {projectSummary && (
+                  <span className="text-[10px] font-mono text-gray-500">
+                    mean V {formatVelocityMs(projectSummary.meanV)} m/s · mean f_cu{' '}
+                    {projectSummary.meanF != null ? `${projectSummary.meanF.toFixed(1)} MPa` : '—'}
+                  </span>
+                )}
+                {onClearProject && projectRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearProject(project, projectRows);
+                    }}
+                    className="px-2 py-0.5 rounded text-[10px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 flex items-center gap-1 transition-colors cursor-pointer"
+                    title={`Clear all tests in ${project}`}
+                  >
+                    <Trash2 size={11} />
+                    <span>Clear Folder</span>
+                  </button>
+                )}
+              </div>
+            </div>
 
             {projectOpen && (
               <div className="bg-white">

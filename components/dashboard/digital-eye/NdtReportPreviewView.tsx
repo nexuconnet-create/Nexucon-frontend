@@ -31,11 +31,13 @@ const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200];
 
 export default function NdtReportPreviewView({
   projectId,
+  operator,
   onBackToEdit,
   onGenerated,
   onEditInCms,
 }: {
   projectId: string;
+  operator?: string;
   /** Returns to the editing page exactly as it was left — nothing committed. */
   onBackToEdit: () => void;
   onGenerated?: () => void;
@@ -59,7 +61,7 @@ export default function NdtReportPreviewView({
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    fetchNdtReportPreviewBundle(projectId)
+    fetchNdtReportPreviewBundle(projectId, operator)
       .then(({ blob, sections: secs, pageCount: total }) => {
         if (cancelled) return;
         objectUrl = window.URL.createObjectURL(blob);
@@ -84,7 +86,7 @@ export default function NdtReportPreviewView({
       cancelled = true;
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
-  }, [projectId]);
+  }, [projectId, operator]);
 
   const toast = (message: string, type: "success" | "error" | "info") => {
     window.dispatchEvent(
@@ -95,7 +97,7 @@ export default function NdtReportPreviewView({
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await downloadNdtReport(projectId);
+      await downloadNdtReport(projectId, operator);
       onGenerated?.();
     } catch (err: any) {
       toast(

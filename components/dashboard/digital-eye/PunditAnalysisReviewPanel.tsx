@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock, PenLine, Undo2 } from "lucide-react";
+import { CheckCircle2, Clock, PenLine, Sparkles, Undo2 } from "lucide-react";
 import {
   getPunditAnalysisReview,
   reviewPunditAnalysis,
   withdrawPunditAnalysisReview,
+  regenerateJointPunditAnalysis,
   type PunditAnalysisReview,
 } from "@/services/digitalEye";
 
@@ -17,11 +18,19 @@ import {
  * "pending" state — nothing is auto-approved. Directors only (enforced
  * server-side; a refusal is shown verbatim).
  */
-export default function PunditAnalysisReviewPanel({ analysisId }: { analysisId: string }) {
+export default function PunditAnalysisReviewPanel({
+  analysisId,
+  onReviewUpdated,
+}: {
+  analysisId: string;
+  onReviewUpdated?: () => void;
+}) {
   const [review, setReview] = useState<PunditAnalysisReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [notes, setNotes] = useState("");
+  const [regenerateWithAi, setRegenerateWithAi] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const errText = useCallback((err: any): string => {
@@ -67,19 +76,34 @@ export default function PunditAnalysisReviewPanel({ analysisId }: { analysisId: 
       const data = await reviewPunditAnalysis(analysisId, {
         decision,
         notes: notes.trim(),
+        regenerate: regenerateWithAi,
       });
       setReview(data);
       setNotes("");
       toast(
         decision === "corroborated"
-          ? "Analysis corroborated by engineer review."
-          : "Analysis returned for revision.",
+          ? "Analysis corroborated by engineer review (Joint Review updated)."
+          : "Analysis returned for revision (Joint Review updated).",
         "success",
       );
+      onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRegenerateJoint = async () => {
+    setIsRegenerating(true);
+    try {
+      await regenerateJointPunditAnalysis(analysisId);
+      toast("Joint AI Review re-synthesized with Principal Engineer directives.", "success");
+      onReviewUpdated?.();
+    } catch (err: any) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -90,6 +114,7 @@ export default function PunditAnalysisReviewPanel({ analysisId }: { analysisId: 
       setReview(await withdrawPunditAnalysisReview(analysisId));
       setNotes("");
       toast("Review withdrawn — the analysis is pending engineer review again.", "info");
+      onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
     } finally {
@@ -153,13 +178,24 @@ export default function PunditAnalysisReviewPanel({ analysisId }: { analysisId: 
           )}
         </div>
         {!pending && (
-          <button
-            onClick={withdraw}
-            disabled={saving}
-            className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 disabled:opacity-50 cursor-pointer"
-          >
-            <Undo2 size={12} /> Withdraw review
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRegenerateJoint}
+              disabled={saving || isRegenerating}
+              className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg px-2.5 py-1 disabled:opacity-50 cursor-pointer shadow-sm transition-all"
+              title="Re-run AI synthesis integrating the Principal Engineer's review directives and notes"
+            >
+              <Sparkles size={12} className={isRegenerating ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+              <span>{isRegenerating ? "Synthesizing Joint Review…" : "Regenerate Joint Review with AI"}</span>
+            </button>
+            <button
+              onClick={withdraw}
+              disabled={saving || isRegenerating}
+              className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 disabled:opacity-50 cursor-pointer"
+            >
+              <Undo2 size={12} /> Withdraw review
+            </button>
+          </div>
         )}
       </div>
 
@@ -188,30 +224,41 @@ export default function PunditAnalysisReviewPanel({ analysisId }: { analysisId: 
         </p>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+      <div className="space-y-2">
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           maxLength={4000}
           rows={2}
           placeholder="Review notes (optional, max 4000 characters) — typed by the reviewing engineer, never auto-filled."
-          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 resize-y"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 resize-y"
         />
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={() => decide("corroborated")}
-            disabled={saving}
-            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-          >
-            <CheckCircle2 size={13} /> Corroborate
-          </button>
-          <button
-            onClick={() => decide("returned")}
-            disabled={saving}
-            className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-          >
-            <PenLine size={13} /> Return for revision
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={regenerateWithAi}
+              onChange={(e) => setRegenerateWithAi(e.target.checked)}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="font-medium">Synthesize Joint AI analysis with this review</span>
+          </label>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => decide("corroborated")}
+              disabled={saving || isRegenerating}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <CheckCircle2 size={13} /> Corroborate
+            </button>
+            <button
+              onClick={() => decide("returned")}
+              disabled={saving || isRegenerating}
+              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <PenLine size={13} /> Return for revision
+            </button>
+          </div>
         </div>
       </div>
     </div>

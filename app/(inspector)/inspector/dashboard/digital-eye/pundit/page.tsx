@@ -23,20 +23,27 @@ import {
   Radio,
   Wifi,
   Bluetooth,
-  Camera,
-  Users,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  PenLine,
+  Download,
 } from "lucide-react";
 import {
   PunditTest,
   PunditReading,
   getPunditTests,
   createPunditTest,
+  clearProjectPunditTests,
   getFieldDevices,
   uploadSensorFile,
   FieldDeviceRecord,
   createDigitalEyeFinding,
   formatVelocityMs,
-  createPunditScanBatch,
+  getPunditAIAnalyses,
+  getPunditAnalysisReview,
+  PunditAnalysisReview,
+  downloadNdtReport,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -157,6 +164,42 @@ function PunditWorkspaceInner() {
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [activePunditTest, setActivePunditTest] = useState<PunditTest | null>(null);
   const [isReloading, setIsReloading] = useState(false);
+  const [activePunditReview, setActivePunditReview] = useState<PunditAnalysisReview | null>(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(false);
+
+  useEffect(() => {
+    if (!activePunditTest?.project) {
+      setActivePunditReview(null);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingReview(true);
+    getPunditAIAnalyses({ project: activePunditTest.project })
+      .then(async (analyses) => {
+        if (cancelled) return;
+        if (!analyses || analyses.length === 0) {
+          setActivePunditReview(null);
+          return;
+        }
+        const latest = analyses[0];
+        try {
+          const rev = await getPunditAnalysisReview(latest.id);
+          if (!cancelled) setActivePunditReview(rev);
+        } catch {
+          if (!cancelled) setActivePunditReview(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setActivePunditReview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingReview(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePunditTest?.project]);
 
   // Projects assignable to inspector
   const [projects, setProjects] = useState<{ id: string; name: string; reference?: string }[]>([]);
@@ -253,6 +296,30 @@ function PunditWorkspaceInner() {
       setRecordsError(
         err?.response?.data?.detail || err?.message || "The UPV test register could not be read."
       );
+    }
+  };
+
+  const [clearingProject, setClearingProject] = useState<{ name: string; id: string; count: number } | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClearProject = (projectName: string, rows: PunditTest[]) => {
+    const projId = rows[0]?.project;
+    if (!projId) return;
+    setClearingProject({ name: projectName, id: projId, count: rows.length });
+  };
+
+  const confirmClearProject = async () => {
+    if (!clearingProject) return;
+    setIsClearing(true);
+    try {
+      const res = await clearProjectPunditTests(clearingProject.id);
+      showToast(`Cleared ${res.deleted_count} tests from ${clearingProject.name}`);
+      setClearingProject(null);
+      await loadRecords();
+    } catch (err: any) {
+      showToast(`Failed to clear folder: ${err?.response?.data?.detail || err?.message || 'Error'}`);
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -470,6 +537,7 @@ function PunditWorkspaceInner() {
     const isSelected = activePunditTest?.id === t.id;
     const analysed = t.pulse_velocity_ms > 0;
     const quality = analysed ? getConcreteQuality(t.pulse_velocity_ms) : null;
+    const primaryLabel = t.test_location || t.test_reference || "Unreferenced test";
     return (
       <div
         key={t.id}
@@ -484,11 +552,11 @@ function PunditWorkspaceInner() {
         }`}
       >
         <div className="flex items-center justify-between gap-2 mb-2">
-          <span className="text-xs font-mono font-bold text-[#022C4F]">
-            {t.test_reference || "Unreferenced test"}
+          <span className="text-xs font-bold text-[#022C4F] truncate" title={primaryLabel}>
+            {primaryLabel}
           </span>
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
               quality
                 ? quality.badgeClass
                 : "bg-slate-100 text-slate-600 border-slate-200"
@@ -497,11 +565,16 @@ function PunditWorkspaceInner() {
             {quality ? quality.label : "UNRATED"}
           </span>
         </div>
-        <div className="text-xs font-semibold text-slate-800 truncate mb-1">
-          {orDash(t.structural_element_name, "Element not recorded")}
+        <div className="flex items-center justify-between text-xs font-semibold text-slate-800 mb-1">
+          <span className="truncate">{orDash(t.structural_element_name, "Element not recorded")}</span>
+          {t.test_reference && (
+            <span className="text-[10px] font-mono text-slate-400 font-normal shrink-0">
+              {t.test_reference}
+            </span>
+          )}
         </div>
         <div className="text-[11px] text-slate-500 truncate mb-3">
-          {orDash(t.test_location, "Location not recorded")}
+          {t.test_location ? t.test_location : orDash(t.test_location, "Location not recorded")}
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
           <span>{dateOr(t.test_date || t.created_at)}</span>
@@ -520,6 +593,65 @@ function PunditWorkspaceInner() {
         <div className="fixed bottom-6 right-6 z-50 bg-[#022C4F] text-white text-xs px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in duration-200">
           <Activity size={15} className="text-cyan-400" />
           <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Clear Folder Confirmation Modal */}
+      {clearingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200">
+            <div className="bg-rose-700 p-4 flex justify-between items-center text-white">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-white" />
+                <h3 className="font-bold text-sm">Clear Folder Confirmation</h3>
+              </div>
+              <button
+                onClick={() => setClearingProject(null)}
+                className="text-white/80 hover:text-white transition-colors"
+                disabled={isClearing}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently clear all <strong className="text-rose-700">{clearingProject.count} tests</strong> in folder <strong className="text-slate-800">{clearingProject.name}</strong>?
+              </p>
+              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-[11px] text-rose-800">
+                This will delete all test records, readings, and waveforms associated with this folder. This action cannot be undone.
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setClearingProject(null)}
+                disabled={isClearing}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmClearProject}
+                disabled={isClearing}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Clearing Folder...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Clear All Tests</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -733,6 +865,94 @@ function PunditWorkspaceInner() {
                   <AlertTriangle size={14} className="text-rose-600" />
                   <span>Raise Concrete Defect Finding</span>
                 </button>
+
+                {/* Principal Engineer Peer Review & Joint Review Card */}
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Principal Engineer Review
+                    </span>
+                    {isLoadingReview && (
+                      <span className="text-[10px] text-slate-400 font-mono animate-pulse">Syncing…</span>
+                    )}
+                  </div>
+
+                  {activePunditReview ? (
+                    <div className={`p-3.5 rounded-xl border space-y-2 text-xs transition-all ${
+                      activePunditReview.review_status === "corroborated"
+                        ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                        : activePunditReview.review_status === "returned"
+                        ? "bg-rose-50/70 border-rose-200 text-rose-900"
+                        : "bg-amber-50/70 border-amber-200 text-amber-900"
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        {activePunditReview.review_status === "corroborated" ? (
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        ) : activePunditReview.review_status === "returned" ? (
+                          <PenLine size={16} className="text-rose-600 shrink-0" />
+                        ) : (
+                          <Clock size={16} className="text-amber-600 shrink-0" />
+                        )}
+                        <span className={`font-bold uppercase tracking-wider text-[11px] ${
+                          activePunditReview.review_status === "corroborated"
+                            ? "text-emerald-800"
+                            : activePunditReview.review_status === "returned"
+                            ? "text-rose-800"
+                            : "text-amber-800"
+                        }`}>
+                          {activePunditReview.review_status === "corroborated"
+                            ? "Corroborated by Engineer"
+                            : activePunditReview.review_status === "returned"
+                            ? "Returned for Revision"
+                            : "Awaiting Engineer Review"}
+                        </span>
+                      </div>
+
+                      {activePunditReview.reviewed_by && (
+                        <p className="text-[11px] text-slate-600">
+                          Reviewed by <strong>{activePunditReview.reviewed_by}</strong>
+                          {activePunditReview.reviewed_at && (
+                            <> on {new Date(activePunditReview.reviewed_at).toLocaleString()}</>
+                          )}
+                        </p>
+                      )}
+
+                      {activePunditReview.notes ? (
+                        <div className="bg-white/90 border border-slate-200 rounded-lg p-2.5 text-[11px] italic text-slate-800 shadow-sm leading-relaxed">
+                          “{activePunditReview.notes}”
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic">No review notes recorded.</p>
+                      )}
+
+                      {activePunditReview.review_status === "returned" && (
+                        <p className="text-[10px] text-rose-700 font-semibold bg-rose-100/70 p-2 rounded-lg border border-rose-200">
+                          ⚠️ Action required by field inspector: address the reviewing engineer's directives above.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-[11px] text-slate-500">
+                      No engineer review recorded for this project yet.
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activePunditTest?.project) return;
+                      showToast("Generating official BS 1881-203 NDT Report PDF…");
+                      downloadNdtReport(activePunditTest.project, activePunditTest.operator_name || undefined)
+                        .then((filename) => showToast(`Downloaded ${filename}`))
+                        .catch((err: any) => showToast(`Download failed: ${err?.message || 'Error'}`));
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                    title="Download the official BS 1881-203 NDT Report including Section 5.3 Joint Review and Section 5.4 Observations"
+                  >
+                    <Download size={13} />
+                    <span>Download Official NDT Report (PDF)</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -807,6 +1027,7 @@ function PunditWorkspaceInner() {
                   toggleFloor={testFolders.toggleFloor}
                   toggleStation={testFolders.toggleStation}
                   stationSummary={punditStationSummary}
+                  onClearProject={handleClearProject}
                   renderStationBody={(rows) => (
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/50">
                       {(rows as PunditTest[]).map(renderTestCard)}

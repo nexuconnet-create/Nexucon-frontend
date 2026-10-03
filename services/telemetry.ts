@@ -19,7 +19,7 @@ import api from './api';
  *    rather than re-captured.
  *
  * A third axis, `transport`, says *how the capture reached the platform*: a
- * device pushing over site Wi-Fi and the same device's export file uploaded
+ * device pushing over site Wi-Fi and the same device's import file uploaded
  * three days later are different claims about one measurement. `''`/`null`
  * means the transport was not recorded — render that as "Not recorded", never
  * as a plausible guess, and never infer it from the device's `status`.
@@ -314,15 +314,30 @@ export async function importTelemetryExport(params: {
   structuralElement?: string;
   floor?: string;
   testLocation?: string;
+  visualObservation?: string;
+  attendanceLog?: string;
   weatherCondition?: string;
   transducerType?: string;
   transducerFrequencyKhz?: number | null;
+  injectionStrategy?: 'append' | 'override' | 'new_folder';
+  folderName?: string;
+  clearFolder?: boolean;
+  photos?: File[];
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }): Promise<TelemetryExportImport> {
   const form = new FormData();
   form.append('device', params.device);
   if (params.project) form.append('project', params.project);
   form.append('file', params.file);
   if (params.dataType) form.append('data_type', params.dataType);
+  if (params.folderName) form.append('folder_name', params.folderName);
+  if (params.clearFolder) form.append('clear_folder', 'true');
+  if (params.photos && params.photos.length > 0) {
+    for (const photo of params.photos) {
+      form.append('photos', photo);
+    }
+  }
   // Only non-empty context is sent: an empty string would be a claim that the
   // element is blank rather than that the app did not supply one.
   const context: Array<[string, string | number | null | undefined]> = [
@@ -330,9 +345,15 @@ export async function importTelemetryExport(params: {
     ['structural_element', params.structuralElement],
     ['floor', params.floor],
     ['test_location', params.testLocation],
+    ['visual_observation', params.visualObservation],
+    ['attendance_log', params.attendanceLog],
     ['weather_condition', params.weatherCondition],
     ['transducer_type', params.transducerType],
     ['transducer_frequency_khz', params.transducerFrequencyKhz],
+    ['injection_strategy', params.injectionStrategy],
+    ['folder_name', params.folderName],
+    ['latitude', params.latitude],
+    ['longitude', params.longitude],
   ];
   for (const [key, value] of context) {
     if (value !== undefined && value !== null && value !== '') {

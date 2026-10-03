@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   FileText, 
@@ -66,6 +66,16 @@ export default function DeviceReportingSection({
   const [reports, setReports] = useState<DeviceReportRecord[]>([]);
   const [elements, setElements] = useState<BIMStructuralElement[]>([]);
   const [punditTests, setPunditTests] = useState<PunditTest[]>([]);
+  const [selectedOperator, setSelectedOperator] = useState<string>("");
+
+  const punditOperators = useMemo(() => {
+    const set = new Set<string>();
+    punditTests.forEach((t) => {
+      const op = (t.operator_name || '').trim();
+      if (op) set.add(op);
+    });
+    return Array.from(set).sort();
+  }, [punditTests]);
   const [selectedReport, setSelectedReport] = useState<DeviceReportRecord | null>(null);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -185,17 +195,19 @@ export default function DeviceReportingSection({
   };
 
   // PUNDIT official deliverable — real backend-generated BS 1881-203 PDF
-  const handleDownloadNdtReport = () => {
+  const handleDownloadNdtReport = (operatorParam?: string) => {
     if (!projectId) {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
       }));
       return;
     }
+    const op = operatorParam !== undefined ? operatorParam : selectedOperator;
+    const opMsg = op ? ` for Inspector: ${op}` : '';
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" }
+      detail: { message: `Generating official BS 1881-203 NDT report PDF${opMsg}…`, type: "info" }
     }));
-    downloadNdtReport(projectId)
+    downloadNdtReport(projectId, op || undefined)
       .then((filename) => {
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Downloaded ${filename} (MTL-style NDT dossier, real registry data).`, type: "success" }
@@ -210,17 +222,19 @@ export default function DeviceReportingSection({
 
   // PUNDIT editable Word edition (8 Sep meeting H7): the same sections,
   // CMS overrides and server-computed figures as the PDF, as a .docx.
-  const handleDownloadWordReport = () => {
+  const handleDownloadWordReport = (operatorParam?: string) => {
     if (!projectId) {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: '⚠️ Select a project to export its NDT report to Word.', type: "error" }
       }));
       return;
     }
+    const op = operatorParam !== undefined ? operatorParam : selectedOperator;
+    const opMsg = op ? ` for Inspector: ${op}` : '';
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: 'Building the editable Word edition of the NDT report…', type: "info" }
+      detail: { message: `Building the editable Word edition of the NDT report${opMsg}…`, type: "info" }
     }));
-    downloadNdtReportWord(projectId)
+    downloadNdtReportWord(projectId, op || undefined)
       .then((filename) => {
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Downloaded ${filename} (editable working copy; the certified record remains the archived PDF).`, type: "success" }
@@ -395,6 +409,22 @@ export default function DeviceReportingSection({
 
           {/* QUICK ACTIONS */}
           <div className="flex items-center gap-2.5 flex-wrap">
+            {deviceType === "pundit" && punditOperators.length > 0 && (
+              <select
+                value={selectedOperator}
+                onChange={(e) => setSelectedOperator(e.target.value)}
+                aria-label="Filter report by inspector"
+                className="px-3 py-2.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <option value="">All Inspectors (Dossier)</option>
+                {punditOperators.map((op) => (
+                  <option key={op} value={op}>
+                    Inspector: {op}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
               onClick={handleExportBatchData}
               className="px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
@@ -405,7 +435,18 @@ export default function DeviceReportingSection({
 
             {deviceType === "pundit" && (
               <button
-                onClick={handleDownloadWordReport}
+                onClick={() => handleDownloadNdtReport()}
+                className="px-3.5 py-2.5 bg-white border border-blue-200 hover:bg-blue-50 text-blue-800 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                title="Download official BS 1881-203 NDT report (PDF)"
+              >
+                <Download size={14} />
+                <span>{selectedOperator ? `NDT PDF (${selectedOperator})` : "Download NDT PDF"}</span>
+              </button>
+            )}
+
+            {deviceType === "pundit" && (
+              <button
+                onClick={() => handleDownloadWordReport()}
                 className="px-3.5 py-2.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                 title="Editable .docx working copy of the official NDT report (same sections and figures as the PDF)"
               >
@@ -422,7 +463,7 @@ export default function DeviceReportingSection({
                 : undefined}
             >
               <Plus size={14} />
-              <span>Generate Official Dossier</span>
+              <span>{deviceType === "pundit" && selectedOperator ? `Generate (${selectedOperator})` : "Generate Official Dossier"}</span>
             </button>
           </div>
         </div>
@@ -654,6 +695,8 @@ export default function DeviceReportingSection({
             elements={elements}
             defaultElementId={elementId}
             certifierDefault={user ? `${user.first_name} ${user.last_name}`.trim() : ""}
+            operators={punditOperators}
+            initialOperator={selectedOperator}
             onClose={() => setIsGenerateOpen(false)}
             onRegenerated={loadReports}
             existingArchive={deviceType === "pundit" && reports.length > 0 ? reports[0] : undefined}
@@ -864,6 +907,8 @@ function GenerateReportModal({
   elements,
   defaultElementId,
   certifierDefault = "",
+  operators = [],
+  initialOperator = "",
   onClose,
   onGenerated,
   onRegenerated,
@@ -874,6 +919,8 @@ function GenerateReportModal({
   elements: BIMStructuralElement[];
   defaultElementId?: string;
   certifierDefault?: string;
+  operators?: string[];
+  initialOperator?: string;
   onClose: () => void;
   onGenerated: (report: DeviceReportRecord) => void;
   onRegenerated?: () => void;
@@ -881,6 +928,7 @@ function GenerateReportModal({
       already-generated warning in the modal. */
   existingArchive?: DeviceReportRecord;
 }) {
+  const [modalOperator, setModalOperator] = useState(initialOperator || "");
   const [title, setTitle] = useState(
     deviceType === "gpr"
       ? "GPR Subsurface Radar Structural & Cover Depth Dossier"
@@ -912,7 +960,7 @@ function GenerateReportModal({
           }));
           return;
         }
-        const filename = await downloadNdtReport(projectId);
+        const filename = await downloadNdtReport(projectId, modalOperator || undefined);
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Downloaded ${filename} — official BS 1881-203 dossier with real registry data.`, type: "success" }
         }));
@@ -1012,6 +1060,22 @@ function GenerateReportModal({
                 ))}
               </select>
             </div>
+
+            {deviceType === "pundit" && operators && operators.length > 0 && (
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Target Inspector / Operator</label>
+                <select
+                  value={modalOperator}
+                  onChange={(e) => setModalOperator(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-900 font-medium outline-none cursor-pointer"
+                >
+                  <option value="">All Inspectors (Complete Dossier)</option>
+                  {operators.map((op) => (
+                    <option key={op} value={op}>Inspector: {op}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="font-bold text-gray-700 block mb-1">Certifying Inspector / Engineer</label>

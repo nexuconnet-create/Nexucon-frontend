@@ -20,6 +20,10 @@ import {
   MapPin,
   Upload,
   Wrench,
+  Database,
+  Image as ImageIcon,
+  X,
+  Plus,
 } from "lucide-react";
 import {
   appendTelemetryPacket,
@@ -79,7 +83,7 @@ const SYNC_STATUS: Record<string, string> = {
  * The test types a PUNDIT reading can come from.
  *
  * A file usually carries a TEST TYPE column; these exist for the bare
- * measurement exports that do not. The values are the ones the platform's
+ * measurement import files that do not. The values are the ones the platform's
  * column contract already accepts, so the app and a file column are validated
  * by the same rule rather than by two.
  */
@@ -103,7 +107,7 @@ const TRANSPORT_LABEL: Record<string, string> = {
   BLE: "Bluetooth",
   WIFI: "Wi-Fi",
   CLOUD: "Cloud",
-  FILE: "Export file",
+  FILE: "Import file",
   MANUAL: "Manual entry",
 };
 
@@ -196,14 +200,85 @@ export default function InspectorTelemetryPage() {
   const [importDevice, setImportDevice] = useState("");
   const [importProject, setImportProject] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importTestType, setImportTestType] = useState("");
   const [importElement, setImportElement] = useState("");
   const [importFloor, setImportFloor] = useState("");
   const [importLocation, setImportLocation] = useState("");
+  const [importVisualObservation, setImportVisualObservation] = useState("");
+  const [importAttendanceLog, setImportAttendanceLog] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [importStrategy, setImportStrategy] = useState<"append" | "override" | "new_folder">("append");
+  const [showStrategyPrompt, setShowStrategyPrompt] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [clearExistingFolder, setClearExistingFolder] = useState(false);
+  // GPS coordinates the inspector tags at the test location.
+  const [importLatitude, setImportLatitude] = useState("");
+  const [importLongitude, setImportLongitude] = useState("");
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   // The file input is uncontrolled by nature — a chosen file cannot be cleared
   // by setting state — so it is remounted after a successful import.
   const [fileInputKey, setFileInputKey] = useState(0);
+
+  // Attached site observation photos
+  interface PhotoAttachment {
+    file: File;
+    previewUrl: string;
+    name: string;
+    size: string;
+  }
+  const [photoAttachments, setPhotoAttachments] = useState<PhotoAttachment[]>([]);
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+    const newItems: PhotoAttachment[] = selectedFiles.map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      name: file.name,
+      size: (file.size / 1024).toFixed(0) + " KB",
+    }));
+    setPhotoAttachments((prev) => [...prev, ...newItems]);
+    const event = new CustomEvent("show-toast", {
+      detail: {
+        message: `${selectedFiles.length} photo${selectedFiles.length === 1 ? "" : "s"} attached.`,
+        type: "info",
+      },
+    });
+    window.dispatchEvent(event);
+    e.target.value = "";
+  };
+
+  /**
+   * One-tap GPS capture for field use — browser asks for permission once;
+   * on tablets/phones this hits the device GPS chip directly.
+   */
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setActionError("GPS is not available in this browser.");
+      return;
+    }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setImportLatitude(pos.coords.latitude.toFixed(7));
+        setImportLongitude(pos.coords.longitude.toFixed(7));
+        setIsGettingLocation(false);
+      },
+      (err) => {
+        setActionError(`GPS error: ${err.message}`);
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+  const removePhotoAttachment = (indexToRemove: number) => {
+    setPhotoAttachments((prev) => {
+      const target = prev[indexToRemove];
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((_, idx) => idx !== indexToRemove);
+    });
+  };
 
   /*
     The mapping offer, shown only when an import is refused for a column the
@@ -326,7 +401,7 @@ export default function InspectorTelemetryPage() {
   };
 
   /**
-   * Import an instrument export as a finished session.
+   * Import an instrument import file as a finished session.
    *
    * The leg the current PUNDIT unit uses: no radio, so the capture leaves the
    * instrument as a file. The server parses it against the documented column
@@ -335,7 +410,7 @@ export default function InspectorTelemetryPage() {
    * arrived, and un-promoted, because nothing reaches the registry until a
    * human has looked at what was parsed.
    */
-  const runImport = async () => {
+  const runImport = async (strategy: "append" | "override" | "new_folder" = importStrategy) => {
     if (!importDevice || !importFile) return;
     setIsImporting(true);
     setActionError(null);
@@ -343,21 +418,32 @@ export default function InspectorTelemetryPage() {
     setPromotion(null);
 
     try {
+      const finalLocation = (strategy === "new_folder" && newFolderName.trim()) ? newFolderName.trim() : importLocation;
       const session = await importTelemetryExport({
         device: importDevice,
         project: importProject || null,
         file: importFile,
         dataType: "pundit",
-        testType: importTestType,
         structuralElement: importElement,
         floor: importFloor,
-        testLocation: importLocation,
+        testLocation: finalLocation,
+        visualObservation: importVisualObservation,
+        attendanceLog: importAttendanceLog,
+        injectionStrategy: strategy,
+        folderName: strategy === "new_folder" ? (newFolderName.trim() || finalLocation) : undefined,
+        clearFolder: strategy === "override" || (strategy === "new_folder" && clearExistingFolder),
+        photos: photoAttachments.map((p) => p.file),
+        latitude: importLatitude ? parseFloat(importLatitude) : null,
+        longitude: importLongitude ? parseFloat(importLongitude) : null,
       });
       const stats = session.import_stats;
       // A resend is answered with the session the first import made, and its
       // figures describe *that* parse — not this upload, from which nothing
       // was read. Reporting "read as N readings" here would claim this file
       // was parsed when the platform never looked at it.
+      const photoMsg = photoAttachments.length
+        ? ` (${photoAttachments.length} site observation photo${photoAttachments.length === 1 ? "" : "s"} attached)`
+        : "";
       setNotice(
         stats.duplicate
           ? `These exact bytes are already on the platform as session ${
@@ -369,7 +455,7 @@ export default function InspectorTelemetryPage() {
               stats.readings === 1 ? "" : "s"
             } from ${stats.rows} row${stats.rows === 1 ? "" : "s"}${
               stats.skipped ? `, skipping ${stats.skipped} blank` : ""
-            }. Session ${session.session_reference} is closed and holds ${
+            }${photoMsg}. Session ${session.session_reference} is closed and holds ${
               session.packet_count
             } packet${
               session.packet_count === 1 ? "" : "s"
@@ -377,6 +463,8 @@ export default function InspectorTelemetryPage() {
       );
       setSelectedId(session.id);
       setImportFile(null);
+      photoAttachments.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setPhotoAttachments([]);
       setFileInputKey((key) => key + 1);
       // Whatever was proposed for an earlier, refused file is answered now:
       // the import went through, so there is nothing left to offer.
@@ -387,7 +475,7 @@ export default function InspectorTelemetryPage() {
       setMappingError(null);
       await readAll();
     } catch (err: any) {
-      setActionError(errorOf(err, "The export file was not imported."));
+      setActionError(errorOf(err, "The import file was not imported."));
 
       // One refusal is fixable from this screen and the rest are not. A file
       // refused for an unrecognised column is answered by telling the platform
@@ -403,9 +491,17 @@ export default function InspectorTelemetryPage() {
     }
   };
 
-  const handleImport = async (e: React.FormEvent) => {
+  const handleImport = (e: React.FormEvent) => {
     e.preventDefault();
-    await runImport();
+    if (!newFolderName && importLocation) {
+      setNewFolderName(importLocation);
+    }
+    setShowStrategyPrompt(true);
+  };
+
+  const confirmImport = () => {
+    setShowStrategyPrompt(false);
+    void runImport(importStrategy);
   };
 
   /**
@@ -957,6 +1053,80 @@ export default function InspectorTelemetryPage() {
                           </div>
                         )}
 
+                        {/* Field Remarks & Attached Photos */}
+                        {(session.session_config?.visual_observation || (Array.isArray(session.session_config?.photos) && session.session_config.photos.length > 0)) && (
+                          <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/70 space-y-2">
+                            <div className="text-[11px] font-bold text-[#022C4F] flex items-center gap-1.5">
+                              <ImageIcon size={13} className="text-[#022C4F]" />
+                              <span>Site Visual Observations & Photos</span>
+                            </div>
+                            {Boolean(session.session_config?.visual_observation) && (
+                              <p className="text-xs text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200/80 leading-relaxed">
+                                {String(session.session_config?.visual_observation)}
+                              </p>
+                            )}
+                            {Array.isArray(session.session_config?.photos) && session.session_config.photos.length > 0 && (
+                              <div className="space-y-1.5">
+                                <div className="text-[10px] font-semibold text-slate-600">
+                                  {session.session_config.photos.length} Photo{session.session_config.photos.length === 1 ? "" : "s"} Documented:
+                                </div>
+                                <div className="flex flex-wrap gap-2.5">
+                                  {session.session_config.photos.map((photoUrl: string, pIdx: number) => {
+                                    const fullUrl = photoUrl.startsWith('http')
+                                      ? photoUrl
+                                      : `${process.env.NEXT_PUBLIC_API_URL || 'https://api.nexucon.net'}${photoUrl}`;
+                                    return (
+                                      <a
+                                        key={photoUrl + pIdx}
+                                        href={fullUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="group relative block rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs hover:shadow-md transition-all hover:scale-105"
+                                      >
+                                        <img
+                                          src={fullUrl}
+                                          alt={`Observation photo ${pIdx + 1}`}
+                                          className="w-20 h-20 sm:w-24 sm:h-24 object-cover"
+                                        />
+                                        <div className="absolute inset-x-0 bottom-0 bg-black/60 backdrop-blur-xs text-[9px] text-white text-center py-0.5 font-medium truncate px-1">
+                                          Photo {pIdx + 1}
+                                        </div>
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                         )}
+                          </div>
+                        )}
+
+                        {/* GPS Coordinates display */}
+                        {(session.session_config?.latitude != null || session.session_config?.longitude != null) && (
+                          <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/70 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                              <div>
+                                <div className="text-[11px] font-semibold text-slate-700">GPS Tagged</div>
+                                <div className="text-[11px] text-slate-600 font-mono">
+                                  {session.session_config.latitude != null ? Number(session.session_config.latitude).toFixed(6) : '—'}°,{' '}
+                                  {session.session_config.longitude != null ? Number(session.session_config.longitude).toFixed(6) : '—'}°
+                                </div>
+                              </div>
+                            </div>
+                            {session.session_config.latitude != null && session.session_config.longitude != null && (
+                              <a
+                                href={`https://www.google.com/maps?q=${session.session_config.latitude},${session.session_config.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2 shrink-0"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                Maps
+                              </a>
+                            )}
+                          </div>
+                        )}
+
                         {selected.status === "OPEN" ? (
                           <form onSubmit={handleAppend} className="space-y-2">
                             <label
@@ -1028,7 +1198,7 @@ export default function InspectorTelemetryPage() {
         )}
       </div>
 
-      {/* Import an instrument export */}
+      {/* Import an instrument import file */}
       <form
         onSubmit={handleImport}
         className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4"
@@ -1036,7 +1206,7 @@ export default function InspectorTelemetryPage() {
         <div>
           <h2 className="text-sm font-bold text-[#022C4F] flex items-center gap-1.5">
             <Upload size={14} />
-            Import an instrument export
+            Import an instrument import file
           </h2>
           <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
             For an instrument that has no radio: the capture leaves the unit as
@@ -1110,27 +1280,128 @@ export default function InspectorTelemetryPage() {
 
           <div>
             <label
-              htmlFor="import-test-type"
+              htmlFor="import-attendance"
               className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
             >
-              Test type
+              Attendance Log
             </label>
-            <select
-              id="import-test-type"
-              value={importTestType}
-              onChange={(e) => setImportTestType(e.target.value)}
+            <input
+              id="import-attendance"
+              type="text"
+              value={importAttendanceLog}
+              onChange={(e) => setImportAttendanceLog(e.target.value)}
+              placeholder="Names of client/site representatives..."
               className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
-            >
-              {PUNDIT_TEST_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+            />
             <p className="text-[11px] text-slate-500 mt-1">
-              A pulse-velocity reading and a crack-depth reading are different
-              measurements of the same concrete, so the platform will not assume
-              one. Leave this if the file has a TEST TYPE column.
+              Record the names of client/site representatives present during testing for transparency.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="import-visual-observation"
+            className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+          >
+            Visual Observations
+          </label>
+          <textarea
+            id="import-visual-observation"
+            value={importVisualObservation}
+            onChange={(e) => setImportVisualObservation(e.target.value)}
+            rows={3}
+            placeholder="Log on-site observations here. Attach photos if necessary."
+            className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
+          />
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <ImageIcon size={14} className="text-[#022C4F]" />
+                <span>Site Photos & Observations Evidence</span>
+                {photoAttachments.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    {photoAttachments.length} {photoAttachments.length === 1 ? "photo" : "photos"} selected
+                  </span>
+                )}
+              </label>
+              <label className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1">
+                <Upload size={12} />
+                <span>{photoAttachments.length > 0 ? "Add more photos" : "Upload photos"}</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </label>
+            </div>
+            
+            {/* Photo Preview Gallery */}
+            {photoAttachments.length > 0 ? (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {photoAttachments.map((photo, idx) => (
+                    <div
+                      key={photo.previewUrl + idx}
+                      className="group relative rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs aspect-square flex flex-col"
+                    >
+                      <img
+                        src={photo.previewUrl}
+                        alt={photo.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePhotoAttachment(idx)}
+                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-rose-600/90 text-white flex items-center justify-center hover:bg-rose-700 shadow-sm transition-colors cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <X size={11} />
+                      </button>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-1.5 text-[9px] text-white truncate">
+                        <div className="font-semibold truncate">{photo.name}</div>
+                        <div className="opacity-80 text-[8px]">{photo.size}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <label className="border-2 border-dashed border-slate-300 hover:border-[#022C4F] rounded-xl flex flex-col items-center justify-center gap-1 text-slate-500 hover:text-[#022C4F] cursor-pointer aspect-square bg-white/50 transition-colors">
+                    <Plus size={18} />
+                    <span className="text-[10px] font-medium">Add Photo</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoSelect}
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <label className="p-4 rounded-xl border border-dashed border-slate-300 hover:border-[#022C4F] bg-slate-50/50 hover:bg-slate-50 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors text-center">
+                <div className="w-8 h-8 rounded-full bg-slate-200/80 flex items-center justify-center text-slate-600">
+                  <Upload size={14} />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-[#022C4F]">Click to upload photos</span>
+                  <span className="text-xs text-slate-500"> or drag and drop</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  JPG, PNG, WEBP site photos (e.g. 1 or 2 pics of elements, cracks, test station setup)
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </label>
+            )}
+            <p className="text-[11px] text-slate-500">
+              Log on-site visual observations with descriptions. Attach photos for further documentation.
             </p>
           </div>
         </div>
@@ -1192,18 +1463,98 @@ export default function InspectorTelemetryPage() {
           </div>
         </div>
 
+        {/* GPS Coordinates */}
+        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/70 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+                GPS Coordinates
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Tag the test location with GPS so it appears on the site map and in the report.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGetLocation}
+              disabled={isGettingLocation}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+            >
+              {isGettingLocation ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Detecting…</span>
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <span>📍 Detect GPS Location</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="import-latitude"
+                className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
+              >
+                Latitude
+              </label>
+              <input
+                id="import-latitude"
+                type="number"
+                step="any"
+                value={importLatitude}
+                onChange={(e) => setImportLatitude(e.target.value)}
+                placeholder="e.g. 6.524379"
+                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="import-longitude"
+                className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
+              >
+                Longitude
+              </label>
+              <input
+                id="import-longitude"
+                type="number"
+                step="any"
+                value={importLongitude}
+                onChange={(e) => setImportLongitude(e.target.value)}
+                placeholder="e.g. 3.379206"
+                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+              />
+            </div>
+          </div>
+          {importLatitude && importLongitude && (
+            <a
+              href={`https://www.google.com/maps?q=${importLatitude},${importLongitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline underline-offset-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Preview on Google Maps
+            </a>
+          )}
+        </div>
+
         <div>
           <label
             htmlFor="import-file"
             className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
           >
-            Export file
+            Import file
           </label>
           <input
             key={fileInputKey}
             id="import-file"
             type="file"
-            accept=".csv,.json,.txt,text/csv,application/json,text/plain"
+            accept=".csv,.json,.txt,.xlsx,.xls,text/csv,application/json,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
             required
             className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-slate-200 file:bg-white file:text-[11px] file:font-semibold file:text-[#022C4F] file:cursor-pointer"
@@ -1211,7 +1562,7 @@ export default function InspectorTelemetryPage() {
           <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
             Read as <span className="font-semibold">PUNDIT Ultrasonic NDT</span>{" "}
             — the only capture type with a file contract that describes a whole
-            session. GPR exports are survey headers and belong in the
+            session. GPR import files are survey headers and belong in the
             data-import wizard; GNSS and SLAM have no agreed column layout yet.
             Columns are matched by their documented names (
             <span className="font-mono text-[10px]">
@@ -1243,7 +1594,7 @@ export default function InspectorTelemetryPage() {
                     } actually writes, read out of the file you just chose —
                     none of them were typed. Beside each is what the platform
                     would read it as. Nothing is recorded until you record it,
-                    and then every future export from this instrument is read
+                    and then every future import file from this instrument is read
                     without asking again.`}
               </p>
             </div>
@@ -1301,7 +1652,7 @@ export default function InspectorTelemetryPage() {
           ) : (
             <Upload size={13} />
           )}
-          <span>{isImporting ? "Reading the file…" : "Import export"}</span>
+          <span>{isImporting ? "Reading the file…" : "Import import file"}</span>
         </button>
       </form>
 
@@ -1449,6 +1800,104 @@ export default function InspectorTelemetryPage() {
           </p>
         )}
       </form>
+
+      {/* DATA INJECTION STRATEGY PROMPT */}
+      {showStrategyPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200">
+            <div className="bg-[#022C4F] p-4 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-white">
+                <Database size={18} className="text-amber-400" />
+                <h3 className="font-bold text-sm">Data Injection Strategy</h3>
+              </div>
+              <button
+                onClick={() => setShowStrategyPrompt(false)}
+                className="text-slate-300 hover:text-white transition-colors"
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600 mb-4">
+                How would you like to handle data ingestion for this file? Choose a strategy to prevent redundant historical records if data already exists for this element.
+              </p>
+              
+              <div className="space-y-3">
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${importStrategy === 'append' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="radio" name="strategy" value="append" checked={importStrategy === 'append'} onChange={() => setImportStrategy('append')} className="mt-1" />
+                  <div>
+                    <div className="text-sm font-bold text-slate-800">Append (Recommended)</div>
+                    <div className="text-xs text-slate-500">Add the new readings to any existing data for this structural element.</div>
+                  </div>
+                </label>
+                
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${importStrategy === 'override' ? 'bg-rose-50 border-rose-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="radio" name="strategy" value="override" checked={importStrategy === 'override'} onChange={() => setImportStrategy('override')} className="mt-1" />
+                  <div>
+                    <div className="text-sm font-bold text-rose-700">Override & Clear Folder</div>
+                    <div className="text-xs text-rose-600/80">Delete previous historical records in this folder/project and replace them entirely with this file.</div>
+                  </div>
+                </label>
+                
+                <div className={`p-3 rounded-xl border transition-colors ${importStrategy === 'new_folder' ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="radio" name="strategy" value="new_folder" checked={importStrategy === 'new_folder'} onChange={() => setImportStrategy('new_folder')} className="mt-1" />
+                    <div>
+                      <div className="text-sm font-bold text-slate-800">Create New Folder / Location</div>
+                      <div className="text-xs text-slate-500">Group all tests under a dedicated folder/location name instead of generic test references.</div>
+                    </div>
+                  </label>
+                  {importStrategy === 'new_folder' && (
+                    <div className="mt-3 pl-7 pr-1 space-y-3 pt-2.5 border-t border-amber-200/70">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Folder / Location Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          placeholder="e.g. Laydown Area, Block B..."
+                          className="w-full text-xs rounded-lg border border-amber-300 p-2.5 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] outline-none shadow-sm"
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          This location name will be displayed on each test card instead of generic codes (like PND-2026-665FD5).
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={clearExistingFolder}
+                          onChange={(e) => setClearExistingFolder(e.target.checked)}
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        <span className="font-semibold text-rose-700">Clear previous folder tests before importing</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-2 justify-end">
+              <button
+                onClick={() => setShowStrategyPrompt(false)}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmImport}
+                className="px-4 py-2 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+              >
+                Confirm Injection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
