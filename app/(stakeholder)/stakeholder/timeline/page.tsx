@@ -17,9 +17,104 @@ import {
   Search,
   Filter,
 } from "lucide-react";
+import {
+  getTimelineMilestones,
+  signoffTimelineMilestone,
+  type TimelineMilestone
+} from "@/services/stakeholders";
+
+const DEFAULT_MILESTONES = [
+  {
+    id: "MS-01",
+    rawId: "ms-1",
+    name: "Architectural & MEP Drawing Approval",
+    category: "Regulatory Permitting",
+    startDate: "01 Aug 2026",
+    dueDate: "15 Aug 2026",
+    isHoldPoint: true,
+    governmentSignoff: "Approved by LASPPPA",
+    progress: 100,
+    status: "Completed",
+  },
+  {
+    id: "MS-02",
+    rawId: "ms-2",
+    name: "Soil Investigation & Deep Foundation Piling",
+    category: "Civil & Substructure",
+    startDate: "16 Aug 2026",
+    dueDate: "05 Sep 2026",
+    isHoldPoint: true,
+    governmentSignoff: "Approved by LASBCA",
+    progress: 100,
+    status: "Completed",
+  },
+  {
+    id: "MS-03",
+    rawId: "ms-3",
+    name: "Level 1 to 3 Reinforced Concrete Slab Pour",
+    category: "Structural Construction",
+    startDate: "06 Sep 2026",
+    dueDate: "26 Sep 2026",
+    isHoldPoint: true,
+    governmentSignoff: "Pending Inspection Pass (INS-041)",
+    progress: 85,
+    status: "Active Hold-Point",
+  },
+  {
+    id: "MS-04",
+    rawId: "ms-4",
+    name: "Superstructure Steel Framing (Levels 4–12)",
+    category: "Structural Construction",
+    startDate: "27 Sep 2026",
+    dueDate: "25 Oct 2026",
+    isHoldPoint: false,
+    governmentSignoff: "In Progress",
+    progress: 30,
+    status: "In Progress",
+  },
+  {
+    id: "MS-05",
+    rawId: "ms-5",
+    name: "MEP Riser & Fire Safety Penetration Clearance",
+    category: "Services & MEP",
+    startDate: "26 Oct 2026",
+    dueDate: "15 Nov 2026",
+    isHoldPoint: true,
+    governmentSignoff: "Upcoming Gate",
+    progress: 0,
+    status: "Upcoming",
+  },
+];
 
 export default function StakeholderTimelinePage() {
   const [selectedProject, setSelectedProject] = useState("Eko Atlantic Horizon Towers");
+  const [milestones, setMilestones] = useState(DEFAULT_MILESTONES);
+
+  useEffect(() => {
+    async function loadMilestones() {
+      try {
+        const live = await getTimelineMilestones({ project: selectedProject });
+        if (live && live.length > 0) {
+          const mapped = live.map((m: TimelineMilestone, idx: number) => ({
+            id: m.milestone_id || `MS-0${idx + 1}`,
+            rawId: m.id,
+            name: m.name,
+            category: m.category,
+            startDate: m.start_date,
+            dueDate: m.due_date,
+            isHoldPoint: m.is_hold_point,
+            governmentSignoff: m.government_signoff,
+            progress: m.progress,
+            status: m.status,
+          }));
+          setMilestones(mapped);
+        }
+      } catch (err) {
+        console.warn("Using default milestones list:", err);
+      }
+    }
+    loadMilestones();
+  }, [selectedProject]);
 
   useEffect(() => {
     const handleHash = () => {
@@ -30,77 +125,7 @@ export default function StakeholderTimelinePage() {
     };
     handleHash();
     window.addEventListener("hashchange", handleHash);
-    return () => window.removeEventListener("hashchange", handleHash);
   }, []);
-
-  const milestones = [
-    {
-      id: "MS-01",
-      name: "Architectural & MEP Drawing Approval",
-      category: "Regulatory Permitting",
-      startDate: "01 Aug 2026",
-      dueDate: "15 Aug 2026",
-      isHoldPoint: true,
-      governmentSignoff: "Approved by LASPPPA",
-      progress: 100,
-      status: "Completed",
-    },
-    {
-      id: "MS-02",
-      name: "Soil Investigation & Deep Foundation Piling",
-      category: "Civil & Substructure",
-      startDate: "16 Aug 2026",
-      dueDate: "05 Sep 2026",
-      isHoldPoint: true,
-      governmentSignoff: "Approved by LASBCA",
-      progress: 100,
-      status: "Completed",
-    },
-    {
-      id: "MS-03",
-      name: "Level 1 to 3 Reinforced Concrete Slab Pour",
-      category: "Structural Construction",
-      startDate: "06 Sep 2026",
-      dueDate: "26 Sep 2026",
-      isHoldPoint: true,
-      governmentSignoff: "Pending Inspection Pass (INS-041)",
-      progress: 85,
-      status: "Active Hold-Point",
-    },
-    {
-      id: "MS-04",
-      name: "Superstructure Steel Framing (Levels 4–12)",
-      category: "Structural Construction",
-      startDate: "27 Sep 2026",
-      dueDate: "25 Oct 2026",
-      isHoldPoint: false,
-      governmentSignoff: "Awaiting Gate 3 Clearance",
-      progress: 20,
-      status: "Upcoming",
-    },
-    {
-      id: "MS-05",
-      name: "Fire Life Safety & MEP Riser Installation",
-      category: "Building Services",
-      startDate: "26 Oct 2026",
-      dueDate: "20 Nov 2026",
-      isHoldPoint: true,
-      governmentSignoff: "Federal Fire Service Clearance",
-      progress: 0,
-      status: "Future Gate",
-    },
-    {
-      id: "MS-06",
-      name: "Pre-Occupancy Final Inspection & Certificate of Completion",
-      category: "Statutory Commissioning",
-      startDate: "21 Nov 2026",
-      dueDate: "15 Dec 2026",
-      isHoldPoint: true,
-      governmentSignoff: "Ministerial Certificate of Occupancy",
-      progress: 0,
-      status: "Final Gate",
-    },
-  ];
 
   return (
     <div className="w-full min-h-screen pb-12">
@@ -254,17 +279,46 @@ export default function StakeholderTimelinePage() {
                   <ShieldCheck size={16} className={m.progress === 100 ? "text-emerald-600" : "text-amber-600"} />
                   <span>Statutory Clearance: <strong>{m.governmentSignoff}</strong></span>
                 </div>
-                {m.status === "Active Hold-Point" && (
-                  <Link
-                    href="/stakeholder/inspections"
-                    className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 self-start sm:self-auto"
-                  >
-                    <span>Coordinate Inspection Pass</span>
-                    <ChevronRight size={14} />
-                  </Link>
-                )}
+                <div className="flex items-center gap-3 self-start sm:self-auto">
+                  {m.status !== "Completed" && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await signoffTimelineMilestone(m.rawId, "Approved & Signed by LASBCA Director");
+                          setMilestones((prev) =>
+                            prev.map((item) =>
+                              item.id === m.id
+                                ? { ...item, status: "Completed", progress: 100, governmentSignoff: "Approved & Signed by LASBCA Director" }
+                                : item
+                            )
+                          );
+                          window.dispatchEvent(
+                            new CustomEvent("show-toast", {
+                              detail: { message: `Stage-Gate ${m.id} endorsed with official government signoff!`, type: "success" },
+                            })
+                          );
+                        } catch (err) {
+                          console.warn("Signoff milestone error:", err);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-bold shadow-xs cursor-pointer"
+                    >
+                      Sign-off Milestone
+                    </button>
+                  )}
+                  {m.status === "Active Hold-Point" && (
+                    <Link
+                      href="/stakeholder/inspections"
+                      className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <span>Coordinate Inspection</span>
+                      <ChevronRight size={14} />
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
+
           ))}
         </div>
       </div>

@@ -25,6 +25,12 @@ import {
   Activity,
   ArrowRight
 } from "lucide-react";
+import {
+  getStageInspections,
+  createStageInspection,
+  resolveInspectionNcr,
+  type StageInspection
+} from "@/services/stakeholders";
 
 export default function StakeholderInspectionsPage() {
   const [search, setSearch] = useState("");
@@ -32,6 +38,7 @@ export default function StakeholderInspectionsPage() {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
   const [selectedNcr, setSelectedNcr] = useState<any>(null);
+  const [ncrProofText, setNcrProofText] = useState("");
 
   // Form state for requesting an inspection
   const [requestForm, setRequestForm] = useState({
@@ -43,7 +50,7 @@ export default function StakeholderInspectionsPage() {
     notes: "",
   });
 
-  const inspections = [
+  const [inspections, setInspections] = useState<any[]>([
     {
       id: "INS-STG-2026-041",
       project: "Eko Atlantic Horizon Towers",
@@ -114,7 +121,42 @@ export default function StakeholderInspectionsPage() {
       status: "Passed",
       hasNcr: false,
     },
-  ];
+  ]);
+
+  // Load live stage inspections from backend
+  useEffect(() => {
+    async function loadInspections() {
+      try {
+        const liveData = await getStageInspections();
+        if (liveData && liveData.length > 0) {
+          const mapped = liveData.map((item: StageInspection) => ({
+            id: item.stage_id,
+            project: item.project_name,
+            stage: item.stage,
+            inspector: {
+              name: item.inspector_details?.name || (typeof item.assigned_inspector === "string" ? item.assigned_inspector : "Engr. Olufemi Adebayo"),
+              role: item.inspector_details?.role_title || "Senior Building Inspector",
+              phone: item.inspector_details?.email || "+234 802 345 6789",
+              agency: "LASBCA HQ Directorate",
+              eta: item.status === "Scheduled" ? "En Route" : item.status,
+              badgeId: item.inspector_details?.inspector_id || "INS-904",
+            },
+            date: item.preferred_date || "20 Sep 2026",
+            status: item.status,
+            hasNcr: item.has_ncr,
+            ncrDetails: item.has_ncr ? {
+              description: item.ncr_description || "Non-conformance flagged during inspection.",
+              deadline: item.ncr_deadline || "05 Oct 2026",
+            } : undefined,
+          }));
+          setInspections(mapped);
+        }
+      } catch (err) {
+        console.warn("Using default stage inspections list:", err);
+      }
+    }
+    loadInspections();
+  }, []);
 
   // Hash watcher for #ncrs and #dispatch
   useEffect(() => {
@@ -144,8 +186,41 @@ export default function StakeholderInspectionsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleRequestSubmit = (e: React.FormEvent) => {
+  const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      const created = await createStageInspection({
+        project_name: requestForm.projectName,
+        stage: requestForm.stage,
+        preferred_date: requestForm.preferredDate || new Date().toISOString().split("T")[0],
+        time_slot: requestForm.timeSlot,
+        contractor_on_site: requestForm.contractorOnSite,
+        has_ncr: false,
+      });
+      if (created) {
+        setInspections((prev) => [
+          {
+            id: created.stage_id || `INS-STG-${Date.now()}`,
+            project: created.project_name,
+            stage: created.stage,
+            inspector: {
+              name: "Unassigned (Zonal Queue)",
+              role: "Pending Assignment",
+              phone: "+234 800 000 0000",
+              agency: "LASBCA HQ Directorate",
+              eta: "Pending Schedule",
+              badgeId: "PENDING",
+            },
+            date: created.preferred_date || "Upcoming",
+            status: created.status || "Scheduled",
+            hasNcr: false,
+          },
+          ...prev,
+        ]);
+      }
+    } catch (err) {
+      console.warn("Backend stage inspection request notice:", err);
+    }
     setIsRequestModalOpen(false);
     window.dispatchEvent(
       new CustomEvent("show-toast", {
@@ -546,6 +621,8 @@ export default function StakeholderInspectionsPage() {
                   <label className="text-xs font-bold text-[#022C4F]">Remediation Action Statement</label>
                   <textarea
                     rows={3}
+                    value={ncrProofText}
+                    onChange={(e) => setNcrProofText(e.target.value)}
                     placeholder="Describe the corrective action executed by the contractor..."
                     className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-xs font-medium focus:outline-none focus:border-[#022C4F]"
                   />
@@ -561,8 +638,26 @@ export default function StakeholderInspectionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      if (selectedNcr?.inspectionId) {
+                        try {
+                          await resolveInspectionNcr(
+                            selectedNcr.inspectionId,
+                            ncrProofText || "Remediation verified by structural contractor."
+                          );
+                          setInspections((prev) =>
+                            prev.map((item) =>
+                              item.id === selectedNcr.inspectionId
+                                ? { ...item, status: "Remediation Under Review" }
+                                : item
+                            )
+                          );
+                        } catch (err) {
+                          console.warn("Resolve NCR backend notice:", err);
+                        }
+                      }
                       setIsNcrModalOpen(false);
+                      setNcrProofText("");
                       window.dispatchEvent(
                         new CustomEvent("show-toast", {
                           detail: {
@@ -577,6 +672,7 @@ export default function StakeholderInspectionsPage() {
                     Submit Proof for Closure
                   </button>
                 </div>
+
               </div>
             </motion.div>
           </div>

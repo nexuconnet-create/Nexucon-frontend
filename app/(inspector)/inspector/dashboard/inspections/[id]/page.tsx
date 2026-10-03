@@ -45,6 +45,8 @@ import { Inspection } from "@/services/inspections";
 import { enqueueOffline, offlineStoreState } from "@/lib/offlineQueue";
 import { isOffline } from "@/lib/syncEngine";
 import { dateTimeOr, orDash } from "@/lib/display";
+import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
+import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 
 /** One checklist row: the template's item plus the inspector's own verdict. */
 interface ChecklistRow {
@@ -1409,6 +1411,16 @@ export default function InspectorInspectionDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Visual Field Observations with Photo Evidence */}
+      <VisualObservationsPanel
+        projectId={inspection?.project || ""}
+      />
+
+      {/* Client & Site Representative Attendance Register */}
+      <SiteAttendanceLogPanel
+        projectId={inspection?.project || ""}
+      />
 
       {/* Step 4: Outcome, Submission & Sign-Off */}
       <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4">

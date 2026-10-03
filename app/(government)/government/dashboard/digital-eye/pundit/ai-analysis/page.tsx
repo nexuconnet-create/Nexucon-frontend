@@ -20,7 +20,10 @@ import {
   ArrowRight,
   Radio,
   Cpu,
-  RefreshCw
+  RefreshCw,
+  Camera,
+  Users,
+  FolderOpen,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
@@ -30,6 +33,10 @@ import PunditWaveformPickerSimulator from "@/components/dashboard/digital-eye/Pu
 import FindingDetailDrawer from "@/components/dashboard/digital-eye/FindingDetailDrawer";
 import CreateFindingModal from "@/components/dashboard/digital-eye/CreateFindingModal";
 import PunditAnalysisReviewPanel from "@/components/dashboard/digital-eye/PunditAnalysisReviewPanel";
+import PunditScanBatchSelector from "@/components/dashboard/digital-eye/PunditScanBatchSelector";
+import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCalibrationModal";
+import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
+import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import {
   DigitalEyeFinding,
   getDigitalEyeFindings,
@@ -42,13 +49,20 @@ import {
   getBIMStructuralElements,
   BIMStructuralElement,
   formatVelocityMs,
+  PunditScanBatch,
+  BatchCalibrationPayload,
+  BatchCalibrationResult,
+  calibratePunditBatchModel,
 } from "@/services/digitalEye";
 
-type ActiveTab = "tomography" | "waveform" | "model" | "defects";
+type ActiveTab = "tomography" | "waveform" | "model" | "defects" | "observations" | "attendance";
 
 export default function PunditAIAnalysisPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
+  const [selectedBatch, setSelectedBatch] = useState<PunditScanBatch | null>(null);
+  const [isCalibrationOpen, setIsCalibrationOpen] = useState(false);
+  const [calibratedProfile, setCalibratedProfile] = useState<BatchCalibrationResult | null>(null);
   const [findings, setFindings] = useState<DigitalEyeFinding[]>([]);
   const [tests, setTests] = useState<PunditTest[]>([]);
   const [analyses, setAnalyses] = useState<PunditAIAnalysis[]>([]);
@@ -111,7 +125,9 @@ export default function PunditAIAnalysisPage() {
       f.finding_reference.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleRunAnalysis = async () => {
+  // Triggered when user clicks "Run AI Analysis" / "Initiate Analysis"
+  // Per review meeting: Analysis is NOT automated on upload, and requires manual calibration!
+  const handleRunAnalysis = () => {
     if (!selectedProjectId) {
       window.dispatchEvent(
         new CustomEvent("show-toast", {
@@ -120,22 +136,33 @@ export default function PunditAIAnalysisPage() {
       );
       return;
     }
-    if (tests.length === 0) {
-      window.dispatchEvent(
-        new CustomEvent("show-toast", {
-          detail: { message: "⚠️ No PUNDIT tests recorded for this project yet — record field measurements first.", type: "error" },
-        })
-      );
-      return;
-    }
+    // Launch the Mandatory UPV-FCU Calibration Modal
+    setIsCalibrationOpen(true);
+  };
+
+  const handleConfirmCalibrationAndAnalyze = async (calPayload: BatchCalibrationPayload) => {
     setIsRunningAnalysis(true);
     try {
-      const result = await analyzePunditProject(selectedProjectId);
+      // 1. Persist model calibration
+      const calResult = await calibratePunditBatchModel(calPayload);
+      setCalibratedProfile(calResult);
+
+      // 2. Execute analysis for this specific isolated batch & calibration profile
+      const result = await analyzePunditProject(selectedProjectId, {
+        batch_id: selectedBatch?.id,
+        curve_type: calPayload.curve_type,
+        params: calPayload.params,
+        design_strength_mpa: calPayload.design_strength_mpa,
+      });
+
       setFreshRun(result);
+      setIsCalibrationOpen(false);
+      setActiveTab("model"); // Switch directly to model review
+
       window.dispatchEvent(
         new CustomEvent("show-toast", {
           detail: {
-            message: `AI analysis complete — ${result.tests_analysed} test${result.tests_analysed === 1 ? "" : "s"} analysed (${result.model_provider || "deterministic engine"}).`,
+            message: `AI analysis complete for ${selectedBatch ? selectedBatch.folder_name : "project"} — ${result.tests_analysed || tests.length} test(s) analysed using calibrated ${calPayload.curve_type.toUpperCase()} model.`,
             type: "success",
           },
         })
@@ -227,6 +254,15 @@ export default function PunditAIAnalysisPage() {
       {/* DEDICATED AI ANALYSIS COMMAND RIBBON */}
       <PunditAiNav />
 
+      {/* PROJECT SCAN BATCHES / FOLDERS (Overhauls workflow to prevent 59 vs 48 data clashes) */}
+      <div className="mb-6">
+        <PunditScanBatchSelector
+          projectId={selectedProjectId}
+          selectedBatchId={selectedBatch?.id}
+          onSelectBatch={(b) => setSelectedBatch(b)}
+        />
+      </div>
+
       {/* AI TELEMETRY METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
@@ -239,9 +275,11 @@ export default function PunditAIAnalysisPage() {
             </span>
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">AI Waveforms Inferred</span>
-          <p className="text-2xl font-bold text-gray-900 font-mono mt-1">{tests.length}</p>
+          <p className="text-2xl font-bold text-gray-900 font-mono mt-1">
+            {selectedBatch ? selectedBatch.element_count : tests.length}
+          </p>
           <span className="text-[11px] text-gray-400 mt-0.5 block truncate">
-            {latestAnalysis ? `${latestAnalysis.model_provider || "Platform"} ${latestAnalysis.model_version || ""}`.trim() : "No AI analysis run yet"}
+            {selectedBatch ? `Folder: ${selectedBatch.folder_name}` : latestAnalysis ? `${latestAnalysis.model_provider || "Platform"}`.trim() : "No AI analysis run yet"}
           </span>
         </motion.div>
 
@@ -257,7 +295,7 @@ export default function PunditAIAnalysisPage() {
           <span className="text-xs font-bold text-gray-500 uppercase">Mean Velocity (AI Calibrated)</span>
           <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">{meanVelocity != null ? `${formatVelocityMs(meanVelocity)} m/s` : "—"}</p>
           <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
-            {meanFcu != null ? `Est. Strength: ${meanFcu} MPa (E.C.S)` : "No assessed stations yet"}
+            {meanFcu != null ? `Est. Strength: ${meanFcu} MPa (E.C.S)` : "Exponential Model (Default)"}
           </span>
         </motion.div>
 
@@ -284,9 +322,13 @@ export default function PunditAIAnalysisPage() {
               First-Break Peak
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Transit-Time Auto-Picker</span>
-          <p className="text-2xl font-bold text-purple-600 font-mono mt-1">{analysisCoverage != null ? `${analysisCoverage}%` : "—"}</p>
-          <span className="text-[11px] text-purple-700 font-medium mt-0.5 block">{analyzedTests.length} of {tests.length} stations analyzed</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Model Calibration</span>
+          <p className="text-sm font-bold text-purple-700 font-mono mt-2 truncate">
+            {calibratedProfile ? calibratedProfile.curve_type.toUpperCase() : "EXPONENTIAL"}
+          </p>
+          <span className="text-[11px] text-purple-700 font-medium mt-0.5 block">
+            Target f_cu: {calibratedProfile?.design_strength_mpa || 25} MPa
+          </span>
         </motion.div>
       </div>
 
@@ -331,6 +373,30 @@ export default function PunditAIAnalysisPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab("observations")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "observations"
+                  ? "bg-[#022C4F] text-white shadow-sm"
+                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200/70"
+              }`}
+            >
+              <Camera size={14} className={activeTab === "observations" ? "text-indigo-500" : "text-gray-400"} />
+              <span>Visual Observations</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("attendance")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "attendance"
+                  ? "bg-[#022C4F] text-white shadow-sm"
+                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200/70"
+              }`}
+            >
+              <Users size={14} className={activeTab === "attendance" ? "text-teal-600" : "text-gray-400"} />
+              <span>Site Attendance Log</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("defects")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === "defects"
@@ -347,10 +413,10 @@ export default function PunditAIAnalysisPage() {
             <button
               onClick={handleRunAnalysis}
               disabled={isRunningAnalysis || isLoading}
-              className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
               <Sparkles size={13} className={isRunningAnalysis ? "animate-spin" : ""} />
-              <span>{isRunningAnalysis ? "Running Model..." : "Run AI Analysis"}</span>
+              <span>{isRunningAnalysis ? "Calibrating & Analyzing..." : "Calibrate & Run Analysis"}</span>
             </button>
           </div>
         </div>
@@ -427,13 +493,37 @@ export default function PunditAIAnalysisPage() {
                   </Link>
                 </div>
 
+                {/* CALIBRATED EXPONENTIAL MODEL & CONTEXT BANNER */}
+                <div className="bg-gradient-to-r from-[#022C4F] to-[#033c6c] text-white p-4 rounded-xl shadow-xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-cyan-300 uppercase tracking-wide">
+                        Calibrated Correlation Model:
+                      </span>
+                      <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded border border-white/20">
+                        {calibratedProfile
+                          ? `Exponential: f_cu = ${calibratedProfile.params.a}·e^(${calibratedProfile.params.b}·V) + ${calibratedProfile.params.c}`
+                          : "Exponential Model (BS 1881-203 / Non-Linear Default)"}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                      Target f_cu: {calibratedProfile?.design_strength_mpa || 25} MPa
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    {selectedBatch
+                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
+                      : "AI Executive Summary integrates ultrasonic wave speeds with on-site visual defect observations and verified client/site attendance logs."}
+                  </p>
+                </div>
+
                 {shownAnalysisId && <PunditAnalysisReviewPanel analysisId={shownAnalysisId} />}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
                     <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                       <Activity size={14} className="text-amber-500" />
-                      AI Observations
+                      AI Observations (NDT + Visual Context)
                     </h4>
                     {shownAnalysis.observations.length > 0 ? (
                       <ul className="space-y-2">
@@ -475,7 +565,7 @@ export default function PunditAIAnalysisPage() {
               </div>
             ) : (
               <div className="p-12 text-center text-xs text-gray-500">
-                No AI analysis has been run for this project yet — click <strong>Run AI Analysis</strong> to analyse the recorded PUNDIT tests.
+                No AI analysis has been run for this project yet — click <strong>Calibrate & Run Analysis</strong> to calibrate the exponential model and analyse the recorded PUNDIT tests.
               </div>
             )}
           </div>
@@ -561,6 +651,26 @@ export default function PunditAIAnalysisPage() {
             )}
           </div>
         )}
+
+        {/* TAB 5: VISUAL OBSERVATIONS & DEFECT PHOTOS (Critical Context for AI Summary) */}
+        {activeTab === "observations" && (
+          <div className="p-6">
+            <VisualObservationsPanel
+              projectId={selectedProjectId}
+              batchId={selectedBatch?.id}
+            />
+          </div>
+        )}
+
+        {/* TAB 6: SITE ATTENDANCE LOG (Regulatory Transparency) */}
+        {activeTab === "attendance" && (
+          <div className="p-6">
+            <SiteAttendanceLogPanel
+              projectId={selectedProjectId}
+              batchId={selectedBatch?.id}
+            />
+          </div>
+        )}
       </div>
 
       {/* QUICK EXPLORATION CARDS: 3 DEDICATED MODULES */}
@@ -641,6 +751,19 @@ export default function PunditAIAnalysisPage() {
         onClose={() => setIsCreateOpen(false)}
         defaultProjectId={selectedProjectId}
         defaultElementId={selectedElementId}
+      />
+
+      {/* MANDATORY PRE-ANALYSIS MODEL CALIBRATION MODAL */}
+      <PunditCalibrationModal
+        isOpen={isCalibrationOpen}
+        onClose={() => setIsCalibrationOpen(false)}
+        projectId={selectedProjectId}
+        projectName="Active Project"
+        batchId={selectedBatch?.id}
+        batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
+        elementCount={selectedBatch?.element_count || tests.length || 48}
+        onConfirmCalibrationAndAnalyze={handleConfirmCalibrationAndAnalyze}
+        isSubmitting={isRunningAnalysis}
       />
     </div>
   );

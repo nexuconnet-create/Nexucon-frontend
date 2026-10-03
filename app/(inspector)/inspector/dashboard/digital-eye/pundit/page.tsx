@@ -57,6 +57,9 @@ import {
 } from "@/components/dashboard/digital-eye/PunditFolderTree";
 import { getAssignableProjects } from "@/services/inspector";
 import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
+import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
+import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -139,16 +142,17 @@ function getConcreteQuality(velocityMs: number): {
   };
 }
 
+/** Non-linear exponential default model: f_cu = 1.20 * exp(0.85 * V_km/s) per review meeting */
 function estimateCompressiveStrength(velocityMs: number): number | null {
   if (velocityMs < 2000 || velocityMs > 5000) return null;
   const vKmS = velocityMs / 1000;
-  const strength = 1.15 * Math.pow(vKmS, 2.45);
+  const strength = 1.2 * Math.exp(0.85 * vKmS);
   return Math.round(Math.min(75, Math.max(10, strength)) * 10) / 10;
 }
 
 function PunditWorkspaceInner() {
   const searchParams = useSearchParams();
-  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device">("live");
+  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance">("live");
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -203,6 +207,7 @@ function PunditWorkspaceInner() {
   // Pundit Devices
   const [punditDevices, setPunditDevices] = useState<FieldDeviceRecord[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>("");
 
   // Manual Form
   const [manualForm, setManualForm] = useState<{
@@ -261,6 +266,7 @@ function PunditWorkspaceInner() {
   const [swoRecommendation, setSwoRecommendation] = useState("");
   const [isSubmittingSwo, setIsSubmittingSwo] = useState(false);
   const [swoError, setSwoError] = useState<string | null>(null);
+  const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -335,6 +341,10 @@ function PunditWorkspaceInner() {
           }))
           .filter((p) => p.id);
         setProjects(shaped);
+        if (shaped.length > 0) {
+          setActiveWorkspaceProjectId((prev) => prev || shaped[0].id);
+          setManualForm((prev) => ({ ...prev, projectId: prev.projectId || shaped[0].id }));
+        }
       } catch {
         if (!cancelled) setProjects([]);
       }
@@ -665,6 +675,35 @@ function PunditWorkspaceInner() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {projects.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Testing Site:</span>
+              <select
+                value={activeWorkspaceProjectId}
+                onChange={(e) => {
+                  const pid = e.target.value;
+                  setActiveWorkspaceProjectId(pid);
+                  setManualForm((prev) => ({ ...prev, projectId: pid }));
+                }}
+                className="text-xs font-bold bg-transparent text-[#022C4F] focus:outline-none max-w-[190px] truncate cursor-pointer"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsCaptureModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+          >
+            <Camera size={14} />
+            <span>Take Photo Evidence</span>
+          </button>
           <button
             type="button"
             onClick={handleReload}
@@ -697,12 +736,14 @@ function PunditWorkspaceInner() {
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           {[
             { id: "live", label: "Recorded Tests", icon: Zap },
             { id: "manual", label: "Manual Station Entry", icon: Sliders },
             { id: "batch", label: "Session File Upload", icon: FileSpreadsheet },
             { id: "device", label: "Live Device Connect", icon: Radio },
+            { id: "observations", label: "Visual Observations", icon: Camera },
+            { id: "attendance", label: "Site Attendance Log", icon: Users },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -1304,6 +1345,20 @@ function PunditWorkspaceInner() {
         </div>
       )}
 
+      {/* MODE 5: VISUAL FIELD OBSERVATIONS & DEFECT PHOTOS */}
+      {punditMode === "observations" && (
+        <VisualObservationsPanel
+          projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
+        />
+      )}
+
+      {/* MODE 6: CLIENT & SITE ATTENDANCE REGISTER */}
+      {punditMode === "attendance" && (
+        <SiteAttendanceLogPanel
+          projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
+        />
+      )}
+
       {/* SWO Defect Finding Escalation Modal */}
       {swoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0F181F]/60 backdrop-blur-sm">
@@ -1370,6 +1425,19 @@ function PunditWorkspaceInner() {
           </div>
         </div>
       )}
+
+      {/* Field Photo Capture Modal */}
+      <FieldPhotoCaptureModal
+        isOpen={isCaptureModalOpen}
+        onClose={() => setIsCaptureModalOpen(false)}
+        projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
+        projectName={projects.find((p) => p.id === (activeWorkspaceProjectId || manualForm.projectId || projects[0]?.id))?.name}
+        structuralElementId={manualForm.elementName || activePunditTest?.structural_element_name || ""}
+        onEvidenceCreated={() => {
+          showToast("Photo evidence sealed with SHA-256 and sent to Government Dashboard.");
+          loadRecords();
+        }}
+      />
     </div>
   );
 }

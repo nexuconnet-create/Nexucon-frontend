@@ -44,11 +44,14 @@ function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
-export const getPortalType = (override?: string): 'stakeholder' | 'inspector' | 'government' | null => {
+export const getPortalType = (override?: string): 'stakeholder' | 'inspector' | 'government' | 'ptp' | null => {
   if (override) return override.toLowerCase() as any;
   if (typeof window === 'undefined') return null;
   const path = window.location.pathname.toLowerCase();
   const host = window.location.hostname.toLowerCase();
+  if (path.includes('/ptp') || host.startsWith('ptp.') || host.includes('ptp.localhost') || host.includes('ptp-')) {
+    return 'ptp';
+  }
   if (path.includes('/stakeholder') || host.startsWith('stakeholder.') || host.includes('stakeholder.localhost') || host.includes('stakeholder-')) {
     return 'stakeholder';
   }
@@ -61,8 +64,9 @@ export const getPortalType = (override?: string): 'stakeholder' | 'inspector' | 
   return null;
 };
 
-export const isRoleAllowedOnPortal = (roleName: string | undefined | null, portal: 'stakeholder' | 'inspector' | 'government' | null): boolean => {
+export const isRoleAllowedOnPortal = (roleName: string | undefined | null, portal: 'stakeholder' | 'inspector' | 'government' | 'ptp' | null): boolean => {
   if (!portal || !roleName) return true;
+  if (portal === 'ptp') return true; // Public Transparency Portal allows civic monitors, citizens, researchers, and public observers
   const role = roleName.toLowerCase();
   const isInspector = role.includes('inspector') || role.includes('field officer') || role.includes('site officer') || role.includes('hse') || role.includes('surveillance');
   const isGovernment = !isInspector && (

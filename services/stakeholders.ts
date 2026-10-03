@@ -597,3 +597,137 @@ export const getStakeholderStats = async (): Promise<StakeholderStats> => {
     };
   }
 };
+
+// ============================================================================
+// Stage Inspections, Timeline Milestones & Financial Activities
+// ============================================================================
+
+export interface StageInspection {
+  id: string;
+  stage_id: string;
+  project_name: string;
+  stage: string;
+  assigned_inspector?: Inspector | string | null;
+  inspector_details?: Inspector | null;
+  contractor_on_site?: string;
+  preferred_date?: string;
+  time_slot?: string;
+  status: string;
+  has_ncr: boolean;
+  ncr_description?: string;
+  ncr_remediation_proof?: string;
+  ncr_deadline?: string;
+  created_at?: string;
+}
+
+export interface TimelineMilestone {
+  id: string;
+  milestone_id: string;
+  project_name: string;
+  name: string;
+  category: string;
+  start_date: string;
+  due_date: string;
+  is_hold_point: boolean;
+  government_signoff: string;
+  progress: number;
+  status: string;
+  created_at?: string;
+}
+
+export interface FinancialInvoice {
+  id: string;
+  invoice_number: string;
+  project_name: string;
+  fee_category: string;
+  amount: number | string;
+  amount_formatted: string;
+  issued_date: string;
+  due_date: string;
+  status: 'DUE' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  paid_date?: string;
+  receipt_number?: string;
+  beneficiary?: string;
+  payment_gateway?: string;
+  created_at?: string;
+}
+
+export const getStageInspections = async (params?: Record<string, any>): Promise<StageInspection[]> => {
+  try {
+    const response = await api.get('/stakeholders/stage-inspections/', { params });
+    return unwrapList<StageInspection>(response);
+  } catch (err) {
+    console.warn('Fallback loading stage inspections', err);
+    return [];
+  }
+};
+
+export const createStageInspection = async (data: Partial<StageInspection>): Promise<StageInspection> => {
+  const response = await api.post('/stakeholders/stage-inspections/', data);
+  return unwrapItem<StageInspection>(response);
+};
+
+export const dispatchInspection = async (
+  id: string,
+  data: { assigned_inspector?: string; scheduled_date?: string }
+): Promise<StageInspection> => {
+  const response = await api.post(`/stakeholders/stage-inspections/${id}/dispatch/`, data);
+  return unwrapItem<StageInspection>(response);
+};
+
+export const resolveInspectionNcr = async (id: string, proof: string): Promise<StageInspection> => {
+  const response = await api.post(`/stakeholders/stage-inspections/${id}/resolve-ncr/`, {
+    remediation_proof: proof,
+  });
+  return unwrapItem<StageInspection>(response);
+};
+
+export const getTimelineMilestones = async (params?: Record<string, any>): Promise<TimelineMilestone[]> => {
+  try {
+    const response = await api.get('/stakeholders/timeline-milestones/', { params });
+    return unwrapList<TimelineMilestone>(response);
+  } catch (err) {
+    console.warn('Fallback loading timeline milestones', err);
+    return [];
+  }
+};
+
+export const createTimelineMilestone = async (data: Partial<TimelineMilestone>): Promise<TimelineMilestone> => {
+  const response = await api.post('/stakeholders/timeline-milestones/', data);
+  return unwrapItem<TimelineMilestone>(response);
+};
+
+export const signoffTimelineMilestone = async (id: string, note?: string): Promise<TimelineMilestone> => {
+  const response = await api.post(`/stakeholders/timeline-milestones/${id}/signoff/`, {
+    government_signoff: note,
+  });
+  return unwrapItem<TimelineMilestone>(response);
+};
+
+export const getFinancialInvoices = async (params?: Record<string, any>): Promise<FinancialInvoice[]> => {
+  try {
+    const response = await api.get('/stakeholders/financial-invoices/', { params });
+    return unwrapList<FinancialInvoice>(response);
+  } catch (err) {
+    console.warn('Fallback loading financial invoices', err);
+    return [];
+  }
+};
+
+export const createFinancialInvoice = async (data: Partial<FinancialInvoice>): Promise<FinancialInvoice> => {
+  const response = await api.post('/stakeholders/financial-invoices/', data);
+  return unwrapItem<FinancialInvoice>(response);
+};
+
+export const payFinancialInvoice = async (id: string, payload?: { gateway?: string; reference?: string }): Promise<FinancialInvoice> => {
+  const response = await api.post(`/stakeholders/financial-invoices/${id}/pay/`, payload || {});
+  return unwrapItem<FinancialInvoice>(response);
+};
+
+export const checkoutFinancialInvoice = async (id: string, gateway?: string): Promise<any> => {
+  const response = await api.post(`/stakeholders/financial-invoices/${id}/checkout/`, {
+    gateway,
+  });
+  return unwrapItem<any>(response);
+};
+

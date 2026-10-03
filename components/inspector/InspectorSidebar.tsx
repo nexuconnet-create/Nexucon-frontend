@@ -36,6 +36,7 @@ import {
   LogOut,
   ExternalLink,
   X,
+  MessageSquare,
 } from "lucide-react";
 
 interface InspectorSidebarProps {
@@ -68,6 +69,7 @@ const SECTIONS: NavSection[] = [
       { name: "Assigned Projects", href: "/inspector/dashboard/projects", icon: Building2 },
       { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck },
       { name: "Evidence Vault", href: "/inspector/dashboard/evidence", icon: Layers },
+      { name: "Agency Dispatch & Chat", href: "/inspector/dashboard/messages", icon: MessageSquare, badge: "Live" },
     ]
   },
   {

@@ -19,7 +19,7 @@ export default function MetricCard({
         </div>
       </div>
       <div>
-        <p className="text-[40px] leading-none font-extrabold text-[#0F181F]">{value}</p>
+        <p className="text-2xl sm:text-3xl lg:text-[38px] leading-tight font-extrabold text-[#0F181F] truncate">{value}</p>
       </div>
     </div>
   );

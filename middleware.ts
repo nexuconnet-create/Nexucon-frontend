@@ -104,6 +104,121 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
+function applySecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.headers.set('X-XSS-Protection', '1; mode=block');
+  res.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+  return res;
+}
+
+  const isPtpHost =
+    hostname.startsWith('ptp.') ||
+    hostname.includes('ptp.localhost') ||
+    hostname.includes('ptp-');
+
+  if (isPtpHost) {
+    // Safety fallback: prevent internal dashboard routes from leaking on public transparency domain
+    if (
+      pathname.startsWith('/government') ||
+      pathname.startsWith('/client') ||
+      pathname.startsWith('/professional') ||
+      pathname.startsWith('/stakeholder') ||
+      pathname.startsWith('/inspector')
+    ) {
+      url.pathname = '/login';
+      return applySecurityHeaders(NextResponse.redirect(url));
+    }
+
+    // Dedicated auth and onboarding routes
+    if (pathname === '/login') {
+      url.pathname = '/ptp/login';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/register') {
+      url.pathname = '/ptp/register';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/onboarding') {
+      url.pathname = '/ptp/onboarding';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    // Root serves the official Public Transparency Portal landing page
+    if (pathname === '/') {
+      url.pathname = '/transparency';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    // If request is already pointing to /ptp, allow it
+    if (pathname.startsWith('/ptp')) {
+      return applySecurityHeaders(NextResponse.next());
+    }
+
+    // Public civic transparency routes (unauthenticated public access)
+    if (pathname === '/transparency' || pathname === '/about' || pathname === '/info') {
+      url.pathname = '/transparency';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/verify') {
+      url.pathname = '/transparency/verify';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/search') {
+      url.pathname = '/transparency/search';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/map') {
+      url.pathname = '/transparency/map';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/notices') {
+      url.pathname = '/transparency/notices';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/documents') {
+      url.pathname = '/transparency/documents';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/report' || pathname === '/report-violation') {
+      url.pathname = '/transparency/report-violation';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname.startsWith('/projects/')) {
+      url.pathname = `/transparency${pathname}`;
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    // Authenticated dashboard routes
+    if (pathname === '/dashboard') {
+      url.pathname = '/ptp/dashboard';
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname.startsWith('/dashboard/')) {
+      url.pathname = `/ptp${pathname}`;
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    if (pathname === '/watchlist' || pathname === '/settings') {
+      url.pathname = `/ptp/dashboard${pathname}`;
+      return applySecurityHeaders(NextResponse.rewrite(url));
+    }
+
+    url.pathname = `/ptp${pathname}`;
+    return applySecurityHeaders(NextResponse.rewrite(url));
+  }
+
   return NextResponse.next();
 }
 
