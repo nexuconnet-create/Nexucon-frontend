@@ -213,6 +213,23 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
+      {review?.inspector_notes && (
+        <div className="p-2.5 rounded-lg bg-blue-50/80 border border-blue-200 text-blue-900 space-y-1 text-[11px]">
+          <div className="flex items-center justify-between font-semibold text-blue-800">
+            <span>Field Inspector Response:</span>
+            <span className="font-normal text-[10px] text-slate-500">
+              {review.inspector_responded_by || "Field Inspector"}
+              {review.inspector_responded_at && (
+                <> on {new Date(review.inspector_responded_at).toLocaleString()}</>
+              )}
+            </span>
+          </div>
+          <p className="italic bg-white/90 p-2 rounded border border-blue-100 text-slate-800">
+            “{review.inspector_notes}”
+          </p>
+        </div>
+      )}
+
       {pending ? (
         <p className="text-[11px] text-slate-600">
           A qualified engineer must corroborate or return this analysis before it is

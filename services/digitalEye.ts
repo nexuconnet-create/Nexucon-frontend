@@ -1888,6 +1888,16 @@ export interface PunditAnalysisReview {
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  inspector_notes?: string | null;
+  inspector_responded_by?: string | null;
+  inspector_responded_at?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  project_reference?: string | null;
+  project_location?: string | null;
+  analysis_id?: string | null;
+  analysis_reference?: string | null;
+  analysis_title?: string | null;
 }
 
 function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
@@ -1898,6 +1908,16 @@ function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
     notes: row.notes ?? null,
     reviewed_by: row.reviewed_by ?? null,
     reviewed_at: row.reviewed_at ?? null,
+    inspector_notes: row.inspector_notes ?? null,
+    inspector_responded_by: row.inspector_responded_by ?? null,
+    inspector_responded_at: row.inspector_responded_at ?? null,
+    project_id: row.project_id ?? null,
+    project_name: row.project_name ?? null,
+    project_reference: row.project_reference ?? null,
+    project_location: row.project_location ?? null,
+    analysis_id: row.analysis_id ?? null,
+    analysis_reference: row.analysis_reference ?? null,
+    analysis_title: row.analysis_title ?? null,
   };
 }
 
@@ -1910,12 +1930,31 @@ export const getPunditAnalysisReview = async (
 
 export const reviewPunditAnalysis = async (
   analysisId: string,
-  input: { decision: 'corroborated' | 'returned'; notes?: string; regenerate?: boolean }
+  input: {
+    decision?: 'corroborated' | 'returned';
+    notes?: string;
+    inspector_notes?: string;
+    regenerate?: boolean;
+  }
 ): Promise<PunditAnalysisReview> => {
   const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
     decision: input.decision,
     notes: input.notes ?? '',
+    inspector_notes: input.inspector_notes,
     regenerate: input.regenerate ?? true,
+  });
+  return mapPunditAnalysisReview(unwrap<any>(res, {}));
+};
+
+/** Inspector submits field collaboration notes and clarification */
+export const submitInspectorPunditCollaboration = async (
+  analysisId: string,
+  inspectorNotes: string,
+  regenerate = false
+): Promise<PunditAnalysisReview> => {
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
+    inspector_notes: inspectorNotes,
+    regenerate,
   });
   return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
