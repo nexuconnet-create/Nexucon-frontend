@@ -1190,7 +1190,12 @@ export const getPunditTests = async (params?: {
     const q = params.element_name.toLowerCase();
     tests = tests.filter(t => (t.structural_element_name || '').toLowerCase().includes(q));
   }
-  return tests;
+};
+
+/** Delete all PUNDIT tests belonging to a project to clear the whole folder. */
+export const clearProjectPunditTests = async (projectId: string): Promise<{ status: string; deleted_count: number }> => {
+  const res = await api.post('/digital-eye/pundit-tests/clear-project/', { project_id: projectId });
+  return unwrap(res, { status: 'cleared', deleted_count: 0 });
 };
 
 /** Anchor a PUNDIT test to a BIM structural element (real PATCH). */

@@ -320,6 +320,8 @@ export async function importTelemetryExport(params: {
   transducerType?: string;
   transducerFrequencyKhz?: number | null;
   injectionStrategy?: 'append' | 'override' | 'new_folder';
+  folderName?: string;
+  clearFolder?: boolean;
   photos?: File[];
   latitude?: number | string | null;
   longitude?: number | string | null;
@@ -329,6 +331,8 @@ export async function importTelemetryExport(params: {
   if (params.project) form.append('project', params.project);
   form.append('file', params.file);
   if (params.dataType) form.append('data_type', params.dataType);
+  if (params.folderName) form.append('folder_name', params.folderName);
+  if (params.clearFolder) form.append('clear_folder', 'true');
   if (params.photos && params.photos.length > 0) {
     for (const photo of params.photos) {
       form.append('photos', photo);
@@ -347,6 +351,7 @@ export async function importTelemetryExport(params: {
     ['transducer_type', params.transducerType],
     ['transducer_frequency_khz', params.transducerFrequencyKhz],
     ['injection_strategy', params.injectionStrategy],
+    ['folder_name', params.folderName],
     ['latitude', params.latitude],
     ['longitude', params.longitude],
   ];

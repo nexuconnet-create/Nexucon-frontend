@@ -208,6 +208,8 @@ export default function InspectorTelemetryPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStrategy, setImportStrategy] = useState<"append" | "override" | "new_folder">("append");
   const [showStrategyPrompt, setShowStrategyPrompt] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [clearExistingFolder, setClearExistingFolder] = useState(false);
   // GPS coordinates the inspector tags at the test location.
   const [importLatitude, setImportLatitude] = useState("");
   const [importLongitude, setImportLongitude] = useState("");
@@ -416,6 +418,7 @@ export default function InspectorTelemetryPage() {
     setPromotion(null);
 
     try {
+      const finalLocation = (strategy === "new_folder" && newFolderName.trim()) ? newFolderName.trim() : importLocation;
       const session = await importTelemetryExport({
         device: importDevice,
         project: importProject || null,
@@ -423,10 +426,12 @@ export default function InspectorTelemetryPage() {
         dataType: "pundit",
         structuralElement: importElement,
         floor: importFloor,
-        testLocation: importLocation,
+        testLocation: finalLocation,
         visualObservation: importVisualObservation,
         attendanceLog: importAttendanceLog,
         injectionStrategy: strategy,
+        folderName: strategy === "new_folder" ? (newFolderName.trim() || finalLocation) : undefined,
+        clearFolder: strategy === "override" || (strategy === "new_folder" && clearExistingFolder),
         photos: photoAttachments.map((p) => p.file),
         latitude: importLatitude ? parseFloat(importLatitude) : null,
         longitude: importLongitude ? parseFloat(importLongitude) : null,
@@ -488,6 +493,9 @@ export default function InspectorTelemetryPage() {
 
   const handleImport = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newFolderName && importLocation) {
+      setNewFolderName(importLocation);
+    }
     setShowStrategyPrompt(true);
   };
 
@@ -1824,21 +1832,52 @@ export default function InspectorTelemetryPage() {
                   </div>
                 </label>
                 
-                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${importStrategy === 'override' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${importStrategy === 'override' ? 'bg-rose-50 border-rose-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                   <input type="radio" name="strategy" value="override" checked={importStrategy === 'override'} onChange={() => setImportStrategy('override')} className="mt-1" />
                   <div>
-                    <div className="text-sm font-bold text-rose-700">Override</div>
-                    <div className="text-xs text-rose-600/80">Delete previous historical records for this element and replace them entirely with this file.</div>
+                    <div className="text-sm font-bold text-rose-700">Override & Clear Folder</div>
+                    <div className="text-xs text-rose-600/80">Delete previous historical records in this folder/project and replace them entirely with this file.</div>
                   </div>
                 </label>
                 
-                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${importStrategy === 'new_folder' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                  <input type="radio" name="strategy" value="new_folder" checked={importStrategy === 'new_folder'} onChange={() => setImportStrategy('new_folder')} className="mt-1" />
-                  <div>
-                    <div className="text-sm font-bold text-slate-800">Create New Folder</div>
-                    <div className="text-xs text-slate-500">Keep existing data untouched and save this file under a new name (e.g. {importElement || 'Element'} (New)).</div>
-                  </div>
-                </label>
+                <div className={`p-3 rounded-xl border transition-colors ${importStrategy === 'new_folder' ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="radio" name="strategy" value="new_folder" checked={importStrategy === 'new_folder'} onChange={() => setImportStrategy('new_folder')} className="mt-1" />
+                    <div>
+                      <div className="text-sm font-bold text-slate-800">Create New Folder / Location</div>
+                      <div className="text-xs text-slate-500">Group all tests under a dedicated folder/location name instead of generic test references.</div>
+                    </div>
+                  </label>
+                  {importStrategy === 'new_folder' && (
+                    <div className="mt-3 pl-7 pr-1 space-y-3 pt-2.5 border-t border-amber-200/70">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Folder / Location Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          placeholder="e.g. Laydown Area, Block B..."
+                          className="w-full text-xs rounded-lg border border-amber-300 p-2.5 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] outline-none shadow-sm"
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          This location name will be displayed on each test card instead of generic codes (like PND-2026-665FD5).
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={clearExistingFolder}
+                          onChange={(e) => setClearExistingFolder(e.target.checked)}
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        <span className="font-semibold text-rose-700">Clear previous folder tests before importing</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
