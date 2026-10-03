@@ -54,9 +54,9 @@ export default function PunditAIReasoningPage() {
         getPunditAIAnalyses({ project: selectedProjectId || undefined }),
         getPunditTests({ project: selectedProjectId || undefined }),
       ]);
-      setAnalyses(analysesData);
-      setTests(testsData);
-      if (analysesData.length > 0 && !selectedAnalysisId) {
+      setAnalyses(Array.isArray(analysesData) ? analysesData : []);
+      setTests(Array.isArray(testsData) ? testsData : []);
+      if (analysesData && analysesData.length > 0 && !selectedAnalysisId) {
         setSelectedAnalysisId(analysesData[0].id);
       }
     } catch (err: any) {
@@ -92,7 +92,7 @@ export default function PunditAIReasoningPage() {
       );
       return;
     }
-    if (tests.length === 0) {
+    if (!tests || tests.length === 0) {
       window.dispatchEvent(
         new CustomEvent("show-toast", {
           detail: {
@@ -160,14 +160,14 @@ export default function PunditAIReasoningPage() {
       return [
         `[INIT] Deterministic Acoustic Inversion engine booted. BS 1881-203 calibration loaded.`,
         `[PARAM] Calibration curve: Direct Transmission, fc = a * exp(b * V).`,
-        `[DATA] Total stations queried: ${tests.length}.`,
+        `[DATA] Total stations queried: ${tests?.length ?? 0}.`,
         `[CALC] Pulse velocity validation threshold: 3,500 m/s cutoff.`,
         `[MODEL] Model provider: ${activeAnalysis?.model_provider || "Deterministic Physics Engine"}.`,
         `[STATUS] Analysis completed with status: ${activeAnalysis?.risk_level || "complete"}.`,
       ];
     }
     return lines;
-  }, [activeAnalysis, tests.length]);
+  }, [activeAnalysis, tests?.length]);
 
   const filteredLogs = useMemo(() => {
     return parsedLogLines.filter((line) => {
