@@ -28,6 +28,8 @@ import {
   Clock,
   PenLine,
   Download,
+  Camera,
+  Users,
 } from "lucide-react";
 import {
   PunditTest,
