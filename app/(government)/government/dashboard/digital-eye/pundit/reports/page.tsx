@@ -11,6 +11,7 @@ import ReportSignOffPanel from "@/components/dashboard/digital-eye/ReportSignOff
 import NdtReportPreviewView from "@/components/dashboard/digital-eye/NdtReportPreviewView";
 import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
 import { Eye } from "lucide-react";
+import { getPunditTests } from "@/services/digitalEye";
 
 // Leaflet touches `window` at import time — client-only, same pattern as the
 // fleet map on the Digital Eye overview page.
@@ -29,6 +30,8 @@ const ReportLocationMap = dynamic(
 export default function PunditReportsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
+  const [selectedOperator, setSelectedOperator] = useState<string>("");
+  const [operators, setOperators] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   // Bumped after an archive so the dossier registry remounts and re-lists
   // the real server rows.
@@ -36,6 +39,24 @@ export default function PunditReportsPage() {
   // Set when the preview's "Edit in CMS" exits preview mode: scroll to the
   // CMS panel once it has actually rendered again.
   const [cmsScrollPending, setCmsScrollPending] = useState(false);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setOperators([]);
+      setSelectedOperator("");
+      return;
+    }
+    getPunditTests({ project: selectedProjectId })
+      .then((tests) => {
+        const set = new Set<string>();
+        tests.forEach((t) => {
+          const op = (t.operator_name || '').trim();
+          if (op) set.add(op);
+        });
+        setOperators(Array.from(set).sort());
+      })
+      .catch(() => setOperators([]));
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (!previewOpen && cmsScrollPending) {
@@ -85,6 +106,7 @@ export default function PunditReportsPage() {
       {previewing ? (
         <NdtReportPreviewView
           projectId={selectedProjectId}
+          operator={selectedOperator || undefined}
           onBackToEdit={() => setPreviewOpen(false)}
           onGenerated={() => {
             setRegistryVersion((v) => v + 1);
@@ -99,15 +121,30 @@ export default function PunditReportsPage() {
         <>
           {/* Preview-before-generate (REFINED EXECUTIVE SUMMARY §2.1): the
               exact certified PDF, rendered without archiving. */}
-          <div className="px-6 mt-6">
+          <div className="px-6 mt-6 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={openPreview}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#0A3D2E]/30 bg-[#0A3D2E]/5 px-4 py-2 text-sm font-medium text-[#0A3D2E] hover:bg-[#0A3D2E]/10"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#0A3D2E]/30 bg-[#0A3D2E]/5 px-4 py-2 text-sm font-medium text-[#0A3D2E] hover:bg-[#0A3D2E]/10 cursor-pointer"
             >
               <Eye className="w-4 h-4" />
-              Preview Report
+              Preview Report {selectedOperator ? `(${selectedOperator})` : ""}
             </button>
+            {operators.length > 0 && (
+              <select
+                value={selectedOperator}
+                onChange={(e) => setSelectedOperator(e.target.value)}
+                aria-label="Filter report preview by inspector"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm cursor-pointer"
+              >
+                <option value="">All Inspectors (Complete Dossier)</option>
+                {operators.map((op) => (
+                  <option key={op} value={op}>
+                    Inspector: {op}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <DeviceReportingSection

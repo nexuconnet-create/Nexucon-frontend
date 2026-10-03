@@ -944,6 +944,7 @@ export interface FieldDeviceRecord {
   calibration_expiry: string | null;
   assigned_project: string | null;
   notes: string;
+  cloud_workspace_id?: string | null;
   /**
    * This instrument's own export headers mapped to the platform's contract
    * keys. Empty means its export already speaks the documented template.
@@ -1190,6 +1191,7 @@ export const getPunditTests = async (params?: {
     const q = params.element_name.toLowerCase();
     tests = tests.filter(t => (t.structural_element_name || '').toLowerCase().includes(q));
   }
+  return tests;
 };
 
 /** Delete all PUNDIT tests belonging to a project to clear the whole folder. */
@@ -1895,11 +1897,12 @@ export const getPunditAnalysisReview = async (
 
 export const reviewPunditAnalysis = async (
   analysisId: string,
-  input: { decision: 'corroborated' | 'returned'; notes?: string }
+  input: { decision: 'corroborated' | 'returned'; notes?: string; regenerate?: boolean }
 ): Promise<PunditAnalysisReview> => {
   const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
     decision: input.decision,
     notes: input.notes ?? '',
+    regenerate: input.regenerate ?? true,
   });
   return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
@@ -2016,12 +2019,14 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
  * Download the official MTL-style NDT report (BS 1881-203 PUNDIT dossier)
  * streamed by GET /reports/projects/<id>/ndt-report/ — real database rows only.
  */
-export const downloadNdtReport = async (projectId: string): Promise<string> => {
+export const downloadNdtReport = async (projectId: string, operator?: string): Promise<string> => {
   const res = await api.get(`/reports/projects/${projectId}/ndt-report/`, {
+    params: operator ? { operator } : {},
     responseType: 'blob',
   });
   const blob = new Blob([res as any], { type: 'application/pdf' });
-  const filename = `ndt_report_${projectId}.pdf`;
+  const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+  const filename = `ndt_report_${projectId}${safeOp}.pdf`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2149,14 +2154,16 @@ export const setReportCmsPassword = async (payload: {
  * sections, CMS overrides and server-computed figures as the PDF, streamed by
  * GET /reports/projects/<id>/ndt-report-word/.
  */
-export const downloadNdtReportWord = async (projectId: string): Promise<string> => {
+export const downloadNdtReportWord = async (projectId: string, operator?: string): Promise<string> => {
   const res = await api.get(`/reports/projects/${projectId}/ndt-report-word/`, {
+    params: operator ? { operator } : {},
     responseType: 'blob',
   });
   const blob = new Blob([res as any], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
-  const filename = `ndt_report_${projectId}.docx`;
+  const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+  const filename = `ndt_report_${projectId}${safeOp}.docx`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -3083,10 +3090,12 @@ export interface NdtReportPreviewBundle {
  * document than the one it navigates.
  */
 export const fetchNdtReportPreviewBundle = async (
-  projectId: string
+  projectId: string,
+  operator?: string,
 ): Promise<NdtReportPreviewBundle> => {
   const res: any = await api.get(
-    `/reports/projects/${projectId}/ndt-report-preview/sections/`
+    `/reports/projects/${projectId}/ndt-report-preview/sections/`,
+    { params: operator ? { operator } : {} }
   );
   const binary = atob(res.pdf_base64);
   const bytes = new Uint8Array(binary.length);
@@ -3096,6 +3105,14 @@ export const fetchNdtReportPreviewBundle = async (
     sections: (res.sections ?? []) as NdtPreviewSection[],
     pageCount: Number(res.page_count ?? 0),
   };
+};
+
+/**
+ * Regenerate AI analysis synthesizing the Principal Engineer's review directives as a Joint Review.
+ */
+export const regenerateJointPunditAnalysis = async (analysisId: string): Promise<any> => {
+  const res: any = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/regenerate/`);
+  return res;
 };
 
 /** Branding configuration for a project's statutory report (§2.3). */

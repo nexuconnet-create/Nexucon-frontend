@@ -401,7 +401,10 @@ export default function PunditAIReasoningPage() {
                 <ShieldCheck size={16} className="text-emerald-600" />
                 Principal Engineer Peer Review
               </h3>
-              <PunditAnalysisReviewPanel analysisId={activeAnalysis.id} />
+              <PunditAnalysisReviewPanel
+                analysisId={activeAnalysis.id}
+                onReviewUpdated={loadData}
+              />
             </div>
           )}
         </div>

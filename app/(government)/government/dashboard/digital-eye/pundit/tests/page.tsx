@@ -49,13 +49,26 @@ export default function PunditTestsPage() {
     refreshTests();
   }, [selectedProjectId]);
 
-  const handleDownloadReport = () => {
+  const [selectedOperator, setSelectedOperator] = useState<string>("");
+
+  const operators = React.useMemo(() => {
+    const set = new Set<string>();
+    tests.forEach((t) => {
+      const op = (t.operator_name || '').trim();
+      if (op) set.add(op);
+    });
+    return Array.from(set).sort();
+  }, [tests]);
+
+  const handleDownloadReport = (operatorParam?: string) => {
     if (!selectedProjectId) {
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '⚠️ Select a project to download its official NDT report.', type: "error" } }));
       return;
     }
-    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" } }));
-    downloadNdtReport(selectedProjectId)
+    const op = operatorParam !== undefined ? operatorParam : selectedOperator;
+    const opMsg = op ? ` for Inspector: ${op}` : '';
+    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Generating official BS 1881-203 NDT report PDF${opMsg}…`, type: "info" } }));
+    downloadNdtReport(selectedProjectId, op || undefined)
       .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Downloaded ${filename} (MTL-style NDT dossier, real registry data).`, type: "success" } })))
       .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" } })));
   };
@@ -106,6 +119,30 @@ export default function PunditTestsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <FolderViewToggle viewMode={folders.viewMode} onChange={folders.setViewMode} />
+            {operators.length > 0 && (
+              <select
+                value={selectedOperator}
+                onChange={(e) => setSelectedOperator(e.target.value)}
+                aria-label="Filter report by inspector"
+                className="px-2.5 py-1.5 border border-gray-200 hover:bg-slate-50 rounded-lg text-xs font-semibold text-gray-700 bg-white cursor-pointer transition-all shadow-sm"
+              >
+                <option value="">All Inspectors (Dossier)</option>
+                {operators.map((op) => (
+                  <option key={op} value={op}>
+                    Inspector: {op}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => handleDownloadReport(selectedOperator || undefined)}
+              disabled={!selectedProjectId}
+              title="Download official BS 1881-203 NDT report (PDF)"
+              className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+            >
+              <Download size={13} />
+              <span>{selectedOperator ? `Report (${selectedOperator})` : "Download NDT Report"}</span>
+            </button>
             <button
               onClick={handleExportResults}
               disabled={!selectedProjectId}
@@ -245,7 +282,7 @@ function TestRow({
   expandedId: string | null;
   setExpandedId: (id: string | null) => void;
   setActiveTest: (t: PunditTest) => void;
-  handleDownloadReport: () => void;
+  handleDownloadReport: (operator?: string) => void;
   showFloor?: boolean;
 }) {
   // Resolved once: the row badge and the expanded disclosure are the same
@@ -298,8 +335,12 @@ function TestRow({
             Oscillogram
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleDownloadReport(); }}
-            title="Download official BS 1881-203 NDT report (PDF)"
+            onClick={(e) => {
+              e.stopPropagation();
+              const op = (t.operator_name || '').trim();
+              handleDownloadReport(op || undefined);
+            }}
+            title={`Download official BS 1881-203 NDT report (PDF)${t.operator_name ? ` for ${t.operator_name}` : ''}`}
             className="p-1 border border-gray-200 hover:bg-slate-100 rounded-lg text-gray-600 cursor-pointer"
           >
             <Download size={13} />
