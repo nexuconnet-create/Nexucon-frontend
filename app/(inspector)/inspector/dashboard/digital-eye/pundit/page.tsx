@@ -67,6 +67,7 @@ import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
+import { useAuth } from "@/context/AuthContext";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -158,6 +159,7 @@ function estimateCompressiveStrength(velocityMs: number): number | null {
 }
 
 function PunditWorkspaceInner() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance">("live");
 
@@ -1143,8 +1145,10 @@ function PunditWorkspaceInner() {
                     type="button"
                     onClick={() => {
                       if (!activePunditTest?.project) return;
-                      showToast("Generating official BS 1881-203 NDT Report PDF…");
-                      downloadNdtReport(activePunditTest.project, activePunditTest.operator_name || undefined)
+                      const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+                      const inspectorLabel = activePunditTest.operator_name || userFullName || user?.email || undefined;
+                      showToast(`Generating official BS 1881-203 NDT Report PDF${inspectorLabel ? ` (${inspectorLabel})` : ""}…`);
+                      downloadNdtReport(activePunditTest.project, inspectorLabel)
                         .then((filename) => showToast(`Downloaded ${filename}`))
                         .catch((err: any) => showToast(`Download failed: ${err?.message || 'Error'}`));
                     }}

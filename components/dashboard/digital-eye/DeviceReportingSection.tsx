@@ -50,7 +50,7 @@ interface DeviceReportingSectionProps {
   onReportGenerated?: (report: DeviceReportRecord) => void;
   /** PUNDIT: preview-first flow — opens the exact-PDF preview modal
       instead of generating/archiving directly. */
-  onPreviewNdt?: () => void;
+  onPreviewNdt?: (operator?: string) => void;
 }
 
 export default function DeviceReportingSection({
@@ -76,6 +76,30 @@ export default function DeviceReportingSection({
     });
     return Array.from(set).sort();
   }, [punditTests]);
+
+  const punditOperatorStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    punditTests.forEach((t) => {
+      const op = (t.operator_name || '').trim();
+      if (op) {
+        map[op] = (map[op] || 0) + 1;
+      }
+    });
+    return map;
+  }, [punditTests]);
+
+  // Always auto-select the active or first inspector so a single-inspector report is guaranteed
+  useEffect(() => {
+    if (punditOperators.length > 0 && (!selectedOperator || !punditOperators.includes(selectedOperator))) {
+      const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim().toLowerCase();
+      const userMatch = punditOperators.find((op) => {
+        const opLower = op.toLowerCase();
+        return (userFullName && opLower === userFullName) || (user?.email && opLower === user.email.toLowerCase());
+      });
+      setSelectedOperator(userMatch || punditOperators[0]);
+    }
+  }, [punditOperators, user, selectedOperator]);
+
   const [selectedReport, setSelectedReport] = useState<DeviceReportRecord | null>(null);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -178,8 +202,9 @@ export default function DeviceReportingSection({
       }));
       return;
     }
+    const targetOp = selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : undefined);
     if (onPreviewNdt) {
-      onPreviewNdt();
+      onPreviewNdt(targetOp);
       return;
     }
     // No preview handler wired (other host pages): fall back to the direct flow.
@@ -202,7 +227,7 @@ export default function DeviceReportingSection({
       }));
       return;
     }
-    const op = operatorParam !== undefined ? operatorParam : selectedOperator;
+    const op = operatorParam !== undefined ? operatorParam : (selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : ''));
     const opMsg = op ? ` for Inspector: ${op}` : '';
     window.dispatchEvent(new CustomEvent('show-toast', {
       detail: { message: `Generating official BS 1881-203 NDT report PDF${opMsg}…`, type: "info" }
@@ -220,6 +245,22 @@ export default function DeviceReportingSection({
       })));
   };
 
+  // Download individual NDT reports for each inspector in sequence
+  const handleDownloadAllInspectors = async () => {
+    if (!projectId || punditOperators.length === 0) return;
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: `Generating individual reports for all ${punditOperators.length} inspectors…`, type: "info" }
+    }));
+    for (const op of punditOperators) {
+      try {
+        await downloadNdtReport(projectId, op);
+      } catch (err: any) {
+        console.error(`Failed to download report for ${op}`, err);
+      }
+    }
+    loadReports();
+  };
+
   // PUNDIT editable Word edition (8 Sep meeting H7): the same sections,
   // CMS overrides and server-computed figures as the PDF, as a .docx.
   const handleDownloadWordReport = (operatorParam?: string) => {
@@ -229,7 +270,7 @@ export default function DeviceReportingSection({
       }));
       return;
     }
-    const op = operatorParam !== undefined ? operatorParam : selectedOperator;
+    const op = operatorParam !== undefined ? operatorParam : (selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : ''));
     const opMsg = op ? ` for Inspector: ${op}` : '';
     window.dispatchEvent(new CustomEvent('show-toast', {
       detail: { message: `Building the editable Word edition of the NDT report${opMsg}…`, type: "info" }
@@ -415,14 +456,25 @@ export default function DeviceReportingSection({
                 onChange={(e) => setSelectedOperator(e.target.value)}
                 aria-label="Filter report by inspector"
                 className="px-3 py-2.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                title="Select inspector: each report isolates scans done by this inspector"
               >
-                <option value="">All Inspectors (Dossier)</option>
                 {punditOperators.map((op) => (
                   <option key={op} value={op}>
-                    Inspector: {op}
+                    Inspector: {op} ({punditOperatorStats[op] || 0} scans)
                   </option>
                 ))}
               </select>
+            )}
+
+            {deviceType === "pundit" && punditOperators.length > 1 && (
+              <button
+                onClick={handleDownloadAllInspectors}
+                className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                title="Download separate individual NDT reports for every inspector"
+              >
+                <Download size={13} />
+                <span>All Inspectors ({punditOperators.length})</span>
+              </button>
             )}
 
             <button
@@ -928,7 +980,9 @@ function GenerateReportModal({
       already-generated warning in the modal. */
   existingArchive?: DeviceReportRecord;
 }) {
-  const [modalOperator, setModalOperator] = useState(initialOperator || "");
+  const [modalOperator, setModalOperator] = useState(
+    initialOperator || (operators.length > 0 ? operators[0] : "")
+  );
   const [title, setTitle] = useState(
     deviceType === "gpr"
       ? "GPR Subsurface Radar Structural & Cover Depth Dossier"
@@ -1069,7 +1123,6 @@ function GenerateReportModal({
                   onChange={(e) => setModalOperator(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-900 font-medium outline-none cursor-pointer"
                 >
-                  <option value="">All Inspectors (Complete Dossier)</option>
                   {operators.map((op) => (
                     <option key={op} value={op}>Inspector: {op}</option>
                   ))}
