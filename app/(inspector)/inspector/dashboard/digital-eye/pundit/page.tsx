@@ -24,6 +24,10 @@ import {
   Wifi,
   Bluetooth,
   Trash2,
+  CheckCircle2,
+  Clock,
+  PenLine,
+  Download,
 } from "lucide-react";
 import {
   PunditTest,
@@ -36,6 +40,10 @@ import {
   FieldDeviceRecord,
   createDigitalEyeFinding,
   formatVelocityMs,
+  getPunditAIAnalyses,
+  getPunditAnalysisReview,
+  PunditAnalysisReview,
+  downloadNdtReport,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -152,6 +160,42 @@ function PunditWorkspaceInner() {
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [activePunditTest, setActivePunditTest] = useState<PunditTest | null>(null);
   const [isReloading, setIsReloading] = useState(false);
+  const [activePunditReview, setActivePunditReview] = useState<PunditAnalysisReview | null>(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(false);
+
+  useEffect(() => {
+    if (!activePunditTest?.project) {
+      setActivePunditReview(null);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingReview(true);
+    getPunditAIAnalyses({ project: activePunditTest.project })
+      .then(async (analyses) => {
+        if (cancelled) return;
+        if (!analyses || analyses.length === 0) {
+          setActivePunditReview(null);
+          return;
+        }
+        const latest = analyses[0];
+        try {
+          const rev = await getPunditAnalysisReview(latest.id);
+          if (!cancelled) setActivePunditReview(rev);
+        } catch {
+          if (!cancelled) setActivePunditReview(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setActivePunditReview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingReview(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePunditTest?.project]);
 
   // Projects assignable to inspector
   const [projects, setProjects] = useState<{ id: string; name: string; reference?: string }[]>([]);
@@ -780,6 +824,94 @@ function PunditWorkspaceInner() {
                   <AlertTriangle size={14} className="text-rose-600" />
                   <span>Raise Concrete Defect Finding</span>
                 </button>
+
+                {/* Principal Engineer Peer Review & Joint Review Card */}
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Principal Engineer Review
+                    </span>
+                    {isLoadingReview && (
+                      <span className="text-[10px] text-slate-400 font-mono animate-pulse">Syncing…</span>
+                    )}
+                  </div>
+
+                  {activePunditReview ? (
+                    <div className={`p-3.5 rounded-xl border space-y-2 text-xs transition-all ${
+                      activePunditReview.review_status === "corroborated"
+                        ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                        : activePunditReview.review_status === "returned"
+                        ? "bg-rose-50/70 border-rose-200 text-rose-900"
+                        : "bg-amber-50/70 border-amber-200 text-amber-900"
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        {activePunditReview.review_status === "corroborated" ? (
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        ) : activePunditReview.review_status === "returned" ? (
+                          <PenLine size={16} className="text-rose-600 shrink-0" />
+                        ) : (
+                          <Clock size={16} className="text-amber-600 shrink-0" />
+                        )}
+                        <span className={`font-bold uppercase tracking-wider text-[11px] ${
+                          activePunditReview.review_status === "corroborated"
+                            ? "text-emerald-800"
+                            : activePunditReview.review_status === "returned"
+                            ? "text-rose-800"
+                            : "text-amber-800"
+                        }`}>
+                          {activePunditReview.review_status === "corroborated"
+                            ? "Corroborated by Engineer"
+                            : activePunditReview.review_status === "returned"
+                            ? "Returned for Revision"
+                            : "Awaiting Engineer Review"}
+                        </span>
+                      </div>
+
+                      {activePunditReview.reviewed_by && (
+                        <p className="text-[11px] text-slate-600">
+                          Reviewed by <strong>{activePunditReview.reviewed_by}</strong>
+                          {activePunditReview.reviewed_at && (
+                            <> on {new Date(activePunditReview.reviewed_at).toLocaleString()}</>
+                          )}
+                        </p>
+                      )}
+
+                      {activePunditReview.notes ? (
+                        <div className="bg-white/90 border border-slate-200 rounded-lg p-2.5 text-[11px] italic text-slate-800 shadow-sm leading-relaxed">
+                          “{activePunditReview.notes}”
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 italic">No review notes recorded.</p>
+                      )}
+
+                      {activePunditReview.review_status === "returned" && (
+                        <p className="text-[10px] text-rose-700 font-semibold bg-rose-100/70 p-2 rounded-lg border border-rose-200">
+                          ⚠️ Action required by field inspector: address the reviewing engineer's directives above.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-[11px] text-slate-500">
+                      No engineer review recorded for this project yet.
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activePunditTest?.project) return;
+                      showToast("Generating official BS 1881-203 NDT Report PDF…");
+                      downloadNdtReport(activePunditTest.project, activePunditTest.operator_name || undefined)
+                        .then((filename) => showToast(`Downloaded ${filename}`))
+                        .catch((err: any) => showToast(`Download failed: ${err?.message || 'Error'}`));
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                    title="Download the official BS 1881-203 NDT Report including Section 5.3 Joint Review and Section 5.4 Observations"
+                  >
+                    <Download size={13} />
+                    <span>Download Official NDT Report (PDF)</span>
+                  </button>
+                </div>
               </>
             )}
           </div>
