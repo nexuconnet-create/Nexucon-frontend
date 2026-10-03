@@ -31,6 +31,8 @@ import {
   Building2,
   MessageSquare,
   Send,
+  Camera,
+  Users,
 } from "lucide-react";
 import {
   PunditTest,
@@ -48,6 +50,7 @@ import {
   PunditAnalysisReview,
   downloadNdtReport,
   submitInspectorPunditCollaboration,
+  regenerateJointPunditAnalysis,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -170,8 +173,10 @@ function PunditWorkspaceInner() {
   const [isReloading, setIsReloading] = useState(false);
   const [activePunditReview, setActivePunditReview] = useState<PunditAnalysisReview | null>(null);
   const [isLoadingReview, setIsLoadingReview] = useState(false);
+  const [inspectorVerdict, setInspectorVerdict] = useState("verified");
   const [inspectorCollabText, setInspectorCollabText] = useState("");
   const [isSubmittingCollab, setIsSubmittingCollab] = useState(false);
+  const [isRegeneratingJoint, setIsRegeneratingJoint] = useState(false);
   const [collabRegenAi, setCollabRegenAi] = useState(true);
   const [showCollabInput, setShowCollabInput] = useState(false);
 
@@ -192,7 +197,11 @@ function PunditWorkspaceInner() {
         const latest = analyses[0];
         try {
           const rev = await getPunditAnalysisReview(latest.id);
-          if (!cancelled) setActivePunditReview(rev);
+          if (!cancelled) {
+            setActivePunditReview({ ...rev, analysis_id: latest.id });
+            if (rev.inspector_verdict) setInspectorVerdict(rev.inspector_verdict);
+            if (rev.inspector_notes) setInspectorCollabText(rev.inspector_notes);
+          }
         } catch {
           if (!cancelled) setActivePunditReview(null);
         }
@@ -973,13 +982,19 @@ function PunditWorkspaceInner() {
                         </p>
                       )}
 
-                      {/* Display Recorded Inspector Collaboration */}
-                      {activePunditReview.inspector_notes && (
-                        <div className="p-2.5 rounded-lg bg-blue-50/90 border border-blue-200 text-blue-900 space-y-1 mt-2">
+                      {/* Display Recorded Inspector Review */}
+                      {(activePunditReview.inspector_notes || activePunditReview.inspector_verdict) && (
+                        <div className="p-2.5 rounded-lg bg-blue-50/90 border border-blue-200 text-blue-900 space-y-1.5 mt-2">
                           <div className="flex items-center justify-between text-[10px] font-bold text-blue-800">
-                            <span className="flex items-center gap-1">
-                              <MessageSquare size={11} className="text-blue-600" />
-                              Your Recorded Field Response:
+                            <span className="flex items-center gap-1.5">
+                              <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider">
+                                Inspector Review
+                              </span>
+                              {activePunditReview.inspector_verdict && (
+                                <span className="font-semibold text-blue-900">
+                                  {activePunditReview.inspector_verdict_display || activePunditReview.inspector_verdict}
+                                </span>
+                              )}
                             </span>
                             <span className="font-normal text-[9px] text-slate-500">
                               {activePunditReview.inspector_responded_at
@@ -987,9 +1002,11 @@ function PunditWorkspaceInner() {
                                 : ""}
                             </span>
                           </div>
-                          <p className="text-[11px] italic bg-white/90 p-2 rounded border border-blue-100 text-slate-800 leading-relaxed">
-                            “{activePunditReview.inspector_notes}”
-                          </p>
+                          {activePunditReview.inspector_notes && (
+                            <p className="text-[11px] italic bg-white/90 p-2 rounded border border-blue-100 text-slate-800 leading-relaxed">
+                              “{activePunditReview.inspector_notes}”
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -999,13 +1016,13 @@ function PunditWorkspaceInner() {
                     </div>
                   )}
 
-                  {/* Inspector Collaboration Form */}
+                  {/* Inspector Review Form & Joint AI Analysis */}
                   {activePunditReview?.analysis_id && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
+                    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2.5 shadow-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                           <MessageSquare size={13} className="text-indigo-600" />
-                          Field Inspector Collaboration
+                          Field Inspector Review
                         </span>
                         <button
                           type="button"
@@ -1014,22 +1031,44 @@ function PunditWorkspaceInner() {
                         >
                           {showCollabInput
                             ? "Close"
-                            : activePunditReview.inspector_notes
-                            ? "Update Feedback"
-                            : "+ Add Response"}
+                            : (activePunditReview.inspector_notes || activePunditReview.inspector_verdict)
+                            ? "Update Review"
+                            : "+ Enter My Review"}
                         </button>
                       </div>
 
                       {showCollabInput && (
-                        <div className="space-y-2 pt-1">
-                          <textarea
-                            value={inspectorCollabText}
-                            onChange={(e) => setInspectorCollabText(e.target.value)}
-                            placeholder="Type field observations, transducer coupling details, or answer the reviewing engineer's directives..."
-                            rows={2}
-                            maxLength={4000}
-                            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-2 text-xs outline-none focus:border-indigo-500 focus:bg-white resize-y"
-                          />
+                        <div className="space-y-2.5 pt-1">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              Inspector Assessment Verdict
+                            </label>
+                            <select
+                              value={inspectorVerdict}
+                              onChange={(e) => setInspectorVerdict(e.target.value)}
+                              className="w-full text-xs rounded-lg border border-slate-200 bg-white p-2 text-slate-800 outline-none focus:border-indigo-500"
+                            >
+                              <option value="verified">Verified — field readings consistent & sound</option>
+                              <option value="coupling_rechecked">Transducer coupling verified on site</option>
+                              <option value="requires_coring">Secondary coring recommended</option>
+                              <option value="retest_recommended">Further station testing / revision required</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              Field Review Observations & Remarks
+                            </label>
+                            <textarea
+                              value={inspectorCollabText}
+                              onChange={(e) => setInspectorCollabText(e.target.value)}
+                              placeholder="Enter your field review observations, coupling notes, or physical condition of tested elements..."
+                              rows={2}
+                              maxLength={4000}
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-2 text-xs outline-none focus:border-indigo-500 focus:bg-white resize-y"
+                            />
+                          </div>
+
                           <div className="flex items-center justify-between gap-2">
                             <label className="flex items-center gap-1.5 text-[10px] text-slate-600 select-none cursor-pointer">
                               <input
@@ -1042,20 +1081,22 @@ function PunditWorkspaceInner() {
                             </label>
                             <button
                               type="button"
-                              disabled={isSubmittingCollab || !inspectorCollabText.trim()}
+                              disabled={isSubmittingCollab}
                               onClick={async () => {
-                                if (!activePunditReview?.analysis_id || !inspectorCollabText.trim()) return;
+                                if (!activePunditReview?.analysis_id) return;
                                 setIsSubmittingCollab(true);
                                 try {
                                   const updated = await submitInspectorPunditCollaboration(
                                     activePunditReview.analysis_id,
-                                    inspectorCollabText.trim(),
-                                    collabRegenAi
+                                    {
+                                      inspectorVerdict,
+                                      inspectorNotes: inspectorCollabText.trim(),
+                                      regenerate: collabRegenAi,
+                                    }
                                   );
                                   setActivePunditReview(updated);
-                                  setInspectorCollabText("");
                                   setShowCollabInput(false);
-                                  showToast("Field collaboration recorded! Joint Review updated.");
+                                  showToast("Inspector review recorded! Visible to Directorate/Governor.");
                                 } catch (err: any) {
                                   showToast(`Submission failed: ${err?.message || "Error"}`);
                                 } finally {
@@ -1065,11 +1106,36 @@ function PunditWorkspaceInner() {
                               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                             >
                               <Send size={11} />
-                              <span>{isSubmittingCollab ? "Posting…" : "Post Response"}</span>
+                              <span>{isSubmittingCollab ? "Saving…" : "Save Review"}</span>
                             </button>
                           </div>
                         </div>
                       )}
+
+                      {/* Joint AI Re-synthesis Action */}
+                      <button
+                        type="button"
+                        disabled={isRegeneratingJoint}
+                        onClick={async () => {
+                          if (!activePunditReview?.analysis_id) return;
+                          setIsRegeneratingJoint(true);
+                          try {
+                            await regenerateJointPunditAnalysis(activePunditReview.analysis_id);
+                            showToast("Joint AI Analysis successfully re-synthesized with both reviews!");
+                            const refreshed = await getPunditAnalysisReview(activePunditReview.analysis_id);
+                            setActivePunditReview({ ...refreshed, analysis_id: activePunditReview.analysis_id });
+                          } catch (err: any) {
+                            showToast(`AI generation failed: ${err?.message || "Error"}`);
+                          } finally {
+                            setIsRegeneratingJoint(false);
+                          }
+                        }}
+                        className="w-full py-2 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                        title="Re-run the platform's multi-model AI synthesis incorporating both Principal Engineer and Inspector reviews"
+                      >
+                        <Sparkles size={12} className={isRegeneratingJoint ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+                        <span>{isRegeneratingJoint ? "Synthesizing Joint AI Analysis…" : "Run Joint AI Analysis (Engineer + Inspector)"}</span>
+                      </button>
                     </div>
                   )}
 

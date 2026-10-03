@@ -1888,6 +1888,8 @@ export interface PunditAnalysisReview {
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  inspector_verdict?: string | null;
+  inspector_verdict_display?: string | null;
   inspector_notes?: string | null;
   inspector_responded_by?: string | null;
   inspector_responded_at?: string | null;
@@ -1908,6 +1910,8 @@ function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
     notes: row.notes ?? null,
     reviewed_by: row.reviewed_by ?? null,
     reviewed_at: row.reviewed_at ?? null,
+    inspector_verdict: row.inspector_verdict ?? null,
+    inspector_verdict_display: row.inspector_verdict_display ?? null,
     inspector_notes: row.inspector_notes ?? null,
     inspector_responded_by: row.inspector_responded_by ?? null,
     inspector_responded_at: row.inspector_responded_at ?? null,
@@ -1946,16 +1950,20 @@ export const reviewPunditAnalysis = async (
   return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
 
-/** Inspector submits field collaboration notes and clarification */
+/** Inspector submits field review verdict and observations */
 export const submitInspectorPunditCollaboration = async (
   analysisId: string,
-  inspectorNotes: string,
-  regenerate = false
+  input: string | { inspectorNotes?: string; inspectorVerdict?: string; regenerate?: boolean },
+  legacyRegen = false
 ): Promise<PunditAnalysisReview> => {
-  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
-    inspector_notes: inspectorNotes,
-    regenerate,
-  });
+  const payload = typeof input === 'string'
+    ? { inspector_notes: input, regenerate: legacyRegen }
+    : {
+        inspector_notes: input.inspectorNotes ?? '',
+        inspector_verdict: input.inspectorVerdict,
+        regenerate: input.regenerate ?? true,
+      };
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, payload);
   return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
 

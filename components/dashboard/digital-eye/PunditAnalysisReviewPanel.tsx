@@ -213,20 +213,33 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
-      {review?.inspector_notes && (
-        <div className="p-2.5 rounded-lg bg-blue-50/80 border border-blue-200 text-blue-900 space-y-1 text-[11px]">
-          <div className="flex items-center justify-between font-semibold text-blue-800">
-            <span>Field Inspector Response:</span>
+      {(review?.inspector_notes || review?.inspector_verdict) && (
+        <div className="p-3 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 space-y-1.5 text-xs shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 font-semibold text-blue-900">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                Inspector Review
+              </span>
+              {review.inspector_verdict && (
+                <span className="font-bold text-blue-800 text-[11px]">
+                  {review.inspector_verdict_display || review.inspector_verdict}
+                </span>
+              )}
+            </div>
             <span className="font-normal text-[10px] text-slate-500">
-              {review.inspector_responded_by || "Field Inspector"}
+              Submitted by <strong>{review.inspector_responded_by || "Field Inspector"}</strong>
               {review.inspector_responded_at && (
                 <> on {new Date(review.inspector_responded_at).toLocaleString()}</>
               )}
             </span>
           </div>
-          <p className="italic bg-white/90 p-2 rounded border border-blue-100 text-slate-800">
-            “{review.inspector_notes}”
-          </p>
+          {review.inspector_notes ? (
+            <p className="italic bg-white/90 p-2.5 rounded-lg border border-blue-100 text-slate-800 text-[11px] leading-relaxed">
+              “{review.inspector_notes}”
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-500 italic">No field text notes provided.</p>
+          )}
         </div>
       )}
 
