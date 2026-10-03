@@ -37,6 +37,7 @@ export default function ApplicationDetailSideDrawer({
 
   // Decision Modals State
   const [showDecisionModal, setShowDecisionModal] = useState<'APPROVED' | 'REJECTED' | 'CONDITIONAL_APPROVAL' | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const [rejectionCategory, setRejectionCategory] = useState('Structural Safety Non-Compliance (NBC Sec 4.2)');
   const [decisionReason, setDecisionReason] = useState('');
   const [conditionalNotes, setConditionalNotes] = useState('');
@@ -58,6 +59,7 @@ export default function ApplicationDetailSideDrawer({
 
   const handleTransition = async (newStatus: 'APPROVED' | 'REJECTED' | 'CONDITIONAL_APPROVAL' | string) => {
     setIsSubmitting(true);
+    setDecisionError(null);
     const reasonText = newStatus === 'REJECTED' 
       ? `[${rejectionCategory}] ${decisionReason.trim() || 'Did not meet statutory regulatory building requirements.'}`
       : decisionReason;
@@ -79,6 +81,7 @@ export default function ApplicationDetailSideDrawer({
       }) : null);
 
       setShowDecisionModal(null);
+      setDecisionError(null);
       
       // Open Success Confirmation Modal
       setSuccessModalState({
@@ -100,6 +103,7 @@ export default function ApplicationDetailSideDrawer({
       if (onUpdated) onUpdated();
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Failed to execute decision';
+      setDecisionError(typeof msg === 'string' ? msg : JSON.stringify(msg));
       window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
     } finally {
       setIsSubmitting(false);
@@ -724,12 +728,27 @@ export default function ApplicationDetailSideDrawer({
 
           <div className="flex items-center gap-2">
             
+            {/* If application is REJECTED, provide Reopen for Review option */}
+            {currentApp.status === 'REJECTED' && (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleTransition('UNDER_REVIEW')}
+                className="px-4 py-2.5 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw size={14} className={isSubmitting ? "animate-spin" : ""} /> Reopen for Review
+              </button>
+            )}
+
             {/* Always provide Reject option if active application */}
             {currentApp.status !== 'REJECTED' && currentApp.status !== 'APPROVED' && (
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => setShowDecisionModal('REJECTED')}
+                onClick={() => {
+                  setDecisionError(null);
+                  setShowDecisionModal('REJECTED');
+                }}
                 className="px-4 py-2.5 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <FileX size={14} /> Reject Application
@@ -752,7 +771,10 @@ export default function ApplicationDetailSideDrawer({
                 <button
                   type="button"
                   disabled={isSubmitting}
-                  onClick={() => setShowDecisionModal('CONDITIONAL_APPROVAL')}
+                  onClick={() => {
+                    setDecisionError(null);
+                    setShowDecisionModal('CONDITIONAL_APPROVAL');
+                  }}
                   className="px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
                   Conditional Pass
@@ -760,7 +782,10 @@ export default function ApplicationDetailSideDrawer({
                 <button
                   type="button"
                   disabled={isSubmitting}
-                  onClick={() => setShowDecisionModal('APPROVED')}
+                  onClick={() => {
+                    setDecisionError(null);
+                    setShowDecisionModal('APPROVED');
+                  }}
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle size={14} /> Approve & Issue Permit
@@ -772,7 +797,10 @@ export default function ApplicationDetailSideDrawer({
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => setShowDecisionModal('APPROVED')}
+                onClick={() => {
+                  setDecisionError(null);
+                  setShowDecisionModal('APPROVED');
+                }}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle size={14} /> Approve & Issue Permit
@@ -806,7 +834,10 @@ export default function ApplicationDetailSideDrawer({
                   </div>
                 </div>
                 <button 
-                  onClick={() => setShowDecisionModal(null)}
+                  onClick={() => {
+                    setShowDecisionModal(null);
+                    setDecisionError(null);
+                  }}
                   className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <X size={16} />
@@ -821,6 +852,14 @@ export default function ApplicationDetailSideDrawer({
                   ? 'Rejecting will formally issue a Refusal Notice to the developer and move this application to the Rejected registry with documented statutory citations.'
                   : 'Specify the required mandatory conditions that must be fulfilled before site works commence.'}
               </p>
+
+              {/* ERROR ALERT BANNER */}
+              {decisionError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-red-500 shrink-0" />
+                  <span>{decisionError}</span>
+                </div>
+              )}
 
               {/* REJECTION CATEGORY SELECT */}
               {showDecisionModal === 'REJECTED' && (
