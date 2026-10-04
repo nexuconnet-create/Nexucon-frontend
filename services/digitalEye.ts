@@ -1900,6 +1900,11 @@ export interface PunditAnalysisReview {
   analysis_id?: string | null;
   analysis_reference?: string | null;
   analysis_title?: string | null;
+  ai_summary?: string | null;
+  ai_observations?: string[] | null;
+  ai_reasoning_log?: string | null;
+  ai_confidence_score?: number | null;
+  ai_analysis?: any;
 }
 
 function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
@@ -1922,6 +1927,10 @@ function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
     analysis_id: row.analysis_id ?? null,
     analysis_reference: row.analysis_reference ?? null,
     analysis_title: row.analysis_title ?? null,
+    ai_summary: row.ai_summary ?? null,
+    ai_observations: Array.isArray(row.ai_observations) ? row.ai_observations : null,
+    ai_reasoning_log: row.ai_reasoning_log ?? null,
+    ai_confidence_score: row.ai_confidence_score ?? null,
   };
 }
 
@@ -3702,5 +3711,35 @@ export const calibratePunditBatchModel = async (
     is_active: true,
     message: `Model calibrated using ${payload.curve_type.toUpperCase()} equation (a=${payload.params.a}, b=${payload.params.b}, c=${payload.params.c}). Target design f_cu = ${payload.design_strength_mpa} MPa.`,
   };
+};
+
+export interface PunditAnalysisComment {
+  id: string;
+  analysis_id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  comment: string;
+  created_at: string;
+}
+
+export const getPunditAnalysisComments = async (
+  analysisId: string
+): Promise<PunditAnalysisComment[]> => {
+  try {
+    const res = await api.get(`/digital-eye/pundit-analysis-review/${analysisId}/comments/`);
+    const data = unwrap<PunditAnalysisComment[]>(res, []);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+};
+
+export const addPunditAnalysisComment = async (
+  analysisId: string,
+  comment: string
+): Promise<PunditAnalysisComment> => {
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/comments/`, { comment });
+  return unwrap<PunditAnalysisComment>(res, res as any);
 };
 

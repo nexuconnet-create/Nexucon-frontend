@@ -181,6 +181,7 @@ function PunditWorkspaceInner() {
   const [isRegeneratingJoint, setIsRegeneratingJoint] = useState(false);
   const [collabRegenAi, setCollabRegenAi] = useState(true);
   const [showCollabInput, setShowCollabInput] = useState(false);
+  const [showAiFindings, setShowAiFindings] = useState(false);
 
   useEffect(() => {
     if (!activePunditTest?.project) {
@@ -200,7 +201,7 @@ function PunditWorkspaceInner() {
         try {
           const rev = await getPunditAnalysisReview(latest.id);
           if (!cancelled) {
-            setActivePunditReview({ ...rev, analysis_id: latest.id });
+            setActivePunditReview({ ...rev, analysis_id: latest.id, ai_analysis: latest });
             if (rev.inspector_verdict) setInspectorVerdict(rev.inspector_verdict);
             if (rev.inspector_notes) setInspectorCollabText(rev.inspector_notes);
           }
@@ -900,15 +901,20 @@ function PunditWorkspaceInner() {
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 shadow-xs">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate">
-                        <Building2 size={13} className="text-slate-500 shrink-0" />
+                        <Building2 size={13} className="text-indigo-600 shrink-0" />
                         <span className="truncate">{activePunditReview?.project_name || activePunditTest.project_name || "Assigned Project"}</span>
                       </div>
                       {(activePunditReview?.project_reference || activePunditTest.project) && (
-                        <span className="font-mono text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-0.5 shrink-0">
+                        <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 shrink-0">
                           {activePunditReview?.project_reference || activePunditTest.project}
                         </span>
                       )}
                     </div>
+                    {activePunditReview?.project_location && (
+                      <div className="text-[10px] text-slate-500">
+                        Location: <span className="font-semibold text-slate-700">{activePunditReview.project_location}</span>
+                      </div>
+                    )}
                     <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span>Target: <strong className="text-slate-700">{activePunditTest.structural_element_name || activePunditTest.test_location || "Element"}</strong></span>
                       <span>•</span>
@@ -929,6 +935,76 @@ function PunditWorkspaceInner() {
                       </div>
                     )}
                   </div>
+
+                  {/* AI Generated Findings & Reasoning Box (Hidden until clicked, scrollable container) */}
+                  {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary || (activePunditReview?.ai_observations && activePunditReview.ai_observations.length > 0) || activePunditReview?.ai_analysis?.observations?.length || activePunditReview?.ai_reasoning_log || activePunditReview?.ai_analysis?.reasoning_log) && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAiFindings(!showAiFindings)}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-800/80 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer shadow-xs"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles size={13} className="text-cyan-400 animate-pulse" />
+                          <span>{showAiFindings ? "Hide AI Generated Analysis" : "View AI Generated Analysis & Findings"}</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-semibold text-cyan-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                          {showAiFindings ? "Collapse ▲" : "Expand ▼"}
+                        </span>
+                      </button>
+
+                      {showAiFindings && (
+                        <div className="bg-slate-900 text-white rounded-xl p-3.5 space-y-2.5 text-xs shadow-md border border-indigo-900 max-h-60 overflow-y-auto pr-1">
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-800 sticky top-0 bg-slate-900 pt-0.5 z-10">
+                            <div className="flex items-center gap-1.5 font-bold text-indigo-300 text-[11px] uppercase tracking-wider">
+                              <Sparkles size={13} className="text-cyan-400" />
+                              <span>AI Generated Scan Analysis & Findings</span>
+                            </div>
+                            <Link
+                              href="/government/dashboard/digital-eye/pundit/ai-analysis/reasoning"
+                              className="text-[10px] text-cyan-300 hover:text-cyan-100 underline font-semibold flex items-center gap-0.5 shrink-0"
+                              target="_blank"
+                            >
+                              <span>Reasoning Chat</span>
+                              <ChevronRight size={10} />
+                            </Link>
+                          </div>
+
+                          {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary) && (
+                            <div className="text-[11px] text-slate-200 bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 leading-relaxed font-sans">
+                              <strong className="text-cyan-400 block mb-0.5 text-[10px] uppercase tracking-wider font-bold">Executive AI Summary:</strong>
+                              {activePunditReview.ai_summary || activePunditReview.ai_analysis?.summary}
+                            </div>
+                          )}
+
+                          {((activePunditReview?.ai_observations && activePunditReview.ai_observations.length > 0) || (activePunditReview?.ai_analysis?.observations && activePunditReview.ai_analysis.observations.length > 0)) && (
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Key AI Observations & Anomaly Detections:</span>
+                              <ul className="space-y-1 text-[11px] text-slate-300">
+                                {(activePunditReview.ai_observations || activePunditReview.ai_analysis?.observations || []).map((obs: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-1.5 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
+                                    <span className="text-cyan-400 font-bold">•</span>
+                                    <span className="leading-snug">{obs}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {(activePunditReview?.ai_reasoning_log || activePunditReview?.ai_analysis?.reasoning_log) && (
+                            <details className="text-[10px] text-indigo-300 cursor-pointer pt-0.5">
+                              <summary className="font-semibold hover:text-white transition-colors">
+                                Click to Expand Full AI Reasoning Log & Synthesis
+                              </summary>
+                              <div className="mt-1.5 p-2 rounded bg-slate-950 text-slate-300 font-mono text-[10px] max-h-36 overflow-y-auto whitespace-pre-wrap border border-slate-800">
+                                {activePunditReview.ai_reasoning_log || activePunditReview.ai_analysis?.reasoning_log}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {activePunditReview ? (
                     <div className={`p-3.5 rounded-xl border space-y-2 text-xs transition-all ${

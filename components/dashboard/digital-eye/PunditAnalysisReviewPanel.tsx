@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock, PenLine, Sparkles, Undo2 } from "lucide-react";
+import { CheckCircle2, Clock, PenLine, Sparkles, Undo2, MessageSquare, Send, UserCheck } from "lucide-react";
 import {
   getPunditAnalysisReview,
   reviewPunditAnalysis,
   withdrawPunditAnalysisReview,
   regenerateJointPunditAnalysis,
+  getPunditAnalysisComments,
+  addPunditAnalysisComment,
   type PunditAnalysisReview,
+  type PunditAnalysisComment,
 } from "@/services/digitalEye";
 
 /**
@@ -26,10 +29,13 @@ export default function PunditAnalysisReviewPanel({
   onReviewUpdated?: () => void;
 }) {
   const [review, setReview] = useState<PunditAnalysisReview | null>(null);
+  const [comments, setComments] = useState<PunditAnalysisComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [notes, setNotes] = useState("");
+  const [newCommentText, setNewCommentText] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
   const [regenerateWithAi, setRegenerateWithAi] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,10 +52,16 @@ export default function PunditAnalysisReviewPanel({
     setLoading(true);
     setError(null);
     try {
-      setReview(await getPunditAnalysisReview(analysisId));
+      const [revData, commentsData] = await Promise.all([
+        getPunditAnalysisReview(analysisId),
+        getPunditAnalysisComments(analysisId),
+      ]);
+      setReview(revData);
+      setComments(commentsData);
     } catch (err: any) {
       setError(errText(err));
       setReview(null);
+      setComments([]);
     } finally {
       setLoading(false);
     }
@@ -94,11 +106,28 @@ export default function PunditAnalysisReviewPanel({
     }
   };
 
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCommentText.trim()) return;
+    setIsPostingComment(true);
+    try {
+      const added = await addPunditAnalysisComment(analysisId, newCommentText.trim());
+      setComments((prev) => [...prev, added]);
+      setNewCommentText("");
+      toast("Comment added to collaborative AI discussion stream.", "success");
+      onReviewUpdated?.();
+    } catch (err: any) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
   const handleRegenerateJoint = async () => {
     setIsRegenerating(true);
     try {
       await regenerateJointPunditAnalysis(analysisId);
-      toast("Joint AI Review re-synthesized with Principal Engineer directives.", "success");
+      toast("Joint AI Review re-synthesized with Principal Engineer directives and team chat.", "success");
       onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
@@ -183,7 +212,7 @@ export default function PunditAnalysisReviewPanel({
               onClick={handleRegenerateJoint}
               disabled={saving || isRegenerating}
               className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg px-2.5 py-1 disabled:opacity-50 cursor-pointer shadow-sm transition-all"
-              title="Re-run AI synthesis integrating the Principal Engineer's review directives and notes"
+              title="Re-run AI synthesis integrating Principal Engineer directives, field notes, and team chat"
             >
               <Sparkles size={12} className={isRegenerating ? "animate-spin text-indigo-600" : "text-indigo-600"} />
               <span>{isRegenerating ? "Synthesizing Joint Review…" : "Regenerate Joint Review with AI"}</span>
@@ -243,13 +272,76 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
+      {/* COLLABORATIVE CHAT & TEAM DISCUSSION STREAM */}
+      <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 uppercase tracking-wider">
+            <MessageSquare size={14} className="text-indigo-600" />
+            <span>Team Discussion Chat ({comments.length})</span>
+          </div>
+          <span className="text-[10px] text-slate-500 font-medium">
+            Government & Inspector Collaborative Opinion
+          </span>
+        </div>
+
+        {comments.length === 0 ? (
+          <div className="bg-white/80 rounded-xl p-3 border border-slate-200/60 text-center text-xs text-slate-500 italic">
+            No chat comments posted yet. Government officials and inspectors can discuss here to build a collaborative opinion for AI synthesis.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {comments.map((c) => (
+              <div key={c.id} className="bg-white/90 rounded-xl p-2.5 border border-slate-200/80 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-900">{c.author_name}</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {c.author_role}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(c.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                  {c.comment}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={handleSendComment} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newCommentText}
+            onChange={(e) => setNewCommentText(e.target.value)}
+            placeholder="Type a message to discuss with government & inspectors..."
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-indigo-400 shadow-xs"
+          />
+          <button
+            type="submit"
+            disabled={isPostingComment || !newCommentText.trim()}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+          >
+            <Send size={12} />
+            <span>Send</span>
+          </button>
+        </form>
+      </div>
+
       {pending ? (
-        <p className="text-[11px] text-slate-600">
+        <p className="text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
           A qualified engineer must corroborate or return this analysis before it is
           treated as reviewed. Directors only — the server enforces the role.
         </p>
       ) : (
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
           Recording a new decision below replaces the current review.
         </p>
       )}
@@ -271,7 +363,7 @@ export default function PunditAnalysisReviewPanel({
               onChange={(e) => setRegenerateWithAi(e.target.checked)}
               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <span className="font-medium">Synthesize Joint AI analysis with this review</span>
+            <span className="font-medium">Synthesize Joint AI analysis with this review & team chat</span>
           </label>
           <div className="flex gap-2 shrink-0">
             <button

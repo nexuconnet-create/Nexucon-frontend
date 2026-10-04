@@ -36,7 +36,11 @@ export default function PunditTestsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      setTests(await getPunditTests({ project: selectedProjectId || undefined }));
+      if (!selectedProjectId) {
+        setTests([]);
+      } else {
+        setTests(await getPunditTests({ project: selectedProjectId }));
+      }
     } catch (err: any) {
       setTests([]);
       setError(err?.response?.data?.detail || err?.message || 'Failed to load PUNDIT tests from the server.');
@@ -52,13 +56,14 @@ export default function PunditTestsPage() {
   const [selectedOperator, setSelectedOperator] = useState<string>("");
 
   const operators = React.useMemo(() => {
+    if (!selectedProjectId) return [];
     const set = new Set<string>();
     tests.forEach((t) => {
       const op = (t.operator_name || '').trim();
       if (op) set.add(op);
     });
     return Array.from(set).sort();
-  }, [tests]);
+  }, [tests, selectedProjectId]);
 
   const handleDownloadReport = (operatorParam?: string) => {
     if (!selectedProjectId) {

@@ -69,13 +69,14 @@ export default function DeviceReportingSection({
   const [selectedOperator, setSelectedOperator] = useState<string>("");
 
   const punditOperators = useMemo(() => {
+    if (!projectId) return [];
     const set = new Set<string>();
     punditTests.forEach((t) => {
       const op = (t.operator_name || '').trim();
       if (op) set.add(op);
     });
     return Array.from(set).sort();
-  }, [punditTests]);
+  }, [punditTests, projectId]);
 
   const punditOperatorStats = useMemo(() => {
     const map: Record<string, number> = {};
@@ -97,6 +98,8 @@ export default function DeviceReportingSection({
         return (userFullName && opLower === userFullName) || (user?.email && opLower === user.email.toLowerCase());
       });
       setSelectedOperator(userMatch || punditOperators[0]);
+    } else if (punditOperators.length === 0) {
+      setSelectedOperator("");
     }
   }, [punditOperators, user, selectedOperator]);
 
@@ -111,11 +114,15 @@ export default function DeviceReportingSection({
     loadReports();
     getBIMStructuralElements({ project: projectId || undefined }).then(setElements).catch(() => setElements([]));
     if (deviceType === "pundit") {
-      // PUNDIT deliverables stream from the backend report engine — the
-      // compliance KPI is computed from the real test registry.
-      getPunditTests({ project: projectId || undefined })
-        .then(setPunditTests)
-        .catch(() => setPunditTests([]));
+      if (!projectId) {
+        setPunditTests([]);
+      } else {
+        // PUNDIT deliverables stream from the backend report engine — the
+        // compliance KPI is computed from the real test registry.
+        getPunditTests({ project: projectId })
+          .then(setPunditTests)
+          .catch(() => setPunditTests([]));
+      }
     }
   }, [deviceType, projectId, elementId]);
 

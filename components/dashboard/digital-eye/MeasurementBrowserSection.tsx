@@ -148,10 +148,15 @@ export default function MeasurementBrowserSection({
   // are disabled and say why, and every other filter still works.
   useEffect(() => {
     if (!open) return;
+    if (!projectId) {
+      setOptionSource([]);
+      setOptionsFailed(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const all = await getPunditTests({ project: projectId || undefined });
+        const all = await getPunditTests({ project: projectId });
         if (!cancelled) {
           setOptionSource(all);
           setOptionsFailed(false);
