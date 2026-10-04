@@ -140,8 +140,15 @@ export default function PunditAnalysisReviewPanel({
   const handleRegenerateJoint = async () => {
     setIsRegenerating(true);
     try {
-      await regenerateJointPunditAnalysis(analysisId);
+      const res = await regenerateJointPunditAnalysis(analysisId);
+      const targetId = res?.analysis_id || analysisId;
       toast("Joint AI Review re-synthesized with Principal Engineer directives and team chat.", "success");
+      const [revData, commentsData] = await Promise.all([
+        getPunditAnalysisReview(targetId),
+        getPunditAnalysisComments(targetId),
+      ]);
+      setReview(revData);
+      setComments(commentsData);
       onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
