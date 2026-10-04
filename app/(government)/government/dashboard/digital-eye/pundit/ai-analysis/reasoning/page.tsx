@@ -516,12 +516,15 @@ export default function PunditAIReasoningPage() {
           {activeAnalysis && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Activity size={14} className="text-amber-500" />
-                  Deterministic Observations
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity size={14} className="text-amber-500" />
+                    Deterministic Observations ({parsedObservations.length})
+                  </h4>
+                  <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                </div>
                 {parsedObservations.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {parsedObservations.map((obs, i) => (
                       <li
                         key={i}
@@ -539,12 +542,15 @@ export default function PunditAIReasoningPage() {
               </div>
 
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-emerald-600" />
-                  Engineered Recommendations
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-emerald-600" />
+                    Engineered Recommendations ({parsedRecommendations.length})
+                  </h4>
+                  <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                </div>
                 {parsedRecommendations.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {parsedRecommendations.map((rec, i) => (
                       <li
                         key={i}

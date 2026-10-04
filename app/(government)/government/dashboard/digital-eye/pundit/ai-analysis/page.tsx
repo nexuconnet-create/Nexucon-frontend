@@ -521,12 +521,15 @@ export default function PunditAIAnalysisPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <Activity size={14} className="text-amber-500" />
-                      AI Observations (NDT + Visual Context)
-                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Activity size={14} className="text-amber-500" />
+                        AI Observations (NDT + Visual Context) ({shownAnalysis.observations.length})
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                    </div>
                     {shownAnalysis.observations.length > 0 ? (
-                      <ul className="space-y-2">
+                      <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {shownAnalysis.observations.map((obs, i) => (
                           <li
                             key={i}
@@ -542,12 +545,15 @@ export default function PunditAIAnalysisPage() {
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <ShieldCheck size={14} className="text-emerald-500" />
-                      Engineered Recommendations
-                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-emerald-500" />
+                        Engineered Recommendations ({shownAnalysis.recommendations.length})
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                    </div>
                     {shownAnalysis.recommendations.length > 0 ? (
-                      <ul className="space-y-2">
+                      <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {shownAnalysis.recommendations.map((rec, i) => (
                           <li
                             key={i}
