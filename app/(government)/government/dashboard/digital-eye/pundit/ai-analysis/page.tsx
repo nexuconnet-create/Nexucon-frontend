@@ -22,6 +22,8 @@ import {
   Cpu,
   RefreshCw,
   Camera,
+  ChevronDown,
+  ArrowDown,
   Users,
   FolderOpen,
 } from "lucide-react";
@@ -520,51 +522,81 @@ export default function PunditAIAnalysisPage() {
                 {shownAnalysisId && <PunditAnalysisReviewPanel analysisId={shownAnalysisId} />}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                  {/* AI Observations */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
                         <Activity size={14} className="text-amber-500" />
-                        AI Observations (NDT + Visual Context) ({shownAnalysis.observations.length})
+                        <span>AI Observations ({shownAnalysis.observations.length})</span>
                       </h4>
-                      <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                      {shownAnalysis.observations.length > 1 && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80 flex items-center gap-1">
+                          <ChevronDown size={11} className="animate-bounce text-amber-600" />
+                          Scrollable ({shownAnalysis.observations.length})
+                        </span>
+                      )}
                     </div>
+
                     {shownAnalysis.observations.length > 0 ? (
-                      <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {shownAnalysis.observations.map((obs, i) => (
-                          <li
-                            key={i}
-                            className="text-xs text-gray-700 bg-slate-50 border border-gray-100 rounded-xl p-3 leading-relaxed"
-                          >
-                            {obs}
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="space-y-2">
+                        <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1.5 [::-webkit-scrollbar]:w-1.5 [::-webkit-scrollbar-thumb]:bg-slate-300 [::-webkit-scrollbar-thumb]:rounded-full hover:[::-webkit-scrollbar-thumb]:bg-slate-400">
+                          {shownAnalysis.observations.map((obs, i) => (
+                            <li
+                              key={i}
+                              className="text-xs text-gray-800 bg-slate-50/90 border border-gray-200/80 rounded-xl p-3 leading-relaxed font-medium shadow-2xs hover:border-amber-200 transition-colors"
+                            >
+                              {obs}
+                            </li>
+                          ))}
+                        </ul>
+                        {shownAnalysis.observations.length > 2 && (
+                          <div className="text-[10px] text-slate-400 font-mono text-center pt-2 flex items-center justify-center gap-1 border-t border-slate-100 mt-2">
+                            <ArrowDown size={10} className="animate-pulse text-amber-500" />
+                            <span>Scroll container to view all {shownAnalysis.observations.length} observations</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-xs text-gray-400">No observations recorded in this analysis.</p>
+                      <p className="text-xs text-gray-400 italic">No observations recorded in this analysis.</p>
                     )}
                   </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                        <ShieldCheck size={14} className="text-emerald-500" />
-                        Engineered Recommendations ({shownAnalysis.recommendations.length})
+                  {/* Engineered Recommendations */}
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-emerald-600" />
+                        <span>Engineered Recommendations ({shownAnalysis.recommendations.length})</span>
                       </h4>
-                      <span className="text-[10px] font-mono text-slate-400">Scrollable</span>
+                      {shownAnalysis.recommendations.length > 1 && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
+                          <ChevronDown size={11} className="animate-bounce text-emerald-600" />
+                          Scrollable ({shownAnalysis.recommendations.length})
+                        </span>
+                      )}
                     </div>
+
                     {shownAnalysis.recommendations.length > 0 ? (
-                      <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {shownAnalysis.recommendations.map((rec, i) => (
-                          <li
-                            key={i}
-                            className="text-xs text-gray-700 bg-emerald-50/40 border border-emerald-100 rounded-xl p-3 leading-relaxed"
-                          >
-                            {typeof rec === "string" ? rec : `${rec.priority ? `[${rec.priority}] ` : ""}${rec.recommendation}`}
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="space-y-2">
+                        <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1.5 [::-webkit-scrollbar]:w-1.5 [::-webkit-scrollbar-thumb]:bg-emerald-200 [::-webkit-scrollbar-thumb]:rounded-full hover:[::-webkit-scrollbar-thumb]:bg-emerald-300">
+                          {shownAnalysis.recommendations.map((rec, i) => (
+                            <li
+                              key={i}
+                              className="text-xs text-gray-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 leading-relaxed shadow-2xs"
+                            >
+                              {typeof rec === "string" ? rec : `${rec.priority ? `[${rec.priority}] ` : ""}${rec.recommendation}`}
+                            </li>
+                          ))}
+                        </ul>
+                        {shownAnalysis.recommendations.length > 2 && (
+                          <div className="text-[10px] text-slate-400 font-mono text-center pt-2 flex items-center justify-center gap-1 border-t border-slate-100 mt-2">
+                            <ArrowDown size={10} className="animate-pulse text-emerald-500" />
+                            <span>Scroll container to view all {shownAnalysis.recommendations.length} recommendations</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-xs text-gray-400">No recommendations recorded in this analysis.</p>
+                      <p className="text-xs text-gray-400 italic">No recommendations recorded in this analysis.</p>
                     )}
                   </div>
                 </div>
