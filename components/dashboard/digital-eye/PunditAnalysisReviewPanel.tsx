@@ -85,17 +85,31 @@ export default function PunditAnalysisReviewPanel({
   const decide = async (decision: "corroborated" | "returned") => {
     setSaving(true);
     try {
+      let activeNotes = newCommentText.trim();
+      // If text is in chat input, post it to discussion stream as well
+      if (activeNotes) {
+        try {
+          const added = await addPunditAnalysisComment(analysisId, activeNotes);
+          setComments((prev) => [...prev, added]);
+          setNewCommentText("");
+        } catch {
+          // fallback to activeNotes
+        }
+      } else if (comments.length > 0) {
+        // Use latest comment as note if input field is empty
+        activeNotes = comments[comments.length - 1].comment;
+      }
+
       const data = await reviewPunditAnalysis(analysisId, {
         decision,
-        notes: notes.trim(),
+        notes: activeNotes,
         regenerate: regenerateWithAi,
       });
       setReview(data);
-      setNotes("");
       toast(
         decision === "corroborated"
-          ? "Analysis corroborated by engineer review (Joint Review updated)."
-          : "Analysis returned for revision (Joint Review updated).",
+          ? "Analysis corroborated by engineer review (Joint AI Synthesis updated)."
+          : "Analysis returned for revision (Joint AI Synthesis updated).",
         "success",
       );
       onReviewUpdated?.();
@@ -106,15 +120,15 @@ export default function PunditAnalysisReviewPanel({
     }
   };
 
-  const handleSendComment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendComment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!newCommentText.trim()) return;
     setIsPostingComment(true);
     try {
       const added = await addPunditAnalysisComment(analysisId, newCommentText.trim());
       setComments((prev) => [...prev, added]);
       setNewCommentText("");
-      toast("Comment added to collaborative AI discussion stream.", "success");
+      toast("Comment posted to collaborative chat stream.", "success");
       onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
@@ -141,7 +155,6 @@ export default function PunditAnalysisReviewPanel({
     setSaving(true);
     try {
       setReview(await withdrawPunditAnalysisReview(analysisId));
-      setNotes("");
       toast("Review withdrawn — the analysis is pending engineer review again.", "info");
       onReviewUpdated?.();
     } catch (err: any) {
@@ -272,24 +285,24 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
-      {/* COLLABORATIVE CHAT & TEAM DISCUSSION STREAM */}
-      <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-2.5">
+      {/* SINGLE COLLABORATIVE CHAT & DECISION INPUT SYSTEM */}
+      <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 uppercase tracking-wider">
             <MessageSquare size={14} className="text-indigo-600" />
-            <span>Team Discussion Chat ({comments.length})</span>
+            <span>Government & Inspector Collaborative Chat ({comments.length})</span>
           </div>
           <span className="text-[10px] text-slate-500 font-medium">
-            Government & Inspector Collaborative Opinion
+            AI Joint Review Discussion Thread
           </span>
         </div>
 
         {comments.length === 0 ? (
           <div className="bg-white/80 rounded-xl p-3 border border-slate-200/60 text-center text-xs text-slate-500 italic">
-            No chat comments posted yet. Government officials and inspectors can discuss here to build a collaborative opinion for AI synthesis.
+            No chat comments posted yet. Government officials, engineers, and inspectors discuss here to build a collaborative opinion for AI synthesis.
           </div>
         ) : (
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
             {comments.map((c) => (
               <div key={c.id} className="bg-white/90 rounded-xl p-2.5 border border-slate-200/80 shadow-xs space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
@@ -316,70 +329,65 @@ export default function PunditAnalysisReviewPanel({
           </div>
         )}
 
-        <form onSubmit={handleSendComment} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newCommentText}
-            onChange={(e) => setNewCommentText(e.target.value)}
-            placeholder="Type a message to discuss with government & inspectors..."
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-indigo-400 shadow-xs"
-          />
-          <button
-            type="submit"
-            disabled={isPostingComment || !newCommentText.trim()}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
-          >
-            <Send size={12} />
-            <span>Send</span>
-          </button>
-        </form>
-      </div>
-
-      {pending ? (
-        <p className="text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
-          A qualified engineer must corroborate or return this analysis before it is
-          treated as reviewed. Directors only — the server enforces the role.
-        </p>
-      ) : (
-        <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
-          Recording a new decision below replaces the current review.
-        </p>
-      )}
-
-      <div className="space-y-2">
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          maxLength={4000}
-          rows={2}
-          placeholder="Review notes (optional, max 4000 characters) — typed by the reviewing engineer, never auto-filled."
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 resize-y"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+        {/* SINGLE INPUT FIELD */}
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-center gap-2">
             <input
-              type="checkbox"
-              checked={regenerateWithAi}
-              onChange={(e) => setRegenerateWithAi(e.target.checked)}
-              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              type="text"
+              value={newCommentText}
+              onChange={(e) => setNewCommentText(e.target.value)}
+              placeholder="Type your message / directive to discuss with inspectors & government..."
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 shadow-xs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendComment();
+                }
+              }}
             />
-            <span className="font-medium">Synthesize Joint AI analysis with this review & team chat</span>
-          </label>
-          <div className="flex gap-2 shrink-0">
             <button
-              onClick={() => decide("corroborated")}
-              disabled={saving || isRegenerating}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              type="button"
+              onClick={() => handleSendComment()}
+              disabled={isPostingComment || !newCommentText.trim()}
+              className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
+              title="Post message to collaborative discussion"
             >
-              <CheckCircle2 size={13} /> Corroborate
+              <Send size={12} />
+              <span>Send Chat</span>
             </button>
-            <button
-              onClick={() => decide("returned")}
-              disabled={saving || isRegenerating}
-              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <PenLine size={13} /> Return for revision
-            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={regenerateWithAi}
+                onChange={(e) => setRegenerateWithAi(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="font-medium">Synthesize AI Joint Analysis with chat thread</span>
+            </label>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => decide("corroborated")}
+                disabled={saving || isRegenerating}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                title="Corroborate AI analysis using current chat directives"
+              >
+                <CheckCircle2 size={13} /> Corroborate
+              </button>
+              <button
+                type="button"
+                onClick={() => decide("returned")}
+                disabled={saving || isRegenerating}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                title="Return analysis for revision with directives"
+              >
+                <PenLine size={13} /> Return for Revision
+              </button>
+            </div>
           </div>
         </div>
       </div>
