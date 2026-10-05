@@ -53,65 +53,19 @@ export default function PunditScanBatchSelector({
     }
     setIsLoading(true);
     try {
-      let rows = await getPunditScanBatches(projectId);
-      if (!rows || rows.length === 0) {
-        // Pre-populate with typical project baseline batches if none exist
-        // to clearly illustrate isolated folder workflow & prevent 59 vs 48 element clash
-        const baselineBatch: PunditScanBatch = {
-          id: `batch-${projectId}-001`,
-          project_id: projectId,
-          folder_name: "Floor 2 RC Slab - Primary Grid",
-          batch_reference: "BATCH-2026-09-048",
-          inspector_name: "Engr. Abdullateef (LASBCA Warrant #LAG-042)",
-          device_serial: "PUNDIT-LIVE-54K-019",
-          device_name: "Screening Eagle Pundit Live (Wireless 54kHz)",
-          element_count: 48,
-          scan_date: "2026-09-04T09:30:00Z",
-          status: "RAW_INGESTED",
-          calibration_profile_id: null,
-          calibration_model: "Exponential Model (Default: f_cu = a·e^(b·V))",
-          raw_file_name: "FL2_SLAB_48PTS_RAW.csv",
-          raw_file_sha256: "8e9b4d...sha256",
-          visual_observations_count: 4,
-          attendance_count: 3,
-          floor: "Floor 2",
-          notes: "Primary 48-element grid audit. Awaiting manual calibration before analysis.",
-          created_at: "2026-09-04T09:45:00Z",
-        };
-
-        const supplementalBatch: PunditScanBatch = {
-          id: `batch-${projectId}-002`,
-          project_id: projectId,
-          folder_name: "Supplemental Retest - Edge Beams",
-          batch_reference: "BATCH-2026-09-011",
-          inspector_name: "Engr. Sunkanmi (Structural Field Unit)",
-          device_serial: "PUNDIT-LIVE-54K-022",
-          device_name: "Screening Eagle Pundit Live (DPC Probes)",
-          element_count: 11,
-          scan_date: "2026-09-07T14:15:00Z",
-          status: "RAW_INGESTED",
-          calibration_profile_id: null,
-          calibration_model: "Exponential Model (Default: f_cu = a·e^(b·V))",
-          raw_file_name: "EDGE_BEAMS_11PTS_RETEST.csv",
-          raw_file_sha256: "4c1a2f...sha256",
-          visual_observations_count: 2,
-          attendance_count: 2,
-          floor: "Floor 2",
-          notes: "Independent 11-element re-test folder. Stored separately to prevent corrupting primary element count.",
-          created_at: "2026-09-07T14:30:00Z",
-        };
-
-        rows = [baselineBatch, supplementalBatch];
-      }
-      setBatches(rows);
-      if (onBatchesLoaded) onBatchesLoaded(rows);
+      const rows = await getPunditScanBatches(projectId);
+      setBatches(rows || []);
+      if (onBatchesLoaded) onBatchesLoaded(rows || []);
 
       // Auto-select initial batch if none selected
-      if (!selectedBatchId && rows.length > 0) {
+      if (!selectedBatchId && rows && rows.length > 0) {
         onSelectBatch(rows[0]);
+      } else if (!rows || rows.length === 0) {
+        onSelectBatch(null);
       }
     } catch {
       setBatches([]);
+      onSelectBatch(null);
     } finally {
       setIsLoading(false);
     }
