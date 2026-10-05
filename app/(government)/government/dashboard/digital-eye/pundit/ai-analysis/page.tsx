@@ -40,6 +40,7 @@ import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCal
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
+import { getProjects, Project } from "@/services/projects";
 import {
   DigitalEyeFinding,
   getDigitalEyeFindings,
@@ -61,6 +62,7 @@ import {
 type ActiveTab = "tomography" | "waveform" | "model" | "defects" | "observations" | "attendance";
 
 export default function PunditAIAnalysisPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [selectedBatch, setSelectedBatch] = useState<PunditScanBatch | null>(null);
@@ -81,18 +83,21 @@ export default function PunditAIAnalysisPage() {
   const [freshRun, setFreshRun] = useState<PunditProjectAnalysis | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("tomography");
 
-  // Auto-select initial project if none is selected
+  const activeProject = useMemo(() => {
+    return projects.find((p) => p.id === selectedProjectId) || null;
+  }, [projects, selectedProjectId]);
+
+  // Load project list & auto-select initial project if none is selected
   useEffect(() => {
-    if (!selectedProjectId) {
-      import("@/services/projects").then(({ getProjects }) => {
-        getProjects().then((res) => {
-          const pList = Array.isArray(res) ? res : ((res as any).results || []);
-          if (pList.length > 0) {
-            setSelectedProjectId(pList[0].id);
-          }
-        });
-      });
-    }
+    getProjects().then((res) => {
+      const pList = Array.isArray(res) ? res : ((res as any).results || []);
+      setProjects(pList);
+      if (!selectedProjectId && pList.length > 0) {
+        setSelectedProjectId(pList[0].id);
+      }
+    }).catch(() => {
+      setProjects([]);
+    });
   }, []);
 
   // Load project-specific saved calibration profile
@@ -847,7 +852,7 @@ export default function PunditAIAnalysisPage() {
         isOpen={isCalibrationOpen}
         onClose={() => setIsCalibrationOpen(false)}
         projectId={selectedProjectId}
-        projectName="Active Project"
+        projectName={activeProject?.name || activeProject?.title || "Active Project"}
         batchId={selectedBatch?.id}
         batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
         elementCount={selectedBatch?.element_count || tests.length || 48}
