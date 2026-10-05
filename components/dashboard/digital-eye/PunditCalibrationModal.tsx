@@ -59,17 +59,8 @@ export default function PunditCalibrationModal({
     "Calibrated for project mix design using non-linear exponential acoustic response."
   );
 
-  const DEFAULT_CUBE_POINTS = [
-    { velocity_ms: 4421, cube_strength_mpa: 32.43 },
-    { velocity_ms: 4495, cube_strength_mpa: 32.23 },
-    { velocity_ms: 4405, cube_strength_mpa: 31.47 },
-    { velocity_ms: 4412, cube_strength_mpa: 31.53 },
-    { velocity_ms: 4405, cube_strength_mpa: 31.47 },
-    { velocity_ms: 4224, cube_strength_mpa: 30.04 },
-  ];
-
   // Calibration Cube Test data points (optional ground truth pairs)
-  const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>(DEFAULT_CUBE_POINTS);
+  const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>([]);
   const [newVel, setNewVel] = useState<string>("");
   const [newCube, setNewCube] = useState<string>("");
 
@@ -100,12 +91,12 @@ export default function PunditCalibrationModal({
           if (parsed.notes != null) {
             setCalibrationNotes(parsed.notes);
           }
-          if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points) && parsed.cube_correlation_points.length > 0) {
+          if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points)) {
             setCubePoints(parsed.cube_correlation_points);
-          } else if (parsed.cubePoints && Array.isArray(parsed.cubePoints) && parsed.cubePoints.length > 0) {
+          } else if (parsed.cubePoints && Array.isArray(parsed.cubePoints)) {
             setCubePoints(parsed.cubePoints);
           } else {
-            setCubePoints(DEFAULT_CUBE_POINTS);
+            setCubePoints([]);
           }
         } else {
           // Reset to default baseline for uncalibrated project
@@ -115,7 +106,7 @@ export default function PunditCalibrationModal({
           setParamB(0.85);
           setParamC(0.0);
           setCalibrationNotes("Calibrated for project mix design using non-linear exponential acoustic response.");
-          setCubePoints(DEFAULT_CUBE_POINTS);
+          setCubePoints([]);
         }
       } catch (e) {
         // ignore parse error
@@ -579,14 +570,16 @@ export default function PunditCalibrationModal({
                 + Add Calibration Pair
               </button>
 
-              <button
-                type="button"
-                onClick={handleAutoFitFromCubes}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1"
-                title="Fit optimal exponential equation from cube ground truth pairs"
-              >
-                ⚡ Auto-Fit Curve from Cube Data
-              </button>
+              {cubePoints.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={handleAutoFitFromCubes}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                  title="Fit optimal exponential equation from recorded cube ground truth pairs"
+                >
+                  ⚡ Auto-Fit Curve from Cube Data ({cubePoints.length} Pairs)
+                </button>
+              )}
 
               <button
                 type="button"
