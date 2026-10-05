@@ -326,7 +326,7 @@ export default function PunditAIAnalysisPage() {
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">AI Waveforms Inferred</span>
           <p className="text-2xl font-bold text-gray-900 font-mono mt-1">
-            {selectedBatch ? selectedBatch.element_count : tests.length}
+            {tests.length > 0 ? tests.length : (selectedBatch?.element_count || 0)}
           </p>
           <span className="text-[11px] text-gray-400 mt-0.5 block truncate">
             {selectedBatch ? `Folder: ${selectedBatch.folder_name}` : latestAnalysis ? `${latestAnalysis.model_provider || "Platform"}`.trim() : "No AI analysis run yet"}
@@ -570,7 +570,7 @@ export default function PunditAIAnalysisPage() {
                   </div>
                   <p className="text-[11px] text-slate-300">
                     {selectedBatch
-                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
+                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${tests.length > 0 ? tests.length : selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
                       : "AI Executive Summary integrates ultrasonic wave speeds with on-site visual defect observations and verified client/site attendance logs."}
                   </p>
                 </div>
@@ -855,7 +855,7 @@ export default function PunditAIAnalysisPage() {
         projectName={activeProject?.name || (activeProject as any)?.title || "Active Project"}
         batchId={selectedBatch?.id}
         batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
-        elementCount={selectedBatch?.element_count || tests.length || 48}
+        elementCount={tests.length > 0 ? tests.length : (selectedBatch?.element_count || 20)}
         onConfirmCalibrationAndAnalyze={handleConfirmCalibrationAndAnalyze}
         isSubmitting={isRunningAnalysis}
       />
