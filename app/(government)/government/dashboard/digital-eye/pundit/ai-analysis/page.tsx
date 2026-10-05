@@ -39,6 +39,7 @@ import PunditScanBatchSelector from "@/components/dashboard/digital-eye/PunditSc
 import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCalibrationModal";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
 import {
   DigitalEyeFinding,
   getDigitalEyeFindings,
@@ -80,17 +81,57 @@ export default function PunditAIAnalysisPage() {
   const [freshRun, setFreshRun] = useState<PunditProjectAnalysis | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("tomography");
 
+  // Auto-select initial project if none is selected
+  useEffect(() => {
+    if (!selectedProjectId) {
+      import("@/services/projects").then(({ getProjects }) => {
+        getProjects().then((res) => {
+          const pList = Array.isArray(res) ? res : ((res as any).results || []);
+          if (pList.length > 0) {
+            setSelectedProjectId(pList[0].id);
+          }
+        });
+      });
+    }
+  }, []);
+
+  // Load project-specific saved calibration profile
+  useEffect(() => {
+    if (selectedProjectId && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(`pundit_cal_${selectedProjectId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCalibratedProfile({
+            project_id: selectedProjectId,
+            batch_id: parsed.batch_id,
+            curve_type: parsed.curve_type || "exponential",
+            params: parsed.params || { a: 1.2, b: 0.85, c: 0 },
+            design_strength_mpa: parsed.design_strength_mpa || 25,
+            notes: parsed.notes || "",
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          setCalibratedProfile(null);
+        }
+      } catch (e) {
+        setCalibratedProfile(null);
+      }
+    }
+  }, [selectedProjectId]);
+
   const refresh = async () => {
+    if (!selectedProjectId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId || undefined });
+      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId });
       setElements(fetchedElements);
       const selected = fetchedElements.find((el) => el.id === selectedElementId) || null;
       const [fetchedFindings, fetchedTests, fetchedAnalyses] = await Promise.all([
-        getDigitalEyeFindings({ project: selectedProjectId || undefined, element_name: selected?.name }),
-        getPunditTests({ project: selectedProjectId || undefined, element_name: selected?.name }),
-        getPunditAIAnalyses({ project: selectedProjectId || undefined }),
+        getDigitalEyeFindings({ project: selectedProjectId, element_name: selected?.name }),
+        getPunditTests({ project: selectedProjectId, element_name: selected?.name }),
+        getPunditAIAnalyses({ project: selectedProjectId }),
       ]);
       setFindings(fetchedFindings);
       setTests(fetchedTests);
@@ -106,7 +147,9 @@ export default function PunditAIAnalysisPage() {
   };
 
   useEffect(() => {
-    refresh();
+    if (selectedProjectId) {
+      refresh();
+    }
   }, [selectedProjectId, selectedElementId]);
 
   // Real computed metrics
@@ -423,11 +466,19 @@ export default function PunditAIAnalysisPage() {
           </div>
         </div>
 
-        {/* TAB 1: INTERACTIVE 2D TOMOGRAPHY GRID */}
+        {/* TAB 1: INTERACTIVE 2D TOMOGRAPHY GRID & ELEMENT BAR CHART */}
         {activeTab === "tomography" && (
-          <div className="p-6">
+          <div className="p-6 space-y-6">
             <PunditTomographyHeatmap
               tests={tests}
+              onSelectTest={(t) => {
+                setSelectedTest(t);
+              }}
+            />
+
+            <PunditElementVelocityBarChart
+              tests={tests}
+              targetDesignStrengthMpa={calibratedProfile?.design_strength_mpa || 25}
               onSelectTest={(t) => {
                 setSelectedTest(t);
               }}

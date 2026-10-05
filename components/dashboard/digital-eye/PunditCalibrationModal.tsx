@@ -59,6 +59,27 @@ export default function PunditCalibrationModal({
     "Calibrated for project mix design using non-linear exponential acoustic response."
   );
 
+  // Load project-specific calibration parameters whenever projectId or modal open state changes
+  React.useEffect(() => {
+    if (projectId && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(`pundit_cal_${projectId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.design_strength_mpa) setDesignStrengthMpa(parsed.design_strength_mpa);
+          if (parsed.curve_type) setCurveType(parsed.curve_type);
+          if (parsed.params) {
+            if (parsed.params.a != null) setParamA(parsed.params.a);
+            if (parsed.params.b != null) setParamB(parsed.params.b);
+            if (parsed.params.c != null) setParamC(parsed.params.c);
+          }
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+  }, [projectId, isOpen]);
+
   // Calibration Cube Test data points (optional ground truth pairs)
   const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>([
     { velocity_ms: 3200, cube_strength_mpa: 18.5 },
@@ -146,6 +167,14 @@ export default function PunditCalibrationModal({
       notes: calibrationNotes.trim(),
       cube_correlation_points: cubePoints,
     };
+
+    if (projectId && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`pundit_cal_${projectId}`, JSON.stringify(payload));
+      } catch (e) {
+        // ignore
+      }
+    }
 
     await onConfirmCalibrationAndAnalyze(payload);
   };

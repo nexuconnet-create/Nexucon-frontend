@@ -27,6 +27,7 @@ import {
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditAiNav from "@/components/dashboard/digital-eye/PunditAiNav";
 import PunditAnalysisReviewPanel from "@/components/dashboard/digital-eye/PunditAnalysisReviewPanel";
+import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
 import {
   PunditAIAnalysis,
   getPunditAIAnalyses,
@@ -48,13 +49,28 @@ export default function PunditAIReasoningPage() {
   const [logSearchQuery, setLogSearchQuery] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Auto-select initial project if none is selected
+  useEffect(() => {
+    if (!selectedProjectId) {
+      import("@/services/projects").then(({ getProjects }) => {
+        getProjects().then((res) => {
+          const pList = Array.isArray(res) ? res : ((res as any).results || []);
+          if (pList.length > 0) {
+            setSelectedProjectId(pList[0].id);
+          }
+        });
+      });
+    }
+  }, []);
+
   const loadData = async () => {
+    if (!selectedProjectId) return;
     setIsLoading(true);
     setError(null);
     try {
       const [analysesData, testsData] = await Promise.all([
-        getPunditAIAnalyses({ project: selectedProjectId || undefined }),
-        getPunditTests({ project: selectedProjectId || undefined }),
+        getPunditAIAnalyses({ project: selectedProjectId }),
+        getPunditTests({ project: selectedProjectId }),
       ]);
       setAnalyses(Array.isArray(analysesData) ? analysesData : []);
       setTests(Array.isArray(testsData) ? testsData : []);
@@ -75,7 +91,9 @@ export default function PunditAIReasoningPage() {
   };
 
   useEffect(() => {
-    loadData();
+    if (selectedProjectId) {
+      loadData();
+    }
   }, [selectedProjectId]);
 
   const activeAnalysis = useMemo(() => {
@@ -266,12 +284,12 @@ export default function PunditAIReasoningPage() {
             </span>
             <p className="text-sm sm:text-base font-bold text-gray-900 truncate mt-0.5" title={activeAnalysis?.model_provider}>
               {(!activeAnalysis?.model_provider || activeAnalysis?.model_provider.toLowerCase() === "gemini")
-                ? "Multi-Model Ensemble (Gemini + Acoustics)"
+                ? "DeepSeek Active Engine"
                 : activeAnalysis.model_provider}
             </p>
             <span className="text-[11px] text-emerald-600 font-mono font-semibold truncate block" title={activeAnalysis?.model_version}>
               {(!activeAnalysis?.model_version || activeAnalysis?.model_version === "gemini-3.5-flash-lite")
-                ? "Consensus v2.4 (gemini-3.5-flash-lite + BS 1881-203)"
+                ? "DeepSeek R1 / V3 Consensus (deepseek-reasoner + BS 1881-203)"
                 : activeAnalysis.model_version}
             </span>
           </div>
@@ -604,6 +622,11 @@ export default function PunditAIReasoningPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ELEMENT VELOCITY & STRENGTH DISTRIBUTION BAR CHART */}
+      <div className="mt-6">
+        <PunditElementVelocityBarChart tests={tests} />
       </div>
     </div>
   );
