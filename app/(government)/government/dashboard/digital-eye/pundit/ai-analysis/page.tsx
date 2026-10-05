@@ -852,7 +852,7 @@ export default function PunditAIAnalysisPage() {
         isOpen={isCalibrationOpen}
         onClose={() => setIsCalibrationOpen(false)}
         projectId={selectedProjectId}
-        projectName={activeProject?.name || activeProject?.title || "Active Project"}
+        projectName={activeProject?.name || (activeProject as any)?.title || "Active Project"}
         batchId={selectedBatch?.id}
         batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
         elementCount={selectedBatch?.element_count || tests.length || 48}

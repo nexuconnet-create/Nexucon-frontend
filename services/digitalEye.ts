@@ -3464,6 +3464,7 @@ export interface BatchCalibrationResult {
   calibrated_by?: string;
   created_at: string;
   is_active: boolean;
+  notes?: string;
   message?: string;
 }
 

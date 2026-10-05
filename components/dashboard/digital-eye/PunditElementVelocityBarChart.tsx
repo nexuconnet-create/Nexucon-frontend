@@ -24,8 +24,8 @@ export default function PunditElementVelocityBarChart({
   const sortedTests = useMemo(() => {
     const valid = tests.filter((t) => t.pulse_velocity_ms > 0);
     return [...valid].sort((a, b) => {
-      const nameA = a.structural_element || a.test_location || a.test_reference || "";
-      const nameB = b.structural_element || b.test_location || b.test_reference || "";
+      const nameA = a.structural_element_name || (a as any).structural_element || a.test_location || a.test_reference || "";
+      const nameB = b.structural_element_name || (b as any).structural_element || b.test_location || b.test_reference || "";
       return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: "base" });
     });
   }, [tests]);
@@ -168,7 +168,7 @@ export default function PunditElementVelocityBarChart({
             {/* Bars Column List */}
             <div className="space-y-2 pt-2">
               {sortedTests.map((test, index) => {
-                const elemName = test.structural_element || test.test_location || `S${index + 1}`;
+                const elemName = test.structural_element_name || (test as any).structural_element || test.test_location || `S${index + 1}`;
                 const vel = test.pulse_velocity_ms;
                 const fcu = test.estimated_compressive_strength_mpa;
                 const isHovered = hoveredStationId === test.id;
