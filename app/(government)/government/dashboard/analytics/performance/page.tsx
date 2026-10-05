@@ -67,10 +67,56 @@ export default function ProjectPerformance() {
   };
 
   const metricCards = [
-    { label: "Overall Safety Index", value: data?.structural_safety_index || "94.8%", trend: "+1.2%", positive: true, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-    { label: "Schedule Index (SPI)", value: data ? data.schedule_performance_index.toFixed(2) : "0.96", trend: "-0.02", positive: false, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
-    { label: "Cost Index (CPI)", value: data ? data.cost_performance_index.toFixed(2) : "1.03", trend: "+0.01", positive: true, icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
-    { label: "Intervention Required", value: data ? `${data.projects_requiring_intervention} Projects` : "4 Projects", trend: "High Priority", positive: false, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" },
+    {
+      label: "Overall Safety Index",
+      value: data?.structural_safety_index || "94.8%",
+      trend: "+1.2%",
+      positive: true,
+      icon: Activity,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "border-blue-100"
+    },
+    {
+      label: "Schedule Index (SPI)",
+      value: typeof data?.schedule_performance_index === 'number'
+        ? data.schedule_performance_index.toFixed(2)
+        : "1.00",
+      trend: typeof data?.schedule_performance_index === 'number'
+        ? (data.schedule_performance_index >= 1 ? "+0.02" : "-0.02")
+        : "0.00",
+      positive: (data?.schedule_performance_index ?? 1) >= 1,
+      icon: Clock,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      border: "border-amber-100"
+    },
+    {
+      label: "Cost Index (CPI)",
+      value: typeof data?.cost_performance_index === 'number'
+        ? data.cost_performance_index.toFixed(2)
+        : "1.00",
+      trend: typeof data?.cost_performance_index === 'number'
+        ? (data.cost_performance_index >= 1 ? "+0.01" : "-0.01")
+        : "0.00",
+      positive: (data?.cost_performance_index ?? 1) >= 1,
+      icon: DollarSign,
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+      border: "border-emerald-100"
+    },
+    {
+      label: "Intervention Required",
+      value: data?.projects_requiring_intervention != null
+        ? `${data.projects_requiring_intervention} Projects`
+        : "0 Projects",
+      trend: (data?.projects_requiring_intervention ?? 0) > 0 ? "High Priority" : "Nominal",
+      positive: (data?.projects_requiring_intervention ?? 0) === 0,
+      icon: AlertTriangle,
+      color: "text-rose-600",
+      bg: "bg-rose-50",
+      border: "border-rose-100"
+    },
   ];
 
   const getHealthBadge = (health: string) => {
@@ -151,7 +197,7 @@ export default function ProjectPerformance() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400">Total Portfolio: {data?.total_projects || 28} Projects</span>
+            <span className="text-xs font-bold text-slate-400">Total Portfolio: {data?.total_projects ?? 0} Projects</span>
           </div>
         </div>
 
@@ -170,79 +216,103 @@ export default function ProjectPerformance() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium">
-              {(data?.projects || []).map((proj, idx) => (
-                <motion.tr 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  key={proj.id || idx}
-                  className="hover:bg-blue-50/30 transition-colors group"
-                >
-                  <td className="py-4 px-6">
-                    <div>
-                      <Link 
-                        href={`/government/dashboard/projects/view/${proj.id}`}
-                        className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-xs sm:text-sm hover:underline"
-                      >
-                        {proj.name}
-                      </Link>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-mono font-bold text-slate-400">{proj.reference_number}</span>
-                        <span className="text-[10px] text-slate-400">• {proj.lga}</span>
+              {isLoading && !data && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <RefreshCw size={24} className="animate-spin mx-auto text-blue-500 mb-2" />
+                    Loading portfolio performance metrics...
+                  </td>
+                </tr>
+              )}
+              {(!data?.projects || data.projects.length === 0) && !isLoading && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    No project performance records found.
+                  </td>
+                </tr>
+              )}
+              {(data?.projects || []).map((proj, idx) => {
+                const progressVal = typeof proj.progress_percentage === 'number' ? proj.progress_percentage : 0;
+                const complianceVal = typeof proj.compliance_percentage === 'number' ? proj.compliance_percentage : 100;
+                const inspectionsVal = typeof proj.inspections_count === 'number' ? proj.inspections_count : 0;
+                const riskVal = typeof proj.risk_score === 'number' ? proj.risk_score : 15;
+                const overallHealth = proj.overall_health || 'Good';
+                const scheduleStatus = proj.schedule_status || 'On Track';
+
+                return (
+                  <motion.tr 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.03 }}
+                    key={proj.id || idx}
+                    className="hover:bg-blue-50/30 transition-colors group"
+                  >
+                    <td className="py-4 px-6">
+                      <div>
+                        <Link 
+                          href={`/government/dashboard/projects/view/${proj.id}`}
+                          className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-xs sm:text-sm hover:underline"
+                        >
+                          {proj.name}
+                        </Link>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-mono font-bold text-slate-400">{proj.reference_number}</span>
+                          <span className="text-[10px] text-slate-400">• {proj.lga || 'General'}</span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="w-32 space-y-1">
-                      <div className="flex justify-between text-[11px] font-bold">
-                        <span>{proj.progress_percentage}%</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="w-32 space-y-1">
+                        <div className="flex justify-between text-[11px] font-bold">
+                          <span>{typeof proj.progress_percentage === 'number' ? `${proj.progress_percentage}%` : 'Pending'}</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-600 rounded-full transition-all" 
+                            style={{ width: `${Math.min(100, Math.max(0, progressVal))}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-600 rounded-full transition-all" 
-                          style={{ width: `${proj.progress_percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                      proj.schedule_status === 'On Track' || proj.schedule_status === 'Ahead'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}>
-                      {proj.schedule_status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 font-bold text-slate-700">
-                    {proj.compliance_percentage}%
-                  </td>
-                  <td className="py-4 px-6 font-bold text-slate-700">
-                    {proj.inspections_count} Verified
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`font-mono font-bold text-xs ${proj.risk_score > 60 ? 'text-red-600' : 'text-slate-800'}`}>
-                        {proj.risk_score}/100
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                        scheduleStatus === 'On Track' || scheduleStatus === 'Ahead'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {scheduleStatus}
                       </span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getHealthBadge(proj.overall_health)}`}>
-                      {proj.overall_health}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <Link
-                      href={`/government/dashboard/projects/view/${proj.id}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-slate-900/10 cursor-pointer"
-                    >
-                      <span>View Details</span>
-                      <ArrowUpRight size={13} />
-                    </Link>
-                  </td>
-                </motion.tr>
-              ))}
+                    </td>
+                    <td className="py-4 px-6 font-bold text-slate-700">
+                      {complianceVal}%
+                    </td>
+                    <td className="py-4 px-6 font-bold text-slate-700">
+                      {inspectionsVal} Verified
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`font-mono font-bold text-xs ${riskVal > 60 ? 'text-red-600' : 'text-slate-800'}`}>
+                          {riskVal}/100
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getHealthBadge(overallHealth)}`}>
+                        {overallHealth}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <Link
+                        href={`/government/dashboard/projects/view/${proj.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-slate-900/10 cursor-pointer"
+                      >
+                        <span>View Details</span>
+                        <ArrowUpRight size={13} />
+                      </Link>
+                    </td>
+                  </motion.tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

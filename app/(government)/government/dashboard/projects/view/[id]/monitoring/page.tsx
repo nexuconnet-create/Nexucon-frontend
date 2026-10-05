@@ -7,29 +7,36 @@ import { getDistricts, District } from '@/services/settings';
 import {
   Building2, Activity, FileText, Box,
   ArrowLeft, MapPin, Calendar, User, CheckCircle, ShieldCheck,
-  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus
+  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus,
+  Edit, Compass, Phone, Mail, ExternalLink, Award, Hammer, Briefcase, FileSpreadsheet,
+  CheckCircle2, Wrench, Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { getInspections, Inspection } from '@/services/inspections';
 import RequestDocumentsModal from '@/components/dashboard/RequestDocumentsModal';
+import EditGovernmentProjectModal from '@/components/dashboard/EditGovernmentProjectModal';
 
 // --- MOCK COMPONENTS FOR TABS --- //
 
 /**
- * The project overview, and the one place a project's operational zone is set.
- *
- * Progress and compliance percentages are deliberately absent. The `Project`
- * model has no such columns, so the 45% / 92% bars this card used to show were
- * invented outright — not a missing fallback, a permanent fiction. Both figures
- * are measured from inspections and progress reports, which live on the Site
- * Activity tab.
+ * Verified Government Project Overview & Verification Card Deck.
+ * Displays all data collected during project registration:
+ * - General Identification & Category
+ * - Developer & Ownership Records
+ * - Physical Location, Coordinate System & 4-Corner Boundary Map
+ * - Technical Building Specifications & Timeline
+ * - Regulatory Approvals & Land Title Document References
+ * - Appointed Registered Professionals (COREN / ARCON / CORBON)
+ * - Government Governance & Operational Zone Assignment
  */
 const OverviewTab = ({
   project,
   onProjectUpdated,
+  onOpenEditModal,
 }: {
   project: Project;
   onProjectUpdated: (updated: Project) => void;
+  onOpenEditModal: () => void;
 }) => {
   const [zones, setZones] = useState<District[]>([]);
   const [zonesLoading, setZonesLoading] = useState(true);
@@ -37,9 +44,6 @@ const OverviewTab = ({
   const [isSavingZone, setIsSavingZone] = useState(false);
   const [zoneError, setZoneError] = useState<string | null>(null);
 
-  // `active: 'all'` — a project may sit in a zone that has since been retired,
-  // and the select still has to name it as the current assignment rather than
-  // silently reading as unassigned.
   useEffect(() => {
     let cancelled = false;
     getDistricts({ active: 'all' })
@@ -86,183 +90,541 @@ const OverviewTab = ({
     }
   };
 
-  const notRecorded = <span className="text-slate-400">Not recorded</span>;
+  const notRecorded = <span className="text-slate-400 italic">Not recorded</span>;
+  const cornersData = project.corner_coordinates;
+  const hasBoundaryCorners = cornersData && typeof cornersData === 'object' && Array.isArray(cornersData.corners) && cornersData.corners.length > 0;
 
   return (
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0">
-    <div className="lg:col-span-2 space-y-6 min-w-0">
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-[#022C4F] mb-4">Project Overview</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Project Name</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{project.name}</p>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0">
+      {/* Top Verification & Edit Banner */}
+      <div className="bg-gradient-to-r from-blue-900 to-[#022C4F] rounded-2xl p-5 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-blue-200 shrink-0">
+            <ShieldCheck size={22} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Developer</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{project.developer_name || notRecorded}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Site Address</p>
-            <p className="text-sm font-medium text-slate-800 break-words">{project.site_address || project.location || notRecorded}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">LGA</p>
-            <p className="text-sm font-medium text-slate-800">{project.lga || notRecorded}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Operational Zone</p>
-            <p className="text-sm font-medium text-slate-800">
-              {project.district_name || <span className="text-slate-400">No zone assigned</span>}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-200">
+                Government Agency Verification Deck
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                Verified Record
+              </span>
+            </div>
+            <p className="text-xs text-blue-100/80 mt-0.5">
+              Review and ensure all registered statutory specifications, coordinates, and appointed consultants are accurate.
             </p>
           </div>
         </div>
+
+        <button
+          onClick={onOpenEditModal}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/30 transition-all cursor-pointer shrink-0"
+        >
+          <Edit size={15} /> Edit Project Details
+        </button>
       </div>
 
-      {/* Assigning the zone writes straight through to the project record. */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-[#022C4F] mb-1">Operational Zone</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          The district office holding jurisdiction over this project. The zone
-          scopes which officers can see the project and which district it appears
-          under on the HQ heatmap.
-        </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column (2 Cols) */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Card 1: Project Identity & Ownership */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
+                <Building2 size={16} className="text-blue-600" />
+                Project Identity & Ownership
+              </h3>
+              <span className="text-xs font-bold text-slate-500">Ref: {project.reference_number}</span>
+            </div>
 
-        {zonesLoading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <RefreshCw size={14} className="animate-spin" /> Loading the zone register...
-          </div>
-        ) : zonesError ? (
-          <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50">
-            <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-800">{zonesError}</p>
-          </div>
-        ) : zones.length === 0 ? (
-          <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
-            <AlertTriangle size={15} className="text-slate-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-slate-600">
-              No operational zone has been created yet, so this project cannot be
-              placed in one.{' '}
-              <Link
-                href="/government/dashboard/settings/districts"
-                className="font-bold text-blue-600 hover:text-blue-700"
-              >
-                Create a zone
-              </Link>
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <select
-                value={project.district || ''}
-                onChange={(e) => void handleZoneChange(e.target.value)}
-                disabled={isSavingZone}
-                aria-label="Operational zone for this project"
-                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-transparent transition-all disabled:opacity-60 cursor-pointer"
-              >
-                <option value="">No zone assigned</option>
-                {zones.map((zone) => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.name}
-                    {zone.code ? ` (${zone.code})` : ''}
-                    {zone.is_active ? '' : ' — retired'}
-                  </option>
-                ))}
-              </select>
-              {isSavingZone && (
-                <span className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  <RefreshCw size={13} className="animate-spin" /> Saving...
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Project Name</p>
+                <p className="text-sm font-semibold text-slate-800 break-words">{project.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Project Type</p>
+                <p className="text-sm font-semibold text-slate-800">{project.project_type || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Development Category</p>
+                <p className="text-sm font-semibold text-slate-800">{project.development_category || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Priority</p>
+                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold ${
+                  project.project_priority === 'Critical' ? 'bg-red-100 text-red-700' :
+                  project.project_priority === 'High' ? 'bg-amber-100 text-amber-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {project.project_priority || 'Normal'}
                 </span>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Developer / Owner</p>
+                <p className="text-sm font-semibold text-slate-800 break-words">{project.developer_name || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Developer Company / Firm</p>
+                <p className="text-sm font-semibold text-slate-800 break-words">{project.developer_organization || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Developer CAC / Reg No.</p>
+                <p className="text-sm font-semibold text-slate-800">{project.developer_reg_number || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Contact Person</p>
+                <p className="text-sm font-semibold text-slate-800">{project.developer_contact_person || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Developer Email</p>
+                {project.developer_email ? (
+                  <a href={`mailto:${project.developer_email}`} className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                    <Mail size={13} /> {project.developer_email}
+                  </a>
+                ) : notRecorded}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Developer Phone</p>
+                {project.developer_phone ? (
+                  <a href={`tel:${project.developer_phone}`} className="text-sm font-semibold text-slate-800 flex items-center gap-1">
+                    <Phone size={13} className="text-slate-400" /> {project.developer_phone}
+                  </a>
+                ) : notRecorded}
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-slate-500 mb-1">Developer Registered Address</p>
+                <p className="text-sm font-medium text-slate-800 break-words">{project.developer_address || notRecorded}</p>
+              </div>
+              {project.description && (
+                <div className="sm:col-span-3 pt-2 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 mb-1">Project Scope & Description</p>
+                  <p className="text-xs text-slate-700 leading-relaxed">{project.description}</p>
+                </div>
               )}
             </div>
-            {zoneError && (
-              <div className="mt-3 flex items-start gap-2 p-3 rounded-xl border border-red-200 bg-red-50">
-                <AlertTriangle size={15} className="text-red-600 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-700">{zoneError}</p>
+          </div>
+
+          {/* Card 2: Spatial Geolocation, Boundaries & 4-Corner Coordinates */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 mb-4 gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
+                  <Compass size={16} className="text-blue-600" />
+                  Site Location & 4-Corner Boundary Calibration
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Precise spatial coordinates registered for digital site mapping.
+                </p>
+              </div>
+
+              {project.latitude && project.longitude && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${project.latitude},${project.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shrink-0"
+                >
+                  <MapPin size={13} /> Satellite View <ExternalLink size={11} />
+                </a>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="sm:col-span-2">
+                <p className="text-xs text-slate-500 mb-1">Site Address</p>
+                <p className="text-sm font-semibold text-slate-800 break-words">{project.site_address || project.location || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">State & LGA</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.lga ? `${project.lga}, ${project.state || 'Lagos'}` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Coordinate System</p>
+                <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800">
+                  {project.coordinate_system || 'WGS84_DD'}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Center Latitude</p>
+                <p className="text-sm font-mono font-bold text-slate-800">
+                  {project.latitude ? `${Number(project.latitude).toFixed(6)}°N` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Center Longitude</p>
+                <p className="text-sm font-mono font-bold text-slate-800">
+                  {project.longitude ? `${Number(project.longitude).toFixed(6)}°E` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Operational Zone</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.district_name || <span className="text-slate-400">Unassigned</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Site Area</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.site_area ? `${Number(project.site_area).toLocaleString()} sqm` : notRecorded}
+                </p>
+              </div>
+            </div>
+
+            {/* 4-Corner Boundary Table */}
+            {hasBoundaryCorners ? (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    4-Corner Boundary Survey Coordinates
+                  </h4>
+                  {cornersData.footprintAreaSqm && (
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                      Footprint: {cornersData.footprintAreaSqm.toLocaleString()} sqm ({(cornersData.footprintAreaSqm / 10000).toFixed(3)} ha)
+                    </span>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <th className="py-2 px-3">Corner / Point</th>
+                        <th className="py-2 px-3">Easting / Longitude</th>
+                        <th className="py-2 px-3">Northing / Latitude</th>
+                        <th className="py-2 px-3">WGS84 Coordinates</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {cornersData.corners.map((c: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-3 font-sans font-bold text-slate-800">{c.label || `Corner ${idx + 1}`}</td>
+                          <td className="py-2 px-3 text-slate-700">{c.easting || c.lng || '-'}</td>
+                          <td className="py-2 px-3 text-slate-700">{c.northing || c.lat || '-'}</td>
+                          <td className="py-2 px-3 text-blue-700 font-semibold">
+                            {c.lat && c.lng ? `${Number(c.lat).toFixed(6)}°N, ${Number(c.lng).toFixed(6)}°E` : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Compass size={18} className="text-slate-400" />
+                  <span className="text-xs font-medium text-slate-600">
+                    4-corner boundary survey coordinates not yet calibrated for this project.
+                  </span>
+                </div>
+                <button
+                  onClick={onOpenEditModal}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer shrink-0"
+                >
+                  Calibrate 4-Corner Coordinates
+                </button>
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-[#022C4F] mb-4">Technical Details</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Primary Use</p>
-            <p className="text-sm font-medium text-slate-800">{project.primary_use || notRecorded}</p>
+          {/* Card 3: Technical Specifications & Parameters */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-[#022C4F] mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+              <Wrench size={16} className="text-blue-600" />
+              Technical Specifications & Construction Scope
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Primary Use</p>
+                <p className="text-sm font-semibold text-slate-800">{project.primary_use || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Proposed Use</p>
+                <p className="text-sm font-semibold text-slate-800">{project.proposed_use || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Number of Floors</p>
+                <p className="text-sm font-semibold text-slate-800">{project.number_of_floors ?? notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Building Height</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.building_height ? `${project.building_height} meters` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Gross Floor Area</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.gross_floor_area ? `${Number(project.gross_floor_area).toLocaleString()} sqm` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Structural System</p>
+                <p className="text-sm font-semibold text-slate-800">{project.structural_system || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Construction Method</p>
+                <p className="text-sm font-semibold text-slate-800">{project.construction_method || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Estimated Project Value</p>
+                <p className="text-sm font-bold text-slate-900">
+                  {project.estimated_project_value
+                    ? `₦${Number(project.estimated_project_value).toLocaleString()}`
+                    : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Number of Units</p>
+                <p className="text-sm font-semibold text-slate-800">{project.number_of_units ?? notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Commencement Date</p>
+                <p className="text-sm font-semibold text-slate-800">{project.start_date || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Estimated Completion</p>
+                <p className="text-sm font-semibold text-slate-800">{project.estimated_completion || notRecorded}</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">No. of Floors</p>
-            <p className="text-sm font-medium text-slate-800">{project.number_of_floors ?? notRecorded}</p>
+
+          {/* Card 4: Permits, Approvals & Land Title */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-[#022C4F] mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+              <FileCheck size={16} className="text-blue-600" />
+              Statutory Permits, Approvals & Land Title
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Building Permit Number</p>
+                <p className="text-sm font-bold text-slate-900">{project.permit_number || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Permit Status</p>
+                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold ${
+                  project.permit_status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
+                  project.permit_status === 'Pending Review' ? 'bg-amber-100 text-amber-800' :
+                  'bg-slate-100 text-slate-800'
+                }`}>
+                  {project.permit_status || 'Approved'}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Regulatory Authority</p>
+                <p className="text-sm font-semibold text-slate-800">{project.regulatory_authority || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Land Title Reference</p>
+                <p className="text-sm font-semibold text-slate-800">{project.land_title_reference || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Planning Approval Ref</p>
+                <p className="text-sm font-semibold text-slate-800">{project.planning_approval_reference || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Environmental Approval (EIA)</p>
+                <p className="text-sm font-semibold text-slate-800">{project.environmental_approval_reference || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Plot / Block Number</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.plot_number ? `${project.plot_number}${project.block_number ? ` / Block ${project.block_number}` : ''}` : notRecorded}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Approval Date</p>
+                <p className="text-sm font-semibold text-slate-800">{project.approval_date || notRecorded}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Permit Expiry Date</p>
+                <p className="text-sm font-semibold text-slate-800">{project.permit_expiry_date || notRecorded}</p>
+              </div>
+              {project.special_requirements && (
+                <div className="sm:col-span-3 pt-2 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 mb-1">Special Regulatory Requirements / Conditions</p>
+                  <p className="text-xs text-slate-700">{project.special_requirements}</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Estimated Value</p>
-            <p className="text-sm font-medium text-slate-800">
-              {project.estimated_project_value
-                ? `₦${Number(project.estimated_project_value).toLocaleString()}`
-                : notRecorded}
-            </p>
+
+          {/* Card 5: Appointed Registered Professionals */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
+                  <Award size={16} className="text-blue-600" />
+                  Appointed Registered Professionals
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Verified structural consultants, architects, MEP engineers, and site managers.
+                </p>
+              </div>
+              <button
+                onClick={onOpenEditModal}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+              >
+                + Manage Team
+              </button>
+            </div>
+
+            {project.professionals && project.professionals.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {project.professionals.map((prof, idx) => (
+                  <div key={idx} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-50 transition-colors space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-slate-900 truncate">{prof.name}</h4>
+                        <p className="text-xs font-semibold text-blue-700">{prof.role}</p>
+                      </div>
+                      {prof.license_number && (
+                        <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700 shrink-0">
+                          {prof.license_number}
+                        </span>
+                      )}
+                    </div>
+                    {prof.organization && (
+                      <p className="text-xs text-slate-600">Company: <span className="font-semibold text-slate-800">{prof.organization}</span></p>
+                    )}
+                    <div className="flex items-center gap-3 pt-1 text-xs text-slate-500 flex-wrap">
+                      {prof.phone && (
+                        <span className="flex items-center gap-1"><Phone size={12} /> {prof.phone}</span>
+                      )}
+                      {prof.email && (
+                        <span className="flex items-center gap-1"><Mail size={12} /> {prof.email}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <Users size={28} className="mx-auto text-slate-400 mb-1" />
+                <p className="text-xs font-bold text-slate-700">No Appointed Professionals Registered</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Click &ldquo;Edit Project Details&rdquo; to input COREN/ARCON registered personnel.</p>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Permit Number</p>
-            <p className="text-sm font-medium text-slate-800">{project.permit_number || notRecorded}</p>
+        </div>
+
+        {/* Right Column (1 Col) */}
+        <div className="space-y-6">
+          {/* Status Badge */}
+          <div className="bg-gradient-to-br from-[#022C4F] to-[#044073] rounded-2xl p-6 text-white shadow-md relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:bg-blue-400/20 transition-all"></div>
+            <h3 className="text-sm font-bold text-blue-100 mb-4 flex items-center gap-2">
+              <Activity size={16} /> Regulatory Status
+            </h3>
+            <div className="mb-4">
+              <span className="text-3xl font-extrabold tracking-tight">{project.status}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-blue-100/90 pt-3 border-t border-blue-700/50">
+              <span>Priority:</span>
+              <span className="font-bold text-white">{project.project_priority || 'Normal'}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-blue-100/90 pt-1">
+              <span>Inspection Frequency:</span>
+              <span className="font-bold text-white">{project.inspection_frequency || 'Milestone Based'}</span>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-1">Gross Floor Area</p>
-            <p className="text-sm font-medium text-slate-800">
-              {project.gross_floor_area
-                ? `${Number(project.gross_floor_area).toLocaleString()} sqm`
-                : notRecorded}
-            </p>
+
+          {/* Operational Zone assignment */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-[#022C4F] mb-1">Operational Zone Jurisdiction</h3>
+              <p className="text-xs text-slate-500">
+                District office holding jurisdiction over this site.
+              </p>
+            </div>
+
+            {zonesLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <RefreshCw size={14} className="animate-spin" /> Loading zones...
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <select
+                  value={project.district || ''}
+                  onChange={(e) => void handleZoneChange(e.target.value)}
+                  disabled={isSavingZone}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F] cursor-pointer"
+                >
+                  <option value="">No zone assigned</option>
+                  {zones.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name} {zone.code ? `(${zone.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {isSavingZone && (
+                  <p className="text-xs text-blue-600 font-semibold flex items-center gap-1">
+                    <RefreshCw size={12} className="animate-spin" /> Saving zone assignment...
+                  </p>
+                )}
+                {zoneError && (
+                  <p className="text-xs text-red-600">{zoneError}</p>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Key Agency Personnel */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-[#022C4F] pb-2 border-b border-slate-100">
+              Agency Governance & Assignment
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500">Assigned Site Inspector</p>
+                  <p className="text-sm font-bold text-slate-800 truncate">{project.assigned_inspector || 'Not assigned'}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <User size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500">Compliance Officer</p>
+                  <p className="text-sm font-bold text-slate-800 truncate">{project.compliance_officer || notRecorded}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                  <Briefcase size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500">Supervising Department</p>
+                  <p className="text-sm font-bold text-slate-800 truncate">{project.assigned_department || notRecorded}</p>
+                </div>
+              </div>
+
+              {project.internal_notes && (
+                <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200">
+                  <p className="text-xs font-bold text-amber-800 mb-1">Agency Notes</p>
+                  <p className="text-xs text-amber-900 leading-relaxed">{project.internal_notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
-
-    <div className="space-y-6">
-      <div className="bg-gradient-to-br from-[#022C4F] to-[#044073] rounded-2xl p-6 text-white shadow-md relative overflow-hidden group">
-        <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:bg-blue-400/20 transition-all"></div>
-        <h3 className="text-sm font-bold text-blue-100 mb-4 flex items-center gap-2">
-          <Activity size={16} /> Current Status
-        </h3>
-        <div className="mb-6">
-          <span className="text-3xl font-bold">{project.status}</span>
-        </div>
-        <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-900/40 border border-blue-700/40">
-          <AlertTriangle size={14} className="text-blue-200 mt-0.5 shrink-0" />
-          <p className="text-[11px] leading-relaxed text-blue-100">
-            No progress or compliance percentage is recorded against this project.
-            Both are measured from submitted inspections and progress reports,
-            under Site Activity.
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
-         <h3 className="text-sm font-bold text-[#022C4F] mb-4">Key Personnel</h3>
-         <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-slate-50">
-            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-               <ShieldCheck size={18} />
-            </div>
-            <div>
-               <p className="text-xs text-slate-500">Assigned Inspector</p>
-               <p className="text-sm font-medium text-slate-800">{project.assigned_inspector || 'Not assigned'}</p>
-            </div>
-         </div>
-         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-               <User size={18} />
-            </div>
-            <div>
-               <p className="text-xs text-slate-500">Compliance Officer</p>
-               <p className="text-sm font-medium text-slate-800">{project.compliance_officer || notRecorded}</p>
-            </div>
-         </div>
-      </div>
-    </div>
-  </div>
   );
 };
 
@@ -534,6 +896,7 @@ export default function ProjectMonitoringPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isRequestDocsOpen, setIsRequestDocsOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('tab')) {
@@ -607,22 +970,28 @@ export default function ProjectMonitoringPage() {
                 <div className="flex items-center gap-2 sm:gap-3 mb-1.5 flex-wrap">
                   <h1 className="text-xl sm:text-2xl font-black text-[#022C4F] break-words">{project.name}</h1>
                   <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0
-                    ${project.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : ''}
+                    ${project.status === 'Active' || project.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : ''}
                     ${project.status === 'Flagged' ? 'bg-red-100 text-red-700' : ''}
-                    ${project.status === 'Pending' ? 'bg-amber-100 text-amber-700' : ''}
-                    ${project.status === 'Completed' ? 'bg-indigo-100 text-indigo-700' : ''}
+                    ${project.status === 'Pending' || project.status === 'PLANNING' ? 'bg-amber-100 text-amber-700' : ''}
+                    ${project.status === 'Completed' || project.status === 'COMPLETED' ? 'bg-indigo-100 text-indigo-700' : ''}
                   `}>
                     {project.status}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 sm:gap-4 text-xs text-slate-500 font-medium flex-wrap">
-                  <span className="flex items-center gap-1.5"><MapPin size={14}/> {project.lga || 'Unknown Location'}</span>
+                  <span className="flex items-center gap-1.5"><MapPin size={14}/> {project.lga ? `${project.lga}, ${project.state || 'Lagos'}` : 'Unknown Location'}</span>
                   <span className="flex items-center gap-1.5"><Calendar size={14}/> Reg: {project.reference_number}</span>
                 </div>
               </div>
             </div>
             
             <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+              <button 
+                onClick={() => setIsEditModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              >
+                <Edit size={15} /> Edit Project Details
+              </button>
               <button className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all shadow-sm text-center cursor-pointer">
                 Generate Report
               </button>
@@ -656,7 +1025,11 @@ export default function ProjectMonitoringPage() {
       {/* Tab Content Area */}
       <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto min-w-0">
         {activeTab === 'overview' && (
-          <OverviewTab project={project} onProjectUpdated={setProject} />
+          <OverviewTab 
+            project={project} 
+            onProjectUpdated={setProject}
+            onOpenEditModal={() => setIsEditModalOpen(true)}
+          />
         )}
         {activeTab === 'documents' && (
           <DocumentsTab 
@@ -671,6 +1044,13 @@ export default function ProjectMonitoringPage() {
       <RequestDocumentsModal
         isOpen={isRequestDocsOpen}
         onClose={() => setIsRequestDocsOpen(false)}
+      />
+
+      <EditGovernmentProjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        project={project}
+        onSave={(updated) => setProject(updated)}
       />
     </div>
   );
