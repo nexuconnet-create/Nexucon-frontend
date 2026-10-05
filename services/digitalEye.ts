@@ -3455,15 +3455,16 @@ export interface BatchCalibrationPayload {
 }
 
 export interface BatchCalibrationResult {
-  id: string;
+  id?: string;
   project_id: string;
   batch_id?: string;
   curve_type: CurveType;
   params: Record<string, any>;
   design_strength_mpa: number;
   calibrated_by?: string;
-  created_at: string;
-  is_active: boolean;
+  created_at?: string;
+  timestamp?: string;
+  is_active?: boolean;
   notes?: string;
   message?: string;
 }
