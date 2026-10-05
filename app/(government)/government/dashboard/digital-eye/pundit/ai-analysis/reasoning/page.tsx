@@ -20,6 +20,8 @@ import {
   Activity,
   FileCode2,
   ChevronRight,
+  ChevronDown,
+  ArrowDown,
   ExternalLink,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
@@ -515,50 +517,86 @@ export default function PunditAIReasoningPage() {
           {/* AI OBSERVATIONS & RECOMMENDATIONS CARDS */}
           {activeAnalysis && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Activity size={14} className="text-amber-500" />
-                  Deterministic Observations
-                </h4>
+              {/* Deterministic Observations */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity size={14} className="text-amber-500" />
+                    <span>Deterministic Observations ({parsedObservations.length})</span>
+                  </h4>
+                  {parsedObservations.length > 1 && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80 flex items-center gap-1">
+                      <ChevronDown size={11} className="animate-bounce text-amber-600" />
+                      Scrollable ({parsedObservations.length})
+                    </span>
+                  )}
+                </div>
+
                 {parsedObservations.length > 0 ? (
-                  <ul className="space-y-2">
-                    {parsedObservations.map((obs, i) => (
-                      <li
-                        key={i}
-                        className="text-xs text-gray-700 bg-slate-50 border border-gray-100 rounded-xl p-3 leading-relaxed"
-                      >
-                        {obs}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-2">
+                    <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1.5 [::-webkit-scrollbar]:w-1.5 [::-webkit-scrollbar-thumb]:bg-slate-300 [::-webkit-scrollbar-thumb]:rounded-full hover:[::-webkit-scrollbar-thumb]:bg-slate-400">
+                      {parsedObservations.map((obs, i) => (
+                        <li
+                          key={i}
+                          className="text-xs text-gray-800 bg-slate-50/90 border border-gray-200/80 rounded-xl p-3 leading-relaxed font-medium shadow-2xs hover:border-amber-200 transition-colors"
+                        >
+                          {obs}
+                        </li>
+                      ))}
+                    </ul>
+                    {parsedObservations.length > 2 && (
+                      <div className="text-[10px] text-slate-400 font-mono text-center pt-2 flex items-center justify-center gap-1 border-t border-slate-100 mt-2">
+                        <ArrowDown size={10} className="animate-pulse text-amber-500" />
+                        <span>Scroll container to view all {parsedObservations.length} observations</span>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-400 italic">
                     No structured observations recorded for this run.
                   </p>
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-emerald-600" />
-                  Engineered Recommendations
-                </h4>
+              {/* Engineered Recommendations */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-emerald-600" />
+                    <span>Engineered Recommendations ({parsedRecommendations.length})</span>
+                  </h4>
+                  {parsedRecommendations.length > 1 && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
+                      <ChevronDown size={11} className="animate-bounce text-emerald-600" />
+                      Scrollable ({parsedRecommendations.length})
+                    </span>
+                  )}
+                </div>
+
                 {parsedRecommendations.length > 0 ? (
-                  <ul className="space-y-2">
-                    {parsedRecommendations.map((rec, i) => (
-                      <li
-                        key={i}
-                        className="text-xs text-gray-700 bg-emerald-50/50 border border-emerald-100/80 rounded-xl p-3 leading-relaxed"
-                      >
-                        <span className="font-bold text-emerald-800 mr-1.5">
-                          [{rec.priority}]
-                        </span>
-                        {rec.recommendation}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-2">
+                    <ul className="space-y-2.5 max-h-72 overflow-y-auto pr-1.5 [::-webkit-scrollbar]:w-1.5 [::-webkit-scrollbar-thumb]:bg-emerald-200 [::-webkit-scrollbar-thumb]:rounded-full hover:[::-webkit-scrollbar-thumb]:bg-emerald-300">
+                      {parsedRecommendations.map((rec, i) => (
+                        <li
+                          key={i}
+                          className="text-xs text-gray-800 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 leading-relaxed shadow-2xs"
+                        >
+                          <span className="font-bold text-emerald-800 mr-1.5">
+                            [{rec.priority}]
+                          </span>
+                          {rec.recommendation}
+                        </li>
+                      ))}
+                    </ul>
+                    {parsedRecommendations.length > 2 && (
+                      <div className="text-[10px] text-slate-400 font-mono text-center pt-2 flex items-center justify-center gap-1 border-t border-slate-100 mt-2">
+                        <ArrowDown size={10} className="animate-pulse text-emerald-500" />
+                        <span>Scroll container to view all {parsedRecommendations.length} recommendations</span>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-400 italic">
                     No specific recommendations logged.
                   </p>
                 )}

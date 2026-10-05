@@ -53,7 +53,11 @@ export default function PunditReportsPage() {
           const op = (t.operator_name || '').trim();
           if (op) set.add(op);
         });
-        setOperators(Array.from(set).sort());
+        const ops = Array.from(set).sort();
+        setOperators(ops);
+        if (ops.length > 0 && (!selectedOperator || !ops.includes(selectedOperator))) {
+          setSelectedOperator(ops[0]);
+        }
       })
       .catch(() => setOperators([]));
   }, [selectedProjectId]);
@@ -137,7 +141,6 @@ export default function PunditReportsPage() {
                 aria-label="Filter report preview by inspector"
                 className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm cursor-pointer"
               >
-                <option value="">All Inspectors (Complete Dossier)</option>
                 {operators.map((op) => (
                   <option key={op} value={op}>
                     Inspector: {op}

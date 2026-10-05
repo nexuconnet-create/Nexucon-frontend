@@ -1888,6 +1888,23 @@ export interface PunditAnalysisReview {
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  inspector_verdict?: string | null;
+  inspector_verdict_display?: string | null;
+  inspector_notes?: string | null;
+  inspector_responded_by?: string | null;
+  inspector_responded_at?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  project_reference?: string | null;
+  project_location?: string | null;
+  analysis_id?: string | null;
+  analysis_reference?: string | null;
+  analysis_title?: string | null;
+  ai_summary?: string | null;
+  ai_observations?: string[] | null;
+  ai_reasoning_log?: string | null;
+  ai_confidence_score?: number | null;
+  ai_analysis?: any;
 }
 
 function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
@@ -1898,6 +1915,22 @@ function mapPunditAnalysisReview(row: any): PunditAnalysisReview {
     notes: row.notes ?? null,
     reviewed_by: row.reviewed_by ?? null,
     reviewed_at: row.reviewed_at ?? null,
+    inspector_verdict: row.inspector_verdict ?? null,
+    inspector_verdict_display: row.inspector_verdict_display ?? null,
+    inspector_notes: row.inspector_notes ?? null,
+    inspector_responded_by: row.inspector_responded_by ?? null,
+    inspector_responded_at: row.inspector_responded_at ?? null,
+    project_id: row.project_id ?? null,
+    project_name: row.project_name ?? null,
+    project_reference: row.project_reference ?? null,
+    project_location: row.project_location ?? null,
+    analysis_id: row.analysis_id ?? null,
+    analysis_reference: row.analysis_reference ?? null,
+    analysis_title: row.analysis_title ?? null,
+    ai_summary: row.ai_summary ?? null,
+    ai_observations: Array.isArray(row.ai_observations) ? row.ai_observations : null,
+    ai_reasoning_log: row.ai_reasoning_log ?? null,
+    ai_confidence_score: row.ai_confidence_score ?? null,
   };
 }
 
@@ -1910,13 +1943,36 @@ export const getPunditAnalysisReview = async (
 
 export const reviewPunditAnalysis = async (
   analysisId: string,
-  input: { decision: 'corroborated' | 'returned'; notes?: string; regenerate?: boolean }
+  input: {
+    decision?: 'corroborated' | 'returned';
+    notes?: string;
+    inspector_notes?: string;
+    regenerate?: boolean;
+  }
 ): Promise<PunditAnalysisReview> => {
   const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, {
     decision: input.decision,
     notes: input.notes ?? '',
+    inspector_notes: input.inspector_notes,
     regenerate: input.regenerate ?? true,
   });
+  return mapPunditAnalysisReview(unwrap<any>(res, {}));
+};
+
+/** Inspector submits field review verdict and observations */
+export const submitInspectorPunditCollaboration = async (
+  analysisId: string,
+  input: string | { inspectorNotes?: string; inspectorVerdict?: string; regenerate?: boolean },
+  legacyRegen = false
+): Promise<PunditAnalysisReview> => {
+  const payload = typeof input === 'string'
+    ? { inspector_notes: input, regenerate: legacyRegen }
+    : {
+        inspector_notes: input.inspectorNotes ?? '',
+        inspector_verdict: input.inspectorVerdict,
+        regenerate: input.regenerate ?? true,
+      };
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/`, payload);
   return mapPunditAnalysisReview(unwrap<any>(res, {}));
 };
 
@@ -3655,5 +3711,35 @@ export const calibratePunditBatchModel = async (
     is_active: true,
     message: `Model calibrated using ${payload.curve_type.toUpperCase()} equation (a=${payload.params.a}, b=${payload.params.b}, c=${payload.params.c}). Target design f_cu = ${payload.design_strength_mpa} MPa.`,
   };
+};
+
+export interface PunditAnalysisComment {
+  id: string;
+  analysis_id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  comment: string;
+  created_at: string;
+}
+
+export const getPunditAnalysisComments = async (
+  analysisId: string
+): Promise<PunditAnalysisComment[]> => {
+  try {
+    const res = await api.get(`/digital-eye/pundit-analysis-review/${analysisId}/comments/`);
+    const data = unwrap<PunditAnalysisComment[]>(res, []);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+};
+
+export const addPunditAnalysisComment = async (
+  analysisId: string,
+  comment: string
+): Promise<PunditAnalysisComment> => {
+  const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/comments/`, { comment });
+  return unwrap<PunditAnalysisComment>(res, res as any);
 };
 

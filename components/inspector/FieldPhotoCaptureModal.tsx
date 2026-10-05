@@ -336,6 +336,7 @@ export default function FieldPhotoCaptureModal({
         {
           project: selectedProjectId,
           file: fileToUpload,
+          source_type: "photo",
           structuralElementId: structuralElement.trim(),
           description: fullDescription,
           category,

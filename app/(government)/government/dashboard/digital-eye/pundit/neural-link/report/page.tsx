@@ -10,7 +10,8 @@ import ReportBrandingPanel from "@/components/dashboard/digital-eye/ReportBrandi
 import ReportSignOffPanel from "@/components/dashboard/digital-eye/ReportSignOffPanel";
 import NdtReportPreviewView from "@/components/dashboard/digital-eye/NdtReportPreviewView";
 import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
-import { FileText, Eye, ShieldCheck, Download, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FileText, Eye, ShieldCheck, Download, CheckCircle2, AlertTriangle, Users } from "lucide-react";
+import { getPunditTests } from "@/services/digitalEye";
 
 // Dynamic map import for client-only rendering
 const ReportLocationMap = dynamic(
@@ -28,9 +29,33 @@ const ReportLocationMap = dynamic(
 export default function NeuralLinkReportPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
+  const [selectedOperator, setSelectedOperator] = useState<string>("");
+  const [operators, setOperators] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [registryVersion, setRegistryVersion] = useState(0);
   const [cmsScrollPending, setCmsScrollPending] = useState(false);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setOperators([]);
+      setSelectedOperator("");
+      return;
+    }
+    getPunditTests({ project: selectedProjectId })
+      .then((tests) => {
+        const set = new Set<string>();
+        tests.forEach((t) => {
+          const op = (t.operator_name || '').trim();
+          if (op) set.add(op);
+        });
+        const ops = Array.from(set).sort();
+        setOperators(ops);
+        if (ops.length > 0 && (!selectedOperator || !ops.includes(selectedOperator))) {
+          setSelectedOperator(ops[0]);
+        }
+      })
+      .catch(() => setOperators([]));
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (!previewOpen && cmsScrollPending) {
@@ -76,6 +101,7 @@ export default function NeuralLinkReportPage() {
       {previewing ? (
         <NdtReportPreviewView
           projectId={selectedProjectId}
+          operator={selectedOperator || undefined}
           onBackToEdit={() => setPreviewOpen(false)}
           onGenerated={() => {
             setRegistryVersion((v) => v + 1);
@@ -110,7 +136,21 @@ export default function NeuralLinkReportPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {operators.length > 0 && (
+                  <select
+                    value={selectedOperator}
+                    onChange={(e) => setSelectedOperator(e.target.value)}
+                    aria-label="Filter report preview by inspector"
+                    className="rounded-xl border border-cyan-400/30 bg-slate-800/80 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-sm cursor-pointer"
+                  >
+                    {operators.map((op) => (
+                      <option key={op} value={op} className="bg-slate-900 text-white">
+                        Inspector: {op}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={openPreview}
@@ -118,7 +158,7 @@ export default function NeuralLinkReportPage() {
                   className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-cyan-950/30 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Eye size={15} />
-                  <span>Preview Official Report</span>
+                  <span>Preview {selectedOperator ? `(${selectedOperator})` : "Report"}</span>
                 </button>
               </div>
             </div>

@@ -612,7 +612,7 @@ export default function PunditWaveformViewer({
                   return;
                 }
                 window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Generating official BS 1881-203 NDT report PDF…', type: "info" } }));
-                downloadNdtReport(test.project)
+                downloadNdtReport(test.project, test.operator_name || undefined)
                   .then((filename) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Downloaded ${filename} (includes ${test.test_reference}).`, type: "success" } })))
                   .catch((err: any) => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || 'Report generation failed.'}`, type: "error" } })));
               }}

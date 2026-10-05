@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock, PenLine, Sparkles, Undo2 } from "lucide-react";
+import { CheckCircle2, Clock, PenLine, Sparkles, Undo2, MessageSquare, Send, UserCheck } from "lucide-react";
 import {
   getPunditAnalysisReview,
   reviewPunditAnalysis,
   withdrawPunditAnalysisReview,
   regenerateJointPunditAnalysis,
+  getPunditAnalysisComments,
+  addPunditAnalysisComment,
   type PunditAnalysisReview,
+  type PunditAnalysisComment,
 } from "@/services/digitalEye";
 
 /**
@@ -26,10 +29,13 @@ export default function PunditAnalysisReviewPanel({
   onReviewUpdated?: () => void;
 }) {
   const [review, setReview] = useState<PunditAnalysisReview | null>(null);
+  const [comments, setComments] = useState<PunditAnalysisComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [notes, setNotes] = useState("");
+  const [newCommentText, setNewCommentText] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
   const [regenerateWithAi, setRegenerateWithAi] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,10 +52,16 @@ export default function PunditAnalysisReviewPanel({
     setLoading(true);
     setError(null);
     try {
-      setReview(await getPunditAnalysisReview(analysisId));
+      const [revData, commentsData] = await Promise.all([
+        getPunditAnalysisReview(analysisId),
+        getPunditAnalysisComments(analysisId),
+      ]);
+      setReview(revData);
+      setComments(commentsData);
     } catch (err: any) {
       setError(errText(err));
       setReview(null);
+      setComments([]);
     } finally {
       setLoading(false);
     }
@@ -73,17 +85,31 @@ export default function PunditAnalysisReviewPanel({
   const decide = async (decision: "corroborated" | "returned") => {
     setSaving(true);
     try {
+      let activeNotes = newCommentText.trim();
+      // If text is in chat input, post it to discussion stream as well
+      if (activeNotes) {
+        try {
+          const added = await addPunditAnalysisComment(analysisId, activeNotes);
+          setComments((prev) => [...prev, added]);
+          setNewCommentText("");
+        } catch {
+          // fallback to activeNotes
+        }
+      } else if (comments.length > 0) {
+        // Use latest comment as note if input field is empty
+        activeNotes = comments[comments.length - 1].comment;
+      }
+
       const data = await reviewPunditAnalysis(analysisId, {
         decision,
-        notes: notes.trim(),
+        notes: activeNotes,
         regenerate: regenerateWithAi,
       });
       setReview(data);
-      setNotes("");
       toast(
         decision === "corroborated"
-          ? "Analysis corroborated by engineer review (Joint Review updated)."
-          : "Analysis returned for revision (Joint Review updated).",
+          ? "Analysis corroborated by engineer review (Joint AI Synthesis updated)."
+          : "Analysis returned for revision (Joint AI Synthesis updated).",
         "success",
       );
       onReviewUpdated?.();
@@ -94,11 +120,35 @@ export default function PunditAnalysisReviewPanel({
     }
   };
 
+  const handleSendComment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newCommentText.trim()) return;
+    setIsPostingComment(true);
+    try {
+      const added = await addPunditAnalysisComment(analysisId, newCommentText.trim());
+      setComments((prev) => [...prev, added]);
+      setNewCommentText("");
+      toast("Comment posted to collaborative chat stream.", "success");
+      onReviewUpdated?.();
+    } catch (err: any) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
   const handleRegenerateJoint = async () => {
     setIsRegenerating(true);
     try {
-      await regenerateJointPunditAnalysis(analysisId);
-      toast("Joint AI Review re-synthesized with Principal Engineer directives.", "success");
+      const res = await regenerateJointPunditAnalysis(analysisId);
+      const targetId = res?.analysis_id || analysisId;
+      toast("Joint AI Review re-synthesized with Principal Engineer directives and team chat.", "success");
+      const [revData, commentsData] = await Promise.all([
+        getPunditAnalysisReview(targetId),
+        getPunditAnalysisComments(targetId),
+      ]);
+      setReview(revData);
+      setComments(commentsData);
       onReviewUpdated?.();
     } catch (err: any) {
       toast(`⚠️ ${errText(err)}`, "error");
@@ -112,7 +162,6 @@ export default function PunditAnalysisReviewPanel({
     setSaving(true);
     try {
       setReview(await withdrawPunditAnalysisReview(analysisId));
-      setNotes("");
       toast("Review withdrawn — the analysis is pending engineer review again.", "info");
       onReviewUpdated?.();
     } catch (err: any) {
@@ -183,7 +232,7 @@ export default function PunditAnalysisReviewPanel({
               onClick={handleRegenerateJoint}
               disabled={saving || isRegenerating}
               className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg px-2.5 py-1 disabled:opacity-50 cursor-pointer shadow-sm transition-all"
-              title="Re-run AI synthesis integrating the Principal Engineer's review directives and notes"
+              title="Re-run AI synthesis integrating Principal Engineer directives, field notes, and team chat"
             >
               <Sparkles size={12} className={isRegenerating ? "animate-spin text-indigo-600" : "text-indigo-600"} />
               <span>{isRegenerating ? "Synthesizing Joint Review…" : "Regenerate Joint Review with AI"}</span>
@@ -213,51 +262,139 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
-      {pending ? (
-        <p className="text-[11px] text-slate-600">
-          A qualified engineer must corroborate or return this analysis before it is
-          treated as reviewed. Directors only — the server enforces the role.
-        </p>
-      ) : (
-        <p className="text-[11px] text-slate-500">
-          Recording a new decision below replaces the current review.
-        </p>
+      {(review?.inspector_notes || review?.inspector_verdict) && (
+        <div className="p-3 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 space-y-1.5 text-xs shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 font-semibold text-blue-900">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                Inspector Review
+              </span>
+              {review.inspector_verdict && (
+                <span className="font-bold text-blue-800 text-[11px]">
+                  {review.inspector_verdict_display || review.inspector_verdict}
+                </span>
+              )}
+            </div>
+            <span className="font-normal text-[10px] text-slate-500">
+              Submitted by <strong>{review.inspector_responded_by || "Field Inspector"}</strong>
+              {review.inspector_responded_at && (
+                <> on {new Date(review.inspector_responded_at).toLocaleString()}</>
+              )}
+            </span>
+          </div>
+          {review.inspector_notes ? (
+            <p className="italic bg-white/90 p-2.5 rounded-lg border border-blue-100 text-slate-800 text-[11px] leading-relaxed">
+              “{review.inspector_notes}”
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-500 italic">No field text notes provided.</p>
+          )}
+        </div>
       )}
 
-      <div className="space-y-2">
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          maxLength={4000}
-          rows={2}
-          placeholder="Review notes (optional, max 4000 characters) — typed by the reviewing engineer, never auto-filled."
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 resize-y"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+      {/* SINGLE COLLABORATIVE CHAT & DECISION INPUT SYSTEM */}
+      <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 uppercase tracking-wider">
+            <MessageSquare size={14} className="text-indigo-600" />
+            <span>Government & Inspector Collaborative Chat ({comments.length})</span>
+          </div>
+          <span className="text-[10px] text-slate-500 font-medium">
+            AI Joint Review Discussion Thread
+          </span>
+        </div>
+
+        {comments.length === 0 ? (
+          <div className="bg-white/80 rounded-xl p-3 border border-slate-200/60 text-center text-xs text-slate-500 italic">
+            No chat comments posted yet. Government officials, engineers, and inspectors discuss here to build a collaborative opinion for AI synthesis.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            {comments.map((c) => (
+              <div key={c.id} className="bg-white/90 rounded-xl p-2.5 border border-slate-200/80 shadow-xs space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-900">{c.author_name}</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {c.author_role}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(c.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                  {c.comment}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* SINGLE INPUT FIELD */}
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-center gap-2">
             <input
-              type="checkbox"
-              checked={regenerateWithAi}
-              onChange={(e) => setRegenerateWithAi(e.target.checked)}
-              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              type="text"
+              value={newCommentText}
+              onChange={(e) => setNewCommentText(e.target.value)}
+              placeholder="Type your message / directive to discuss with inspectors & government..."
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 shadow-xs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendComment();
+                }
+              }}
             />
-            <span className="font-medium">Synthesize Joint AI analysis with this review</span>
-          </label>
-          <div className="flex gap-2 shrink-0">
             <button
-              onClick={() => decide("corroborated")}
-              disabled={saving || isRegenerating}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              type="button"
+              onClick={() => handleSendComment()}
+              disabled={isPostingComment || !newCommentText.trim()}
+              className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
+              title="Post message to collaborative discussion"
             >
-              <CheckCircle2 size={13} /> Corroborate
+              <Send size={12} />
+              <span>Send Chat</span>
             </button>
-            <button
-              onClick={() => decide("returned")}
-              disabled={saving || isRegenerating}
-              className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <PenLine size={13} /> Return for revision
-            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={regenerateWithAi}
+                onChange={(e) => setRegenerateWithAi(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="font-medium">Synthesize AI Joint Analysis with chat thread</span>
+            </label>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => decide("corroborated")}
+                disabled={saving || isRegenerating}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                title="Corroborate AI analysis using current chat directives"
+              >
+                <CheckCircle2 size={13} /> Corroborate
+              </button>
+              <button
+                type="button"
+                onClick={() => decide("returned")}
+                disabled={saving || isRegenerating}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                title="Return analysis for revision with directives"
+              >
+                <PenLine size={13} /> Return for Revision
+              </button>
+            </div>
           </div>
         </div>
       </div>

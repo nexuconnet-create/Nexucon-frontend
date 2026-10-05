@@ -28,6 +28,9 @@ import {
   Clock,
   PenLine,
   Download,
+  Building2,
+  MessageSquare,
+  Send,
   Camera,
   Users,
 } from "lucide-react";
@@ -46,6 +49,8 @@ import {
   getPunditAnalysisReview,
   PunditAnalysisReview,
   downloadNdtReport,
+  submitInspectorPunditCollaboration,
+  regenerateJointPunditAnalysis,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -62,6 +67,7 @@ import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
+import { useAuth } from "@/context/AuthContext";
 
 /** "SEMI_DIRECT" → "Semi direct", for a recorded enum shown to a reader. */
 function humaniseTransducer(value?: string | null): string | null {
@@ -153,6 +159,7 @@ function estimateCompressiveStrength(velocityMs: number): number | null {
 }
 
 function PunditWorkspaceInner() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance">("live");
 
@@ -168,6 +175,13 @@ function PunditWorkspaceInner() {
   const [isReloading, setIsReloading] = useState(false);
   const [activePunditReview, setActivePunditReview] = useState<PunditAnalysisReview | null>(null);
   const [isLoadingReview, setIsLoadingReview] = useState(false);
+  const [inspectorVerdict, setInspectorVerdict] = useState("verified");
+  const [inspectorCollabText, setInspectorCollabText] = useState("");
+  const [isSubmittingCollab, setIsSubmittingCollab] = useState(false);
+  const [isRegeneratingJoint, setIsRegeneratingJoint] = useState(false);
+  const [collabRegenAi, setCollabRegenAi] = useState(true);
+  const [showCollabInput, setShowCollabInput] = useState(false);
+  const [showAiFindings, setShowAiFindings] = useState(false);
 
   useEffect(() => {
     if (!activePunditTest?.project) {
@@ -186,7 +200,11 @@ function PunditWorkspaceInner() {
         const latest = analyses[0];
         try {
           const rev = await getPunditAnalysisReview(latest.id);
-          if (!cancelled) setActivePunditReview(rev);
+          if (!cancelled) {
+            setActivePunditReview({ ...rev, analysis_id: latest.id, ai_analysis: latest });
+            if (rev.inspector_verdict) setInspectorVerdict(rev.inspector_verdict);
+            if (rev.inspector_notes) setInspectorCollabText(rev.inspector_notes);
+          }
         } catch {
           if (!cancelled) setActivePunditReview(null);
         }
@@ -872,12 +890,121 @@ function PunditWorkspaceInner() {
                 <div className="pt-4 border-t border-slate-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Principal Engineer Review
+                      Principal Engineer Review & Collaboration
                     </span>
                     {isLoadingReview && (
                       <span className="text-[10px] text-slate-400 font-mono animate-pulse">Syncing…</span>
                     )}
                   </div>
+
+                  {/* Linked Project & Element Scope Banner */}
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 shadow-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate">
+                        <Building2 size={13} className="text-indigo-600 shrink-0" />
+                        <span className="truncate">{activePunditReview?.project_name || activePunditTest.project_name || "Assigned Project"}</span>
+                      </div>
+                      {(activePunditReview?.project_reference || activePunditTest.project) && (
+                        <span className="font-mono text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 shrink-0">
+                          {activePunditReview?.project_reference || activePunditTest.project}
+                        </span>
+                      )}
+                    </div>
+                    {activePunditReview?.project_location && (
+                      <div className="text-[10px] text-slate-500">
+                        Location: <span className="font-semibold text-slate-700">{activePunditReview.project_location}</span>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>Target: <strong className="text-slate-700">{activePunditTest.structural_element_name || activePunditTest.test_location || "Element"}</strong></span>
+                      <span>•</span>
+                      <span>Scan: <strong className="text-slate-700">{activePunditTest.test_reference}</strong></span>
+                      {activePunditTest.floor && (
+                        <>
+                          <span>•</span>
+                          <span>Level: <strong className="text-slate-700">{activePunditTest.floor}</strong></span>
+                        </>
+                      )}
+                    </div>
+                    {activePunditReview?.analysis_reference && (
+                      <div className="text-[10px] font-mono text-indigo-700 bg-indigo-50/60 border border-indigo-100 rounded px-2 py-0.5 flex items-center justify-between">
+                        <span>Analysis: {activePunditReview.analysis_reference}</span>
+                        {activePunditReview.requires_human_review && (
+                          <span className="text-[9px] font-sans font-bold text-amber-700 uppercase">Review Pending</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI Generated Findings & Reasoning Box (Hidden until clicked, scrollable container) */}
+                  {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary || (activePunditReview?.ai_observations && activePunditReview.ai_observations.length > 0) || activePunditReview?.ai_analysis?.observations?.length || activePunditReview?.ai_reasoning_log || activePunditReview?.ai_analysis?.reasoning_log) && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAiFindings(!showAiFindings)}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-800/80 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer shadow-xs"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles size={13} className="text-cyan-400 animate-pulse" />
+                          <span>{showAiFindings ? "Hide AI Generated Analysis" : "View AI Generated Analysis & Findings"}</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-semibold text-cyan-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                          {showAiFindings ? "Collapse ▲" : "Expand ▼"}
+                        </span>
+                      </button>
+
+                      {showAiFindings && (
+                        <div className="bg-slate-900 text-white rounded-xl p-3.5 space-y-2.5 text-xs shadow-md border border-indigo-900 max-h-60 overflow-y-auto pr-1">
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-800 sticky top-0 bg-slate-900 pt-0.5 z-10">
+                            <div className="flex items-center gap-1.5 font-bold text-indigo-300 text-[11px] uppercase tracking-wider">
+                              <Sparkles size={13} className="text-cyan-400" />
+                              <span>AI Generated Scan Analysis & Findings</span>
+                            </div>
+                            <Link
+                              href="/government/dashboard/digital-eye/pundit/ai-analysis/reasoning"
+                              className="text-[10px] text-cyan-300 hover:text-cyan-100 underline font-semibold flex items-center gap-0.5 shrink-0"
+                              target="_blank"
+                            >
+                              <span>Reasoning Chat</span>
+                              <ChevronRight size={10} />
+                            </Link>
+                          </div>
+
+                          {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary) && (
+                            <div className="text-[11px] text-slate-200 bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 leading-relaxed font-sans">
+                              <strong className="text-cyan-400 block mb-0.5 text-[10px] uppercase tracking-wider font-bold">Executive AI Summary:</strong>
+                              {activePunditReview.ai_summary || activePunditReview.ai_analysis?.summary}
+                            </div>
+                          )}
+
+                          {((activePunditReview?.ai_observations && activePunditReview.ai_observations.length > 0) || (activePunditReview?.ai_analysis?.observations && activePunditReview.ai_analysis.observations.length > 0)) && (
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Key AI Observations & Anomaly Detections:</span>
+                              <ul className="space-y-1 text-[11px] text-slate-300">
+                                {(activePunditReview.ai_observations || activePunditReview.ai_analysis?.observations || []).map((obs: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-1.5 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
+                                    <span className="text-cyan-400 font-bold">•</span>
+                                    <span className="leading-snug">{obs}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {(activePunditReview?.ai_reasoning_log || activePunditReview?.ai_analysis?.reasoning_log) && (
+                            <details className="text-[10px] text-indigo-300 cursor-pointer pt-0.5">
+                              <summary className="font-semibold hover:text-white transition-colors">
+                                Click to Expand Full AI Reasoning Log & Synthesis
+                              </summary>
+                              <div className="mt-1.5 p-2 rounded bg-slate-950 text-slate-300 font-mono text-[10px] max-h-36 overflow-y-auto whitespace-pre-wrap border border-slate-800">
+                                {activePunditReview.ai_reasoning_log || activePunditReview.ai_analysis?.reasoning_log}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {activePunditReview ? (
                     <div className={`p-3.5 rounded-xl border space-y-2 text-xs transition-all ${
@@ -920,17 +1047,45 @@ function PunditWorkspaceInner() {
                       )}
 
                       {activePunditReview.notes ? (
-                        <div className="bg-white/90 border border-slate-200 rounded-lg p-2.5 text-[11px] italic text-slate-800 shadow-sm leading-relaxed">
+                        <div className="bg-white/90 border border-slate-200 rounded-lg p-2.5 text-[11px] italic text-slate-800 shadow-xs leading-relaxed">
                           “{activePunditReview.notes}”
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-500 italic">No review notes recorded.</p>
+                        <p className="text-[10px] text-slate-500 italic">No review notes recorded yet by reviewing engineer.</p>
                       )}
 
                       {activePunditReview.review_status === "returned" && (
                         <p className="text-[10px] text-rose-700 font-semibold bg-rose-100/70 p-2 rounded-lg border border-rose-200">
                           ⚠️ Action required by field inspector: address the reviewing engineer's directives above.
                         </p>
+                      )}
+
+                      {/* Display Recorded Inspector Review */}
+                      {(activePunditReview.inspector_notes || activePunditReview.inspector_verdict) && (
+                        <div className="p-2.5 rounded-lg bg-blue-50/90 border border-blue-200 text-blue-900 space-y-1.5 mt-2">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-blue-800">
+                            <span className="flex items-center gap-1.5">
+                              <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider">
+                                Inspector Review
+                              </span>
+                              {activePunditReview.inspector_verdict && (
+                                <span className="font-semibold text-blue-900">
+                                  {activePunditReview.inspector_verdict_display || activePunditReview.inspector_verdict}
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-normal text-[9px] text-slate-500">
+                              {activePunditReview.inspector_responded_at
+                                ? new Date(activePunditReview.inspector_responded_at).toLocaleDateString()
+                                : ""}
+                            </span>
+                          </div>
+                          {activePunditReview.inspector_notes && (
+                            <p className="text-[11px] italic bg-white/90 p-2 rounded border border-blue-100 text-slate-800 leading-relaxed">
+                              “{activePunditReview.inspector_notes}”
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -939,16 +1094,141 @@ function PunditWorkspaceInner() {
                     </div>
                   )}
 
+                  {/* Inspector Review Form & Joint AI Analysis */}
+                  {activePunditReview?.analysis_id && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2.5 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                          <MessageSquare size={13} className="text-indigo-600" />
+                          Field Inspector Review
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowCollabInput(!showCollabInput)}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                        >
+                          {showCollabInput
+                            ? "Close"
+                            : (activePunditReview.inspector_notes || activePunditReview.inspector_verdict)
+                            ? "Update Review"
+                            : "+ Enter My Review"}
+                        </button>
+                      </div>
+
+                      {showCollabInput && (
+                        <div className="space-y-2.5 pt-1">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              Inspector Assessment Verdict
+                            </label>
+                            <select
+                              value={inspectorVerdict}
+                              onChange={(e) => setInspectorVerdict(e.target.value)}
+                              className="w-full text-xs rounded-lg border border-slate-200 bg-white p-2 text-slate-800 outline-none focus:border-indigo-500"
+                            >
+                              <option value="verified">Verified — field readings consistent & sound</option>
+                              <option value="coupling_rechecked">Transducer coupling verified on site</option>
+                              <option value="requires_coring">Secondary coring recommended</option>
+                              <option value="retest_recommended">Further station testing / revision required</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              Field Review Observations & Remarks
+                            </label>
+                            <textarea
+                              value={inspectorCollabText}
+                              onChange={(e) => setInspectorCollabText(e.target.value)}
+                              placeholder="Enter your field review observations, coupling notes, or physical condition of tested elements..."
+                              rows={2}
+                              maxLength={4000}
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-2 text-xs outline-none focus:border-indigo-500 focus:bg-white resize-y"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex items-center gap-1.5 text-[10px] text-slate-600 select-none cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={collabRegenAi}
+                                onChange={(e) => setCollabRegenAi(e.target.checked)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span>Synthesize with AI</span>
+                            </label>
+                            <button
+                              type="button"
+                              disabled={isSubmittingCollab}
+                              onClick={async () => {
+                                if (!activePunditReview?.analysis_id) return;
+                                setIsSubmittingCollab(true);
+                                try {
+                                  const updated = await submitInspectorPunditCollaboration(
+                                    activePunditReview.analysis_id,
+                                    {
+                                      inspectorVerdict,
+                                      inspectorNotes: inspectorCollabText.trim(),
+                                      regenerate: collabRegenAi,
+                                    }
+                                  );
+                                  setActivePunditReview(updated);
+                                  setShowCollabInput(false);
+                                  showToast("Inspector review recorded! Visible to Directorate/Governor.");
+                                } catch (err: any) {
+                                  showToast(`Submission failed: ${err?.message || "Error"}`);
+                                } finally {
+                                  setIsSubmittingCollab(false);
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                            >
+                              <Send size={11} />
+                              <span>{isSubmittingCollab ? "Saving…" : "Save Review"}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Joint AI Re-synthesis Action */}
+                      <button
+                        type="button"
+                        disabled={isRegeneratingJoint}
+                        onClick={async () => {
+                          if (!activePunditReview?.analysis_id) return;
+                          setIsRegeneratingJoint(true);
+                          try {
+                            await regenerateJointPunditAnalysis(activePunditReview.analysis_id);
+                            showToast("Joint AI Analysis successfully re-synthesized with both reviews!");
+                            const refreshed = await getPunditAnalysisReview(activePunditReview.analysis_id);
+                            setActivePunditReview({ ...refreshed, analysis_id: activePunditReview.analysis_id });
+                          } catch (err: any) {
+                            showToast(`AI generation failed: ${err?.message || "Error"}`);
+                          } finally {
+                            setIsRegeneratingJoint(false);
+                          }
+                        }}
+                        className="w-full py-2 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                        title="Re-run the platform's multi-model AI synthesis incorporating both Principal Engineer and Inspector reviews"
+                      >
+                        <Sparkles size={12} className={isRegeneratingJoint ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+                        <span>{isRegeneratingJoint ? "Synthesizing Joint AI Analysis…" : "Run Joint AI Analysis (Engineer + Inspector)"}</span>
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
                       if (!activePunditTest?.project) return;
-                      showToast("Generating official BS 1881-203 NDT Report PDF…");
-                      downloadNdtReport(activePunditTest.project, activePunditTest.operator_name || undefined)
+                      const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+                      const inspectorLabel = activePunditTest.operator_name || userFullName || user?.email || undefined;
+                      showToast(`Generating official BS 1881-203 NDT Report PDF${inspectorLabel ? ` (${inspectorLabel})` : ""}…`);
+                      downloadNdtReport(activePunditTest.project, inspectorLabel)
                         .then((filename) => showToast(`Downloaded ${filename}`))
                         .catch((err: any) => showToast(`Download failed: ${err?.message || 'Error'}`));
                     }}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                     title="Download the official BS 1881-203 NDT Report including Section 5.3 Joint Review and Section 5.4 Observations"
                   >
                     <Download size={13} />
