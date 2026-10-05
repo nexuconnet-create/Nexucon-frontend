@@ -310,6 +310,7 @@ export default function PunditAIAnalysisPage() {
           projectId={selectedProjectId}
           selectedBatchId={selectedBatch?.id}
           onSelectBatch={(b) => setSelectedBatch(b)}
+          totalElementsCount={tests.length}
         />
       </div>
 
