@@ -18,17 +18,30 @@ export default function PunditElementVelocityBarChart({
   className = "",
 }: PunditElementVelocityBarChartProps) {
   const [metricMode, setMetricMode] = useState<"velocity" | "strength">("velocity");
+  const [sortBy, setSortBy] = useState<"element" | "velocity_asc" | "velocity_desc" | "strength_asc">("element");
   const [hoveredStationId, setHoveredStationId] = useState<string | null>(null);
 
-  // Filter & sort tests using natural numeric order (S1, S2, S3... S20)
+  // Filter & sort tests using natural numeric order or selected sort criteria
   const sortedTests = useMemo(() => {
     const valid = tests.filter((t) => t.pulse_velocity_ms > 0);
     return [...valid].sort((a, b) => {
+      if (sortBy === "velocity_asc") {
+        return a.pulse_velocity_ms - b.pulse_velocity_ms;
+      }
+      if (sortBy === "velocity_desc") {
+        return b.pulse_velocity_ms - a.pulse_velocity_ms;
+      }
+      if (sortBy === "strength_asc") {
+        const sA = a.estimated_compressive_strength_mpa ?? 0;
+        const sB = b.estimated_compressive_strength_mpa ?? 0;
+        return sA - sB;
+      }
+      // Default: Natural element name order (S1, S2, S3...)
       const nameA = a.structural_element_name || (a as any).structural_element || a.test_location || a.test_reference || "";
       const nameB = b.structural_element_name || (b as any).structural_element || b.test_location || b.test_reference || "";
       return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: "base" });
     });
-  }, [tests]);
+  }, [tests, sortBy]);
 
   // Calculated statistics
   const stats = useMemo(() => {
@@ -58,6 +71,14 @@ export default function PunditElementVelocityBarChart({
     return "bg-rose-600 border-rose-400";
   };
 
+  const getQualityBand = (v: number) => {
+    if (v > 5000) return { label: "REBAR", cls: "bg-purple-50 text-purple-700 border-purple-200" };
+    if (v >= 4500) return { label: "EXCELLENT", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    if (v >= 3500) return { label: "GOOD", cls: "bg-teal-50 text-teal-700 border-teal-200" };
+    if (v >= 3000) return { label: "FAIR", cls: "bg-amber-50 text-amber-700 border-amber-200" };
+    return { label: "DOUBTFUL / POOR", cls: "bg-rose-50 text-rose-700 border-rose-200" };
+  };
+
   return (
     <div className={`bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden ${className}`}>
       {/* Header Toolbar */}
@@ -75,12 +96,28 @@ export default function PunditElementVelocityBarChart({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Visual inspection of pulse velocities (V) and compressive strengths (f_cu) ordered sequentially across all structural elements (S1 through S{sortedTests.length}).
+            Visual inspection of pulse velocities (V) and compressive strengths (f_cu) ordered across structural elements.
           </p>
         </div>
 
-        {/* Metric Selector Toggle */}
-        <div className="flex items-center gap-2">
+        {/* Controls: Metric Toggle & Sort Order */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sort By Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700">
+            <span className="text-[11px] text-slate-500 pl-2">Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 font-bold outline-none cursor-pointer"
+            >
+              <option value="element">Element ID (S1, S2...)</option>
+              <option value="velocity_asc">Lowest Velocity First (Risk)</option>
+              <option value="velocity_desc">Highest Velocity First</option>
+              <option value="strength_asc">Lowest Compressive Strength First</option>
+            </select>
+          </div>
+
+          {/* Metric Selector Toggle */}
           <div className="flex rounded-xl border border-slate-200 overflow-hidden text-xs font-bold p-0.5 bg-slate-100">
             <button
               onClick={() => setMetricMode("velocity")}
@@ -135,7 +172,7 @@ export default function PunditElementVelocityBarChart({
             No active structural elements recorded for bar chart rendering.
           </div>
         ) : (
-          <div className="min-w-[650px] space-y-4">
+          <div className="min-w-[720px] space-y-4">
             {/* Legend & Threshold Reference Indicator */}
             <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
               <div className="flex items-center gap-3">
@@ -160,18 +197,24 @@ export default function PunditElementVelocityBarChart({
                   <span>&lt;3000 (Poor/Void)</span>
                 </span>
               </div>
-              <span className="font-bold text-teal-800">
-                {metricMode === "velocity" ? "Dashed Line: BS 1881-203 Threshold (3,500 m/s)" : `Dashed Line: Target Design Strength (${targetDesignStrengthMpa} MPa)`}
+              <span className="font-bold text-teal-800 flex items-center gap-1">
+                <span className="w-3 h-0.5 border-b-2 border-dashed border-teal-900 inline-block" />
+                {metricMode === "velocity" ? "Cutoff Threshold: 3,500 m/s (BS 1881-203)" : `Cutoff Target: ${targetDesignStrengthMpa} MPa`}
               </span>
             </div>
 
             {/* Bars Column List */}
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2.5 pt-1">
               {sortedTests.map((test, index) => {
                 const elemName = test.structural_element_name || (test as any).structural_element || test.test_location || `S${index + 1}`;
                 const vel = test.pulse_velocity_ms;
                 const fcu = test.estimated_compressive_strength_mpa;
                 const isHovered = hoveredStationId === test.id;
+                const qualityBand = getQualityBand(vel);
+
+                const isVelPass = vel >= 3500;
+                const isFcuPass = fcu != null && fcu >= targetDesignStrengthMpa;
+                const isCompliant = metricMode === "velocity" ? isVelPass : isFcuPass;
 
                 // Percentages for bar width (max velocity 5500 m/s, max strength 60 MPa)
                 const velPercent = Math.min(100, Math.max(5, (vel / 5500) * 100));
@@ -184,16 +227,18 @@ export default function PunditElementVelocityBarChart({
                     onMouseEnter={() => setHoveredStationId(test.id)}
                     onMouseLeave={() => setHoveredStationId(null)}
                     onClick={() => onSelectTest?.(test)}
-                    className={`group relative p-2.5 rounded-xl border transition-all cursor-pointer ${
-                      isHovered
+                    className={`group relative p-3 rounded-xl border transition-all cursor-pointer ${
+                      !isCompliant
+                        ? "bg-rose-50/40 border-rose-200/80 hover:bg-rose-50/70"
+                        : isHovered
                         ? "bg-slate-100 border-teal-400 shadow-xs"
                         : "bg-slate-50/70 border-slate-200/80 hover:bg-slate-100/60"
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       {/* Element Tag */}
-                      <div className="w-24 shrink-0 flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
-                        <span className="w-5 h-5 rounded-md bg-slate-900 text-teal-300 flex items-center justify-center text-[10px]">
+                      <div className="w-28 shrink-0 flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
+                        <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] ${!isCompliant ? "bg-rose-600 text-white" : "bg-slate-900 text-teal-300"}`}>
                           {index + 1}
                         </span>
                         <span className="truncate" title={elemName}>
@@ -201,11 +246,18 @@ export default function PunditElementVelocityBarChart({
                         </span>
                       </div>
 
+                      {/* Quality Band Pill */}
+                      <div className="w-28 shrink-0 hidden sm:block">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${qualityBand.cls}`}>
+                          {qualityBand.label}
+                        </span>
+                      </div>
+
                       {/* Bar Track Container with Threshold Line */}
                       <div className="flex-1 relative h-6 bg-slate-200/80 rounded-lg overflow-hidden border border-slate-300/60">
                         {/* Cutoff Threshold Line */}
                         <div
-                          className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-teal-900 z-10 opacity-70"
+                          className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-slate-900 z-10 opacity-75"
                           style={{ left: `${thresholdPercent}%` }}
                         />
 
@@ -220,8 +272,19 @@ export default function PunditElementVelocityBarChart({
                         </div>
                       </div>
 
-                      {/* Numerical Summary Value */}
-                      <div className="w-28 shrink-0 text-right font-mono text-xs font-bold">
+                      {/* Numerical Summary Value & Compliance Badge */}
+                      <div className="w-36 shrink-0 text-right flex items-center justify-end gap-2 font-mono text-xs font-bold">
+                        <span
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                            isCompliant
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-rose-100 text-rose-800 border-rose-300"
+                          }`}
+                        >
+                          {!isCompliant && <AlertTriangle size={10} className="shrink-0" />}
+                          {isCompliant ? "PASS" : "FAIL"}
+                        </span>
+
                         {metricMode === "velocity" ? (
                           <span className={vel >= 3500 ? "text-teal-700" : "text-rose-600 font-black"}>
                             {formatVelocityMs(vel)} m/s
