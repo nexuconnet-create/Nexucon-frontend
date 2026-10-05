@@ -75,7 +75,7 @@ export default function PunditElementVelocityBarChart({
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Visual inspection of pulse velocities ($V$) and compressive strengths ($f_{{cu}}$) ordered sequentially across all structural elements (S1 through S{sortedTests.length}).
+            Visual inspection of pulse velocities (V) and compressive strengths (f_cu) ordered sequentially across all structural elements (S1 through S{sortedTests.length}).
           </p>
         </div>
 
@@ -100,7 +100,7 @@ export default function PunditElementVelocityBarChart({
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Comp. Strength ($f_{{cu}}$ MPa)
+              Comp. Strength (f_cu MPa)
             </button>
           </div>
         </div>
