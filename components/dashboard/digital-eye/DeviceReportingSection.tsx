@@ -24,7 +24,10 @@ import {
   Search,
   Filter,
   RefreshCw,
-  QrCode
+  QrCode,
+  Mail,
+  Send,
+  Check
 } from "lucide-react";
 import {
   DeviceReportRecord,
@@ -37,7 +40,10 @@ import {
   downloadNdtReport,
   downloadNdtReportWord,
   downloadArchivedReport,
-  openArchivedReport
+  openArchivedReport,
+  notifyInspectorsAboutNdtReport,
+  getProjectNdtInspectors,
+  type ProjectInspectorRecipient
 } from "@/services/digitalEye";
 import { useAuth } from "@/context/AuthContext";
 
@@ -104,6 +110,7 @@ export default function DeviceReportingSection({
   }, [punditOperators, user, selectedOperator]);
 
   const [selectedReport, setSelectedReport] = useState<DeviceReportRecord | null>(null);
+  const [notifyReport, setNotifyReport] = useState<DeviceReportRecord | null>(null);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -725,6 +732,15 @@ export default function DeviceReportingSection({
                         >
                           <Share2 size={13} />
                         </button>
+                        {rep.device_type === 'PUNDIT' && (
+                          <button
+                            onClick={() => setNotifyReport(rep)}
+                            className="p-1 border border-sky-200 bg-sky-50/70 hover:bg-sky-100 text-sky-700 rounded-lg cursor-pointer transition-colors"
+                            title="Send Email Alert to Inspectors (Report Ready for Download)"
+                          >
+                            <Mail size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -765,6 +781,17 @@ export default function DeviceReportingSection({
               setSelectedReport(newRep);
               if (onReportGenerated) onReportGenerated(newRep);
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 3: NOTIFY INSPECTORS MODAL */}
+      <AnimatePresence>
+        {notifyReport && (
+          <NotifyInspectorsModal
+            report={notifyReport}
+            projectId={projectId}
+            onClose={() => setNotifyReport(null)}
           />
         )}
       </AnimatePresence>
@@ -1180,6 +1207,247 @@ function GenerateReportModal({
             >
               <Plus size={14} />
               <span>{isSubmitting ? "Generating..." : "Generate & Certify"}</span>
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+interface NotifyInspectorsModalProps {
+  report: DeviceReportRecord;
+  projectId?: string;
+  onClose: () => void;
+}
+
+function NotifyInspectorsModal({ report, projectId, onClose }: NotifyInspectorsModalProps) {
+  const [inspectors, setInspectors] = useState<ProjectInspectorRecipient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [customMessage, setCustomMessage] = useState("");
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
+
+  useEffect(() => {
+    const pId = projectId || report.project_id;
+    if (pId) {
+      getProjectNdtInspectors(pId)
+        .then((data) => {
+          setInspectors(data);
+          setSelectedEmails(data.map((i) => i.email));
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [projectId, report]);
+
+  const toggleEmail = (email: string) => {
+    setSelectedEmails((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedEmails.length === 0) {
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: "⚠️ Please select at least one inspector recipient.",
+            type: "error",
+          },
+        })
+      );
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await notifyInspectorsAboutNdtReport(report.id, {
+        recipients: selectedEmails,
+        custom_message: customMessage.trim() || undefined,
+        force_resend: true,
+      });
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: `✉️ Email notification sent to ${res.notified_count || selectedEmails.length} inspector(s) with pre-authorized download links!`,
+            type: "success",
+          },
+        })
+      );
+      onClose();
+    } catch (err: any) {
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: `⚠️ ${err?.response?.data?.detail || err?.message || "Failed to dispatch inspector notifications."}`,
+            type: "error",
+          },
+        })
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]"
+      >
+        {/* Header */}
+        <div className="p-6 bg-gradient-to-r from-[#022C4F] to-[#0369A1] text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-sky-200" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold">Email Inspector Notification</h2>
+              <p className="text-xs text-sky-200">Alert field officers that NDT report is ready for download</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSend} className="p-6 space-y-4 overflow-y-auto">
+          {/* Target Report Card */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Target Dossier</span>
+              <span className="font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                {report.report_reference}
+              </span>
+            </div>
+            <p className="text-xs font-semibold text-slate-900 truncate">{report.title}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Project: {report.project_name}</p>
+          </div>
+
+          {/* Inspectors List */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Recipients ({selectedEmails.length}/{inspectors.length})
+              </label>
+              {inspectors.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedEmails(
+                      selectedEmails.length === inspectors.length ? [] : inspectors.map((i) => i.email)
+                    )
+                  }
+                  className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                >
+                  {selectedEmails.length === inspectors.length ? "Deselect All" : "Select All"}
+                </button>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                <RefreshCw size={16} className="animate-spin" />
+                <span>Identifying project inspectors…</span>
+              </div>
+            ) : inspectors.length === 0 ? (
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                No registered inspectors identified for this project yet.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                {inspectors.map((insp) => {
+                  const isChecked = selectedEmails.includes(insp.email);
+                  return (
+                    <div
+                      key={insp.email}
+                      onClick={() => toggleEmail(insp.email)}
+                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                        isChecked
+                          ? "bg-sky-50/70 border-sky-300 text-slate-900"
+                          : "bg-slate-50/40 border-slate-200 text-slate-500 opacity-60"
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold truncate">{insp.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-700 font-medium">
+                            {insp.role}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-mono truncate">{insp.email}</p>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                          isChecked
+                            ? "bg-sky-600 border-sky-600 text-white"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {isChecked && <Check size={12} strokeWidth={3} />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Custom Message Field */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+              Officer Directive / Optional Message
+            </label>
+            <textarea
+              rows={3}
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              placeholder="e.g. Please review Section 5.3 UPV joint review and verify compressive strength compliance before morning site meeting."
+              className="w-full p-3 rounded-xl border border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-xs placeholder:text-slate-400 resize-none"
+            />
+          </div>
+
+          {/* Statutory note */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 flex items-start gap-2">
+            <Send size={14} className="shrink-0 text-sky-600 mt-0.5" />
+            <span>
+              Recipients receive a branded statutory email with a direct one-click authenticated download link and public seal verification.
+            </span>
+          </div>
+
+          {/* Modal Actions */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={sending || selectedEmails.length === 0}
+              className="px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {sending ? (
+                <>
+                  <RefreshCw size={13} className="animate-spin" />
+                  <span>Dispatching Emails…</span>
+                </>
+              ) : (
+                <>
+                  <Send size={13} />
+                  <span>Dispatch Notification ({selectedEmails.length})</span>
+                </>
+              )}
             </button>
           </div>
         </form>

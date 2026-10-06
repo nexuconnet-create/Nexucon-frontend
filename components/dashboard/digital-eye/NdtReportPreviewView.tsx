@@ -9,11 +9,13 @@ import {
   FileDown,
   Loader2,
   PencilLine,
+  Mail,
 } from "lucide-react";
 import {
   downloadNdtReport,
   fetchNdtReportPreviewBundle,
   type NdtPreviewSection,
+  notifyProjectNdtInspectors,
 } from "@/services/digitalEye";
 
 /**
@@ -52,6 +54,7 @@ export default function NdtReportPreviewView({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [notifyInspectors, setNotifyInspectors] = useState(true);
   const [zoom, setZoom] = useState(100);
 
   // Fetch the bundle fresh each time the view mounts — data may have
@@ -98,6 +101,16 @@ export default function NdtReportPreviewView({
     setGenerating(true);
     try {
       await downloadNdtReport(projectId, operator);
+      if (notifyInspectors) {
+        try {
+          const notif = await notifyProjectNdtInspectors(projectId, { operator });
+          if (notif?.notified_count) {
+            toast(`✉️ Alert emails dispatched to ${notif.notified_count} project inspector(s).`, "info");
+          }
+        } catch (e) {
+          console.warn("Inspector notification notice:", e);
+        }
+      }
       onGenerated?.();
     } catch (err: any) {
       toast(
@@ -183,6 +196,16 @@ export default function NdtReportPreviewView({
                 Download
               </a>
             )}
+            <label className="hidden sm:inline-flex items-center gap-1.5 text-xs text-[#4B5B66] cursor-pointer mr-1 select-none">
+              <input
+                type="checkbox"
+                checked={notifyInspectors}
+                onChange={(e) => setNotifyInspectors(e.target.checked)}
+                className="rounded text-[#0A3D2E] focus:ring-[#0A3D2E] w-3.5 h-3.5 border-slate-300"
+              />
+              <Mail className="w-3.5 h-3.5 text-slate-500" />
+              <span>Email Inspectors</span>
+            </label>
             <button
               type="button"
               onClick={handleGenerate}
