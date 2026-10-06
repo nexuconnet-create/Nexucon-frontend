@@ -208,11 +208,12 @@ export default function DigitalEyeOverview() {
           {/* Quick Actions */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {[
                 { name: "View Scan Library", href: "/government/dashboard/digital-eye/scan-library", icon: Scan, desc: "Access raw and processed data." },
                 { name: "Processing Pipeline", href: "/government/dashboard/digital-eye/processing-pipeline", icon: Activity, desc: "Monitor data ingestion status." },
-                { name: "QA/QC Insights", href: "/government/dashboard/digital-eye/qa-qc-insights", icon: BarChart, desc: "Check sensor calibration metrics." }
+                { name: "QA/QC Insights", href: "/government/dashboard/digital-eye/qa-qc-insights", icon: BarChart, desc: "Check sensor calibration metrics." },
+                { name: "PUNDIT AI", href: "/government/dashboard/digital-eye/pundit/ai-analysis", icon: Activity, desc: "Acoustic tomography and pulse velocity inversion." }
               ].map((action, i) => (
                 <Link key={i} href={action.href} className="group block p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all">
                   <div className="w-10 h-10 rounded-lg bg-gray-50 group-hover:bg-blue-100 flex items-center justify-center mb-3 transition-colors">

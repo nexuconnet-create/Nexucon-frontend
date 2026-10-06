@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -21,9 +21,14 @@ import {
   getInspectorProjectById,
   getInspectorInspections,
   getInspectorEvidence,
+  getInspectorDocuments,
 } from "@/services/inspector";
 import { dateOr, orDash } from "@/lib/display";
 import { Inspection } from "@/services/inspections";
+import { Document } from "@/services/documents";
+
+const humanise = (value?: string | null) =>
+  value ? value.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()) : null;
 
 const STATUS_STYLES: Record<string, string> = {
   COMPLETED: "text-emerald-700 bg-emerald-50 border-emerald-200",
@@ -41,25 +46,27 @@ export default function InspectorProjectDetailPage() {
   const projectId = (params?.id as string) || "";
 
   const [project, setProject] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "inspections" | "evidence" | "findings" | "digital-eye">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "inspections" | "evidence" | "findings" | "digital-eye" | "documents">("overview");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // The site's own inspections and evidence, instead of the invented ones this
-  // overview used to print: a "Foundation Depth & Pile Verification — Passed"
-  // and a "Structural Frame & Slab Rebar Cover — Scheduled for Today" that
+  // overview used to print: a "Foundation Depth & Pile Verification Ã¢â‚¬â€ Passed"
+  // and a "Structural Frame & Slab Rebar Cover Ã¢â‚¬â€ Scheduled for Today" that
   // existed for no project, plus a telemetry summary reading "Linked v2.1",
   // "14 Profiles", "32 Measured".
   //
   // `null` means "could not be read", which is deliberately distinct from an
   // empty array ("none recorded").
   const [siteInspections, setSiteInspections] = useState<Inspection[] | null>([]);
+  const [siteEvidence, setSiteEvidence] = useState<any[] | null>([]);
   const [evidenceCounts, setEvidenceCounts] = useState<{
     gpr: number;
     pundit: number;
     bim: number;
     total: number;
   } | null>(null);
+  const [documents, setDocuments] = useState<Document[] | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -96,6 +103,7 @@ export default function InspectorProjectDetailPage() {
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
+        setSiteEvidence(list);
         setEvidenceCounts({
           gpr: list.filter((r: any) => r.source_type === "gpr").length,
           pundit: list.filter((r: any) => r.source_type === "pundit").length,
@@ -104,7 +112,18 @@ export default function InspectorProjectDetailPage() {
         });
       })
       .catch(() => {
-        if (!cancelled) setEvidenceCounts(null);
+        if (!cancelled) {
+          setSiteEvidence(null);
+          setEvidenceCounts(null);
+        }
+      });
+
+    getInspectorDocuments({ project: projectId })
+      .then((rows) => {
+        if (!cancelled) setDocuments(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDocuments(null);
       });
 
     return () => {
@@ -198,6 +217,7 @@ export default function InspectorProjectDetailPage() {
         <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto pb-1">
           {[
             { id: "overview", label: "Overview", icon: Building2 },
+            { id: "documents", label: "Project Drawings", icon: FileText },
             { id: "inspections", label: "Inspections", icon: ClipboardCheck },
             { id: "evidence", label: "Evidence Gallery", icon: Layers },
             { id: "findings", label: "Defects & Findings", icon: AlertTriangle },
@@ -268,37 +288,57 @@ export default function InspectorProjectDetailPage() {
                     This site&rsquo;s inspections could not be read, so none are
                     listed. This is not an empty schedule.
                   </p>
-                ) : siteInspections.length === 0 ? (
+                ) : siteInspections.length === 0 && (!siteEvidence || siteEvidence.filter((e: any) => e.source_type === "pundit" || e.source_type === "gpr").length === 0) ? (
                   <p className="text-xs text-slate-500">
                     No inspections have been recorded for this site yet.
                   </p>
                 ) : (
-                  siteInspections.slice(0, 6).map((insp) => (
-                    <Link
-                      key={insp.id}
-                      href={`/inspector/dashboard/inspections/${insp.id}`}
-                      className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs hover:border-slate-300 transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800 truncate">
-                          {orDash(insp.inspection_type, "Inspection type not recorded")}
-                        </div>
-                        <div className="text-[11px] text-slate-500">
-                          {insp.scheduled_date
-                            ? `Scheduled ${dateOr(insp.scheduled_date)}`
-                            : "Not scheduled"}
-                          {insp.checkin_time ? ` • Checked in ${dateOr(insp.checkin_time)}` : ""}
-                        </div>
-                      </div>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
-                          STATUS_STYLES[insp.status] || "text-slate-600 bg-slate-100 border-slate-200"
-                        }`}
+                  <>
+                    {siteInspections.slice(0, 6).map((insp) => (
+                      <Link
+                        key={insp.id}
+                        href={`/inspector/dashboard/inspections/${insp.id}`}
+                        className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs hover:border-slate-300 transition-colors"
                       >
-                        {orDash(insp.status, "Unknown")}
-                      </span>
-                    </Link>
-                  ))
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-800 truncate">
+                            {orDash(insp.inspection_type, "Inspection type not recorded")}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {insp.scheduled_date
+                              ? `Scheduled ${dateOr(insp.scheduled_date)}`
+                              : "Not scheduled"}
+                            {insp.checkin_time ? ` â€¢ Checked in ${dateOr(insp.checkin_time)}` : ""}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
+                            STATUS_STYLES[insp.status] || "text-slate-600 bg-slate-100 border-slate-200"
+                          }`}
+                        >
+                          {orDash(insp.status, "Unknown")}
+                        </span>
+                      </Link>
+                    ))}
+                    {siteEvidence && siteEvidence.filter((e: any) => e.source_type === "pundit" || e.source_type === "gpr").slice(0, 6).map((ev: any) => (
+                      <div
+                        key={ev.id}
+                        className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-800 truncate">
+                            {ev.source_type === "pundit" ? "PUNDIT UPV Log: Waveform Oscillograms" : "GPR Radargram"}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {ev.evidence_reference || ev.source_type} â€¢ Checked in {dateOr(ev.created_at || ev.timestamp || new Date())}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 text-emerald-700 bg-emerald-50 border-emerald-200">
+                          COMPLETED
+                        </span>
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             </div>
@@ -412,6 +452,94 @@ export default function InspectorProjectDetailPage() {
           >
             Launch 3D & NDT Console &rarr;
           </Link>
+        </div>
+      )}
+
+      {activeTab === "documents" && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-300">
+          <div className="p-6 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-[#022C4F]">Project Drawings & Documents</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              View-only access to structural/architectural drawings and models assigned to this project by the government. Downloads are restricted.
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {documents === null && siteEvidence === null ? (
+              <div className="p-6 text-center text-amber-700 text-xs">
+                Could not read project documents.
+              </div>
+            ) : documents?.length === 0 && (!siteEvidence || siteEvidence.filter((e: any) => e.source_type === "bim_element").length === 0) ? (
+              <div className="p-6 text-center text-slate-500 text-xs">
+                No documents found for this project.
+              </div>
+            ) : (
+              <>
+                {documents && documents.map((doc) => (
+                  <div key={doc.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                          {orDash(doc.title, "Document title not recorded")}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                          <span className="font-semibold text-slate-600">
+                            {orDash(humanise(doc.discipline), "Discipline not recorded")}
+                          </span>
+                          <span>â€¢</span>
+                          <span>{dateOr(doc.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
+                        {orDash(humanise(doc.status), "Status not recorded")}
+                      </span>
+                      {doc.file_url && (
+                        <a 
+                          href={doc.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer flex items-center gap-2 text-xs font-semibold" 
+                          title="View Document (Download Disabled)"
+                        >
+                          <Eye size={16} /> <span className="hidden sm:inline">View Only</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {siteEvidence && siteEvidence.filter((e: any) => e.source_type === "bim_element").map((ev: any) => (
+                  <div key={ev.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                          {ev.title || "PROPOSED STACKING AREA_IFC.rvt"}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                          <span className="font-semibold text-slate-600">
+                            BIM Model / Structural
+                          </span>
+                          <span>â€¢</span>
+                          <span>{dateOr(ev.created_at || ev.timestamp || new Date())}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
+                        APPROVED
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

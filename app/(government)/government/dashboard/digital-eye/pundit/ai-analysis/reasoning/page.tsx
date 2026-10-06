@@ -49,6 +49,45 @@ export default function PunditAIReasoningPage() {
   const [logSearchQuery, setLogSearchQuery] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Chat Interaction State
+  const [chatInput, setChatInput] = useState<string>("");
+  const [chatHistory, setChatHistory] = useState<{role: string, text: string}[]>([]);
+  const [isChatting, setIsChatting] = useState<boolean>(false);
+
+  const handleSendChat = () => {
+    if (!chatInput.trim()) return;
+    const newMsg = { role: "user", text: chatInput.trim() };
+    setChatHistory((prev) => [...prev, newMsg]);
+    setChatInput("");
+    setIsChatting(true);
+    
+    // Hit AI Reasoning Chat backend endpoint
+    import("@/services/api").then(({ customFetch }) => {
+      customFetch(`/api/v1/digital-eye/pundit-analysis-review/${activeAnalysis.id}/chat/`, {
+        method: "POST",
+        body: JSON.stringify({
+          history: chatHistory,
+          message: chatInput,
+        })
+      })
+        .then((res: any) => {
+          setChatHistory((prev) => [...prev, {
+            role: "ai", 
+            text: res?.text || "No response."
+          }]);
+        })
+        .catch((err: any) => {
+          setChatHistory((prev) => [...prev, {
+            role: "ai", 
+            text: "Error: " + (err?.response?.data?.detail || err?.message || "Failed to communicate with AI Engine.")
+          }]);
+        })
+        .finally(() => {
+          setIsChatting(false);
+        });
+    });
+  };
+
   // Auto-select initial project if none is selected
   useEffect(() => {
     if (!selectedProjectId) {
@@ -530,7 +569,60 @@ export default function PunditAIReasoningPage() {
                 })
               )}
             </div>
+
+            {/* AI REASONING CHAT INTERACTION SYSTEM */}
+            <div className="bg-slate-900 border-t border-slate-700/60 p-4 flex flex-col gap-4">
+              {chatHistory.length > 0 && (
+                <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                  {chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`px-3 py-2 rounded-xl text-xs max-w-[85%] ${
+                        msg.role === "user" 
+                          ? "bg-amber-500/20 text-amber-100 border border-amber-500/30 rounded-br-none" 
+                          : "bg-slate-800 text-slate-300 border border-slate-700 rounded-bl-none"
+                      }`}>
+                        {msg.role === "ai" && <Sparkles size={10} className="inline mr-1.5 text-amber-400 mb-0.5" />}
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatting && (
+                    <div className="flex items-start">
+                      <div className="px-3 py-2 rounded-xl text-xs bg-slate-800 text-slate-400 border border-slate-700 rounded-bl-none flex items-center gap-2">
+                        <Sparkles size={10} className="text-amber-400 animate-pulse" />
+                        Synthesizing response...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="relative">
+                <textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask the AI engine about its reasoning..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3 pr-12 py-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none h-12"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendChat();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSendChat}
+                  disabled={!chatInput.trim() || isChatting}
+                  className="absolute right-2 top-2 p-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-700 text-slate-950 disabled:text-slate-500 rounded-lg transition-colors cursor-pointer shadow-sm"
+                  title="Send to AI Engine"
+                >
+                  <Terminal size={14} />
+                </button>
+              </div>
+            </div>
           </div>
+
 
           {/* AI OBSERVATIONS & RECOMMENDATIONS CARDS */}
           {activeAnalysis && (

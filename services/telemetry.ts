@@ -314,6 +314,12 @@ export async function importTelemetryExport(params: {
   structuralElement?: string;
   floor?: string;
   testLocation?: string;
+  /**
+   * The inspector's own description of where the capture was taken. Free text:
+   * the platform has no geocoding service, so a filled-in address it produced
+   * itself would be an invented location on the captured record.
+   */
+  locationAddress?: string;
   visualObservation?: string;
   attendanceLog?: string;
   weatherCondition?: string;
@@ -345,6 +351,7 @@ export async function importTelemetryExport(params: {
     ['structural_element', params.structuralElement],
     ['floor', params.floor],
     ['test_location', params.testLocation],
+    ['location_address', params.locationAddress],
     ['visual_observation', params.visualObservation],
     ['attendance_log', params.attendanceLog],
     ['weather_condition', params.weatherCondition],

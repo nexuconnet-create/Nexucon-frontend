@@ -70,6 +70,7 @@ const SECTIONS: NavSection[] = [
       { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck },
       { name: "Evidence Vault", href: "/inspector/dashboard/evidence", icon: Layers },
       { name: "Agency Dispatch & Chat", href: "/inspector/dashboard/messages", icon: MessageSquare, badge: "Live" },
+      { name: "Triple Connect Live", href: "/inspector/dashboard/triple-connect", icon: Radio, badge: "Stream" },
     ]
   },
   {

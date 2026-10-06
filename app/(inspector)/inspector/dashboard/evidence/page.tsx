@@ -1,20 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Layers,
-  Search,
-  Filter,
   Camera,
-  Radio,
   FileText,
-  MapPin,
-  CheckCircle2,
   Hash,
   ShieldCheck,
   RefreshCw,
   Eye,
-  ExternalLink,
   X,
   AlertTriangle,
   Mic,
@@ -22,14 +16,43 @@ import {
   Play,
   Pause,
   Globe,
-  Languages,
-  Headphones,
-  Sliders,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  FolderOpen,
 } from "lucide-react";
 import { getInspectorEvidence, verifyInspectorEvidence } from "@/services/inspector";
 import { dateOr, orDash } from "@/lib/display";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 import FieldVoiceNoteModal from "@/components/inspector/FieldVoiceNoteModal";
+import {
+  FolderViewToggle,
+  type FolderViewMode,
+} from "@/components/dashboard/digital-eye/PunditFolderTree";
+
+// ----------------------------------------------------
+// Folder grouping: Project → evidence source type
+// ----------------------------------------------------
+
+/**
+ * The evidence registry spans every project in the inspector's scope, so a
+ * source-type-first split would merge different projects' photos under one
+ * heading. Project comes first; the source type is its sub-folder.
+ *
+ * Both keys are honest buckets. A record naming no project is its own folder
+ * — never folded into a neighbouring project — and a record whose source type
+ * is blank reads "Source not recorded" rather than being dropped or guessed.
+ */
+const evidenceProjectOf = (ev: any): string =>
+  (ev?.project_name || "").trim() || "Project not recorded";
+
+const evidenceSourceOf = (ev: any): { key: string; label: string } => {
+  const raw = (ev?.source_type || "").trim();
+  return {
+    key: raw || "__source_not_recorded__",
+    label: (ev?.source_type_display || raw || "").trim() || "Source not recorded",
+  };
+};
 
 // Inline Voice Note Player for Evidence Cards
 function VoiceNoteCardPlayer({ url, duration = 0 }: { url: string; duration?: number }) {
@@ -175,6 +198,69 @@ export default function InspectorEvidencePage() {
   // Active translation channel tab per card: { [evidenceId]: 'en' | 'yo' | 'ig' }
   const [cardLangMap, setCardLangMap] = useState<Record<string, "en" | "yo" | "ig">>({});
 
+  // Folder view: Folders (Project → source type) or the flat card grid.
+  const [viewMode, setViewMode] = useState<FolderViewMode>("grouped");
+  const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
+  const [openSources, setOpenSources] = useState<Set<string>>(new Set());
+
+  /** Project folder → source-type sub-folder → records, in registry order. */
+  const folderGroups = useMemo<
+    [string, Map<string, { label: string; rows: any[] }>][]
+  >(() => {
+    const projects = new Map<string, Map<string, { label: string; rows: any[] }>>();
+    for (const ev of evidenceList) {
+      const projectKey = evidenceProjectOf(ev);
+      const source = evidenceSourceOf(ev);
+      if (!projects.has(projectKey)) projects.set(projectKey, new Map());
+      const sources = projects.get(projectKey)!;
+      if (!sources.has(source.key)) sources.set(source.key, { label: source.label, rows: [] });
+      sources.get(source.key)!.rows.push(ev);
+    }
+    return Array.from(projects.entries());
+  }, [evidenceList]);
+
+  // A single-project registry would otherwise open as one collapsed row and
+  // hide every record behind it, so that one project is opened for the reader.
+  useEffect(() => {
+    if (folderGroups.length === 1) setOpenProjects(new Set([folderGroups[0][0]]));
+  }, [folderGroups]);
+
+  const toggleProject = (project: string) =>
+    setOpenProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(project)) next.delete(project);
+      else next.add(project);
+      return next;
+    });
+
+  const toggleSource = (key: string) =>
+    setOpenSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const allFoldersOpen =
+    folderGroups.length > 0 &&
+    folderGroups.every(([project]) => openProjects.has(project));
+
+  const toggleAllFolders = () => {
+    if (allFoldersOpen) {
+      setOpenProjects(new Set());
+      setOpenSources(new Set());
+      return;
+    }
+    setOpenProjects(new Set(folderGroups.map(([project]) => project)));
+    setOpenSources(
+      new Set(
+        folderGroups.flatMap(([project, sources]) =>
+          Array.from(sources.keys()).map((key) => `${project}::${key}`)
+        )
+      )
+    );
+  };
+
   const fetchEvidence = async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -229,6 +315,271 @@ export default function InspectorEvidencePage() {
   const setCardLang = (id: string, lang: "en" | "yo" | "ig", e: React.MouseEvent) => {
     e.stopPropagation();
     setCardLangMap((prev) => ({ ...prev, [id]: lang }));
+  };
+
+  /**
+   * One evidence card, extracted unchanged from the flat grid so the folder
+   * tree and the flat list render the identical card. A second copy of this
+   * markup would drift, and the SHA-256 state it shows must not.
+   */
+  const renderEvidenceCard = (ev: any) => {
+    const isVoiceNote =
+      ev.source_type === "voice_note" ||
+      Boolean(ev.payload?.audio_url || ev.audio_url || ev.payload?.transcript);
+
+    const audioUrl =
+      ev.audio_url ||
+      ev.payload?.audio_url ||
+      ev.payload?.voice_note_url ||
+      (isVoiceNote ? ev.file?.file_url : null);
+
+    const photoUrl =
+      !isVoiceNote
+        ? ev.photo_url ||
+          ev.payload?.photo_url ||
+          ev.payload?.url ||
+          ev.file?.file_url
+        : null;
+
+    const verification = verifyOutcomeMap[ev.id];
+    const isVerifying = verifyingMap[ev.id];
+
+    const currentLang = cardLangMap[ev.id] || "en";
+    const transcriptText = ev.payload?.transcript || ev.payload?.description || "";
+    const translations = ev.payload?.translations || {};
+    const activeText =
+      currentLang === "en"
+        ? transcriptText
+        : translations[currentLang] || transcriptText;
+
+    return (
+      <div
+        key={ev.id}
+        className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-slate-300 transition-all flex flex-col justify-between shadow-sm hover:shadow-md"
+      >
+        <div>
+          {/* Top Bar with Reference & SHA-256 Seal status */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-[11px] font-bold text-cyan-800 bg-cyan-50 px-2.5 py-0.5 rounded-full border border-cyan-200">
+              {orDash(ev.evidence_reference, "Unreferenced")}
+            </span>
+
+            {verification ? (
+              <span
+                className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                  verification.file_bytes_ok === true
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : verification.file_bytes_ok === false && verification.check_performed
+                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}
+              >
+                {verification.file_bytes_ok === true ? (
+                  <>
+                    <ShieldCheck size={12} />
+                    <span>SHA-256 Validated</span>
+                  </>
+                ) : verification.file_bytes_ok === false && verification.check_performed ? (
+                  <>
+                    <AlertTriangle size={12} />
+                    <span>Hash Mismatch</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={12} />
+                    <span>Check Unavailable</span>
+                  </>
+                )}
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200 flex items-center gap-1">
+                <Hash size={13} />
+                <span>Digest on file</span>
+              </span>
+            )}
+          </div>
+
+          {/* Title & Source */}
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="text-sm font-bold text-[#022C4F]">
+              {isVoiceNote
+                ? "Field Voice Note / Audio Record"
+                : orDash(ev.source_type_display || ev.source_type, "Source not recorded")}
+            </h3>
+
+            {isVoiceNote && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-200 flex items-center gap-1">
+                <Mic size={10} />
+                <span>Transcribed</span>
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500">
+            {orDash(ev.project_name, "Project not recorded")}
+          </p>
+
+          {/* Voice Note Player & Translation Channel Deck */}
+          {isVoiceNote && audioUrl && (
+            <div className="mt-3 space-y-2.5">
+              <VoiceNoteCardPlayer
+                url={audioUrl}
+                duration={ev.payload?.duration_seconds || 0}
+              />
+
+              {/* Transcribed Notes Box & Nigerian Language Channel Tabs */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-[#022C4F] flex items-center gap-1">
+                    <FileText size={12} className="text-cyan-700" />
+                    <span>Voice Notes Transcript:</span>
+                  </span>
+
+                  {/* Language Switcher Tabs */}
+                  <div className="flex items-center gap-1">
+                    {[
+                      { code: "en" as const, label: "EN" },
+                      { code: "yo" as const, label: "YO" },
+                      { code: "ig" as const, label: "IG" },
+                    ].map((lang) => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={(e) => setCardLang(ev.id, lang.code, e)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          currentLang === lang.code
+                            ? "bg-[#022C4F] text-white"
+                            : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
+                        }`}
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Active Language Channel Notes */}
+                <div className="text-xs text-slate-700 leading-relaxed font-sans bg-white p-2.5 rounded-lg border border-slate-200/80">
+                  <p className="line-clamp-3 italic">
+                    &ldquo;{activeText || "No voice transcript recorded."}&rdquo;
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Photo Evidence Preview Banner */}
+          {photoUrl && (
+            <div
+              onClick={() => setSelectedPhotoEvidence(ev)}
+              className="mt-3 relative h-36 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 group cursor-pointer"
+            >
+              <img
+                src={photoUrl}
+                alt="Field test evidence"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex flex-col justify-end p-2.5 text-white">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold truncate max-w-[200px]">
+                    {ev.payload?.description || ev.payload?.caption || "Field Inspection Photo"}
+                  </span>
+                  <span className="bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono flex items-center gap-1">
+                    <Eye size={11} />
+                    <span>View Full</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata Attributes */}
+          <div className="mt-3.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500 font-medium text-[11px]">Element Link:</span>
+              <span className="font-bold text-[#022C4F]">
+                {orDash(ev.structural_element_id, "Not linked to an element")}
+              </span>
+            </div>
+
+            {ev.payload?.category && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-slate-500 font-medium text-[11px]">Category:</span>
+                <span className="font-semibold text-indigo-700 capitalize">
+                  {ev.payload.category.replace(/_/g, " ")}
+                </span>
+              </div>
+            )}
+
+            {ev.payload?.severity && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-slate-500 font-medium text-[11px]">Severity:</span>
+                <span
+                  className={`px-2 py-0.2 rounded font-bold text-[10px] ${
+                    ev.payload.severity === "CRITICAL"
+                      ? "text-rose-700 bg-rose-50"
+                      : ev.payload.severity === "HIGH"
+                      ? "text-amber-800 bg-amber-50"
+                      : "text-slate-700 bg-slate-100"
+                  }`}
+                >
+                  {ev.payload.severity}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-slate-700">
+              <span className="text-slate-500 font-medium text-[11px]">Integrity Hash:</span>
+              <span
+                className="font-mono text-[11px] text-slate-600 truncate max-w-[200px]"
+                title={ev.evidence_hash}
+              >
+                {orDash(ev.evidence_hash, "Not recorded")}
+              </span>
+            </div>
+
+            {ev.coordinates && (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-slate-500 font-medium text-[11px]">Coordinates:</span>
+                <span className="text-[11px] text-slate-600 font-mono">
+                  {ev.coordinates.latitude && ev.coordinates.longitude
+                    ? `${ev.coordinates.latitude}, ${ev.coordinates.longitude}`
+                    : JSON.stringify(ev.coordinates)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer Controls */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span>{dateOr(ev.captured_at, "Capture time not recorded")}</span>
+
+          <div className="flex items-center gap-2">
+            {isVoiceNote && (
+              <button
+                type="button"
+                onClick={() => setSelectedVoiceEvidence(ev)}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-indigo-800 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              >
+                <Eye size={11} />
+                <span>Voice Dossier</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => handleVerify(ev)}
+              disabled={isVerifying}
+              className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[#022C4F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+            >
+              <RefreshCw size={10} className={isVerifying ? "animate-spin" : ""} />
+              <span>{isVerifying ? "Verifying..." : "Verify Hash"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -341,270 +692,112 @@ export default function InspectorEvidencePage() {
         </div>
       )}
 
-      {/* Evidence Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {!isLoading &&
-          !loadError &&
-          evidenceList.map((ev) => {
-            const isVoiceNote =
-              ev.source_type === "voice_note" ||
-              Boolean(ev.payload?.audio_url || ev.audio_url || ev.payload?.transcript);
+      {/* Folder toolbar */}
+      {!isLoading && !loadError && evidenceList.length > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-slate-500">
+            {folderGroups.length} project folder{folderGroups.length === 1 ? "" : "s"} ·{" "}
+            {evidenceList.length} record{evidenceList.length === 1 ? "" : "s"}
+          </p>
 
-            const audioUrl =
-              ev.audio_url ||
-              ev.payload?.audio_url ||
-              ev.payload?.voice_note_url ||
-              (isVoiceNote ? ev.file?.file_url : null);
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleAllFolders}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-[#022C4F] transition-colors cursor-pointer"
+            >
+              {allFoldersOpen ? "Collapse all" : "Expand all"}
+            </button>
+            <FolderViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
+      )}
 
-            const photoUrl =
-              !isVoiceNote
-                ? ev.photo_url ||
-                  ev.payload?.photo_url ||
-                  ev.payload?.url ||
-                  ev.file?.file_url
-                : null;
-
-            const verification = verifyOutcomeMap[ev.id];
-            const isVerifying = verifyingMap[ev.id];
-
-            const currentLang = cardLangMap[ev.id] || "en";
-            const transcriptText = ev.payload?.transcript || ev.payload?.description || "";
-            const translations = ev.payload?.translations || {};
-            const activeText =
-              currentLang === "en"
-                ? transcriptText
-                : translations[currentLang] || transcriptText;
+      {/* Folder tree: Project folder to source-type sub-folder to cards */}
+      {!isLoading && !loadError && viewMode === "grouped" && (
+        <div className="rounded-2xl bg-white border border-slate-200/80 overflow-hidden divide-y divide-slate-100">
+          {folderGroups.map(([project, sources]) => {
+            const projectRows = Array.from(sources.values()).flatMap((s) => s.rows);
+            const projectOpen = openProjects.has(project);
 
             return (
-              <div
-                key={ev.id}
-                className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-slate-300 transition-all flex flex-col justify-between shadow-sm hover:shadow-md"
-              >
-                <div>
-                  {/* Top Bar with Reference & SHA-256 Seal status */}
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[11px] font-bold text-cyan-800 bg-cyan-50 px-2.5 py-0.5 rounded-full border border-cyan-200">
-                      {orDash(ev.evidence_reference, "Unreferenced")}
-                    </span>
-
-                    {verification ? (
-                      <span
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
-                          verification.file_bytes_ok === true
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : verification.file_bytes_ok === false && verification.check_performed
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}
-                      >
-                        {verification.file_bytes_ok === true ? (
-                          <>
-                            <ShieldCheck size={12} />
-                            <span>SHA-256 Validated</span>
-                          </>
-                        ) : verification.file_bytes_ok === false && verification.check_performed ? (
-                          <>
-                            <AlertTriangle size={12} />
-                            <span>Hash Mismatch</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle size={12} />
-                            <span>Check Unavailable</span>
-                          </>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200 flex items-center gap-1">
-                        <Hash size={13} />
-                        <span>Digest on file</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Title & Source */}
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className="text-sm font-bold text-[#022C4F]">
-                      {isVoiceNote
-                        ? "Field Voice Note / Audio Record"
-                        : orDash(ev.source_type_display || ev.source_type, "Source not recorded")}
-                    </h3>
-
-                    {isVoiceNote && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-200 flex items-center gap-1">
-                        <Mic size={10} />
-                        <span>Transcribed</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-slate-500">
-                    {orDash(ev.project_name, "Project not recorded")}
-                  </p>
-
-                  {/* Voice Note Player & Translation Channel Deck */}
-                  {isVoiceNote && audioUrl && (
-                    <div className="mt-3 space-y-2.5">
-                      <VoiceNoteCardPlayer
-                        url={audioUrl}
-                        duration={ev.payload?.duration_seconds || 0}
-                      />
-
-                      {/* Transcribed Notes Box & Nigerian Language Channel Tabs */}
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-[#022C4F] flex items-center gap-1">
-                            <FileText size={12} className="text-cyan-700" />
-                            <span>Voice Notes Transcript:</span>
-                          </span>
-
-                          {/* Language Switcher Tabs */}
-                          <div className="flex items-center gap-1">
-                            {[
-                              { code: "en" as const, label: "EN" },
-                              { code: "yo" as const, label: "YO" },
-                              { code: "ig" as const, label: "IG" },
-                            ].map((lang) => (
-                              <button
-                                key={lang.code}
-                                type="button"
-                                onClick={(e) => setCardLang(ev.id, lang.code, e)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                                  currentLang === lang.code
-                                    ? "bg-[#022C4F] text-white"
-                                    : "bg-white text-slate-600 hover:text-slate-900 border border-slate-200"
-                                }`}
-                              >
-                                {lang.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Active Language Channel Notes */}
-                        <div className="text-xs text-slate-700 leading-relaxed font-sans bg-white p-2.5 rounded-lg border border-slate-200/80">
-                          <p className="line-clamp-3 italic">
-                            &ldquo;{activeText || "No voice transcript recorded."}&rdquo;
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+              <div key={project}>
+                {/* Project folder row */}
+                <button
+                  type="button"
+                  onClick={() => toggleProject(project)}
+                  className="w-full px-4 sm:px-5 py-3 flex items-center gap-3 bg-slate-50/80 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                >
+                  {projectOpen ? (
+                    <ChevronDown size={14} className="text-slate-500 shrink-0" />
+                  ) : (
+                    <ChevronRight size={14} className="text-slate-500 shrink-0" />
                   )}
-
-                  {/* Photo Evidence Preview Banner */}
-                  {photoUrl && (
-                    <div
-                      onClick={() => setSelectedPhotoEvidence(ev)}
-                      className="mt-3 relative h-36 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 group cursor-pointer"
-                    >
-                      <img
-                        src={photoUrl}
-                        alt="Field test evidence"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex flex-col justify-end p-2.5 text-white">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold truncate max-w-[200px]">
-                            {ev.payload?.description || ev.payload?.caption || "Field Inspection Photo"}
-                          </span>
-                          <span className="bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono flex items-center gap-1">
-                            <Eye size={11} />
-                            <span>View Full</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                  {projectOpen ? (
+                    <FolderOpen size={15} className="text-amber-500 shrink-0" />
+                  ) : (
+                    <Folder size={15} className="text-amber-500 shrink-0" />
                   )}
+                  <span className="text-xs font-black uppercase tracking-wide text-[#022C4F] truncate">
+                    {project}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                    {sources.size} folder{sources.size === 1 ? "" : "s"} ·{" "}
+                    {projectRows.length} record{projectRows.length === 1 ? "" : "s"}
+                  </span>
+                </button>
 
-                  {/* Metadata Attributes */}
-                  <div className="mt-3.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-slate-700">
-                      <span className="text-slate-500 font-medium text-[11px]">Element Link:</span>
-                      <span className="font-bold text-[#022C4F]">
-                        {orDash(ev.structural_element_id, "Not linked to an element")}
-                      </span>
-                    </div>
+                {projectOpen && (
+                  <div className="bg-white">
+                    {Array.from(sources.entries()).map(([key, group]) => {
+                      const sourceKey = `${project}::${key}`;
+                      const sourceOpen = openSources.has(sourceKey);
 
-                    {ev.payload?.category && (
-                      <div className="flex items-center justify-between text-slate-700">
-                        <span className="text-slate-500 font-medium text-[11px]">Category:</span>
-                        <span className="font-semibold text-indigo-700 capitalize">
-                          {ev.payload.category.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                    )}
+                      return (
+                        <div key={sourceKey} className="border-t border-slate-100">
+                          {/* Source-type sub-folder row */}
+                          <button
+                            type="button"
+                            onClick={() => toggleSource(sourceKey)}
+                            className="w-full px-4 sm:px-5 py-2.5 pl-10 flex items-center gap-3 hover:bg-cyan-50/40 transition-colors text-left cursor-pointer"
+                          >
+                            {sourceOpen ? (
+                              <ChevronDown size={13} className="text-slate-400 shrink-0" />
+                            ) : (
+                              <ChevronRight size={13} className="text-slate-400 shrink-0" />
+                            )}
+                            <span className="text-xs font-bold text-slate-900 truncate">
+                              {group.label}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                              {group.rows.length} record{group.rows.length === 1 ? "" : "s"}
+                            </span>
+                          </button>
 
-                    {ev.payload?.severity && (
-                      <div className="flex items-center justify-between text-slate-700">
-                        <span className="text-slate-500 font-medium text-[11px]">Severity:</span>
-                        <span
-                          className={`px-2 py-0.2 rounded font-bold text-[10px] ${
-                            ev.payload.severity === "CRITICAL"
-                              ? "text-rose-700 bg-rose-50"
-                              : ev.payload.severity === "HIGH"
-                              ? "text-amber-800 bg-amber-50"
-                              : "text-slate-700 bg-slate-100"
-                          }`}
-                        >
-                          {ev.payload.severity}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between text-slate-700">
-                      <span className="text-slate-500 font-medium text-[11px]">Integrity Hash:</span>
-                      <span
-                        className="font-mono text-[11px] text-slate-600 truncate max-w-[200px]"
-                        title={ev.evidence_hash}
-                      >
-                        {orDash(ev.evidence_hash, "Not recorded")}
-                      </span>
-                    </div>
-
-                    {ev.coordinates && (
-                      <div className="flex items-center justify-between text-slate-700">
-                        <span className="text-slate-500 font-medium text-[11px]">Coordinates:</span>
-                        <span className="text-[11px] text-slate-600 font-mono">
-                          {ev.coordinates.latitude && ev.coordinates.longitude
-                            ? `${ev.coordinates.latitude}, ${ev.coordinates.longitude}`
-                            : JSON.stringify(ev.coordinates)}
-                        </span>
-                      </div>
-                    )}
+                          {sourceOpen && (
+                            <div className="p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {group.rows.map(renderEvidenceCard)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-
-                {/* Footer Controls */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>{dateOr(ev.captured_at, "Capture time not recorded")}</span>
-
-                  <div className="flex items-center gap-2">
-                    {isVoiceNote && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedVoiceEvidence(ev)}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-indigo-800 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                      >
-                        <Eye size={11} />
-                        <span>Voice Dossier</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleVerify(ev)}
-                      disabled={isVerifying}
-                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[#022C4F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      <RefreshCw size={10} className={isVerifying ? "animate-spin" : ""} />
-                      <span>{isVerifying ? "Verifying..." : "Verify Hash"}</span>
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             );
           })}
-      </div>
+        </div>
+      )}
+
+      {/* Flat card grid */}
+      {!isLoading && !loadError && viewMode === "flat" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {evidenceList.map(renderEvidenceCard)}
+        </div>
+      )}
 
       {/* Lightbox / High-Resolution Photo Evidence Modal */}
       {selectedPhotoEvidence && (

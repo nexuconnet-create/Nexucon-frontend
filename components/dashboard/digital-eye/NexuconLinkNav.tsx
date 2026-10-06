@@ -17,6 +17,14 @@ export interface NexuconLinkNavItem {
 
 export const NEXUCON_LINK_NAV: NexuconLinkNavItem[] = [
   {
+    label: "I Pundit",
+    title: "I Pundit (AI Analysis)",
+    href: "/government/dashboard/digital-eye/pundit/ai-analysis",
+    icon: Cpu,
+    description: "AI-driven analysis and evaluation suite.",
+    badge: "AI Engine",
+  },
+  {
     label: "Measurement",
     title: "UPV Test Measurements",
     href: "/government/dashboard/digital-eye/pundit/neural-link/measurement",

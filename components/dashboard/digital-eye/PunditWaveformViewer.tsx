@@ -77,7 +77,7 @@ export default function PunditWaveformViewer({
 
   // Active Nexucon Link calibration curve for this station's project — the
   // same curve the server applied to the stored strengths. Falls back to the
-  // built-in BS 1881-203 laboratory curve (fcu = 8.961·V − 7.97, valid
+  // built-in BS 1881-203 laboratory curve (fcu = 1.20·exp(0.85·V) N/mm², valid
   // 2.0–5.0 km/s only, never extrapolated) until it resolves.
   const [activeCurve, setActiveCurve] = useState<CurveSnapshot>(BUILTIN_CURVE_SNAPSHOT);
 
@@ -345,59 +345,40 @@ export default function PunditWaveformViewer({
         
         {/* Oscilloscope Canvas (Cols 1-3) */}
         <div className="lg:col-span-3 p-4 bg-slate-950 flex flex-col justify-between">
-          {/* Simultaneous A/B/C waveforms (8 Sep meeting): every test point
-              rendered at once, compressed — the interactive single-trace
-              scope below still handles the forensic manual-pick workflow. */}
+          {/* Refactored per Oct 4 meeting: Display a single data point per click instead of simultaneous */}
           {multiReadings.length > 1 && (
             <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                   <Layers size={13} className="text-amber-400" />
                   <span>
-                    Simultaneous Waveforms — {multiReadings.length} Test Points (A–
-                    {String.fromCharCode(64 + multiReadings.length)})
+                    Select Test Point to View Waveform
                   </span>
                 </h4>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Element mean V: {formatVelocityMs(test.pulse_velocity_ms)} m/s
-                  </span>
-                  <button
-                    onClick={() => setIsOverlayMode((v) => !v)}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-200 rounded-lg border border-slate-700 flex items-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <Layers size={11} />
-                    <span>{isOverlayMode ? "Separate traces" : "Overlay on one axis"}</span>
-                  </button>
-                </div>
               </div>
-
-              {isOverlayMode ? (
-                <OverlayTraceCanvas
-                  readings={multiReadings}
-                  fallbackPathMm={test.path_length_mm}
-                  gain={appliedGain}
-                />
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                  {multiReadings.map((r, i) => (
-                    <ReadingTrace
+              <div className="flex gap-2">
+                {multiReadings.map((r, i) => {
+                  const label = r.point_label || String.fromCharCode(65 + i);
+                  const isSelected = transitTimeUs === r.transit_time_us;
+                  return (
+                    <button
                       key={r.id || i}
-                      index={i}
-                      label={r.point_label || String.fromCharCode(65 + i)}
-                      transitTimeUs={r.transit_time_us as number}
-                      pathLengthMm={r.path_length_mm ?? test.path_length_mm}
-                      gain={appliedGain}
-                      velocityKmS={r.velocity_km_s}
-                      ecsMpa={r.ecs_mpa}
-                    />
-                  ))}
-                </div>
-              )}
-              <p className="mt-2 text-[10px] text-slate-500 font-mono">
-                t₀ markers rendered from each point&apos;s recorded transit time — per-point V and f_cu as
-                computed server-side through the active calibration curve.
-              </p>
+                      onClick={() => {
+                        setTransitTimeUs(r.transit_time_us as number);
+                        setPathLengthMm(r.path_length_mm ?? test.path_length_mm ?? 0);
+                        setIsAutomatedPicking(true);
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${
+                        isSelected 
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' 
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      }`}
+                    >
+                      Point {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

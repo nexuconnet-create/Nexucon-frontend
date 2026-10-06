@@ -344,8 +344,11 @@ const DocumentsTab = ({ project, onRequestDocs }: { project: Project; onRequestD
                 `}>
                   {doc.status}
                 </span>
-                <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer">
+                <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer" title="View Document">
                   <Eye size={18} />
+                </button>
+                <button className="text-slate-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg cursor-pointer" title="Download Document">
+                  <Download size={18} />
                 </button>
               </div>
             </div>

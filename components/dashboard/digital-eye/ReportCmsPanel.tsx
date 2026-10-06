@@ -71,12 +71,14 @@ const SECTION_CMS_KEYS: Record<string, string[]> = {
   "3.0": ["literature_review"],
   "3.1": [],
   "4.0": [],
-  "4.1": ["visual_preamble", "visual_observations"],
-  "4.2": ["methodology_equipment", "methodology_concrete", "rebar_statement"],
+  "4.1": [],
+  "4.2": [],
   "5.0": [],
   "5.3": [],
-  "6.0": ["recommendation_preamble", "findings_statement"],
-  "7.0": ["conclusion_preamble", "conclusion_items"],
+  "5.4": ["discussion_of_results"],
+  "5.5": ["remarks_preamble"],
+  "6.0": [],
+  "7.0": [],
   APPENDIX: [],
 };
 

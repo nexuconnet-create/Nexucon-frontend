@@ -114,6 +114,7 @@ export default function FieldVoiceNoteModal({
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId || "");
   const [structuralElement, setStructuralElement] = useState<string>(initialElementId);
+  const [isGeneralRemark, setIsGeneralRemark] = useState<boolean>(false);
   const [category, setCategory] = useState<string>(defaultCategory);
   const [severity, setSeverity] = useState<string>("MEDIUM");
   const [description, setDescription] = useState<string>("");
@@ -428,8 +429,8 @@ export default function FieldVoiceNoteModal({
       setSubmitError("Please select an assigned project.");
       return;
     }
-    if (!structuralElement.trim()) {
-      setSubmitError("Please specify the structural member / element identifier.");
+    if (!isGeneralRemark && !structuralElement.trim()) {
+      setSubmitError("Please specify the structural member / element identifier (or select General Remark).");
       return;
     }
 
@@ -457,7 +458,7 @@ export default function FieldVoiceNoteModal({
           file: fileToUpload,
           source_type: "voice_note",
           batchId: batchId || undefined,
-          structuralElementId: structuralElement.trim(),
+          structuralElementId: isGeneralRemark ? "GENERAL (ALL MEMBERS)" : structuralElement.trim(),
           category,
           severity,
           description: description.trim() || effectiveTranscript,
@@ -850,18 +851,38 @@ export default function FieldVoiceNoteModal({
                   </select>
                 </div>
 
-                {/* Structural Element ID */}
+                {/* Structural Element ID & General Remark */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Structural Element ID <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      Structural Element ID(s) <span className="text-rose-500">*</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isGeneralRemark}
+                        onChange={(e) => {
+                          setIsGeneralRemark(e.target.checked);
+                          if (e.target.checked) setStructuralElement("");
+                        }}
+                        className="rounded border-slate-300 text-cyan-500 focus:ring-cyan-500"
+                      />
+                      General Remark (All Members)
+                    </label>
+                  </div>
                   <input
                     type="text"
                     value={structuralElement}
+                    disabled={isGeneralRemark}
                     onChange={(e) => setStructuralElement(e.target.value)}
-                    placeholder="e.g. COL-C24, BEAM-L3, FOUNDATION-1"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 uppercase font-mono"
+                    placeholder={isGeneralRemark ? "Applies to all members" : "e.g. COL-C24, BEAM-L3 (comma separated for multiple)"}
+                    className={`w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 uppercase font-mono ${isGeneralRemark ? "opacity-50 cursor-not-allowed" : ""}`}
                   />
+                  {!isGeneralRemark && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Separate multiple elements with commas to apply this report to all of them at once.
+                    </p>
+                  )}
                 </div>
 
                 {/* Category */}

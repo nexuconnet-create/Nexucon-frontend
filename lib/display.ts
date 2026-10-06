@@ -72,3 +72,40 @@ export function timeOr(
   if (Number.isNaN(parsed.getTime())) return absent;
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+
+/**
+ * A Google Maps link that opens with a pin already dropped and named.
+ *
+ * A bare `?q=lat,lng` opens a dropped pin whose place panel reads back the
+ * position in degrees-minutes-seconds — which is not a description of
+ * anything, and is what leaves the inspector clicking the marker to find no
+ * details there. Google renders a parenthesised label after the coordinates
+ * as the place name, so the description the inspector typed is what the
+ * panel shows.
+ *
+ * Coordinates are interpolated raw because every caller holds them as a
+ * number or a numeric string the browser already validated. Only the label
+ * is encoded.
+ */
+export function googleMapsUrl(
+  latitude: number | string,
+  longitude: number | string,
+  label?: string | null
+): string {
+  const coords = `${latitude},${longitude}`;
+  const name = (label || '').trim();
+  return `https://www.google.com/maps?q=${coords}${name ? `(${encodeURIComponent(name)})` : ''}`;
+}
+
+/**
+ * A Google Maps search for a described location when no fix was taken.
+ *
+ * Used only when an address exists and the coordinates do not: the previous
+ * link rendered nothing at all in that case, so a described site looked like
+ * an untagged one.
+ */
+export function googleMapsAddressUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    address.trim()
+  )}`;
+}
