@@ -10,15 +10,17 @@ interface CreateInspectionSideDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: () => void;
+  defaultProjectId?: string;
 }
 
 export default function CreateInspectionSideDrawer({
   isOpen,
   onClose,
-  onCreated
+  onCreated,
+  defaultProjectId
 }: CreateInspectionSideDrawerProps) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId || '');
   const [inspectionType, setInspectionType] = useState('Foundation Inspection');
   const [priority, setPriority] = useState('Normal');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -27,16 +29,21 @@ export default function CreateInspectionSideDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
+    if (defaultProjectId) {
+      setSelectedProjectId(defaultProjectId);
+    }
     getProjects()
       .then(res => {
         const list = Array.isArray(res) ? res : ((res as any).results || []);
         setProjects(list);
-        if (list.length > 0) {
+        if (defaultProjectId) {
+          setSelectedProjectId(defaultProjectId);
+        } else if (list.length > 0 && !selectedProjectId) {
           setSelectedProjectId(list[0].id);
         }
       })
       .catch(err => console.error("Failed to load projects", err));
-  }, [isOpen]);
+  }, [isOpen, defaultProjectId]);
 
   if (!isOpen) return null;
 

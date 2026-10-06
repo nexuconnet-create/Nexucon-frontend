@@ -9,6 +9,14 @@ export interface ProjectProfessional {
   role: string;
 }
 
+export interface ProjectDocument {
+  id: string;
+  document_type: string;
+  file: string;
+  name: string;
+  uploaded_at: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -95,6 +103,7 @@ export interface Project {
   updated_at?: string;
 
   professionals?: ProjectProfessional[];
+  project_documents?: ProjectDocument[];
 }
 
 export const getProjects = async (): Promise<Project[]> => {
