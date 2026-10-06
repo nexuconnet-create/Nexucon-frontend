@@ -315,3 +315,80 @@ export const linkDocumentToCompliance = async (id: string, complianceCaseId: str
   const response = await api.post(`/documents/documents/${id}/link-compliance/`, { compliance_case_id: complianceCaseId });
   return unwrapItem<Document>(response);
 };
+
+export interface DocumentAccessRequest {
+  id: string;
+  project?: string;
+  project_name?: string;
+  document?: string;
+  report_reference?: string;
+  report_digest?: string;
+  document_title: string;
+  requester_name: string;
+  requester_email: string;
+  requester_phone?: string;
+  requester_organization?: string;
+  requester_role: string;
+  purpose: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  access_token: string;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  reviewed_at?: string;
+  review_notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getDocumentAccessRequests = async (params?: {
+  project?: string;
+  status?: string;
+  digest?: string;
+  email?: string;
+}): Promise<DocumentAccessRequest[]> => {
+  const response = await api.get('/documents/access-requests/', { params });
+  return unwrapList<DocumentAccessRequest>(response);
+};
+
+export const createDocumentAccessRequest = async (
+  data: Partial<DocumentAccessRequest>
+): Promise<DocumentAccessRequest> => {
+  const response = await api.post('/documents/access-requests/', data);
+  return unwrapItem<DocumentAccessRequest>(response);
+};
+
+export const checkDocumentAccessStatus = async (params: {
+  email?: string;
+  token?: string;
+  digest?: string;
+}): Promise<{
+  found: boolean;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  is_approved?: boolean;
+  access_token?: string;
+  detail?: string;
+  reviewed_at?: string;
+  review_notes?: string;
+  requester_name?: string;
+  document_title?: string;
+}> => {
+  const response = await api.get('/documents/access-requests/check-status/', { params });
+  return response.data;
+};
+
+export const approveDocumentAccessRequest = async (
+  id: string,
+  notes?: string
+): Promise<DocumentAccessRequest> => {
+  const response = await api.post(`/documents/access-requests/${id}/approve/`, { notes });
+  return unwrapItem<DocumentAccessRequest>(response);
+};
+
+export const rejectDocumentAccessRequest = async (
+  id: string,
+  notes?: string
+): Promise<DocumentAccessRequest> => {
+  const response = await api.post(`/documents/access-requests/${id}/reject/`, { notes });
+  return unwrapItem<DocumentAccessRequest>(response);
+};
+

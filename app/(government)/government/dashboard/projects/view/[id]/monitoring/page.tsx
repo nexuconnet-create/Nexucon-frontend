@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { getProjectById, updateProject, uploadProjectDocument, Project, ProjectDocument } from '@/services/projects';
 import { getDistricts, District } from '@/services/settings';
@@ -10,11 +10,18 @@ import {
   AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus,
   Edit, Compass, Phone, Mail, ExternalLink, Award, Hammer, Briefcase, FileSpreadsheet,
   CheckCircle2, Wrench, Users, Search, Download, Trash2, Check, FolderOpen, Info,
-  ChevronRight, Zap, Sparkles, Filter, X, ClipboardList
+  ChevronRight, Zap, Sparkles, Filter, X, ClipboardList, Lock, Unlock, KeyRound
 } from 'lucide-react';
 import Link from 'next/link';
 import { getInspections, Inspection } from '@/services/inspections';
-import { getDocuments, Document as RepoDocument } from '@/services/documents';
+import {
+  getDocuments,
+  Document as RepoDocument,
+  getDocumentAccessRequests,
+  approveDocumentAccessRequest,
+  rejectDocumentAccessRequest,
+  DocumentAccessRequest
+} from '@/services/documents';
 import { getBIMModels, BIMModel } from '@/services/bim';
 import { getDailySiteUpdates, DailySiteUpdate } from '@/services/monitoring';
 import { getPunditTests, PunditTest, downloadNdtReport } from '@/services/digitalEye';
@@ -644,7 +651,7 @@ const DocumentsTab = ({
   onProjectUpdated: (updated: Project) => void;
   onRequestDocs: () => void;
 }) => {
-  const [subTab, setSubTab] = useState<'project' | 'requested'>('project');
+  const [subTab, setSubTab] = useState<'project' | 'requested' | 'access_requests'>('project');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
   const [repoDocs, setRepoDocs] = useState<RepoDocument[]>([]);
@@ -654,6 +661,18 @@ const DocumentsTab = ({
   const [uploadDocType, setUploadDocType] = useState('Approved Architectural Drawings');
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Document Access Requests State
+  const [accessRequests, setAccessRequests] = useState<DocumentAccessRequest[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(false);
+  const [accessFilter, setAccessFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [accessSearch, setAccessSearch] = useState('');
+  const [actionModal, setActionModal] = useState<{
+    request: DocumentAccessRequest;
+    type: 'APPROVE' | 'REJECT';
+  } | null>(null);
+  const [actionNotes, setActionNotes] = useState('');
+  const [isActionProcessing, setIsActionProcessing] = useState(false);
 
   // Fetch documents from document service for this project as well
   useEffect(() => {
@@ -671,6 +690,80 @@ const DocumentsTab = ({
       });
     return () => { active = false; };
   }, [project.id]);
+
+  // Fetch access requests
+  const fetchAccessRequests = useCallback(async () => {
+    if (!project?.id) return;
+    setLoadingAccess(true);
+    try {
+      const data = await getDocumentAccessRequests({ project: project.id });
+      setAccessRequests(data || []);
+    } catch (err) {
+      console.warn("Could not load document access requests", err);
+    } finally {
+      setLoadingAccess(false);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    fetchAccessRequests();
+  }, [fetchAccessRequests]);
+
+  const pendingAccessCount = useMemo(() => {
+    return accessRequests.filter(r => r.status === 'PENDING').length;
+  }, [accessRequests]);
+
+  const filteredAccessRequests = useMemo(() => {
+    return accessRequests.filter(req => {
+      const matchesFilter = accessFilter === 'ALL' || req.status === accessFilter;
+      const q = accessSearch.toLowerCase().trim();
+      const matchesSearch = !q ||
+        req.requester_name.toLowerCase().includes(q) ||
+        req.requester_email.toLowerCase().includes(q) ||
+        (req.requester_organization && req.requester_organization.toLowerCase().includes(q)) ||
+        (req.report_reference && req.report_reference.toLowerCase().includes(q)) ||
+        req.document_title.toLowerCase().includes(q);
+      return matchesFilter && matchesSearch;
+    });
+  }, [accessRequests, accessFilter, accessSearch]);
+
+  const handleConfirmAction = async () => {
+    if (!actionModal) return;
+    const { request, type } = actionModal;
+    setIsActionProcessing(true);
+    try {
+      if (type === 'APPROVE') {
+        const updated = await approveDocumentAccessRequest(
+          request.id,
+          actionNotes.trim() || 'Approved by supervising government officer.'
+        );
+        setAccessRequests(prev => prev.map(r => r.id === request.id ? updated : r));
+        window.dispatchEvent(new CustomEvent('show-toast', { 
+          detail: { 
+            message: `Official access approved for ${request.requester_name}. They can now download the authentic original.`, 
+            type: 'success' 
+          } 
+        }));
+      } else {
+        const updated = await rejectDocumentAccessRequest(
+          request.id,
+          actionNotes.trim() || 'Access denied under statutory records governance.'
+        );
+        setAccessRequests(prev => prev.map(r => r.id === request.id ? updated : r));
+        window.dispatchEvent(new CustomEvent('show-toast', { 
+          detail: { message: `Access request rejected for ${request.requester_name}.`, type: 'info' } 
+        }));
+      }
+      setActionModal(null);
+      setActionNotes('');
+    } catch (err: any) {
+      console.error('Failed to update access request', err);
+      const msg = err?.response?.data?.detail || 'Failed to update access request.';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+    } finally {
+      setIsActionProcessing(false);
+    }
+  };
 
   // Combine project_documents and repository documents
   const allDocs = useMemo(() => {
@@ -769,33 +862,54 @@ const DocumentsTab = ({
       {/* Header Bar */}
       <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <button
               onClick={() => setSubTab('project')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                subTab === 'project' ? 'bg-[#022C4F] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                subTab === 'project' ? 'bg-[#022C4F] text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               Project Files & Drawings ({allDocs.length})
             </button>
             <button
+              onClick={() => setSubTab('access_requests')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                subTab === 'access_requests' ? 'bg-[#022C4F] text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <KeyRound size={13} />
+              Access Requests ({accessRequests.length})
+              {pendingAccessCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-amber-950 animate-pulse">
+                  {pendingAccessCount} PENDING
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setSubTab('requested')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                subTab === 'requested' ? 'bg-[#022C4F] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                subTab === 'requested' ? 'bg-[#022C4F] text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               Requested Documents
             </button>
           </div>
           <p className="text-xs text-slate-500">
-            {subTab === 'project' 
-              ? 'Statutory drawings, soil surveys, structural calculations, and permit files uploaded for this project.'
-              : 'Formal technical and compliance requirements dispatched to project developers.'}
+            {subTab === 'project' && 'Statutory drawings, soil surveys, structural calculations, and permit files uploaded for this project.'}
+            {subTab === 'access_requests' && 'Requests submitted from QR code report verification and public links awaiting government approval.'}
+            {subTab === 'requested' && 'Formal technical and compliance requirements dispatched to project developers.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {subTab === 'requested' ? (
+          {subTab === 'access_requests' ? (
+            <button
+              onClick={fetchAccessRequests}
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <RefreshCw size={14} className={loadingAccess ? "animate-spin" : ""} /> Refresh Requests
+            </button>
+          ) : subTab === 'requested' ? (
             <button 
               onClick={onRequestDocs}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all cursor-pointer"
@@ -813,6 +927,7 @@ const DocumentsTab = ({
         </div>
       </div>
 
+      {/* --- SUBTAB: PROJECT FILES & DRAWINGS --- */}
       {subTab === 'project' && (
         <div>
           {/* Search and Filters */}
@@ -906,6 +1021,282 @@ const DocumentsTab = ({
         </div>
       )}
 
+      {/* --- SUBTAB: DOCUMENT ACCESS REQUESTS (QR Code Verification Flow) --- */}
+      {subTab === 'access_requests' && (
+        <div className="p-6 space-y-6">
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Requests</p>
+              <p className="text-xl font-black text-[#022C4F] mt-0.5">{accessRequests.length}</p>
+            </div>
+            <div className="bg-amber-50/70 rounded-xl p-3.5 border border-amber-200/60">
+              <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Pending Review</p>
+              <p className="text-xl font-black text-amber-900 mt-0.5">{pendingAccessCount}</p>
+            </div>
+            <div className="bg-emerald-50/70 rounded-xl p-3.5 border border-emerald-200/60">
+              <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Approved Grants</p>
+              <p className="text-xl font-black text-emerald-900 mt-0.5">
+                {accessRequests.filter(r => r.status === 'APPROVED').length}
+              </p>
+            </div>
+            <div className="bg-rose-50/70 rounded-xl p-3.5 border border-rose-200/60">
+              <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Rejected</p>
+              <p className="text-xl font-black text-rose-900 mt-0.5">
+                {accessRequests.filter(r => r.status === 'REJECTED').length}
+              </p>
+            </div>
+          </div>
+
+          {/* Filters & Search */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by requester, email, or firm..."
+                value={accessSearch}
+                onChange={(e) => setAccessSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs font-bold">
+              {[
+                { id: 'ALL', label: `All (${accessRequests.length})` },
+                { id: 'PENDING', label: `Pending (${pendingAccessCount})` },
+                { id: 'APPROVED', label: `Approved` },
+                { id: 'REJECTED', label: `Rejected` },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setAccessFilter(f.id as any)}
+                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    accessFilter === f.id
+                      ? 'bg-[#022C4F] text-white shadow-sm'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Access Requests Table / List */}
+          {loadingAccess ? (
+            <div className="p-12 text-center text-slate-400">
+              <div className="w-8 h-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs">Loading document access requests…</p>
+            </div>
+          ) : filteredAccessRequests.length > 0 ? (
+            <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden bg-white shadow-sm">
+              {filteredAccessRequests.map((req) => (
+                <div key={req.id} className="p-5 hover:bg-slate-50/70 transition-colors space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                        req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                        req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {req.status === 'APPROVED' ? <CheckCircle2 size={20} /> :
+                         req.status === 'REJECTED' ? <AlertTriangle size={20} /> :
+                         <KeyRound size={20} />}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-black text-slate-900">{req.requester_name}</h4>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            {req.requester_role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>{req.requester_email}</span>
+                          {req.requester_phone && <span>• {req.requester_phone}</span>}
+                          {req.requester_organization && <span>• <strong>{req.requester_organization}</strong></span>}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                        req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                        req.status === 'REJECTED' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                        'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                      }`}>
+                        {req.status === 'PENDING' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                        {req.status}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {new Date(req.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Requested Document & Reason */}
+                  <div className="bg-slate-50 rounded-xl p-3 text-xs border border-slate-100 space-y-1">
+                    <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <FileText size={14} className="text-blue-600" />
+                      Target Item: <span className="font-bold text-[#022C4F]">{req.document_title}</span>
+                      {req.report_reference && (
+                        <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200">
+                          Ref: {req.report_reference}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-slate-600">
+                      <strong>Purpose:</strong> {req.purpose || 'Statutory review and verification.'}
+                    </p>
+                    {req.reviewed_by_name && (
+                      <p className="text-[11px] text-emerald-700 pt-1 border-t border-slate-200/60">
+                        ✓ Reviewed by: <strong>{req.reviewed_by_name}</strong> {req.reviewed_at && `on ${new Date(req.reviewed_at).toLocaleDateString()}`}
+                        {req.review_notes && ` — "${req.review_notes}"`}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between gap-3 pt-1 flex-wrap">
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      Token: {req.access_token?.slice(0, 16)}...
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {req.status === 'PENDING' ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setActionModal({ request: req, type: 'APPROVE' });
+                              setActionNotes('Approved by supervising government officer under statutory testing regulations.');
+                            }}
+                            className="flex items-center gap-1 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                          >
+                            <Check size={14} /> Approve Access
+                          </button>
+                          <button
+                            onClick={() => {
+                              setActionModal({ request: req, type: 'REJECT' });
+                              setActionNotes('Access denied under statutory records governance.');
+                            }}
+                            className="flex items-center gap-1 px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          >
+                            <X size={14} /> Reject
+                          </button>
+                        </>
+                      ) : req.status === 'APPROVED' ? (
+                        <button
+                          onClick={() => {
+                            const url = `https://nexucon.net/verify/report?ref=${encodeURIComponent(req.report_reference || '')}&digest=${encodeURIComponent(req.report_digest || '')}&token=${encodeURIComponent(req.access_token)}`;
+                            navigator.clipboard.writeText(url);
+                            window.dispatchEvent(new CustomEvent('show-toast', { 
+                              detail: { message: 'Approved access URL copied to clipboard!', type: 'success' } 
+                            }));
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          <ExternalLink size={12} /> Copy Access Link
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-12 text-center text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              <KeyRound size={36} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-bold text-slate-700">No access requests found</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                When external stakeholders scan report QR codes and request access, their requests will appear here for government authorization.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation Modal for Approving / Rejecting Request */}
+      {actionModal && (
+        <div className="fixed inset-0 bg-[#0F181F]/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-black text-[#022C4F] flex items-center gap-2">
+                {actionModal.type === 'APPROVE' ? (
+                  <>
+                    <Unlock size={18} className="text-emerald-600" />
+                    Approve Document Access
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={18} className="text-rose-600" />
+                    Reject Access Request
+                  </>
+                )}
+              </h3>
+              <button
+                onClick={() => setActionModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-2">
+              <p>
+                <strong>Requester:</strong> {actionModal.request.requester_name} ({actionModal.request.requester_email})
+              </p>
+              <p>
+                <strong>Organization:</strong> {actionModal.request.requester_organization || 'Independent'}
+              </p>
+              <p>
+                <strong>Document:</strong> {actionModal.request.document_title}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Official Review Notes & Statutory Justification
+              </label>
+              <textarea
+                rows={3}
+                value={actionNotes}
+                onChange={(e) => setActionNotes(e.target.value)}
+                placeholder="Enter regulatory review note or authorization remarks..."
+                className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setActionModal(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAction}
+                disabled={isActionProcessing}
+                className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
+                  actionModal.type === 'APPROVE'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {isActionProcessing
+                  ? 'Processing…'
+                  : actionModal.type === 'APPROVE'
+                  ? 'Confirm Approval & Grant Access'
+                  : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- SUBTAB: REQUESTED DOCUMENTS --- */}
       {subTab === 'requested' && (
         <div className="p-6 space-y-4">
           <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">

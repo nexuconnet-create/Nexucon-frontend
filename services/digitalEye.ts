@@ -3111,10 +3111,11 @@ export const verifyArchivedReport = async (
  */
 export const downloadArchivedReportOriginal = async (
   ref: string,
-  digest: string
+  digest: string,
+  token?: string
 ): Promise<Blob> => {
   const res = await api.get('/reports/verify/download/', {
-    params: { ref, digest },
+    params: { ref, digest, ...(token ? { token } : {}) },
     responseType: 'blob',
   });
   return new Blob([res as unknown as BlobPart], { type: 'application/pdf' });
