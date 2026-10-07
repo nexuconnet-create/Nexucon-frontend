@@ -54,7 +54,7 @@ export default function NdtReportPreviewView({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [notifyInspectors, setNotifyInspectors] = useState(true);
+  const [notifying, setNotifying] = useState(false);
   const [zoom, setZoom] = useState(100);
 
   // Fetch the bundle fresh each time the view mounts — data may have
@@ -97,19 +97,42 @@ export default function NdtReportPreviewView({
     );
   };
 
+  const handleNotifyInspectors = async () => {
+    if (!projectId) return;
+    setNotifying(true);
+    try {
+      const res = await notifyProjectNdtInspectors(projectId, { operator, force_resend: true });
+      if (res?.notified_count > 0) {
+        toast(`✉️ Alert emails dispatched to ${res.notified_count} project inspector(s).`, "success");
+      } else if (res?.recipients && res.recipients.length > 0) {
+        toast(`✉️ Notification sent to ${res.recipients.map((r: any) => r.name).join(", ")}.`, "info");
+      } else {
+        toast("No active field inspectors assigned to this project.", "info");
+      }
+    } catch (err: any) {
+      toast(
+        `⚠️ ${err?.response?.data?.detail || err?.message || "Failed to notify inspectors."}`,
+        "error"
+      );
+    } finally {
+      setNotifying(false);
+    }
+  };
+
   const handleGenerate = async () => {
     setGenerating(true);
     try {
       await downloadNdtReport(projectId, operator);
-      if (notifyInspectors) {
-        try {
-          const notif = await notifyProjectNdtInspectors(projectId, { operator });
-          if (notif?.notified_count) {
-            toast(`✉️ Alert emails dispatched to ${notif.notified_count} project inspector(s).`, "info");
-          }
-        } catch (e) {
-          console.warn("Inspector notification notice:", e);
+      // Once generate and archive is triggered, the inspectors automatically get notified instantly
+      try {
+        const notif = await notifyProjectNdtInspectors(projectId, { operator, force_resend: true });
+        if (notif?.notified_count) {
+          toast(`✉️ Alert emails automatically dispatched to ${notif.notified_count} project inspector(s).`, "info");
+        } else if (notif?.recipients?.length) {
+          toast(`✉️ Assigned inspectors automatically notified for this archived report.`, "info");
         }
+      } catch (e) {
+        console.warn("Inspector automatic notification notice:", e);
       }
       onGenerated?.();
     } catch (err: any) {
@@ -196,16 +219,20 @@ export default function NdtReportPreviewView({
                 Download
               </a>
             )}
-            <label className="hidden sm:inline-flex items-center gap-1.5 text-xs text-[#4B5B66] cursor-pointer mr-1 select-none">
-              <input
-                type="checkbox"
-                checked={notifyInspectors}
-                onChange={(e) => setNotifyInspectors(e.target.checked)}
-                className="rounded text-[#0A3D2E] focus:ring-[#0A3D2E] w-3.5 h-3.5 border-slate-300"
-              />
-              <Mail className="w-3.5 h-3.5 text-slate-500" />
-              <span>Email Inspectors</span>
-            </label>
+            <button
+              type="button"
+              onClick={handleNotifyInspectors}
+              disabled={notifying || loading || !projectId}
+              className="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
+              title="Immediately dispatch email notification to field inspectors that this NDT report is ready for download"
+            >
+              {notifying ? (
+                <Loader2 className="w-4 h-4 animate-spin text-sky-700" />
+              ) : (
+                <Mail className="w-4 h-4 text-sky-700" />
+              )}
+              <span>{notifying ? "Notifying Inspectors…" : "Notify Inspectors"}</span>
+            </button>
             <button
               type="button"
               onClick={handleGenerate}

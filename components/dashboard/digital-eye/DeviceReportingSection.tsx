@@ -42,6 +42,7 @@ import {
   downloadArchivedReport,
   openArchivedReport,
   notifyInspectorsAboutNdtReport,
+  notifyProjectNdtInspectors,
   getProjectNdtInspectors,
   type ProjectInspectorRecipient
 } from "@/services/digitalEye";
@@ -111,6 +112,34 @@ export default function DeviceReportingSection({
 
   const [selectedReport, setSelectedReport] = useState<DeviceReportRecord | null>(null);
   const [notifyReport, setNotifyReport] = useState<DeviceReportRecord | null>(null);
+  const [isNotifyingDirect, setIsNotifyingDirect] = useState(false);
+
+  const handleNotifyInspectorsDirect = async () => {
+    if (!projectId) return;
+    setIsNotifyingDirect(true);
+    try {
+      const res = await notifyProjectNdtInspectors(projectId, { operator: selectedOperator || undefined, force_resend: true });
+      if (res?.notified_count > 0) {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `✉️ Alert emails dispatched to ${res.notified_count} project inspector(s).`, type: "success" }
+        }));
+      } else if (res?.recipients && res.recipients.length > 0) {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: `✉️ Notification sent to ${res.recipients.map((r: any) => r.name).join(", ")}.`, type: "info" }
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: "No active field inspectors assigned to this project.", type: "info" }
+        }));
+      }
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `⚠️ ${err?.response?.data?.detail || err?.message || "Failed to notify inspectors."}`, type: "error" }
+      }));
+    } finally {
+      setIsNotifyingDirect(false);
+    }
+  };
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -518,6 +547,28 @@ export default function DeviceReportingSection({
               >
                 <FileText size={14} />
                 <span>Export to Word</span>
+              </button>
+            )}
+
+            {deviceType === "pundit" && (
+              <button
+                onClick={() => {
+                  if (reports.length > 0) {
+                    setNotifyReport(reports[0]);
+                  } else {
+                    handleNotifyInspectorsDirect();
+                  }
+                }}
+                disabled={isNotifyingDirect}
+                className="px-3.5 py-2.5 bg-sky-50 border border-sky-300 hover:bg-sky-100 text-sky-800 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                title="Send official NDT report ready notification to field inspectors"
+              >
+                {isNotifyingDirect ? (
+                  <RefreshCw size={14} className="animate-spin text-sky-700" />
+                ) : (
+                  <Mail size={14} className="text-sky-700" />
+                )}
+                <span>{isNotifyingDirect ? "Notifying…" : "Notify Inspectors"}</span>
               </button>
             )}
 
@@ -1049,8 +1100,13 @@ function GenerateReportModal({
           return;
         }
         const filename = await downloadNdtReport(projectId, modalOperator || undefined);
+        try {
+          await notifyProjectNdtInspectors(projectId, { operator: modalOperator || undefined, force_resend: true });
+        } catch (e) {
+          console.warn("Inspector automatic notification notice:", e);
+        }
         window.dispatchEvent(new CustomEvent('show-toast', {
-          detail: { message: `Downloaded ${filename} — official BS 1881-203 dossier with real registry data.`, type: "success" }
+          detail: { message: `Downloaded ${filename} — official BS 1881-203 dossier archived and inspectors notified.`, type: "success" }
         }));
         // The backend just archived this dossier — re-list so the registry
         // shows the new row immediately (real server row, not a client mock).
