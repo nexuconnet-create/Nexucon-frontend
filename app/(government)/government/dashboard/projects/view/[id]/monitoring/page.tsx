@@ -1008,24 +1008,14 @@ const DocumentsTab = ({
                     </a>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
-                  ${doc.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : ''}
-                  ${doc.status === 'Pending Review' ? 'bg-amber-100 text-amber-700' : ''}
-                  ${doc.status === 'Needs Revision' ? 'bg-red-100 text-red-700' : ''}
-                `}>
-                  {doc.status}
-                </span>
-                <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer" title="View Document">
-                  <Eye size={18} />
-                </button>
-                <button className="text-slate-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg cursor-pointer" title="Download Document">
-                  <Download size={18} />
-                </button>
-              </div>
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="p-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+              <FileText size={32} className="mx-auto mb-2 text-slate-300" />
+              <p className="text-xs font-semibold text-slate-500">No project documents found for this category.</p>
+            </div>
+          )}
 
           {/* Access Requests Table / List */}
           {loadingAccess ? (
@@ -1964,6 +1954,7 @@ export default function ProjectMonitoringPage() {
               </div>
             </div>
             
+            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
               <Link
                 href={`/government/dashboard/digital-eye/pundit/ai-analysis?project=${projectId}`}
                 className="px-4 sm:px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm text-center flex items-center justify-center gap-2"
@@ -1994,6 +1985,7 @@ export default function ProjectMonitoringPage() {
                   </>
                 )}
               </button>
+            </div>
           </div>
 
           {/* Navigation Tabs */}
