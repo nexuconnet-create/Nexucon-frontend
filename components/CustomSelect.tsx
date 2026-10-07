@@ -14,6 +14,7 @@ export interface CustomSelectProps {
   disabled?: boolean;
   disabledText?: string;
   variant?: 'default' | 'underline' | 'form';
+  className?: string;
 }
 
 export function CustomSelect({
@@ -25,7 +26,8 @@ export function CustomSelect({
   error,
   disabled = false,
   disabledText,
-  variant = 'default'
+  variant = 'default',
+  className = ''
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,7 +54,9 @@ export function CustomSelect({
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={
-          variant === 'underline'
+          className
+            ? `w-full flex justify-between items-center transition-all cursor-pointer ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''} ${className}`
+            : variant === 'underline'
             ? `w-full pb-2 border-b ${error ? 'border-red-500' : 'border-[#022C4F]'} focus:outline-none transition-all text-sm font-medium ${disabled ? 'text-gray-400 cursor-not-allowed' : 'bg-transparent text-[#022C4F] cursor-pointer'} flex justify-between items-center`
             : variant === 'form'
             ? `w-full h-12 rounded-lg border ${error ? 'border-red-500' : 'border-[#022C4F]'} px-4 focus:outline-none focus:ring-1 focus:ring-[#022C4F] text-sm text-[#0F181F] flex justify-between items-center ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white cursor-pointer'}`

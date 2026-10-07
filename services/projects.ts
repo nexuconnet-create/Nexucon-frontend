@@ -9,6 +9,14 @@ export interface ProjectProfessional {
   role: string;
 }
 
+export interface ProjectDocument {
+  id: string;
+  document_type: string;
+  file: string;
+  name: string;
+  uploaded_at: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -47,6 +55,8 @@ export interface Project {
   // report's site location section.
   latitude?: number | string | null;
   longitude?: number | string | null;
+  coordinate_system?: string;
+  corner_coordinates?: any;
 
   permit_number?: string;
   permit_status?: string;
@@ -93,6 +103,7 @@ export interface Project {
   updated_at?: string;
 
   professionals?: ProjectProfessional[];
+  project_documents?: ProjectDocument[];
 }
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -154,5 +165,13 @@ export const uploadProjectDocument = async (projectId: string, file: File, docum
       'Content-Type': 'multipart/form-data',
     },
   });
+  return response;
+};
+
+export const convertCoordinatesApi = async (payload: {
+  system: string;
+  corners: any[];
+}): Promise<any> => {
+  const response: any = await api.post('/projects/convert-coordinates/', payload);
   return response;
 };

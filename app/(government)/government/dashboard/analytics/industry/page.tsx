@@ -128,7 +128,7 @@ export default function IndustryPerformancePage() {
                 <span className="font-bold text-xs text-slate-800">{sec.sector}</span>
                 <span className="text-xs font-black text-blue-700">{sec.share_percentage}%</span>
               </div>
-              <p className="text-[11px] text-slate-500">{sec.projects_count.toLocaleString()} Active Projects</p>
+              <p className="text-[11px] text-slate-500">{(sec.projects_count ?? 0).toLocaleString()} Active Projects</p>
               <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
                 <span className="text-slate-400">Avg Compliance</span>
                 <span className="font-bold text-emerald-700">{sec.avg_compliance}%</span>
@@ -148,7 +148,7 @@ export default function IndustryPerformancePage() {
               <div key={i} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                 <div>
                   <h4 className="font-bold text-xs text-slate-900">{lga.lga}</h4>
-                  <p className="text-[10px] text-slate-400">{lga.projects_count.toLocaleString()} Projects</p>
+                  <p className="text-[10px] text-slate-400">{(lga.projects_count ?? 0).toLocaleString()} Projects</p>
                 </div>
                 <div className="text-right text-xs">
                   <span className="font-bold text-emerald-700 block">{lga.compliance_rate}% Compliance</span>

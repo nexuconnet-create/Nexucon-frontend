@@ -171,8 +171,8 @@ export default function FinancialOverview() {
             {(financials?.category_breakdown || []).map((cat, i) => (
               <tr key={i} className="hover:bg-blue-50/30 transition-colors">
                 <td className="py-4 px-6 font-bold text-slate-900">{cat.name}</td>
-                <td className="py-4 px-6 font-bold text-slate-700">₦{cat.budget.toFixed(1)}M</td>
-                <td className="py-4 px-6 font-bold text-blue-700">₦{cat.actual.toFixed(1)}M</td>
+                <td className="py-4 px-6 font-bold text-slate-700">₦{typeof cat.budget === 'number' ? cat.budget.toFixed(1) : '0.0'}M</td>
+                <td className="py-4 px-6 font-bold text-blue-700">₦{typeof cat.actual === 'number' ? cat.actual.toFixed(1) : '0.0'}M</td>
                 <td className="py-4 px-6 text-right">
                   <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                     cat.status === 'under' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
