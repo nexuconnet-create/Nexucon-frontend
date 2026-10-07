@@ -30,7 +30,8 @@ import {
   X,
   ChevronDown,
   FolderOpen,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
@@ -59,6 +60,7 @@ import {
   importBIMElementsFromIFC,
   importBIMElementsFromStored,
   getBIMImportStatus,
+  removeBIMModel,
   BIMImportStatus,
   importPunditReadings,
   downloadPunditImportTemplate,
@@ -584,6 +586,31 @@ export default function DataCollectionPage() {
       });
   };
 
+  const [isRemovingBim, setIsRemovingBim] = useState(false);
+
+  const handleRemoveBimModel = async () => {
+    if (!selectedProjectId) return;
+    if (!window.confirm("Are you sure you want to remove the imported BIM model for this project? This will remove the 3D model preview and unlink the extracted structural elements.")) {
+      return;
+    }
+    setIsRemovingBim(true);
+    try {
+      await removeBIMModel(selectedProjectId, { deleteElements: true, deleteStored: false });
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: '🗑️ BIM model removed successfully.', type: "success" }
+      }));
+      setFormElementName('');
+      setPreviewRefreshKey(k => k + 1);
+      refreshRegistry();
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `⚠️ Failed to remove BIM model: ${err?.response?.data?.detail || err?.message || 'Error'}`, type: "error" }
+      }));
+    } finally {
+      setIsRemovingBim(false);
+    }
+  };
+
   // Batch Excel import (A2): one row per test point, an element's consecutive
   // rows form one test with points A, B, C... The server validates every row
   // and rejects the whole file with row-level reasons when anything is wrong.
@@ -870,18 +897,29 @@ export default function DataCollectionPage() {
                   genuine uploaded file name, so it can be checked against the
                   project it belongs to. */}
               {bimImportStatus?.currently_imported ? (
-                <p className="text-xs text-gray-600 mt-1 flex items-start gap-1.5">
-                  <CheckCircle2 size={13} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>
-                    <span className="font-semibold text-[#022C4F]">
-                      Currently imported: {bimImportStatus.currently_imported.source_file}
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2">
+                  <p className="text-xs text-gray-700 flex items-start gap-1.5 min-w-0">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="font-semibold text-[#022C4F]">
+                        Currently imported: {bimImportStatus.currently_imported.source_file}
+                      </span>
+                      {bimImportStatus.currently_imported.translated_from_rvt
+                        ? ' (translated from Revit via Autodesk)'
+                        : ''}
+                      {` — ${bimImportStatus.currently_imported.element_count} preview element(s), last import ${new Date(bimImportStatus.currently_imported.updated_at).toLocaleString()}.`}
                     </span>
-                    {bimImportStatus.currently_imported.translated_from_rvt
-                      ? ' (translated from Revit via Autodesk)'
-                      : ''}
-                    {` — ${bimImportStatus.currently_imported.element_count} preview element(s), last import ${new Date(bimImportStatus.currently_imported.updated_at).toLocaleString()}.`}
-                  </span>
-                </p>
+                  </p>
+                  <button
+                    onClick={handleRemoveBimModel}
+                    disabled={isRemovingBim || isImportingIfc}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 rounded-lg transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                    title="Remove this BIM model and reset the 3D preview"
+                  >
+                    <Trash2 size={12} className={isRemovingBim ? "animate-spin" : ""} />
+                    <span>{isRemovingBim ? "Removing…" : "Remove Model"}</span>
+                  </button>
+                </div>
               ) : (
                 <p className="text-xs text-gray-500 mt-0.5">
                   No BIM model imported for this project yet — the Target Structural Element

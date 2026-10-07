@@ -688,6 +688,21 @@ export const getBIMImportStatus = async (projectId: string): Promise<BIMImportSt
   return unwrap<any>(res, null);
 };
 
+export const removeBIMModel = async (
+  projectId: string,
+  options?: { deleteElements?: boolean; deleteStored?: boolean }
+): Promise<{ success: boolean; message: string }> => {
+  const params: Record<string, string> = { project: projectId };
+  if (options?.deleteElements !== undefined) {
+    params.delete_elements = String(options.deleteElements);
+  }
+  if (options?.deleteStored !== undefined) {
+    params.delete_stored = String(options.deleteStored);
+  }
+  const res = await api.delete('/digital-eye/bim-elements/import-ifc/', { params });
+  return unwrap<any>(res, res);
+};
+
 // ==========================================
 // 3d. BIM MODEL PREVIEW GEOMETRY (stored tessellation of the imported model)
 // ==========================================
