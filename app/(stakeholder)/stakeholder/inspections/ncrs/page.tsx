@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { getNcrs } from "@/services/inspections";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertOctagon,
@@ -50,69 +51,55 @@ interface NcrItem {
   daysRemaining: number;
 }
 
-const mockNcrs: NcrItem[] = [
-  {
-    id: "ncr-1",
-    ncrNumber: "NCR-2026-088",
-    projectName: "Eko Atlantic Horizon Towers",
-    location: "Block B, Grid 4 (North Elevation)",
-    stage: "Foundation Pour & Rebar Cover",
-    issuingAgency: "LASBCA HQ Directorate",
-    inspectorName: "Engr. Olufemi Adebayo",
-    inspectorRole: "Senior Building Inspector",
-    dateIssued: "18 Sep 2026",
-    deadline: "24 Sep 2026",
-    severity: "Critical",
-    status: "Awaiting Proof",
-    description: "Rebar cover depth on Grid 4 measured at 25mm instead of statutory 40mm design specification. Risk of premature carbonation and chloride ingress in marine environment.",
-    statutoryCode: "BS 8110-1:1997 §3.3 & Lagos State Building Regulations 2021",
-    beforePhotoUrl: "https://images.unsplash.com/photo-1541888946425-d0fbb1861593?q=80&w=800&auto=format&fit=crop",
-    daysRemaining: 3,
-  },
-  {
-    id: "ncr-2",
-    ncrNumber: "NCR-2026-092",
-    projectName: "Victoria Island Central Commercial Hub",
-    location: "Core Shear Wall SW-02, Level 3",
-    stage: "Level 4 Floor Slab Concrete Pour",
-    issuingAgency: "Lagos State Materials Testing Laboratory (LSMTL)",
-    inspectorName: "Engr. Musa Bello",
-    inspectorRole: "Materials Quality Auditor",
-    dateIssued: "14 Sep 2026",
-    deadline: "22 Sep 2026",
-    severity: "Major",
-    status: "Under Review",
-    description: "7-day concrete compressive test cube failed minimum threshold (18.5 N/mm² achieved vs 25 N/mm² specified). NDT ultrasonic pulse velocity (UPV) verification requested.",
-    statutoryCode: "BS 1881-203:1986 & NIS 156:2018",
-    beforePhotoUrl: "https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?q=80&w=800&auto=format&fit=crop",
-    remedialProofUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=800&auto=format&fit=crop",
-    remediationStatement: "Ultrasonic NDT test carried out by accredited laboratory on 19 Sep 2026 confirmed estimated 28-day target strength meets C30/37 design criteria. Rebound hammer calibration appended.",
-    daysRemaining: 1,
-  },
-  {
-    id: "ncr-3",
-    ncrNumber: "NCR-2026-079",
-    projectName: "Lekki Phase 1 Residential Estate",
-    location: "Basement Drainage Trench 03",
-    stage: "Substructure Drainage & Soil Compaction",
-    issuingAgency: "LASBCA Zonal Office",
-    inspectorName: "Arc. Chioma Nwosu",
-    inspectorRole: "Zonal Review Officer",
-    dateIssued: "08 Sep 2026",
-    deadline: "16 Sep 2026",
-    severity: "Moderate",
-    status: "Approved & Closed",
-    description: "Subbase compaction degree measured at 91% MDD against required 95% Modified AASHTO specification prior to blinding layer pour.",
-    statutoryCode: "ASTM D1557-12 / Federal Highway Specs",
-    beforePhotoUrl: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=800&auto=format&fit=crop",
-    remedialProofUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?q=80&w=800&auto=format&fit=crop",
-    remediationStatement: "Trench re-excavated, moisture conditioned to OMC, and re-compacted with 3-ton vibratory roller. Nuclear density gauge test confirmed 97.2% compaction.",
-    daysRemaining: 0,
-  },
-];
-
 export default function StakeholderNcrsPage() {
-  const [ncrs, setNcrs] = useState<NcrItem[]>(mockNcrs);
+  const [ncrs, setNcrs] = useState<NcrItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNcrs()
+      .then((data) => {
+        if (cancelled) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setNcrs(
+            data.map((r: any) => ({
+              id: String(r.id),
+              ncrNumber: r.ncr_number || `NCR-${String(r.id).slice(0, 6).toUpperCase()}`,
+              projectName: r.project_name || r.project?.name || "Assigned Project",
+              location: r.location || "Site Inspection Area",
+              stage: r.stage || "Statutory Inspection",
+              issuingAgency: r.issuing_agency || "Regulatory Authority",
+              inspectorName: r.inspector_name || "Assigned Officer",
+              inspectorRole: r.inspector_role || "Building Inspector",
+              dateIssued: r.created_at ? new Date(r.created_at).toLocaleDateString() : "Recent",
+              deadline: r.deadline ? new Date(r.deadline).toLocaleDateString() : "Immediate",
+              severity: r.severity
+                ? r.severity.charAt(0).toUpperCase() + r.severity.slice(1).toLowerCase()
+                : "Major",
+              status: r.status ? r.status.replace(/_/g, " ").toUpperCase() : "AWAITING PROOF",
+              description: r.description || "Non-conformance report issued.",
+              statutoryCode: r.statutory_code || "National Building Code & Regulations",
+              beforePhotoUrl: r.before_photo_url || "",
+              remedialProofUrl: r.remedial_proof_url || "",
+              remediationStatement: r.remediation_statement || "",
+              daysRemaining: r.days_remaining ?? 0,
+            }))
+          );
+        } else {
+          setNcrs([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setNcrs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");

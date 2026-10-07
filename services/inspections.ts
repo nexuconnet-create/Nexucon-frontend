@@ -335,3 +335,11 @@ export const resolveFinding = async (
   const res: any = await api.post(`/inspections/findings/${id}/resolve/`, payload);
   return res.data || res;
 };
+
+export const getNcrs = async (params?: {
+  project?: string;
+  status?: string;
+}): Promise<any[]> => {
+  const res: any = await api.get('/inspections/ncrs/', { params });
+  return Array.isArray(res) ? res : (res.results || res.data || []);
+};

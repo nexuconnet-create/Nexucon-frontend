@@ -62,61 +62,10 @@ export default function VisualObservationsPanel({
     }
     setIsLoading(true);
     try {
-      let rows = await getVisualObservations(projectId, batchId);
-      if (!rows || rows.length === 0) {
-        // Pre-fill realistic baseline observations for demonstration if none exist
-        const seedObservations: VisualObservation[] = [
-          {
-            id: `obs-${projectId}-001`,
-            project_id: projectId,
-            batch_id: batchId || null,
-            structural_element: "Column C24 (Grid 4-D)",
-            grid_location: "Grid 4-D, Floor 2",
-            floor: "Floor 2",
-            category: "honeycombing",
-            severity: "HIGH",
-            description:
-              "Severe honeycombing observed at the base of transfer column C24 over an area of ~350x200mm. Aggregate segregation and exposed rebars visible; potential acoustic attenuation factor in UPV test.",
-            photos: [
-              {
-                id: "ph-1",
-                url: "https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?auto=format&fit=crop&w=600&q=80",
-                caption: "Base honeycombing & exposed aggregate at Column C24",
-                file_name: "C24_base_honeycombing.jpg",
-                created_at: new Date().toISOString(),
-              },
-            ],
-            inspector_name: "Engr. Abdullateef (LASBCA)",
-            created_at: "2026-09-04T10:15:00Z",
-          },
-          {
-            id: `obs-${projectId}-002`,
-            project_id: projectId,
-            batch_id: batchId || null,
-            structural_element: "Beam B12 (Drop Beam)",
-            grid_location: "Grid 2-3 / Axis B",
-            floor: "Floor 2",
-            category: "cracking",
-            severity: "MEDIUM",
-            description:
-              "Diagonal shear micro-cracking (crack width ~0.25mm) observed at the beam-column interface. UPV indirect surface transmission test recommended to establish crack depth.",
-            photos: [
-              {
-                id: "ph-2",
-                url: "https://images.unsplash.com/photo-1541888946425-d0fbb1861564?auto=format&fit=crop&w=600&q=80",
-                caption: "Diagonal shear crack along Beam B12 soffit",
-                file_name: "Beam_B12_diagonal_crack.jpg",
-                created_at: new Date().toISOString(),
-              },
-            ],
-            inspector_name: "Engr. Abdullateef (LASBCA)",
-            created_at: "2026-09-04T10:45:00Z",
-          },
-        ];
-        rows = seedObservations;
-      }
-      setObservations(rows);
-      if (onObservationsChanged) onObservationsChanged(rows);
+      const rows = await getVisualObservations(projectId, batchId);
+      const actualRows = Array.isArray(rows) ? rows : [];
+      setObservations(actualRows);
+      if (onObservationsChanged) onObservationsChanged(actualRows);
     } catch {
       setObservations([]);
     } finally {

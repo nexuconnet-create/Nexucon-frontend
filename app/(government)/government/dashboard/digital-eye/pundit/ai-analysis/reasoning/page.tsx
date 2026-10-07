@@ -62,13 +62,10 @@ export default function PunditAIReasoningPage() {
     setIsChatting(true);
     
     // Hit AI Reasoning Chat backend endpoint
-    import("@/services/api").then(({ customFetch }) => {
-      customFetch(`/api/v1/digital-eye/pundit-analysis-review/${activeAnalysis.id}/chat/`, {
-        method: "POST",
-        body: JSON.stringify({
-          history: chatHistory,
-          message: chatInput,
-        })
+    import("@/services/api").then(({ default: api }) => {
+      api.post(`/digital-eye/pundit-analysis-review/${activeAnalysis.id}/chat/`, {
+        history: chatHistory,
+        message: chatInput,
       })
         .then((res: any) => {
           setChatHistory((prev) => [...prev, {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -36,30 +36,24 @@ const INITIAL_ITEMS: ChecklistItem[] = [
   {
     id: 1,
     title: "1. Foundation Excavation Depth & Bearing Strata Check",
-    status: "PASS",
-    comment: "Excavation depth is 2.5m, matches structural foundation design specifications.",
-    photos: [
-      {
-        name: "FOUNDATION_STRATA_NORTH.JPG",
-        hash: "a3f5b8c2d1e4f7a9b0c3d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a1b4c7d0e3",
-        url: "https://images.unsplash.com/photo-1541888946425-d0fbb1861593?q=80&w=400&auto=format&fit=crop",
-      },
-    ],
-    voiceNote: "Recorded: 14s (Clear strata confirmed at 2.5m depth)",
+    status: "UNSET",
+    comment: "",
+    photos: [],
+    voiceNote: null,
   },
   {
     id: 2,
     title: "2. Rebar Spacing, Diameter & Splice Length Compliance",
-    status: "PASS",
-    comment: "Spacing is 150mm, within tolerance. T20 rebar diameter verified with digital gauge.",
+    status: "UNSET",
+    comment: "",
     photos: [],
     voiceNote: null,
   },
   {
     id: 3,
     title: "3. Concrete Cover Spacers & Formwork Alignment",
-    status: "PASS",
-    comment: "Cover spacers in place (50mm nominal), formwork aligned plumb within 3mm.",
+    status: "UNSET",
+    comment: "",
     photos: [],
     voiceNote: null,
   },
@@ -67,7 +61,7 @@ const INITIAL_ITEMS: ChecklistItem[] = [
     id: 4,
     title: "4. Damp-Proof Membrane & Subsurface Drainage Verification",
     status: "UNSET",
-    comment: "Not yet installed - pending completion of sub-base compaction.",
+    comment: "",
     photos: [],
     voiceNote: null,
   },
@@ -75,7 +69,7 @@ const INITIAL_ITEMS: ChecklistItem[] = [
     id: 5,
     title: "5. Site Safety Scaffolding, Edge Protection & PPE Review",
     status: "UNSET",
-    comment: "Safety compliance verified for perimeter excavation berms.",
+    comment: "",
     photos: [],
     voiceNote: null,
   },
@@ -114,29 +108,52 @@ export default function ChecklistStagePage() {
     );
   };
 
-  const handleAddPhoto = async (id: number) => {
-    const mockHash = await computeSHA256(`PHOTO_${id}_${Date.now()}`);
-    const newPhoto = {
-      name: `CHK_EVIDENCE_ITEM_${id}_${Date.now().toString().slice(-4)}.JPG`,
-      hash: mockHash,
-      url: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=400&auto=format&fit=crop",
-    };
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [activePhotoItemId, setActivePhotoItemId] = useState<number | null>(null);
 
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === id ? { ...i, photos: [...i.photos, newPhoto] } : i
-      )
-    );
+  const handleTriggerAddPhoto = (id: number) => {
+    setActivePhotoItemId(id);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
 
-    enqueueSyncItem({
-      type: "EVIDENCE",
-      title: newPhoto.name,
-      payload: { itemId: id, inspectionId, stageId },
-      hash: mockHash,
-      timestamp: new Date().toISOString(),
-      sizeBytes: 1850000,
-      source: "FIELD_TERMINAL",
-    });
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || activePhotoItemId === null) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const realHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      const blobUrl = URL.createObjectURL(file);
+      const newPhoto = {
+        name: file.name || `CHK_EVIDENCE_ITEM_${activePhotoItemId}_${Date.now()}.JPG`,
+        hash: realHash,
+        url: blobUrl,
+      };
+
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === activePhotoItemId ? { ...i, photos: [...i.photos, newPhoto] } : i
+        )
+      );
+
+      enqueueSyncItem({
+        type: "EVIDENCE",
+        title: newPhoto.name,
+        payload: { itemId: activePhotoItemId, inspectionId, stageId },
+        hash: realHash,
+        timestamp: new Date().toISOString(),
+        sizeBytes: file.size,
+        source: "FIELD_TERMINAL",
+      });
+    } catch {
+      // Ignore
+    } finally {
+      setActivePhotoItemId(null);
+    }
   };
 
   const handleToggleVoice = (id: number) => {
@@ -332,7 +349,7 @@ export default function ChecklistStagePage() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleAddPhoto(item.id)}
+                  onClick={() => handleTriggerAddPhoto(item.id)}
                   className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Camera size={14} className="text-[#0284C7]" />
@@ -501,6 +518,16 @@ export default function ChecklistStagePage() {
           </div>
         </div>
       )}
+
+      {/* Hidden file picker for field evidence photos */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
     </div>
   );
 }

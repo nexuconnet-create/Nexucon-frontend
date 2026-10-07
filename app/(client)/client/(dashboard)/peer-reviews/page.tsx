@@ -16,11 +16,12 @@ export default function PeerReviewsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    import('@/services/api').then(({ customFetch }) => {
-      customFetch('/api/v1/documents/reviews/')
+    import('@/services/api').then(({ default: api }) => {
+      api.get('/documents/reviews/')
         .then((res: any) => {
-          if (Array.isArray(res)) {
-            setQueueData(res.map((r: any) => ({
+          const data = res.data?.data || res.data || [];
+          if (Array.isArray(data)) {
+            setQueueData(data.map((r: any) => ({
               item: r.document_title || r.document?.title || 'Unknown Document',
               discipline: r.discipline || 'Engineering',
               reviewer: r.reviewer_name || r.reviewer?.first_name || 'Assigned Reviewer',

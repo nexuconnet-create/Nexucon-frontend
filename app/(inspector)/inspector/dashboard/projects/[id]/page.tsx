@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import BIMModelPreview from "@/components/dashboard/digital-eye/BIMModelPreview";
 import {
   Building2,
   MapPin,
@@ -16,6 +17,9 @@ import {
   CheckCircle2,
   FileText,
   ShieldAlert,
+  Box,
+  RefreshCw,
+  Sparkles
 } from "lucide-react";
 import {
   getInspectorProjectById,
@@ -183,7 +187,15 @@ export default function InspectorProjectDetailPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/inspector/dashboard/inspections"
+            href={`/inspector/dashboard/digital-eye/pundit?project=${projectId}`}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
+            title="Direct link to I-Pundit Ultrasonic NDT & AI Analysis for this project"
+          >
+            <Sparkles size={14} className="text-amber-300" />
+            <span>I-Pundit AI Analysis</span>
+          </Link>
+          <Link
+            href={`/inspector/dashboard/inspections?project=${projectId}`}
             className="px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-semibold transition-all shadow-sm"
           >
             Launch Inspection
@@ -379,13 +391,23 @@ export default function InspectorProjectDetailPage() {
                 </div>
               </div>
 
-              <Link
-                href="/inspector/dashboard/digital-eye/ts-1"
-                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#022C4F] border border-slate-200 transition-colors flex items-center justify-center gap-2"
-              >
-                <Eye size={14} className="text-emerald-600" />
-                <span>Launch Digital Eye Workspace</span>
-              </Link>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Link
+                  href={`/inspector/dashboard/digital-eye/pundit?project=${projectId}`}
+                  className="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-semibold text-indigo-900 border border-indigo-200 transition-colors flex items-center justify-center gap-1.5"
+                  title="Direct link to I-Pundit Ultrasonic NDT & AI Analysis"
+                >
+                  <Sparkles size={14} className="text-indigo-600 shrink-0" />
+                  <span className="truncate">Open I-Pundit</span>
+                </Link>
+                <Link
+                  href="/inspector/dashboard/digital-eye/ts-1"
+                  className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#022C4F] border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Eye size={14} className="text-emerald-600 shrink-0" />
+                  <span className="truncate">3D / TS-1 Workspace</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -456,22 +478,23 @@ export default function InspectorProjectDetailPage() {
       )}
 
       {activeTab === "documents" && (
-        <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-300">
-          <div className="p-6 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-[#022C4F]">Project Drawings & Documents</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              View-only access to structural/architectural drawings and models assigned to this project by the government. Downloads are restricted.
-            </p>
+        <div className="space-y-6">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <BIMModelPreview projectId={projectId} />
           </div>
-          <div className="divide-y divide-slate-100">
-            {documents === null && siteEvidence === null ? (
-              <div className="p-6 text-center text-amber-700 text-xs">
-                Could not read project documents.
+          {((documents && documents.length > 0) || (siteEvidence && siteEvidence.filter((e: any) => e.source_type === "bim_element").length > 0)) && (
+            <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-300">
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-[#022C4F]">Project Drawings & Documents</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  View-only access to structural/architectural drawings and models assigned to this project by the government. Downloads are restricted.
+                </p>
               </div>
+            <div className="divide-y divide-slate-100">
+              {documents === null && siteEvidence === null ? (
+                null
             ) : documents?.length === 0 && (!siteEvidence || siteEvidence.filter((e: any) => e.source_type === "bim_element").length === 0) ? (
-              <div className="p-6 text-center text-slate-500 text-xs">
-                No documents found for this project.
-              </div>
+                null
             ) : (
               <>
                 {documents && documents.map((doc) => (
@@ -540,6 +563,8 @@ export default function InspectorProjectDetailPage() {
               </>
             )}
           </div>
+        </div>
+        )}
         </div>
       )}
     </div>

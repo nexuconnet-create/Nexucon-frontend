@@ -78,13 +78,13 @@ export default function ReportsPage() {
                         <span className="text-gray-300">•</span>
                         <span className="text-gray-600 font-medium uppercase tracking-wider">{report.device_type} Assessment</span>
                         <span className="text-gray-300">•</span>
-                        <span className="text-gray-500">{new Date(report.created_at).toLocaleDateString()}</span>
+                        <span className="text-gray-500">{report.created_at ? new Date(report.created_at).toLocaleDateString() : 'Recent'}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <a
-                      href={report.report_file}
+                      href={report.report_file || report.download_url || '#'}
                       download
                       target="_blank"
                       rel="noopener noreferrer"

@@ -7,7 +7,7 @@ import { getDistricts, District } from '@/services/settings';
 import {
   Building2, Activity, FileText, Box,
   ArrowLeft, MapPin, Calendar, User, CheckCircle, ShieldCheck,
-  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus
+  AlertTriangle, Clock, Eye, Layers, UploadCloud, RefreshCw, FileCheck, Plus, Download
 } from 'lucide-react';
 import Link from 'next/link';
 import { getInspections, Inspection } from '@/services/inspections';
@@ -626,9 +626,22 @@ export default function ProjectMonitoringPage() {
             </div>
             
             <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-              <button className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all shadow-sm text-center cursor-pointer">
+              <Link
+                href={`/government/dashboard/digital-eye/pundit/ai-analysis?project=${projectId}`}
+                className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm text-center flex items-center justify-center gap-2"
+                title="Direct link to I-Pundit AI Analysis Workspace"
+              >
+                <Activity size={16} className="text-amber-300" />
+                <span>I-Pundit AI Analysis</span>
+              </Link>
+              <a
+                href={`/api/v1/reports/projects/${projectId}/ndt-report/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 transition-all shadow-sm text-center cursor-pointer"
+              >
                 Generate Report
-              </button>
+              </a>
             </div>
           </div>
 
