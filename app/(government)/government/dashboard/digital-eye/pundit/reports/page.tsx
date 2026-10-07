@@ -111,6 +111,7 @@ export default function PunditReportsPage() {
         <NdtReportPreviewView
           projectId={selectedProjectId}
           operator={selectedOperator || undefined}
+          elementId={selectedElementId || undefined}
           onBackToEdit={() => setPreviewOpen(false)}
           onGenerated={() => {
             setRegistryVersion((v) => v + 1);
@@ -132,7 +133,7 @@ export default function PunditReportsPage() {
               className="inline-flex items-center gap-2 rounded-lg border border-[#0A3D2E]/30 bg-[#0A3D2E]/5 px-4 py-2 text-sm font-medium text-[#0A3D2E] hover:bg-[#0A3D2E]/10 cursor-pointer"
             >
               <Eye className="w-4 h-4" />
-              Preview Report {selectedOperator ? `(${selectedOperator})` : ""}
+              Preview Report {selectedElementId ? `(Item: ${selectedElementId.toUpperCase()})` : selectedOperator ? `(${selectedOperator})` : ""}
             </button>
             {operators.length > 0 && (
               <select

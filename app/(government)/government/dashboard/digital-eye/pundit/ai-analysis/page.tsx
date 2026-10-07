@@ -39,6 +39,8 @@ import PunditScanBatchSelector from "@/components/dashboard/digital-eye/PunditSc
 import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCalibrationModal";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
+import { getProjects, Project } from "@/services/projects";
 import {
   DigitalEyeFinding,
   getDigitalEyeFindings,
@@ -60,6 +62,7 @@ import {
 type ActiveTab = "tomography" | "waveform" | "model" | "defects" | "observations" | "attendance";
 
 export default function PunditAIAnalysisPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [selectedBatch, setSelectedBatch] = useState<PunditScanBatch | null>(null);
@@ -80,17 +83,60 @@ export default function PunditAIAnalysisPage() {
   const [freshRun, setFreshRun] = useState<PunditProjectAnalysis | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("tomography");
 
+  const activeProject = useMemo(() => {
+    return projects.find((p) => p.id === selectedProjectId) || null;
+  }, [projects, selectedProjectId]);
+
+  // Load project list & auto-select initial project if none is selected
+  useEffect(() => {
+    getProjects().then((res) => {
+      const pList = Array.isArray(res) ? res : ((res as any).results || []);
+      setProjects(pList);
+      if (!selectedProjectId && pList.length > 0) {
+        setSelectedProjectId(pList[0].id);
+      }
+    }).catch(() => {
+      setProjects([]);
+    });
+  }, []);
+
+  // Load project-specific saved calibration profile
+  useEffect(() => {
+    if (selectedProjectId && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(`pundit_cal_${selectedProjectId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCalibratedProfile({
+            project_id: selectedProjectId,
+            batch_id: parsed.batch_id,
+            curve_type: parsed.curve_type || "exponential",
+            params: parsed.params || { a: 1.2, b: 0.85, c: 0 },
+            design_strength_mpa: parsed.design_strength_mpa || 25,
+            notes: parsed.notes || "",
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          setCalibratedProfile(null);
+        }
+      } catch (e) {
+        setCalibratedProfile(null);
+      }
+    }
+  }, [selectedProjectId]);
+
   const refresh = async () => {
+    if (!selectedProjectId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId || undefined });
+      const fetchedElements = await getBIMStructuralElements({ project: selectedProjectId });
       setElements(fetchedElements);
       const selected = fetchedElements.find((el) => el.id === selectedElementId) || null;
       const [fetchedFindings, fetchedTests, fetchedAnalyses] = await Promise.all([
-        getDigitalEyeFindings({ project: selectedProjectId || undefined, element_name: selected?.name }),
-        getPunditTests({ project: selectedProjectId || undefined, element_name: selected?.name }),
-        getPunditAIAnalyses({ project: selectedProjectId || undefined }),
+        getDigitalEyeFindings({ project: selectedProjectId, element_name: selected?.name }),
+        getPunditTests({ project: selectedProjectId, element_name: selected?.name }),
+        getPunditAIAnalyses({ project: selectedProjectId }),
       ]);
       setFindings(fetchedFindings);
       setTests(fetchedTests);
@@ -106,7 +152,9 @@ export default function PunditAIAnalysisPage() {
   };
 
   useEffect(() => {
-    refresh();
+    if (selectedProjectId) {
+      refresh();
+    }
   }, [selectedProjectId, selectedElementId]);
 
   // Real computed metrics
@@ -262,6 +310,7 @@ export default function PunditAIAnalysisPage() {
           projectId={selectedProjectId}
           selectedBatchId={selectedBatch?.id}
           onSelectBatch={(b) => setSelectedBatch(b)}
+          totalElementsCount={tests.length}
         />
       </div>
 
@@ -278,7 +327,7 @@ export default function PunditAIAnalysisPage() {
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">AI Waveforms Inferred</span>
           <p className="text-2xl font-bold text-gray-900 font-mono mt-1">
-            {selectedBatch ? selectedBatch.element_count : tests.length}
+            {tests.length > 0 ? tests.length : (selectedBatch?.element_count || 0)}
           </p>
           <span className="text-[11px] text-gray-400 mt-0.5 block truncate">
             {selectedBatch ? `Folder: ${selectedBatch.folder_name}` : latestAnalysis ? `${latestAnalysis.model_provider || "Platform"}`.trim() : "No AI analysis run yet"}
@@ -423,11 +472,19 @@ export default function PunditAIAnalysisPage() {
           </div>
         </div>
 
-        {/* TAB 1: INTERACTIVE 2D TOMOGRAPHY GRID */}
+        {/* TAB 1: INTERACTIVE 2D TOMOGRAPHY GRID & ELEMENT BAR CHART */}
         {activeTab === "tomography" && (
-          <div className="p-6">
+          <div className="p-6 space-y-6">
             <PunditTomographyHeatmap
               tests={tests}
+              onSelectTest={(t) => {
+                setSelectedTest(t);
+              }}
+            />
+
+            <PunditElementVelocityBarChart
+              tests={tests}
+              targetDesignStrengthMpa={calibratedProfile?.design_strength_mpa || 25}
               onSelectTest={(t) => {
                 setSelectedTest(t);
               }}
@@ -514,7 +571,7 @@ export default function PunditAIAnalysisPage() {
                   </div>
                   <p className="text-[11px] text-slate-300">
                     {selectedBatch
-                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
+                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${tests.length > 0 ? tests.length : selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
                       : "AI Executive Summary integrates ultrasonic wave speeds with on-site visual defect observations and verified client/site attendance logs."}
                   </p>
                 </div>
@@ -796,10 +853,10 @@ export default function PunditAIAnalysisPage() {
         isOpen={isCalibrationOpen}
         onClose={() => setIsCalibrationOpen(false)}
         projectId={selectedProjectId}
-        projectName="Active Project"
+        projectName={activeProject?.name || (activeProject as any)?.title || "Active Project"}
         batchId={selectedBatch?.id}
         batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
-        elementCount={selectedBatch?.element_count || tests.length || 48}
+        elementCount={tests.length > 0 ? tests.length : (selectedBatch?.element_count || 20)}
         onConfirmCalibrationAndAnalyze={handleConfirmCalibrationAndAnalyze}
         isSubmitting={isRunningAnalysis}
       />

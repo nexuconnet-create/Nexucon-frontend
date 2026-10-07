@@ -1009,77 +1009,22 @@ const DocumentsTab = ({
                     </a>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-12 text-center text-slate-500">
-              <FileText size={36} className="mx-auto text-slate-300 mb-3" />
-              <p className="text-sm font-bold text-slate-700 mb-1">No documents match your query</p>
-              <p className="text-xs text-slate-400">Try clearing the search filter or upload a new statutory drawing.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* --- SUBTAB: DOCUMENT ACCESS REQUESTS (QR Code Verification Flow) --- */}
-      {subTab === 'access_requests' && (
-        <div className="p-6 space-y-6">
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Requests</p>
-              <p className="text-xl font-black text-[#022C4F] mt-0.5">{accessRequests.length}</p>
-            </div>
-            <div className="bg-amber-50/70 rounded-xl p-3.5 border border-amber-200/60">
-              <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Pending Review</p>
-              <p className="text-xl font-black text-amber-900 mt-0.5">{pendingAccessCount}</p>
-            </div>
-            <div className="bg-emerald-50/70 rounded-xl p-3.5 border border-emerald-200/60">
-              <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Approved Grants</p>
-              <p className="text-xl font-black text-emerald-900 mt-0.5">
-                {accessRequests.filter(r => r.status === 'APPROVED').length}
-              </p>
-            </div>
-            <div className="bg-rose-50/70 rounded-xl p-3.5 border border-rose-200/60">
-              <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Rejected</p>
-              <p className="text-xl font-black text-rose-900 mt-0.5">
-                {accessRequests.filter(r => r.status === 'REJECTED').length}
-              </p>
-            </div>
-          </div>
-
-          {/* Filters & Search */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="relative flex-1 min-w-[220px] max-w-sm">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by requester, email, or firm..."
-                value={accessSearch}
-                onChange={(e) => setAccessSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs font-bold">
-              {[
-                { id: 'ALL', label: `All (${accessRequests.length})` },
-                { id: 'PENDING', label: `Pending (${pendingAccessCount})` },
-                { id: 'APPROVED', label: `Approved` },
-                { id: 'REJECTED', label: `Rejected` },
-              ].map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setAccessFilter(f.id as any)}
-                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    accessFilter === f.id
-                      ? 'bg-[#022C4F] text-white shadow-sm'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {f.label}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
+                  ${doc.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : ''}
+                  ${doc.status === 'Pending Review' ? 'bg-amber-100 text-amber-700' : ''}
+                  ${doc.status === 'Needs Revision' ? 'bg-red-100 text-red-700' : ''}
+                `}>
+                  {doc.status}
+                </span>
+                <button className="text-slate-400 hover:text-[#022C4F] transition-colors p-2 hover:bg-slate-200 rounded-lg cursor-pointer" title="View Document">
+                  <Eye size={18} />
                 </button>
-              ))}
+                <button className="text-slate-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg cursor-pointer" title="Download Document">
+                  <Download size={18} />
+                </button>
+              </div>
             </div>
           </div>
 

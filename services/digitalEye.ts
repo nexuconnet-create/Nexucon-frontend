@@ -2088,14 +2088,18 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
  * Download the official MTL-style NDT report (BS 1881-203 PUNDIT dossier)
  * streamed by GET /reports/projects/<id>/ndt-report/ — real database rows only.
  */
-export const downloadNdtReport = async (projectId: string, operator?: string): Promise<string> => {
+export const downloadNdtReport = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+  const params: Record<string, string> = {};
+  if (operator) params.operator = operator;
+  if (elementId) params.elementId = elementId;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report/`, {
-    params: operator ? { operator } : {},
+    params,
     responseType: 'blob',
   });
   const blob = new Blob([res as any], { type: 'application/pdf' });
   const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-  const filename = `ndt_report_${projectId}${safeOp}.pdf`;
+  const safeEl = elementId ? `_${elementId}` : '';
+  const filename = `ndt_report_${projectId}${safeOp}${safeEl}.pdf`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2223,9 +2227,12 @@ export const setReportCmsPassword = async (payload: {
  * sections, CMS overrides and server-computed figures as the PDF, streamed by
  * GET /reports/projects/<id>/ndt-report-word/.
  */
-export const downloadNdtReportWord = async (projectId: string, operator?: string): Promise<string> => {
+export const downloadNdtReportWord = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+  const params: Record<string, string> = {};
+  if (operator) params.operator = operator;
+  if (elementId) params.elementId = elementId;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report-word/`, {
-    params: operator ? { operator } : {},
+    params,
     responseType: 'blob',
   });
   const blob = new Blob([res as any], {
@@ -2597,16 +2604,16 @@ export interface CurveSnapshot {
 
 /** Built-in fallback curve — identical to the backend engine's last resort
  *  (apps/digital_eye/strength_curves.py `_builtin_default_params`): the
- *  documented BS 1881-203 laboratory curve f_cu = 8.961·V − 7.97 N/mm²
- *  (V in km/s), valid 2.0–5.0 km/s. Used client-side only until the
+ *  documented laboratory exponential curve f_cu = 1.20·e^(0.85·V) N/mm²
+ *  (V in km/s, equivalent to 1.20·e^(0.00085·V) in m/s), valid 2.0–5.0 km/s. Used client-side only until the
  *  project's active calibration curve resolves from the server. */
 export const BUILTIN_CURVE_SNAPSHOT: CurveSnapshot = {
   curve_id: null,
-  name: 'Built-in laboratory curve (BS 1881-203)',
-  curve_type: 'linear',
-  standard: 'BS 1881-203',
-  formula: 'f_cu = 8.961·V − 7.97 (V in km/s)',
-  formula_params: { m: 8.961 / 1000, c: -7.97 },
+  name: 'Built-in laboratory curve (exponential)',
+  curve_type: 'exponential',
+  standard: 'BS 1881-203 / BS EN 12504-4',
+  formula: 'f_cu = 1.20 · exp(0.00085 · V)',
+  formula_params: { a: 1.2, b: 0.00085, c: 0 },
   valid_range_ms: [2000, 5000],
 };
 
@@ -3162,10 +3169,14 @@ export interface NdtReportPreviewBundle {
 export const fetchNdtReportPreviewBundle = async (
   projectId: string,
   operator?: string,
+  elementId?: string,
 ): Promise<NdtReportPreviewBundle> => {
+  const params: Record<string, string> = {};
+  if (operator) params.operator = operator;
+  if (elementId) params.elementId = elementId;
   const res: any = await api.get(
     `/reports/projects/${projectId}/ndt-report-preview/sections/`,
-    { params: operator ? { operator } : {} }
+    { params }
   );
   const binary = atob(res.pdf_base64);
   const bytes = new Uint8Array(binary.length);
@@ -3456,15 +3467,17 @@ export interface BatchCalibrationPayload {
 }
 
 export interface BatchCalibrationResult {
-  id: string;
+  id?: string;
   project_id: string;
   batch_id?: string;
   curve_type: CurveType;
   params: Record<string, any>;
   design_strength_mpa: number;
   calibrated_by?: string;
-  created_at: string;
-  is_active: boolean;
+  created_at?: string;
+  timestamp?: string;
+  is_active?: boolean;
+  notes?: string;
   message?: string;
 }
 

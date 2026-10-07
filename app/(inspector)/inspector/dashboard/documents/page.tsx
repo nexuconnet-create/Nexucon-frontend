@@ -236,14 +236,6 @@ export default function InspectorDocumentsPage() {
                         >
                           <ExternalLink size={14} />
                         </a>
-                        <a
-                          href={href}
-                          download
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-[#022C4F] transition-colors cursor-pointer shadow-sm"
-                          title="Download document"
-                        >
-                          <Download size={14} />
-                        </a>
                       </>
                     ) : (
                       <span className="text-[11px] text-slate-400 italic px-2">

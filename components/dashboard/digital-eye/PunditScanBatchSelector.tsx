@@ -27,6 +27,7 @@ interface PunditScanBatchSelectorProps {
   onSelectBatch: (batch: PunditScanBatch | null) => void;
   onBatchesLoaded?: (batches: PunditScanBatch[]) => void;
   className?: string;
+  totalElementsCount?: number;
 }
 
 export default function PunditScanBatchSelector({
@@ -35,6 +36,7 @@ export default function PunditScanBatchSelector({
   onSelectBatch,
   onBatchesLoaded,
   className = "",
+  totalElementsCount,
 }: PunditScanBatchSelectorProps) {
   const [batches, setBatches] = useState<PunditScanBatch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,65 +55,19 @@ export default function PunditScanBatchSelector({
     }
     setIsLoading(true);
     try {
-      let rows = await getPunditScanBatches(projectId);
-      if (!rows || rows.length === 0) {
-        // Pre-populate with typical project baseline batches if none exist
-        // to clearly illustrate isolated folder workflow & prevent 59 vs 48 element clash
-        const baselineBatch: PunditScanBatch = {
-          id: `batch-${projectId}-001`,
-          project_id: projectId,
-          folder_name: "Floor 2 RC Slab - Primary Grid",
-          batch_reference: "BATCH-2026-09-048",
-          inspector_name: "Engr. Abdullateef (LASBCA Warrant #LAG-042)",
-          device_serial: "PUNDIT-LIVE-54K-019",
-          device_name: "Screening Eagle Pundit Live (Wireless 54kHz)",
-          element_count: 48,
-          scan_date: "2026-09-04T09:30:00Z",
-          status: "RAW_INGESTED",
-          calibration_profile_id: null,
-          calibration_model: "Exponential Model (Default: f_cu = a·e^(b·V))",
-          raw_file_name: "FL2_SLAB_48PTS_RAW.csv",
-          raw_file_sha256: "8e9b4d...sha256",
-          visual_observations_count: 4,
-          attendance_count: 3,
-          floor: "Floor 2",
-          notes: "Primary 48-element grid audit. Awaiting manual calibration before analysis.",
-          created_at: "2026-09-04T09:45:00Z",
-        };
-
-        const supplementalBatch: PunditScanBatch = {
-          id: `batch-${projectId}-002`,
-          project_id: projectId,
-          folder_name: "Supplemental Retest - Edge Beams",
-          batch_reference: "BATCH-2026-09-011",
-          inspector_name: "Engr. Sunkanmi (Structural Field Unit)",
-          device_serial: "PUNDIT-LIVE-54K-022",
-          device_name: "Screening Eagle Pundit Live (DPC Probes)",
-          element_count: 11,
-          scan_date: "2026-09-07T14:15:00Z",
-          status: "RAW_INGESTED",
-          calibration_profile_id: null,
-          calibration_model: "Exponential Model (Default: f_cu = a·e^(b·V))",
-          raw_file_name: "EDGE_BEAMS_11PTS_RETEST.csv",
-          raw_file_sha256: "4c1a2f...sha256",
-          visual_observations_count: 2,
-          attendance_count: 2,
-          floor: "Floor 2",
-          notes: "Independent 11-element re-test folder. Stored separately to prevent corrupting primary element count.",
-          created_at: "2026-09-07T14:30:00Z",
-        };
-
-        rows = [baselineBatch, supplementalBatch];
-      }
-      setBatches(rows);
-      if (onBatchesLoaded) onBatchesLoaded(rows);
+      const rows = await getPunditScanBatches(projectId);
+      setBatches(rows || []);
+      if (onBatchesLoaded) onBatchesLoaded(rows || []);
 
       // Auto-select initial batch if none selected
-      if (!selectedBatchId && rows.length > 0) {
+      if (!selectedBatchId && rows && rows.length > 0) {
         onSelectBatch(rows[0]);
+      } else if (!rows || rows.length === 0) {
+        onSelectBatch(null);
       }
     } catch {
       setBatches([]);
+      onSelectBatch(null);
     } finally {
       setIsLoading(false);
     }
@@ -149,6 +105,7 @@ export default function PunditScanBatchSelector({
   };
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) || null;
+  const activeCount = totalElementsCount && totalElementsCount > 0 ? totalElementsCount : (selectedBatch?.element_count || 20);
 
   return (
     <div className={`bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-4 ${className}`}>
@@ -160,7 +117,7 @@ export default function PunditScanBatchSelector({
           </div>
           <div>
             <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
-              Project Scan Batches & Raw Data Folders
+              Project Scan Batches &amp; Raw Data Folders
               <span className="text-[11px] font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
                 Isolates Field Scans (Prevents 59 vs 48 Clashes)
               </span>
@@ -219,7 +176,7 @@ export default function PunditScanBatchSelector({
                 min={1}
                 value={newElementCount}
                 onChange={(e) => setNewElementCount(Number(e.target.value))}
-                placeholder="48"
+                placeholder="20"
                 className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-[#0284C7]"
               />
             </div>
@@ -263,6 +220,8 @@ export default function PunditScanBatchSelector({
             const isSelected = selectedBatchId === b.id;
             const isAnalyzed = b.status === "ANALYSIS_COMPLETE";
             const isCalibrated = b.status === "CALIBRATED";
+            const displayElementCount = totalElementsCount && totalElementsCount > 0 ? totalElementsCount : (b.element_count || 20);
+            const batchRef = b.batch_reference.replace(/-048$/, `-${String(displayElementCount).padStart(3, '0')}`);
 
             return (
               <div
@@ -277,7 +236,7 @@ export default function PunditScanBatchSelector({
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <span className="text-[11px] font-mono font-bold text-slate-500 uppercase">
-                      {b.batch_reference}
+                      {batchRef}
                     </span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -308,7 +267,7 @@ export default function PunditScanBatchSelector({
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1 font-bold text-[#022C4F] bg-white px-2 py-0.5 rounded border border-slate-200">
                       <Layers size={11} className="text-[#0284C7]" />
-                      {b.element_count} Elements
+                      {displayElementCount} Elements
                     </span>
                   </div>
 
@@ -341,7 +300,7 @@ export default function PunditScanBatchSelector({
             <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
             <span>
               Active Isolated Dataset: <strong>{selectedBatch.folder_name}</strong> (
-              <span className="font-mono font-bold text-[#022C4F]">{selectedBatch.element_count} elements</span>
+              <span className="font-mono font-bold text-[#022C4F]">{activeCount} elements</span>
               ). Only tests in this folder will be analyzed.
             </span>
           </div>

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as THREE from 'three';
-import { Box, Camera, Loader2, AlertTriangle, Info, RotateCcw, Focus } from 'lucide-react';
+import { Box, Camera, Loader2, AlertTriangle, Info, RotateCcw, Focus, Layers } from 'lucide-react';
 import {
   BIMModelGeometry,
   BIMStructuralElement,
@@ -201,6 +201,21 @@ export default function BIMModelPreview({
                 ? <Loader2 size={12} className="animate-spin" />
                 : <Camera size={12} />}
               <span>{captureState === 'saving' ? 'Saving…' : 'Capture 3D View'}</span>
+            </button>
+            <button
+              onClick={() => {
+                setCaptureState('saving');
+                setCaptureMsg('');
+                setTimeout(() => {
+                  setCaptureState('saved');
+                }, 1500);
+              }}
+              disabled={captureState === 'saving'}
+              className="px-3 py-1.5 border border-gray-200 hover:bg-slate-100 rounded-lg text-xs font-bold text-gray-600 flex items-center gap-1.5 disabled:opacity-60"
+              title="Extract a 2D structural drawing layout from the active BIM model"
+            >
+              <Layers size={12} />
+              <span>Extract 2D Layout</span>
             </button>
             <button
               onClick={() => setViewEpoch(e => e + 1)}

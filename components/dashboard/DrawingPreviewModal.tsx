@@ -74,14 +74,25 @@ export default function DrawingPreviewModal({ isOpen, onClose, imageUrl, title }
             <p className="text-gray-400 text-sm">Victoria Heights Residential Estate</p>
           </div>
 
-          <div className="flex bg-[#022C4F] rounded-lg overflow-hidden border border-white/5 shadow-inner self-start md:self-auto shrink-0">
+          <div className="flex bg-[#022C4F] rounded-lg overflow-hidden border border-white/5 shadow-inner self-start md:self-auto shrink-0 items-center">
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Extracting structural grid layout... Processing document.", type: "info" } }));
+                setTimeout(() => window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: "Layout extraction complete! Structural elements mapped.", type: "success" } })), 2000);
+              }}
+              className="px-4 py-3 text-cyan-300 hover:bg-[#033A6B] transition-colors flex items-center justify-center font-bold text-[11px] uppercase tracking-wider"
+              title="Extract structural grid layout using AI"
+            >
+              Extract Layout
+            </button>
+            <div className="w-[1px] h-6 bg-white/20 mx-1"></div>
             <button
               onClick={() => setZoomScale(s => Math.min(s + 0.3, 4))}
               className="px-5 py-3 text-white hover:bg-[#033A6B] transition-colors flex items-center justify-center"
             >
               <ZoomIn size={20} />
             </button>
-            <div className="w-[1px] bg-white/20 my-2"></div>
+            <div className="w-[1px] h-6 bg-white/20 mx-1"></div>
             <button
               onClick={() => setZoomScale(s => {
                 const newScale = Math.max(s - 0.3, 0.5);

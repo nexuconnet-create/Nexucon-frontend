@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, Calendar, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import InviteReviewerDrawer from '@/components/dashboard/InviteReviewerDrawer';
@@ -11,13 +11,36 @@ export default function PeerReviewsPage() {
   const [isInviteDrawerOpen, setIsInviteDrawerOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isReportDrawerOpen, setIsReportDrawerOpen] = useState(false);
-  const queueData = [
-    { item: 'Foundation Layout Package', discipline: 'Structural', reviewer: 'Michael Adeyemi', status: 'In Review', date: 'Jun 25' },
-    { item: 'Architectural Design Report', discipline: 'Architecture', reviewer: 'Sarah Williams', status: 'Pending Review', date: 'Jun 24' },
-    { item: 'Electrical Layout Plan', discipline: 'Electrical', reviewer: 'James Ibrahim', status: 'In Review', date: 'Jun 23' },
-    { item: 'BOQ Package', discipline: 'Quantity Surveying', reviewer: 'Samuel Bello', status: 'Pending Review', date: 'Jun 20' },
-    { item: 'HVAC Coordination Report', discipline: 'Mechanical', reviewer: 'David Smith', status: 'Under Review', date: 'Jun 24' },
-  ];
+  
+  const [queueData, setQueueData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    import('@/services/api').then(({ customFetch }) => {
+      customFetch('/api/v1/documents/reviews/')
+        .then((res: any) => {
+          if (Array.isArray(res)) {
+            setQueueData(res.map((r: any) => ({
+              item: r.document_title || r.document?.title || 'Unknown Document',
+              discipline: r.discipline || 'Engineering',
+              reviewer: r.reviewer_name || r.reviewer?.first_name || 'Assigned Reviewer',
+              status: r.status || 'In Review',
+              date: new Date(r.created_at || r.reviewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            })));
+          } else if (res && res.results && Array.isArray(res.results)) {
+            setQueueData(res.results.map((r: any) => ({
+              item: r.document_title || r.document?.title || 'Unknown Document',
+              discipline: r.discipline || 'Engineering',
+              reviewer: r.reviewer_name || r.reviewer?.first_name || 'Assigned Reviewer',
+              status: r.status || 'In Review',
+              date: new Date(r.created_at || r.reviewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            })));
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsLoading(false));
+    });
+  }, []);
 
   return (
     <div className="pt-4 animate-in fade-in slide-in-from-bottom-8 duration-500 ease-out fill-mode-both pb-10">
@@ -95,23 +118,29 @@ export default function PeerReviewsPage() {
           </div>
 
           <div className="flex flex-col flex-1">
-            {queueData.map((row, index) => (
-              <div 
-                key={index} 
-                className={`grid grid-cols-12 gap-4 items-center px-8 py-6 hover:bg-gray-50 transition-colors ${index !== queueData.length - 1 ? 'border-b border-gray-100' : ''}`}
-              >
-                <span className="col-span-3 text-[12px] text-[#0F181F] font-bold leading-tight">{row.item}</span>
-                <span className="col-span-2 text-[11px] text-gray-600 font-medium">{row.discipline}</span>
-                <span className="col-span-3 text-[11px] text-gray-600 font-medium">{row.reviewer}</span>
-                <span className="col-span-2 text-[11px] text-gray-600 font-medium">{row.status}</span>
-                <div className="col-span-2 flex items-center justify-between">
-                  <span className="text-[11px] text-gray-600 font-medium">{row.date}</span>
-                  <button className="text-[#022C4F] hover:bg-gray-100 p-1.5 rounded-full transition-colors">
-                    <MoreHorizontal size={16} />
-                  </button>
+            {isLoading ? (
+              <div className="text-center py-8 text-sm text-gray-500 font-medium">Loading peer reviews...</div>
+            ) : queueData.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-500 font-medium">No peer reviews found.</div>
+            ) : (
+              queueData.map((row, index) => (
+                <div 
+                  key={index} 
+                  className={`grid grid-cols-12 gap-4 items-center px-8 py-6 hover:bg-gray-50 transition-colors ${index !== queueData.length - 1 ? 'border-b border-gray-100' : ''}`}
+                >
+                  <span className="col-span-3 text-[12px] text-[#0F181F] font-bold leading-tight">{row.item}</span>
+                  <span className="col-span-2 text-[11px] text-gray-600 font-medium">{row.discipline}</span>
+                  <span className="col-span-3 text-[11px] text-gray-600 font-medium">{row.reviewer}</span>
+                  <span className="col-span-2 text-[11px] text-gray-600 font-medium">{row.status}</span>
+                  <div className="col-span-2 flex items-center justify-between">
+                    <span className="text-[11px] text-gray-600 font-medium">{row.date}</span>
+                    <button className="text-[#022C4F] hover:bg-gray-100 p-1.5 rounded-full transition-colors">
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

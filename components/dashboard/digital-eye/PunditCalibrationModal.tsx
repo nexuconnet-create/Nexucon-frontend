@@ -60,13 +60,59 @@ export default function PunditCalibrationModal({
   );
 
   // Calibration Cube Test data points (optional ground truth pairs)
-  const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>([
-    { velocity_ms: 3200, cube_strength_mpa: 18.5 },
-    { velocity_ms: 3800, cube_strength_mpa: 29.8 },
-    { velocity_ms: 4300, cube_strength_mpa: 45.2 },
-  ]);
+  const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>([]);
   const [newVel, setNewVel] = useState<string>("");
   const [newCube, setNewCube] = useState<string>("");
+
+  // Load project-specific calibration parameters whenever projectId or modal open state changes
+  React.useEffect(() => {
+    if (projectId && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(`pundit_cal_${projectId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const loadedDesign = parsed.design_strength_mpa && Number(parsed.design_strength_mpa) > 0 ? Number(parsed.design_strength_mpa) : 25.0;
+          setDesignStrengthMpa(loadedDesign);
+          setCurveType(parsed.curve_type || "exponential");
+
+          if (parsed.params) {
+            const aVal = parsed.params.a && Number(parsed.params.a) > 0 ? Number(parsed.params.a) : 1.2;
+            const bVal = parsed.params.b && Number(parsed.params.b) > 0 ? Number(parsed.params.b) : 0.85;
+            const cVal = parsed.params.c !== undefined && parsed.params.c !== null ? Number(parsed.params.c) : 0.0;
+            setParamA(aVal);
+            setParamB(bVal);
+            setParamC(cVal);
+          } else {
+            setParamA(1.2);
+            setParamB(0.85);
+            setParamC(0.0);
+          }
+
+          if (parsed.notes != null) {
+            setCalibrationNotes(parsed.notes);
+          }
+          if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points)) {
+            setCubePoints(parsed.cube_correlation_points);
+          } else if (parsed.cubePoints && Array.isArray(parsed.cubePoints)) {
+            setCubePoints(parsed.cubePoints);
+          } else {
+            setCubePoints([]);
+          }
+        } else {
+          // Reset to default baseline for uncalibrated project
+          setDesignStrengthMpa(25.0);
+          setCurveType("exponential");
+          setParamA(1.2);
+          setParamB(0.85);
+          setParamC(0.0);
+          setCalibrationNotes("Calibrated for project mix design using non-linear exponential acoustic response.");
+          setCubePoints([]);
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+  }, [projectId, isOpen]);
 
   // Function to calculate f_cu based on current parameters
   const calculateStrength = (velocityMs: number, type: CurveType): number | null => {
@@ -75,7 +121,10 @@ export default function PunditCalibrationModal({
 
     if (type === "exponential") {
       // f_cu = a * exp(b * V_km) + c
-      const res = paramA * Math.exp(paramB * vKmS) + paramC;
+      const effA = paramA > 0 ? paramA : 1.2;
+      const effB = paramB > 0 ? paramB : 0.85;
+      const effC = paramC || 0.0;
+      const res = effA * Math.exp(effB * vKmS) + effC;
       return Number(res.toFixed(1));
     } else if (type === "linear") {
       // f_cu = 8.961 * V_km - 7.97
@@ -130,6 +179,43 @@ export default function PunditCalibrationModal({
     setCubePoints(cubePoints.filter((_, i) => i !== index));
   };
 
+  const handleAutoFitFromCubes = () => {
+    if (cubePoints.length < 2) {
+      alert("At least 2 site cube calibration pairs are required to fit a curve.");
+      return;
+    }
+    const N = cubePoints.length;
+    let sumV = 0, sumY = 0, sumVY = 0, sumV2 = 0;
+    for (const pt of cubePoints) {
+      const vKm = pt.velocity_ms / 1000;
+      const y = Math.log(pt.cube_strength_mpa);
+      sumV += vKm;
+      sumY += y;
+      sumVY += vKm * y;
+      sumV2 += vKm * vKm;
+    }
+    const denom = N * sumV2 - sumV * sumV;
+    if (Math.abs(denom) > 1e-6) {
+      const b = (N * sumVY - sumV * sumY) / denom;
+      const lnA = (sumY - b * sumV) / N;
+      const a = Math.exp(lnA);
+      if (a > 0 && b > 0) {
+        setParamA(Number(a.toFixed(2)));
+        setParamB(Number(b.toFixed(2)));
+        setParamC(0.0);
+        setCurveType("exponential");
+      }
+    }
+  };
+
+  const handleResetBaseline = () => {
+    setParamA(1.2);
+    setParamB(0.85);
+    setParamC(0.0);
+    setDesignStrengthMpa(25.0);
+    setCurveType("exponential");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -146,6 +232,14 @@ export default function PunditCalibrationModal({
       notes: calibrationNotes.trim(),
       cube_correlation_points: cubePoints,
     };
+
+    if (projectId && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`pundit_cal_${projectId}`, JSON.stringify(payload));
+      } catch (e) {
+        // ignore
+      }
+    }
 
     await onConfirmCalibrationAndAnalyze(payload);
   };
@@ -475,9 +569,29 @@ export default function PunditCalibrationModal({
               >
                 + Add Calibration Pair
               </button>
+
+              {cubePoints.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={handleAutoFitFromCubes}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                  title="Fit optimal exponential equation from recorded cube ground truth pairs"
+                >
+                  ⚡ Auto-Fit Curve from Cube Data ({cubePoints.length} Pairs)
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResetBaseline}
+                className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors"
+                title="Reset to recommended standard baseline (a=1.20, b=0.85, f_cu=25 MPa)"
+              >
+                Reset Standard Baseline
+              </button>
             </div>
 
-            {cubePoints.length > 0 && (
+            {cubePoints.length > 0 ? (
               <div className="flex flex-wrap gap-2 pt-1">
                 {cubePoints.map((pt, idx) => (
                   <span
@@ -497,6 +611,10 @@ export default function PunditCalibrationModal({
                   </span>
                 ))}
               </div>
+            ) : (
+              <p className="text-[11px] text-slate-400 italic pt-1">
+                No site laboratory cube crush test pairs added yet for {projectName}. Add project-specific UPV &amp; cube strength pairs above to ground the mathematical curve.
+              </p>
             )}
           </div>
 

@@ -362,6 +362,39 @@ export default function PunditAnalysisReviewPanel({
               <Send size={12} />
               <span>Send Chat</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!newCommentText.trim()) return;
+                setIsPostingComment(true);
+                import("@/services/api").then(({ default: api }) => {
+                  api.post(`/digital-eye/pundit-analysis-review/${analysisId}/chat/`, {
+                      history: [],
+                      message: newCommentText.trim(),
+                  })
+                  .then(async (res: any) => {
+                    const userMsg = await addPunditAnalysisComment(analysisId, newCommentText.trim());
+                    const aiMsg = await addPunditAnalysisComment(analysisId, `🤖 AI Response: ${res?.text || "I have noted your input."}`);
+                    setComments((prev) => [...prev, userMsg, aiMsg]);
+                    setNewCommentText("");
+                    toast("AI has responded to your query.", "success");
+                  })
+                  .catch((err: any) => {
+                    toast(`⚠️ Failed to communicate with AI Engine.`, "error");
+                  })
+                  .finally(() => {
+                    setIsPostingComment(false);
+                    onReviewUpdated?.();
+                  });
+                });
+              }}
+              disabled={isPostingComment || !newCommentText.trim()}
+              className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
+              title="Ask AI a question directly"
+            >
+              <Sparkles size={12} />
+              <span>Ask AI</span>
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">

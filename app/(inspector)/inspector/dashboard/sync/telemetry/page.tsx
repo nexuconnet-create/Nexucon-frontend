@@ -157,6 +157,30 @@ function errorOf(err: any, fallback: string): string {
   );
 }
 
+function readDevicePosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("Your device does not support GPS / location services."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, (err) => {
+      let msg = "Failed to read GPS location.";
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = "Location permission denied. Please allow location access in your browser/device settings.";
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = "GPS signal unavailable. Move to a clear view of the sky or check device settings.";
+      } else if (err.code === err.TIMEOUT) {
+        msg = "GPS read timed out. The device took too long to acquire a signal.";
+      }
+      reject(new Error(msg));
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+  });
+}
+
 /** A battery reading, or an honest absence — never a drawn-full icon. */
 function Battery({ level }: { level: number | null }) {
   if (level === null || !Number.isFinite(level)) {
@@ -213,6 +237,13 @@ export default function InspectorTelemetryPage() {
   // GPS coordinates the inspector tags at the test location.
   const [importLatitude, setImportLatitude] = useState("");
   const [importLongitude, setImportLongitude] = useState("");
+  const [importGpsAccuracyM, setImportGpsAccuracyM] = useState<number | null>(null);
+  /**
+   * The inspector's own description of the location. Typed, never derived:
+   * the platform has no geocoder, so an address it filled in from the
+   * coordinates would be a place nobody actually recorded.
+   */
+  const [importLocationAddress, setImportLocationAddress] = useState("");
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   // The file input is uncontrolled by nature — a chosen file cannot be cleared
   // by setting state — so it is remounted after a successful import.
@@ -248,27 +279,31 @@ export default function InspectorTelemetryPage() {
   };
 
   /**
-   * One-tap GPS capture for field use — browser asks for permission once;
-   * on tablets/phones this hits the device GPS chip directly.
+   * One-tap GPS capture for field use — the browser asks for permission once;
+   * on tablets and phones this reaches the device GPS chip directly.
+   *
+   * Every failure is reported as the reason it failed rather than as
+   * `err.message`, which reads "User denied Geolocation" and leaves the
+   * operator with nothing to do about it. Nothing is filled in on failure:
+   * a guessed coordinate on a test location is the defect this whole block
+   * exists to avoid.
    */
   const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      setActionError("GPS is not available in this browser.");
-      return;
-    }
+    setActionError(null);
     setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setImportLatitude(pos.coords.latitude.toFixed(7));
-        setImportLongitude(pos.coords.longitude.toFixed(7));
-        setIsGettingLocation(false);
-      },
-      (err) => {
-        setActionError(`GPS error: ${err.message}`);
-        setIsGettingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+    readDevicePosition()
+      .then((position) => {
+        setImportLatitude(position.coords.latitude.toFixed(7));
+        setImportLongitude(position.coords.longitude.toFixed(7));
+        setImportGpsAccuracyM(
+          Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null
+        );
+      })
+      .catch((err: Error) => {
+        setImportGpsAccuracyM(null);
+        setActionError(err.message);
+      })
+      .finally(() => setIsGettingLocation(false));
   };
   const removePhotoAttachment = (indexToRemove: number) => {
     setPhotoAttachments((prev) => {
@@ -427,6 +462,7 @@ export default function InspectorTelemetryPage() {
         structuralElement: importElement,
         floor: importFloor,
         testLocation: finalLocation,
+        locationAddress: importLocationAddress,
         visualObservation: importVisualObservation,
         attendanceLog: importAttendanceLog,
         injectionStrategy: strategy,
@@ -1100,17 +1136,33 @@ export default function InspectorTelemetryPage() {
                           </div>
                         )}
 
-                        {/* GPS Coordinates display */}
-                        {(session.session_config?.latitude != null || session.session_config?.longitude != null) && (
+                        {/* GPS coordinates and the inspector's own location
+                            description. Either alone is worth showing: an
+                            address with no fix still says where the capture
+                            was taken. */}
+                        {(session.session_config?.latitude != null ||
+                          session.session_config?.longitude != null ||
+                          String(session.session_config?.location_address ?? '').trim() !== '') && (
                           <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/70 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                               <div>
-                                <div className="text-[11px] font-semibold text-slate-700">GPS Tagged</div>
-                                <div className="text-[11px] text-slate-600 font-mono">
-                                  {session.session_config.latitude != null ? Number(session.session_config.latitude).toFixed(6) : '—'}°,{' '}
-                                  {session.session_config.longitude != null ? Number(session.session_config.longitude).toFixed(6) : '—'}°
+                                <div className="text-[11px] font-semibold text-slate-700">
+                                  {session.session_config?.latitude != null || session.session_config?.longitude != null
+                                    ? 'GPS Tagged'
+                                    : 'Location description'}
                                 </div>
+                                {(session.session_config?.latitude != null || session.session_config?.longitude != null) && (
+                                  <div className="text-[11px] text-slate-600 font-mono">
+                                    {session.session_config.latitude != null ? Number(session.session_config.latitude).toFixed(6) : '—'}°,{' '}
+                                    {session.session_config.longitude != null ? Number(session.session_config.longitude).toFixed(6) : '—'}°
+                                  </div>
+                                )}
+                                {String(session.session_config?.location_address ?? '').trim() !== '' && (
+                                  <div className="text-[11px] text-slate-600 mt-0.5 max-w-[28rem]">
+                                    {String(session.session_config.location_address)}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             {session.session_config.latitude != null && session.session_config.longitude != null && (
@@ -1532,7 +1584,7 @@ export default function InspectorTelemetryPage() {
           </div>
           {importLatitude && importLongitude && (
             <a
-              href={`https://www.google.com/maps?q=${importLatitude},${importLongitude}`}
+              href={`https://www.google.com/maps/place/${encodeURIComponent(importLocationAddress || `${importLatitude},${importLongitude}`)}/@${importLatitude},${importLongitude},17z`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline underline-offset-2"
@@ -1541,6 +1593,31 @@ export default function InspectorTelemetryPage() {
               Preview on Google Maps
             </a>
           )}
+
+          {/* Address / location description. Typed, not geocoded: it prints on
+              the report and on the site-map marker exactly as written here. */}
+          <div>
+            <label
+              htmlFor="import-location-address"
+              className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
+            >
+              Address / location description
+            </label>
+            <textarea
+              id="import-location-address"
+              rows={3}
+              value={importLocationAddress}
+              onChange={(e) => setImportLocationAddress(e.target.value)}
+              placeholder="Street address, building, or how to reach the station — e.g. 14 Marina Rd, Lagos Island, opposite the old toll gate"
+              className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400 resize-y"
+            />
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Free text, stored with the capture and printed on the report beside
+              the coordinates. Leave it blank if the location is already named by
+              the element or the test location — a blank prints nothing rather
+              than a placeholder.
+            </p>
+          </div>
         </div>
 
         <div>
