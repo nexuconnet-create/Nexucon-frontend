@@ -24,7 +24,14 @@ import {
   Image as ImageIcon,
   X,
   Plus,
+  Compass,
 } from "lucide-react";
+import {
+  CoordinateSystem,
+  CornerInput,
+  convertCorners,
+  ConversionResult,
+} from "@/lib/coordinateUtils";
 import {
   appendTelemetryPacket,
   endTelemetrySession,
@@ -245,6 +252,77 @@ export default function InspectorTelemetryPage() {
    */
   const [importLocationAddress, setImportLocationAddress] = useState("");
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  // 4-Corner Boundary Coordinates & System for Test Location
+  const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("WGS84_DD");
+  const [corners, setCorners] = useState<CornerInput[]>([
+    { id: 1, label: "Corner 1 (NW)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 2, label: "Corner 2 (NE)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 3, label: "Corner 3 (SE)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 4, label: "Corner 4 (SW)", lat: "", lng: "", easting: "", northing: "" },
+  ]);
+  const [conversionResult, setConversionResult] = useState<ConversionResult | null>(null);
+
+  const handleCornerChange = (index: number, field: keyof CornerInput, value: string) => {
+    const updated = [...corners];
+    updated[index] = { ...updated[index], [field]: value };
+    setCorners(updated);
+
+    try {
+      const res = convertCorners(coordSystem, updated);
+      setConversionResult(res);
+      if (res && res.center) {
+        setImportLatitude(res.center.lat.toFixed(7));
+        setImportLongitude(res.center.lng.toFixed(7));
+      }
+    } catch {
+      // Ignored while typing
+    }
+  };
+
+  const handleSystemChange = (sys: CoordinateSystem) => {
+    setCoordSystem(sys);
+    try {
+      const res = convertCorners(sys, corners);
+      setConversionResult(res);
+    } catch {
+      // Ignored
+    }
+  };
+
+  const handleLoadProjectCorners = () => {
+    const selectedProj = projects.find((p) => p.id === importProject);
+    if (!selectedProj) return;
+    const existing = selectedProj.corner_coordinates;
+    if (existing && typeof existing === "object" && Array.isArray(existing.corners) && existing.corners.length > 0) {
+      setConversionResult(existing as ConversionResult);
+      if (existing.system) {
+        setCoordSystem(existing.system as CoordinateSystem);
+      }
+      setCorners(
+        existing.corners.map((c: any, idx: number) => ({
+          id: idx + 1,
+          label: c.label || `Corner ${idx + 1}`,
+          lat: c.lat ?? "",
+          lng: c.lng ?? "",
+          easting: c.easting ?? "",
+          northing: c.northing ?? "",
+        }))
+      );
+      if (existing.center) {
+        setImportLatitude(Number(existing.center.lat).toFixed(7));
+        setImportLongitude(Number(existing.center.lng).toFixed(7));
+      }
+      if (selectedProj.site_address && !importLocationAddress) {
+        setImportLocationAddress(selectedProj.site_address);
+      }
+    } else if (selectedProj.latitude && selectedProj.longitude) {
+      setImportLatitude(Number(selectedProj.latitude).toFixed(7));
+      setImportLongitude(Number(selectedProj.longitude).toFixed(7));
+      if (selectedProj.site_address && !importLocationAddress) {
+        setImportLocationAddress(selectedProj.site_address);
+      }
+    }
+  };
   // The file input is uncontrolled by nature — a chosen file cannot be cleared
   // by setting state — so it is remounted after a successful import.
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -471,6 +549,8 @@ export default function InspectorTelemetryPage() {
         photos: photoAttachments.map((p) => p.file),
         latitude: importLatitude ? parseFloat(importLatitude) : null,
         longitude: importLongitude ? parseFloat(importLongitude) : null,
+        coordinateSystem: coordSystem,
+        cornerCoordinates: conversionResult || undefined,
       });
       const stats = session.import_stats;
       // A resend is answered with the session the first import made, and its
@@ -1515,44 +1595,57 @@ export default function InspectorTelemetryPage() {
           </div>
         </div>
 
-        {/* GPS Coordinates */}
-        <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/70 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+        {/* GPS Coordinates & 4-Corner Boundary Mapping */}
+        <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-emerald-100">
             <div>
               <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-                GPS Coordinates
+                <Compass size={15} className="text-emerald-600" />
+                GPS Coordinates & 4-Corner Boundary Mapping
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Tag the test location with GPS so it appears on the site map and in the report.
+                Tag the test location with GPS and calibrate 4-corner boundaries so it appears accurately on the site map and statutory reports.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleGetLocation}
-              disabled={isGettingLocation}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
-            >
-              {isGettingLocation ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Detecting…</span>
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <span>📍 Detect GPS Location</span>
-                </>
+            <div className="flex items-center gap-2">
+              {importProject && (
+                <button
+                  type="button"
+                  onClick={handleLoadProjectCorners}
+                  className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                  title="Import registered survey boundaries from selected project"
+                >
+                  📍 Use Project Boundaries
+                </button>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={handleGetLocation}
+                disabled={isGettingLocation}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors shadow-sm disabled:opacity-60 cursor-pointer"
+              >
+                {isGettingLocation ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Detecting…</span>
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span>📍 Detect GPS Location</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label
                 htmlFor="import-latitude"
                 className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
               >
-                Latitude
+                Center Latitude
               </label>
               <input
                 id="import-latitude"
@@ -1560,8 +1653,8 @@ export default function InspectorTelemetryPage() {
                 step="any"
                 value={importLatitude}
                 onChange={(e) => setImportLatitude(e.target.value)}
-                placeholder="e.g. 6.524379"
-                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+                placeholder="e.g. 6.424"
+                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400 font-mono"
               />
             </div>
             <div>
@@ -1569,7 +1662,7 @@ export default function InspectorTelemetryPage() {
                 htmlFor="import-longitude"
                 className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
               >
-                Longitude
+                Center Longitude
               </label>
               <input
                 id="import-longitude"
@@ -1577,25 +1670,132 @@ export default function InspectorTelemetryPage() {
                 step="any"
                 value={importLongitude}
                 onChange={(e) => setImportLongitude(e.target.value)}
-                placeholder="e.g. 3.379206"
-                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400"
+                placeholder="e.g. 3.385"
+                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400 font-mono"
               />
             </div>
+            <div>
+              <label
+                htmlFor="import-coord-system"
+                className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1"
+              >
+                Coordinate System
+              </label>
+              <select
+                id="import-coord-system"
+                value={coordSystem}
+                onChange={(e) => handleSystemChange(e.target.value as CoordinateSystem)}
+                className="w-full p-2.5 rounded-xl bg-white border border-emerald-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="WGS84_DD">WGS84 (Decimal Degrees)</option>
+                <option value="UTM_31N_WGS84">WGS84 / UTM Zone 31N</option>
+                <option value="UTM_32N_WGS84">WGS84 / UTM Zone 32N</option>
+                <option value="UTM_31N_MINNA">Minna / UTM Zone 31N (Nigeria West)</option>
+                <option value="UTM_32N_MINNA">Minna / UTM Zone 32N (Nigeria East)</option>
+              </select>
+            </div>
           </div>
+
+          {/* 4-Corner Boundary Mapping Section */}
+          <div className="bg-white/80 p-4 rounded-xl border border-emerald-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#022C4F] flex items-center gap-1.5 uppercase tracking-wider">
+                <Compass size={14} className="text-blue-600" />
+                4-Corner Boundary Mapping & Conversion
+              </span>
+              {conversionResult && (
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                  Calculated: {conversionResult.footprintAreaSqm.toLocaleString()} sqm footprint
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {corners.map((c, idx) => (
+                <div key={c.id} className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-2">
+                  <span className="text-xs font-bold text-blue-700 block">{c.label}</span>
+                  {coordSystem.startsWith('UTM') ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Easting (m)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={c.easting ?? ''}
+                          onChange={(e) => handleCornerChange(idx, 'easting', e.target.value)}
+                          placeholder="e.g. 542560"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Northing (m)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={c.northing ?? ''}
+                          onChange={(e) => handleCornerChange(idx, 'northing', e.target.value)}
+                          placeholder="e.g. 710240"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Latitude (°N)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={c.lat ?? ''}
+                          onChange={(e) => handleCornerChange(idx, 'lat', e.target.value)}
+                          placeholder="e.g. 6.428"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Longitude (°E)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={c.lng ?? ''}
+                          onChange={(e) => handleCornerChange(idx, 'lng', e.target.value)}
+                          placeholder="e.g. 3.389"
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
           {importLatitude && importLongitude && (
-            <a
-              href={`https://www.google.com/maps/place/${encodeURIComponent(importLocationAddress || `${importLatitude},${importLongitude}`)}/@${importLatitude},${importLongitude},17z`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline underline-offset-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              Preview on Google Maps
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href={`https://www.google.com/maps/place/${encodeURIComponent(importLocationAddress || `${importLatitude},${importLongitude}`)}/@${importLatitude},${importLongitude},17z`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline underline-offset-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Preview Center on Google Maps
+              </a>
+              {conversionResult?.googleMapsUrl && (
+                <a
+                  href={conversionResult.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-900 font-medium underline underline-offset-2"
+                >
+                  <MapPin size={11} />
+                  View 4-Corner Polygon
+                </a>
+              )}
+            </div>
           )}
 
-          {/* Address / location description. Typed, not geocoded: it prints on
-              the report and on the site-map marker exactly as written here. */}
+          {/* Address / location description */}
           <div>
             <label
               htmlFor="import-location-address"

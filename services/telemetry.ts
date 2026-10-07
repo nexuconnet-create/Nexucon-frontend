@@ -331,6 +331,8 @@ export async function importTelemetryExport(params: {
   photos?: File[];
   latitude?: number | string | null;
   longitude?: number | string | null;
+  coordinateSystem?: string;
+  cornerCoordinates?: any;
 }): Promise<TelemetryExportImport> {
   const form = new FormData();
   form.append('device', params.device);
@@ -361,6 +363,8 @@ export async function importTelemetryExport(params: {
     ['folder_name', params.folderName],
     ['latitude', params.latitude],
     ['longitude', params.longitude],
+    ['coordinate_system', params.coordinateSystem],
+    ['corner_coordinates', params.cornerCoordinates ? JSON.stringify(params.cornerCoordinates) : undefined],
   ];
   for (const [key, value] of context) {
     if (value !== undefined && value !== null && value !== '') {
