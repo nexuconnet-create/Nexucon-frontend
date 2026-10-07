@@ -159,6 +159,9 @@ export default function RegisterProjectWizard() {
     start_date: null,
     estimated_completion: null,
     
+    client_name: '',
+    client_contact: '',
+
     developer_name: '',
     developer_organization: '',
     developer_reg_number: '',
@@ -582,10 +585,12 @@ export default function RegisterProjectWizard() {
     </div>
   );
 
-  // STEP 2: DEVELOPER
+  // STEP 2: DEVELOPER & CLIENT
   const renderStep2 = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {renderInput('Client / Commissioning Body (Optional)', 'client_name', 'text', 'e.g. ExxonMobil, LADOL Free Zone')}
+        {renderInput('Primary Client Contact (Optional)', 'client_contact', 'text', 'e.g. client@example.com')}
         {renderInput('Organization / Company Name', 'developer_organization', 'text', 'e.g. Eko Atlantic Developers Ltd', true)}
         {renderInput('Developer / Owner Name', 'developer_name', 'text', 'e.g. Babatunde Sanwo-Olu & Partners', true)}
         {renderInput('Registration Number (RC)', 'developer_reg_number', 'text', 'RC-894721')}
@@ -1394,6 +1399,11 @@ export default function RegisterProjectWizard() {
             <div>
               <strong>Project:</strong> {formData.name || 'Not provided'}
             </div>
+            {formData.client_name ? (
+              <div>
+                <strong>Client:</strong> {formData.client_name}
+              </div>
+            ) : null}
             <div>
               <strong>Developer:</strong> {formData.developer_organization || 'Not provided'}
             </div>

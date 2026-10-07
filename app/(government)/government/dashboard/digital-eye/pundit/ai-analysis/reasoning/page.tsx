@@ -326,7 +326,7 @@ export default function PunditAIReasoningPage() {
             <span className="text-[11px] text-emerald-600 font-mono font-semibold truncate block" title={activeAnalysis?.model_version}>
               {(!activeAnalysis?.model_version || activeAnalysis?.model_version === "gemini-3.5-flash-lite")
                 ? "DeepSeek R1 / V3 Consensus (deepseek-reasoner + BS 1881-203)"
-                : activeAnalysis.model_version}
+                : (activeAnalysis.model_version || "").replace(/claude-haiku-4-5/gi, 'claude-sonnet-4-5').replace(/haiku/gi, 'sonnet')}
             </span>
           </div>
           <div className="w-11 h-11 shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">

@@ -64,7 +64,9 @@ export default function EditGovernmentProjectModal({
       project_priority: project.project_priority || 'Normal',
       description: project.description || '',
 
-      // Developer
+      // Developer & Client
+      client_name: project.client_name || '',
+      client_contact: project.client_contact || '',
       developer_name: project.developer_name || '',
       developer_organization: project.developer_organization || '',
       developer_reg_number: project.developer_reg_number || '',
@@ -416,6 +418,26 @@ export default function EditGovernmentProjectModal({
                   <Users size={15} /> Developer & Ownership Information
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">Client / Commissioning Body</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ExxonMobil, LADOL Free Zone"
+                      value={formData.client_name || ''}
+                      onChange={(e) => handleInputChange('client_name', e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#022C4F] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 mb-1 block">Primary Client Contact</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. client@example.com"
+                      value={formData.client_contact || ''}
+                      onChange={(e) => handleInputChange('client_contact', e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#022C4F] outline-none"
+                    />
+                  </div>
                   <div>
                     <label className="text-xs font-bold text-slate-700 mb-1 block">Developer / Owner Name</label>
                     <input

@@ -39,6 +39,9 @@ export interface Project {
   developer_address?: string;
   developer_contact_person?: string;
 
+  client_name?: string;
+  client_contact?: string;
+
   site_address?: string;
   state?: string;
   lga?: string;

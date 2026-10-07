@@ -257,7 +257,7 @@ export default function PunditAIAnalysisPage() {
         reasoningLog: normalizeLines(freshRun.reasoning_log),
         riskLevel: freshRun.risk_level,
         provider: freshRun.model_provider,
-        model: freshRun.model_version,
+        model: (freshRun.model_version || '').replace(/claude-haiku-4-5/gi, 'claude-sonnet-4-5').replace(/haiku/gi, 'sonnet'),
         testsAnalysed: freshRun.tests_analysed,
         confidence: freshRun.confidence ?? null,
       }
@@ -269,7 +269,7 @@ export default function PunditAIAnalysisPage() {
         reasoningLog: normalizeLines(latestAnalysis.reasoning_log),
         riskLevel: latestAnalysis.risk_level,
         provider: latestAnalysis.model_provider,
-        model: latestAnalysis.model_version,
+        model: (latestAnalysis.model_version || '').replace(/claude-haiku-4-5/gi, 'claude-sonnet-4-5').replace(/haiku/gi, 'sonnet'),
         testsAnalysed: tests.length,
         confidence: latestAnalysis.confidence ?? null,
       }
