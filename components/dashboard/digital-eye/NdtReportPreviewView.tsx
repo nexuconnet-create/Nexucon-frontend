@@ -9,11 +9,13 @@ import {
   FileDown,
   Loader2,
   PencilLine,
+  Mail,
 } from "lucide-react";
 import {
   downloadNdtReport,
   fetchNdtReportPreviewBundle,
   type NdtPreviewSection,
+  notifyProjectNdtInspectors,
 } from "@/services/digitalEye";
 
 /**
@@ -54,6 +56,7 @@ export default function NdtReportPreviewView({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [notifying, setNotifying] = useState(false);
   const [zoom, setZoom] = useState(100);
 
   // Fetch the bundle fresh each time the view mounts — data may have
@@ -94,6 +97,28 @@ export default function NdtReportPreviewView({
     window.dispatchEvent(
       new CustomEvent("show-toast", { detail: { message, type } })
     );
+  };
+
+  const handleNotifyInspectors = async () => {
+    if (!projectId) return;
+    setNotifying(true);
+    try {
+      const res = await notifyProjectNdtInspectors(projectId, { operator, force_resend: true });
+      if (res?.notified_count > 0) {
+        toast(`✉️ Alert emails dispatched to ${res.notified_count} project inspector(s).`, "success");
+      } else if (res?.recipients && res.recipients.length > 0) {
+        toast(`✉️ Notification sent to ${res.recipients.map((r: any) => r.name).join(", ")}.`, "info");
+      } else {
+        toast("No active field inspectors assigned to this project.", "info");
+      }
+    } catch (err: any) {
+      toast(
+        `⚠️ ${err?.response?.data?.detail || err?.message || "Failed to notify inspectors."}`,
+        "error"
+      );
+    } finally {
+      setNotifying(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -185,6 +210,20 @@ export default function NdtReportPreviewView({
                 Download
               </a>
             )}
+            <button
+              type="button"
+              onClick={handleNotifyInspectors}
+              disabled={notifying || loading || !projectId}
+              className="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
+              title="Immediately dispatch email notification to field inspectors that this NDT report is ready for download"
+            >
+              {notifying ? (
+                <Loader2 className="w-4 h-4 animate-spin text-sky-700" />
+              ) : (
+                <Mail className="w-4 h-4 text-sky-700" />
+              )}
+              <span>{notifying ? "Notifying Inspectors…" : "Notify Inspectors"}</span>
+            </button>
             <button
               type="button"
               onClick={handleGenerate}

@@ -3118,10 +3118,11 @@ export const verifyArchivedReport = async (
  */
 export const downloadArchivedReportOriginal = async (
   ref: string,
-  digest: string
+  digest: string,
+  token?: string
 ): Promise<Blob> => {
   const res = await api.get('/reports/verify/download/', {
-    params: { ref, digest },
+    params: { ref, digest, ...(token ? { token } : {}) },
     responseType: 'blob',
   });
   return new Blob([res as unknown as BlobPart], { type: 'application/pdf' });
@@ -3754,5 +3755,56 @@ export const addPunditAnalysisComment = async (
 ): Promise<PunditAnalysisComment> => {
   const res = await api.post(`/digital-eye/pundit-analysis-review/${analysisId}/comments/`, { comment });
   return unwrap<PunditAnalysisComment>(res, res as any);
+};
+
+export interface ProjectInspectorRecipient {
+  user_id?: string;
+  email: string;
+  name: string;
+  role: string;
+}
+
+export interface NdtNotificationResult {
+  success: boolean;
+  notified_count: number;
+  total_recipients: number;
+  recipients: Array<{
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    delivery_id?: string;
+  }>;
+  errors?: Array<{ email: string; error: any }>;
+  message?: string;
+}
+
+export const getProjectNdtInspectors = async (
+  projectId: string
+): Promise<ProjectInspectorRecipient[]> => {
+  try {
+    const res = await api.get(`/reports/projects/${projectId}/ndt-report/inspectors/`);
+    const data = unwrap<ProjectInspectorRecipient[]>(res, []);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error('Failed to fetch project inspectors', err);
+    return [];
+  }
+};
+
+export const notifyInspectorsAboutNdtReport = async (
+  reportId: string,
+  payload?: { recipients?: string[]; custom_message?: string; force_resend?: boolean }
+): Promise<NdtNotificationResult> => {
+  const res = await api.post(`/reports/archived-reports/${reportId}/notify-inspectors/`, payload || {});
+  return unwrap<NdtNotificationResult>(res, res as any);
+};
+
+export const notifyProjectNdtInspectors = async (
+  projectId: string,
+  payload?: { operator?: string; recipients?: string[]; custom_message?: string; force_resend?: boolean }
+): Promise<NdtNotificationResult> => {
+  const res = await api.post(`/reports/projects/${projectId}/ndt-report/notify-inspectors/`, payload || {});
+  return unwrap<NdtNotificationResult>(res, res as any);
 };
 

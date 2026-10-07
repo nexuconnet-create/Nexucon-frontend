@@ -108,15 +108,39 @@ export interface ComplianceCertificate {
   created_at: string;
 }
 
+export interface DisciplineBreakdownItem {
+  discipline: string;
+  total_ncrs: number;
+  open_ncrs: number;
+  closed_ncrs: number;
+  compliance_rate: number;
+  status: string;
+}
+
+export interface MonthlyTrendItem {
+  month: string;
+  logged: number;
+  resolved: number;
+  score: number;
+}
+
 export interface ComplianceStats {
   overall_score: string;
+  score_numeric?: number;
   open_ncrs_count: number;
   critical_ncrs_count: number;
+  major_ncrs_count?: number;
+  minor_ncrs_count?: number;
+  total_ncrs_count?: number;
+  closed_ncrs_count?: number;
   pending_capas_count: number;
   valid_certificates_count: number;
   expiring_soon_certificates_count: number;
   expired_certificates_count: number;
   reviews_count: number;
+  discipline_breakdown?: DisciplineBreakdownItem[];
+  monthly_trend?: MonthlyTrendItem[];
+  project_id?: string | null;
 }
 
 const unwrapList = <T>(res: any): T[] => {
@@ -231,12 +255,12 @@ export const verifyCertificateAuthenticity = async (id: string): Promise<any> =>
   return unwrapItem<any>(response);
 };
 
-export const getComplianceStats = async (): Promise<ComplianceStats> => {
-  const response = await api.get('/compliance/stats/overview/');
+export const getComplianceStats = async (params?: Record<string, any>): Promise<ComplianceStats> => {
+  const response = await api.get('/compliance/stats/overview/', { params });
   return unwrapItem<ComplianceStats>(response);
 };
 
-export const generateComplianceReport = async (): Promise<any> => {
-  const response = await api.get('/compliance/stats/generate-report/');
+export const generateComplianceReport = async (params?: Record<string, any>): Promise<any> => {
+  const response = await api.get('/compliance/stats/generate-report/', { params });
   return unwrapItem<any>(response);
 };
