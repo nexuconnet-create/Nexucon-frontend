@@ -32,6 +32,12 @@ export default function PunditReportsPage() {
   const [selectedElementId, setSelectedElementId] = useState<string>("");
   const [selectedOperator, setSelectedOperator] = useState<string>("");
   const [operators, setOperators] = useState<string[]>([]);
+  // The structural elements the project's recorded tests actually name
+  // (e.g. 'S1'). Only these can scope a report: the workspace header's
+  // element selector carries IFC model GUIDs, which match no recorded test,
+  // and sending one used to quietly strip Section 5.0's summaries and every
+  // appendix photograph out of the generated PDF.
+  const [recordedElements, setRecordedElements] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   // Bumped after an archive so the dossier registry remounts and re-lists
   // the real server rows.
@@ -44,23 +50,38 @@ export default function PunditReportsPage() {
     if (!selectedProjectId) {
       setOperators([]);
       setSelectedOperator("");
+      setRecordedElements([]);
       return;
     }
     getPunditTests({ project: selectedProjectId })
       .then((tests) => {
         const set = new Set<string>();
+        const elementSet = new Set<string>();
         tests.forEach((t) => {
           const op = (t.operator_name || '').trim();
           if (op) set.add(op);
+          const el = (t.structural_element_name || '').trim();
+          if (el) elementSet.add(el);
         });
         const ops = Array.from(set).sort();
         setOperators(ops);
+        setRecordedElements(Array.from(elementSet).sort());
         if (ops.length > 0 && (!selectedOperator || !ops.includes(selectedOperator))) {
           setSelectedOperator(ops[0]);
         }
       })
-      .catch(() => setOperators([]));
+      .catch(() => {
+        setOperators([]);
+        setRecordedElements([]);
+      });
   }, [selectedProjectId]);
+
+  // The scope the report endpoints may be given: only an element the
+  // project's tests actually recorded. Anything else reports as the whole
+  // project rather than silently narrowing the document.
+  const reportElementId = recordedElements.includes(selectedElementId)
+    ? selectedElementId
+    : "";
 
   useEffect(() => {
     if (!previewOpen && cmsScrollPending) {
@@ -92,12 +113,19 @@ export default function PunditReportsPage() {
   // to the editing stack exactly as it was left (nothing was committed).
   const previewing = previewOpen && !!selectedProjectId;
 
+  const handleProjectChange = (id: string) => {
+    setSelectedProjectId(id);
+    setSelectedElementId("");
+    setSelectedOperator("");
+    setPreviewOpen(false);
+  };
+
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
       <DigitalEyeHeader
         activePillar="PUNDIT: Ultrasonic Pulse Velocity Reports"
         selectedProjectId={selectedProjectId}
-        onProjectChange={setSelectedProjectId}
+        onProjectChange={handleProjectChange}
         selectedElementId={selectedElementId}
         onElementChange={setSelectedElementId}
       />
@@ -111,7 +139,7 @@ export default function PunditReportsPage() {
         <NdtReportPreviewView
           projectId={selectedProjectId}
           operator={selectedOperator || undefined}
-          elementId={selectedElementId || undefined}
+          elementId={reportElementId || undefined}
           onBackToEdit={() => setPreviewOpen(false)}
           onGenerated={() => {
             setRegistryVersion((v) => v + 1);
@@ -133,7 +161,9 @@ export default function PunditReportsPage() {
               className="inline-flex items-center gap-2 rounded-lg border border-[#0A3D2E]/30 bg-[#0A3D2E]/5 px-4 py-2 text-sm font-medium text-[#0A3D2E] hover:bg-[#0A3D2E]/10 cursor-pointer"
             >
               <Eye className="w-4 h-4" />
-              Preview Report {selectedElementId ? `(Item: ${selectedElementId.toUpperCase()})` : selectedOperator ? `(${selectedOperator})` : ""}
+              Preview Report {reportElementId
+                ? `(Element: ${reportElementId.toUpperCase()})`
+                : selectedOperator ? `(${selectedOperator})` : ""}
             </button>
             {operators.length > 0 && (
               <select

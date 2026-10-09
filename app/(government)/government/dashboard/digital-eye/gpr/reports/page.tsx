@@ -8,12 +8,17 @@ export default function GPRReportsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string>("");
 
+  const handleProjectChange = (id: string) => {
+    setSelectedProjectId(id);
+    setSelectedElementId("");
+  };
+
   return (
     <div className="w-full min-h-screen pb-12 animate-in fade-in duration-300">
       <DigitalEyeHeader
         activePillar="GPR: Subsurface Radar Compliance Reports"
         selectedProjectId={selectedProjectId}
-        onProjectChange={setSelectedProjectId}
+        onProjectChange={handleProjectChange}
         selectedElementId={selectedElementId}
         onElementChange={setSelectedElementId}
       />
