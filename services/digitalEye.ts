@@ -1098,6 +1098,18 @@ export const updateFieldDevice = async (
   return unwrap<any>(res, res);
 };
 
+export const calibrateFieldDevice = async (
+  deviceId: string,
+  input: {
+    calibration_date: string;
+    calibration_expiry?: string;
+    calibration_certificate_url?: string;
+  }
+): Promise<{ status: string; calibration_date: string }> => {
+  const res = await api.post(`/digital-eye/devices/${deviceId}/calibrate/`, input);
+  return unwrap<any>(res, res);
+};
+
 export interface DeviceConnectionLog {
   id: string;
   device: string;

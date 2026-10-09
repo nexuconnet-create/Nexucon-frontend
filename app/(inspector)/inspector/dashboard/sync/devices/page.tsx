@@ -21,6 +21,7 @@ import {
   setDeviceGateway,
   suggestColumnMapping,
   updateFieldDevice,
+  calibrateFieldDevice,
   type AcceptedColumn,
   type FieldDeviceInput,
   type FieldDeviceRecord,
@@ -176,6 +177,11 @@ export default function InspectorInstrumentsPage() {
   const [projectDraft, setProjectDraft] = useState("");
   const [projectError, setProjectError] = useState<string | null>(null);
   const [isSavingProject, setIsSavingProject] = useState(false);
+
+  const [calibratingDevice, setCalibratingDevice] = useState<string | null>(null);
+  const [calibrationDraft, setCalibrationDraft] = useState("");
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [isSavingCalibration, setIsSavingCalibration] = useState(false);
 
   // Gateway sync, per device
   /**
@@ -441,6 +447,38 @@ export default function InspectorInstrumentsPage() {
       );
     } finally {
       setIsSavingMapping(false);
+    }
+  };
+
+  const startCalibrationEdit = (device: FieldDeviceRecord) => {
+    setCalibratingDevice(device.id);
+    setCalibrationError(null);
+    setCalibrationDraft(device.calibration_date || "");
+  };
+
+  const handleSaveCalibration = async (device: FieldDeviceRecord) => {
+    setCalibrationError(null);
+    if (!calibrationDraft) {
+      setCalibrationError("A calibration date is required.");
+      return;
+    }
+    
+    if (calibrationDraft === device.calibration_date) {
+      setCalibratingDevice(null);
+      return;
+    }
+
+    setIsSavingCalibration(true);
+    try {
+      await calibrateFieldDevice(device.id, { calibration_date: calibrationDraft });
+      setCalibratingDevice(null);
+      await readDevices();
+      notify("Calibration recorded successfully");
+    } catch (e: any) {
+      const msg = e.detail || "Could not save calibration date. Please try again.";
+      setCalibrationError(msg);
+    } finally {
+      setIsSavingCalibration(false);
     }
   };
 
@@ -957,25 +995,81 @@ export default function InspectorInstrumentsPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-                      <div className="text-[11px] text-slate-500">
-                        Calibrated
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-[11px] text-slate-500">
+                            Calibrated
+                          </div>
+                          {calibratingDevice !== device.id && (
+                            <>
+                              <div className="text-xs font-semibold text-slate-800">
+                                {device.calibration_date
+                                  ? dateOr(
+                                      device.calibration_date,
+                                      "date not recorded"
+                                    )
+                                  : "Not recorded"}
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                {device.calibration_expiry
+                                  ? `Expires ${dateOr(
+                                      device.calibration_expiry,
+                                      "date not recorded"
+                                    )}`
+                                  : "No expiry recorded"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {calibratingDevice !== device.id && canManage && (
+                          <button
+                            type="button"
+                            onClick={() => startCalibrationEdit(device)}
+                            className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-[#022C4F] border border-slate-200 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
+                          >
+                            <Pencil size={12} />
+                            Calibrate
+                          </button>
+                        )}
                       </div>
-                      <div className="text-xs font-semibold text-slate-800">
-                        {device.calibration_date
-                          ? dateOr(
-                              device.calibration_date,
-                              "date not recorded"
-                            )
-                          : "Not recorded"}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {device.calibration_expiry
-                          ? `Expires ${dateOr(
-                              device.calibration_expiry,
-                              "date not recorded"
-                            )}`
-                          : "No expiry recorded"}
-                      </div>
+
+                      {calibratingDevice === device.id && (
+                        <div className="mt-2 space-y-2">
+                          {calibrationError && (
+                            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-800">
+                              {calibrationError}
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Calibration Date
+                            </label>
+                            <input
+                              type="date"
+                              value={calibrationDraft}
+                              onChange={(e) => setCalibrationDraft(e.target.value)}
+                              className="w-full p-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveCalibration(device)}
+                              disabled={isSavingCalibration}
+                              className="px-3 py-1.5 rounded-lg bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                            >
+                              {isSavingCalibration ? "Saving…" : "Save date"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCalibratingDevice(null)}
+                              className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
                       <div className="text-[11px] text-slate-500">

@@ -57,7 +57,12 @@ import ColumnMappingEditor, {
   rowsToMapping,
   type MappingRow,
 } from "@/components/inspector/ColumnMappingEditor";
-import { dateTimeOr, orDash } from "@/lib/display";
+import {
+  dateTimeOr,
+  googleMapsAddressUrl,
+  googleMapsUrl,
+  orDash,
+} from "@/lib/display";
 
 /**
  * The four capture types a session can carry.
@@ -1245,9 +1250,13 @@ export default function InspectorTelemetryPage() {
                                 )}
                               </div>
                             </div>
-                            {session.session_config.latitude != null && session.session_config.longitude != null && (
+                            {session.session_config.latitude != null && session.session_config.longitude != null ? (
                               <a
-                                href={`https://www.google.com/maps?q=${session.session_config.latitude},${session.session_config.longitude}`}
+                                href={googleMapsUrl(
+                                  String(session.session_config.latitude),
+                                  String(session.session_config.longitude),
+                                  String(session.session_config?.location_address ?? '')
+                                )}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2 shrink-0"
@@ -1255,7 +1264,21 @@ export default function InspectorTelemetryPage() {
                                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                                 Maps
                               </a>
-                            )}
+                            ) : String(session.session_config?.location_address ?? '').trim() !== '' ? (
+                              /* A described location with no fix still gets a
+                                 map: searching the text is a real result,
+                                 whereas a coordinate link built from an
+                                 absent fix would not be. */
+                              <a
+                                href={googleMapsAddressUrl(String(session.session_config.location_address))}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 underline underline-offset-2 shrink-0"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                Maps
+                              </a>
+                            ) : null}
                           </div>
                         )}
 
@@ -1770,16 +1793,28 @@ export default function InspectorTelemetryPage() {
             </div>
           </div>
 
-          {importLatitude && importLongitude && (
+          {(importLatitude && importLongitude) || importLocationAddress.trim() !== '' ? (
             <div className="flex items-center gap-3">
               <a
-                href={`https://www.google.com/maps/place/${encodeURIComponent(importLocationAddress || `${importLatitude},${importLongitude}`)}/@${importLatitude},${importLongitude},17z`}
+                /* The place segment used to be built from the address and fell
+                   back to the bare coordinates, so an untitled fix produced
+                   `maps/place//@lat,lng` — a dropped pin whose panel names no
+                   place. `?q=lat,lng(label)` puts the inspector's description
+                   in that panel, and an address with no fix searches the text
+                   instead of inventing a coordinate for it. */
+                href={
+                  importLatitude && importLongitude
+                    ? googleMapsUrl(importLatitude, importLongitude, importLocationAddress)
+                    : googleMapsAddressUrl(importLocationAddress)
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline underline-offset-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                Preview Center on Google Maps
+                {importLatitude && importLongitude
+                  ? "Preview Center on Google Maps"
+                  : "Find the described location on Google Maps"}
               </a>
               {conversionResult?.googleMapsUrl && (
                 <a
@@ -1793,7 +1828,7 @@ export default function InspectorTelemetryPage() {
                 </a>
               )}
             </div>
-          )}
+          ) : null}
 
           {/* Address / location description */}
           <div>
