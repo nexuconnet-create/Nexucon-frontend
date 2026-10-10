@@ -106,8 +106,9 @@ export default function ConsolidatedIssuesHubPage() {
     const matchesSearch = 
       (c.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.project_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.element_a_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.element_b_name || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (c.primary_model_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.secondary_model_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.clash_reference || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSev = severityFilter === "ALL" || c.severity === severityFilter;
     return matchesSearch && matchesSev;
   });
@@ -406,7 +407,7 @@ export default function ConsolidatedIssuesHubPage() {
 
                         <h3 className="text-xs font-bold text-slate-900">{clash.title}</h3>
                         <p className="text-[11px] text-slate-500">
-                          Intersection between <strong className="text-slate-700">{clash.element_a_name}</strong> and <strong className="text-slate-700">{clash.element_b_name}</strong>
+                          {clash.description || `Spatial collision between ${clash.primary_model_name || 'Primary Model'} and ${clash.secondary_model_name || 'Secondary System'}`}
                         </p>
 
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
