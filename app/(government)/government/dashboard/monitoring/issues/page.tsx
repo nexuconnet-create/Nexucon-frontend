@@ -369,7 +369,7 @@ export default function MonitoringSiteIssuesPage() {
                   <option value="">Select Project</option>
                   {projects.map((proj) => (
                     <option key={proj.id} value={proj.id}>
-                      {proj.name} ({proj.project_reference})
+                      {proj.name} ({proj.reference_number || proj.id})
                     </option>
                   ))}
                 </select>

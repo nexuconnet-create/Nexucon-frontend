@@ -617,7 +617,7 @@ export default function InspectionDetailSideDrawer({
                             )}
                           </div>
                           <p className="text-sm font-semibold text-slate-800 leading-snug">
-                            {item.item || item.title || item.name}
+                            {item.item || item.title || (item as any).name}
                           </p>
                           {item.notes && (
                             <p className="text-xs text-slate-500 mt-1 italic">{item.notes}</p>
