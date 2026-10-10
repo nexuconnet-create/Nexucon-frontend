@@ -11,6 +11,7 @@ import {
   ProjectProfessional
 } from '@/services/projects';
 import { getDistricts, District } from '@/services/settings';
+import { getInspectors, type Inspector } from '@/services/stakeholders';
 import { CustomSelect } from '@/components/CustomSelect';
 import {
   getStateOptions,
@@ -249,6 +250,24 @@ export default function RegisterProjectWizard() {
       })
       .finally(() => {
         if (!cancelled) setZonesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Accredited Field Inspectors
+  const [inspectorsList, setInspectorsList] = useState<Inspector[]>([]);
+  const [isCustomInspector, setIsCustomInspector] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getInspectors()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setInspectorsList(data);
+      })
+      .catch((err) => {
+        console.warn("Could not load accredited inspectors:", err);
       });
     return () => {
       cancelled = true;
@@ -1337,7 +1356,51 @@ export default function RegisterProjectWizard() {
         </div>
 
         {renderInput('Assigned Regulatory Officer', 'assigned_officer', 'text', 'e.g. Engr. K. Balogun')}
-        {renderInput('Assigned Field Inspector', 'assigned_inspector', 'text', 'e.g. Arch. T. Williams')}
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-bold text-[#022C4F]">Assigned Field Inspector</label>
+            {inspectorsList.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsCustomInspector(!isCustomInspector)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+              >
+                {isCustomInspector ? "← Select from Directory" : "+ Custom Inspector"}
+              </button>
+            )}
+          </div>
+          {inspectorsList.length > 0 && !isCustomInspector ? (
+            <CustomSelect
+              value={formData.assigned_inspector || ''}
+              onChange={(val) => {
+                if (val === '__custom__') {
+                  setIsCustomInspector(true);
+                } else {
+                  handleCustomSelectChange('assigned_inspector', val);
+                }
+              }}
+              options={[
+                ...inspectorsList.map((ins) => ({
+                  value: ins.name || ins.inspector_id,
+                  label: `${ins.name} (${ins.role_title || 'Field Inspector'}${ins.assigned_zone ? ` - ${ins.assigned_zone}` : ''})`
+                })),
+                { value: '__custom__', label: '+ Enter Custom Inspector Name...' }
+              ]}
+              placeholder="Select Accredited Inspector from Registry..."
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+            />
+          ) : (
+            <input
+              type="text"
+              name="assigned_inspector"
+              value={formData.assigned_inspector || ''}
+              onChange={handleChange}
+              placeholder="e.g. Arch. T. Williams"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#022C4F]/20"
+            />
+          )}
+        </div>
 
         <div>
           <label className="block text-sm font-bold text-[#022C4F] mb-1.5">Mandatory Inspection Frequency</label>

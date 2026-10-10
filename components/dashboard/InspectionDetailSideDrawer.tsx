@@ -8,12 +8,79 @@ import {
   CheckCircle2, CheckSquare, Sparkles, RefreshCw
 } from 'lucide-react';
 import { 
-  Inspection, InspectionFinding, checkinInspection, completeInspection, 
+  Inspection, InspectionFinding, InspectionChecklistItem, checkinInspection, completeInspection, 
   issueStopWorkOrder, createReInspection, assignInspection, logInspectionFinding,
-  resolveFinding, getInspectionById
+  resolveFinding, getInspectionById, updateInspectionChecklist
 } from '@/services/inspections';
 import { CustomSelect } from '@/components/CustomSelect';
 import { useRouter } from 'next/navigation';
+
+const DEFAULT_RUBRICS: Record<string, string[]> = {
+  Foundation: [
+    'Subgrade soil bearing capacity & compaction verification',
+    'Reinforcement steel bar diameter, spacing, and lap length conform to approved structural drawings',
+    'Concrete formwork alignment, stability, and moisture barrier placement',
+    'Adequate concrete cover spacers (minimum 50mm for substructure elements)',
+    'Excavation boundary and setback clearance conformity with LASPPPA survey plan'
+  ],
+  Structural: [
+    'Reinforced concrete column/beam dimensional accuracy against structural schedules',
+    'Rebar tensile grades, bending dimensions, and tie-wire firmness',
+    'Concrete mix design certificate and batch test cube sampling records',
+    'Formwork striking time and propping system stability',
+    'Adequate expansion/construction joints placement per engineering drawings'
+  ],
+  Slab: [
+    'Bottom & top rebar mesh positioning, chair spacers, and cover integrity',
+    'Slab thickness depth gauges checked across all spans',
+    'Conduit, electrical boxes, and plumbing sleeve penetrations correctly secured',
+    'Beam-column joint core confinement reinforcement verified',
+    'Debris, standing water, and tie wire clippings cleared prior to pour'
+  ],
+  Drainage: [
+    'Gradient slope verification to state storm-water drainage network',
+    'Manhole/inspection chamber invert level and water-tightness integrity',
+    'Gully trap installation and interceptor chamber positioning',
+    'Perimeter trench drainage sizing against 50-year return storm calculations',
+    'Discharge connection approval compliance with LASAA/MOE standards'
+  ],
+  Environmental: [
+    'Site hoarding perimeter height (minimum 2.4m) and sound dampening adequacy',
+    'Stormwater runoff control, silt fences, and sediment entrapment traps',
+    'On-site chemical, fuel, and cement storage containment berms',
+    'Solid construction waste sorting, carting manifest, and disposal permits',
+    'Dust abatement suppression water spray operations compliance'
+  ],
+  'Fire Safety': [
+    'Emergency escape stairwell width (minimum 1200mm) and continuous handrails',
+    'Fire-rated doors (2-hour certified) and self-closing panic hardware',
+    'Wet riser piping pressure testing and fire department Siamese connection access',
+    'Smoke/heat detection wiring and central alarm panel annunciator zone mapping',
+    'Fire extinguisher distribution (CO2 and ABC Dry Chemical) at mandatory intervals'
+  ],
+  Final: [
+    'Certificate of Completion from Registered Engineer & Architect of Record',
+    'As-built drawings submission matching actual site structure dimensions',
+    'Permanent utility meters (water, electricity, sewer) signed off by utility providers',
+    'Fire safety, accessibility ramp slopes, and barrier-free access compliance',
+    'Site demobilization and clear reinstatement of public road/sidewalk easements'
+  ]
+};
+
+const getRubricForType = (typeStr?: string): string[] => {
+  if (!typeStr) return DEFAULT_RUBRICS.Structural;
+  const lower = typeStr.toLowerCase();
+  for (const [key, items] of Object.entries(DEFAULT_RUBRICS)) {
+    if (lower.includes(key.toLowerCase())) return items;
+  }
+  return [
+    'Statutory zoning setback adherence verified against approved architectural plan',
+    'Structural member sizing, rebar specifications, and material certification',
+    'Occupational safety compliance (PPE, safety netting, scaffolding tags)',
+    'Stormwater drainage connection and environmental mitigation measures',
+    'Site signpost displayed with LASPPPA building permit reference number'
+  ];
+};
 
 interface InspectionDetailSideDrawerProps {
   isOpen: boolean;
@@ -51,10 +118,56 @@ export default function InspectionDetailSideDrawer({
   const [findingAction, setFindingAction] = useState('');
   const [isLoggingFinding, setIsLoggingFinding] = useState(false);
 
+  // Dynamic Phase-Linked Checklist Rubric State
+  const [checklistItems, setChecklistItems] = useState<InspectionChecklistItem[]>([]);
+  const [isSavingChecklist, setIsSavingChecklist] = useState(false);
+
   // Synchronize when prop changes or drawer opens
   useEffect(() => {
     setCurrentInspection(inspection);
+    if (inspection?.checklist_results && inspection.checklist_results.length > 0) {
+      setChecklistItems(inspection.checklist_results);
+    } else if (inspection) {
+      const rubric = getRubricForType(inspection.inspection_type);
+      setChecklistItems(rubric.map((item, idx) => ({
+        id: `rubric-${idx + 1}`,
+        item,
+        status: 'PENDING'
+      })));
+    }
   }, [inspection, isOpen]);
+
+  const setItemStatus = (idx: number, status: 'PASSED' | 'FAILED' | 'PENDING') => {
+    setChecklistItems(prev => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], status };
+      return updated;
+    });
+  };
+
+  const handleBulkChecklist = (status: 'PASSED' | 'PENDING') => {
+    setChecklistItems(prev => prev.map(item => ({ ...item, status })));
+  };
+
+  const handleSaveChecklist = async () => {
+    if (!currentInspection?.id) return;
+    setIsSavingChecklist(true);
+    try {
+      const updated = await updateInspectionChecklist(currentInspection.id, checklistItems);
+      if (updated && updated.id) {
+        setCurrentInspection(updated);
+      }
+      window.dispatchEvent(new CustomEvent('show-toast', { 
+        detail: { message: 'Inspection checklist progress saved successfully.', type: 'success' } 
+      }));
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to save checklist progress.';
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: msg, type: 'error' } }));
+    } finally {
+      setIsSavingChecklist(false);
+    }
+  };
 
   // Refresh single inspection from backend
   const refreshCurrentInspection = async () => {
@@ -111,7 +224,7 @@ export default function InspectionDetailSideDrawer({
     try {
       const updated = await completeInspection(currentInspection.id, {
         outcome,
-        checklist_results: currentInspection.checklist_results,
+        checklist_results: checklistItems,
         summary_notes: summaryNotes || currentInspection.summary_notes
       });
       if (updated && updated.id) {
@@ -287,7 +400,7 @@ export default function InspectionDetailSideDrawer({
         <div className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs font-bold shrink-0">
           {[
             { id: 'overview', label: 'Overview' },
-            { id: 'checklist', label: `Checklist (${(currentInspection.checklist_results || []).length})` },
+            { id: 'checklist', label: `Checklist (${checklistItems.length})` },
             { id: 'findings', label: `Findings (${findingsList.length})` },
             { id: 'telemetry', label: 'GPS Telemetry' }
           ].map(tab => (
@@ -401,33 +514,159 @@ export default function InspectionDetailSideDrawer({
           )}
 
           {activeTab === 'checklist' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-[#022C4F]">Standard Verification Checklist</h4>
-                <span className="text-xs text-slate-400 font-semibold">Field Audit Rubric</span>
-              </div>
-              
-              <div className="space-y-3">
-                {(currentInspection.checklist_results && currentInspection.checklist_results.length > 0) ? (
-                  currentInspection.checklist_results.map((item: any, idx: number) => (
-                    <div key={idx} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between hover:shadow-sm transition-all">
-                      <div>
-                        <p className="text-sm font-bold text-slate-800">{item.item || item.name}</p>
-                        {item.notes && <p className="text-xs text-slate-500 mt-1">{item.notes}</p>}
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-                        item.status === 'PASSED' ? 'bg-emerald-100 text-emerald-800' :
-                        item.status === 'FAILED' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {item.status || 'PENDING'}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 text-slate-400 text-xs">
-                    No checklist attached to this inspection.
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckSquare size={16} className="text-blue-600" />
+                    <h4 className="text-sm font-black text-[#022C4F]">Statutory Inspection Rubric</h4>
                   </div>
-                )}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Stage-linked criteria for <span className="font-bold text-slate-700">{currentInspection.inspection_type}</span>
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleBulkChecklist('PASSED')}
+                    className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Pass All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkChecklist('PENDING')}
+                    className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveChecklist}
+                    disabled={isSavingChecklist}
+                    className="px-3 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingChecklist ? (
+                      <>
+                        <RefreshCw size={12} className="animate-spin" /> Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Check size={12} /> Save Progress
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Counters */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Passed</span>
+                  <span className="text-lg font-black text-emerald-800">
+                    {checklistItems.filter(i => (i.status === 'PASSED' || i.result === 'PASS')).length}
+                  </span>
+                </div>
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider block">Defects / Failed</span>
+                  <span className="text-lg font-black text-red-800">
+                    {checklistItems.filter(i => (i.status === 'FAILED' || i.result === 'FAIL')).length}
+                  </span>
+                </div>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Pending</span>
+                  <span className="text-lg font-black text-slate-700">
+                    {checklistItems.filter(i => (!i.status || i.status === 'PENDING') && i.result !== 'PASS' && i.result !== 'FAIL').length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {checklistItems.map((item, idx) => {
+                  const currentStatus = item.status || (item.result === 'PASS' ? 'PASSED' : item.result === 'FAIL' ? 'FAILED' : 'PENDING');
+                  return (
+                    <div 
+                      key={item.id || idx} 
+                      className={`p-4 rounded-2xl border transition-all ${
+                        currentStatus === 'PASSED' ? 'bg-emerald-50/40 border-emerald-200' :
+                        currentStatus === 'FAILED' ? 'bg-red-50/40 border-red-200' :
+                        'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">
+                              Item #{idx + 1}
+                            </span>
+                            {currentStatus === 'PASSED' && (
+                              <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 size={12} /> Compliant
+                              </span>
+                            )}
+                            {currentStatus === 'FAILED' && (
+                              <span className="text-[11px] font-bold text-red-700 flex items-center gap-1">
+                                <AlertOctagon size={12} /> Non-Conforming
+                              </span>
+                            )}
+                            {currentStatus === 'PENDING' && (
+                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                                <Clock size={12} /> Awaiting Audit
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-slate-800 leading-snug">
+                            {item.item || item.title || item.name}
+                          </p>
+                          {item.notes && (
+                            <p className="text-xs text-slate-500 mt-1 italic">{item.notes}</p>
+                          )}
+                        </div>
+
+                        {/* Interactive Status Selector */}
+                        <div className="flex items-center gap-1.5 shrink-0 bg-slate-100/80 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setItemStatus(idx, 'PASSED')}
+                            title="Mark as Passed"
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              currentStatus === 'PASSED'
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                          >
+                            <Check size={12} /> Pass
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setItemStatus(idx, 'FAILED')}
+                            title="Mark as Failed"
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              currentStatus === 'FAILED'
+                                ? 'bg-red-600 text-white shadow-sm'
+                                : 'text-slate-600 hover:text-red-700 hover:bg-red-50'
+                            }`}
+                          >
+                            <X size={12} /> Fail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setItemStatus(idx, 'PENDING')}
+                            title="Set to Pending"
+                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              currentStatus === 'PENDING'
+                                ? 'bg-slate-300 text-slate-800'
+                                : 'text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            Hold
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

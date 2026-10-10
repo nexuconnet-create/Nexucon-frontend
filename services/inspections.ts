@@ -190,6 +190,14 @@ export const completeInspection = async (
   return res.data || res;
 };
 
+export const updateInspectionChecklist = async (
+  id: string,
+  checklist_results: InspectionChecklistItem[]
+): Promise<Inspection> => {
+  const res: any = await api.patch(`/inspections/${id}/`, { checklist_results });
+  return res.data || res;
+};
+
 export const logInspectionFinding = async (
   id: string,
   payload: {

@@ -78,6 +78,7 @@ type SidebarItem = {
 
 const sidebarLinks: SidebarItem[] = [
   {
+    sectionHeader: "Executive Oversight",
     name: "Dashboard",
     icon: Home,
     subItems: [
@@ -85,6 +86,7 @@ const sidebarLinks: SidebarItem[] = [
     ],
   },
   {
+    sectionHeader: "Core Statutory Oversight",
     name: "Projects",
     icon: Building2,
     requiredPermission: "projects.view",
@@ -243,6 +245,7 @@ const sidebarLinks: SidebarItem[] = [
     ],
   },
   {
+    sectionHeader: "Compliance & Enforcement",
     name: "Compliance",
     icon: ShieldCheck,
     subItems: [
@@ -309,6 +312,7 @@ const sidebarLinks: SidebarItem[] = [
     ],
   },
   {
+    sectionHeader: "Ecosystem & Governance",
     name: "Stakeholders",
     icon: Users,
     subItems: [
