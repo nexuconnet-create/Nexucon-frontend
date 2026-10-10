@@ -26,8 +26,8 @@ export default function StakeholderMeetings() {
   // View Mode: 'calendar' (Google Calendar Grid) vs 'list' (Agenda List)
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
 
-  // Active Calendar Month & Year (Default to current date or August 2026)
-  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 7, 26)); // August 2026
+  // Active Calendar Month & Year (Default to current real date)
+  const [currentDate, setCurrentDate] = useState(() => new Date());
 
   // Selected Date for Popover / Quick View
   const [selectedDayEvents, setSelectedDayEvents] = useState<StakeholderMeeting[] | null>(null);

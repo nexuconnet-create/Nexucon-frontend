@@ -112,7 +112,7 @@ export default function ApplicationsDynamicPage() {
           title: "Requested Documents Registry",
           subtitle: "Track statutory and technical documents formally requested from applicants and developers.",
           overview: [
-            { label: "Requests Issued", value: applications.filter(a => (a.document_requests?.length || 0) > 0).length || 3, icon: FileText, color: "blue" },
+            { label: "Requests Issued", value: applications.filter(a => (a.document_requests?.length || 0) > 0).length, icon: FileText, color: "blue" },
             { label: "Pending Submissions", value: stats.under_review, icon: Clock, color: "amber" },
             { label: "Active Applications", value: stats.total, icon: ClipboardList, color: "indigo" },
             { label: "Fully Approved", value: stats.approved, icon: CheckCircle, color: "emerald" },

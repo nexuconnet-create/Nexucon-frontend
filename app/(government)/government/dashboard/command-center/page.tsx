@@ -28,12 +28,25 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from "@/context/AuthContext";
 import TopRightControls from "@/components/dashboard/TopRightControls";
 
 export default function GovernmentCommandCenter() {
   const router = useRouter();
+  const { user } = useAuth();
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [userRole, setUserRole] = useState<'Agency Head' | 'Director' | 'Inspector'>('Agency Head');
+
+  useEffect(() => {
+    const rawRole = (user?.role_name || '').toLowerCase();
+    if (rawRole.includes('inspector')) {
+      setUserRole('Inspector');
+    } else if (rawRole.includes('director')) {
+      setUserRole('Director');
+    } else {
+      setUserRole('Agency Head');
+    }
+  }, [user]);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -925,7 +938,19 @@ export default function GovernmentCommandCenter() {
                   <div className="w-full">
                     <h4 className={`text-sm font-bold mb-0.5 ${alert.style.title}`}>{alert.title}</h4>
                     <p className={`text-xs font-medium mb-3 ${alert.style.desc}`}>{alert.desc}</p>
-                    <button className={`text-[11px] font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-colors w-full ${alert.style.btn}`}>{alert.action}</button>
+                    <button
+                      onClick={() => {
+                        setShowAlertsModal(false);
+                        if (alert.title.toLowerCase().includes('inspection')) {
+                          router.push('/government/dashboard/inspections/schedule');
+                        } else {
+                          router.push('/government/dashboard/projects/flagged');
+                        }
+                      }}
+                      className={`text-[11px] font-bold uppercase tracking-wider px-4 py-2.5 rounded-lg transition-colors w-full cursor-pointer ${alert.style.btn}`}
+                    >
+                      {alert.action}
+                    </button>
                   </div>
                 </div>
               ))}

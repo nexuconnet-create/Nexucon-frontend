@@ -219,10 +219,10 @@ export default function MonitoringDynamicPage() {
           title: "Field Attendance & Non-Visitation Control",
           subtitle: "Internal control history tracking government field worker site visits, unfulfilled visit justifications, and developer access audits.",
           overview: [
-            { label: "Total Scheduled Visits", value: ((dailyUpdates.length + missedVisits.length) || 12), icon: Calendar, color: "blue" },
-            { label: "Verified Inspector Visits", value: dailyUpdates.length || 9, icon: CheckCircle, color: "emerald" },
-            { label: "Justified Missed Visits", value: missedVisits.filter(m => m.status === 'JUSTIFIED' || m.status === 'ACKNOWLEDGED').length || 3, icon: ShieldCheck, color: "amber" },
-            { label: "Flagged / Review Required", value: missedVisits.filter(m => m.status === 'FLAGGED_UNJUSTIFIED' || m.status === 'SUBMITTED').length || 1, icon: AlertTriangle, color: "red" },
+            { label: "Total Scheduled Visits", value: dailyUpdates.length + missedVisits.length, icon: Calendar, color: "blue" },
+            { label: "Verified Inspector Visits", value: dailyUpdates.length, icon: CheckCircle, color: "emerald" },
+            { label: "Justified Missed Visits", value: missedVisits.filter(m => m.status === 'JUSTIFIED' || m.status === 'ACKNOWLEDGED').length, icon: ShieldCheck, color: "amber" },
+            { label: "Flagged / Review Required", value: missedVisits.filter(m => m.status === 'FLAGGED_UNJUSTIFIED' || m.status === 'SUBMITTED').length, icon: AlertTriangle, color: "red" },
           ],
           actions: [
             "⚠️ Document Missed Site Visit",
