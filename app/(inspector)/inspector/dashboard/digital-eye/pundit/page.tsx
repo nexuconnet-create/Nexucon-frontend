@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState, useEffect } from "react";
+import React, { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -304,45 +304,68 @@ function PunditWorkspaceInner() {
 
   const [isFetchingWeatherAuto, setIsFetchingWeatherAuto] = useState(false);
   const [weatherAutoDetectedNote, setWeatherAutoDetectedNote] = useState<string | null>(null);
+  const weatherReqIdRef = useRef(0);
+  const loadRecordsIdRef = useRef(0);
 
   const handleAutoDetectGoogleWeather = async () => {
     const targetProject = manualForm.projectId || activeWorkspaceProjectId || projects[0]?.id;
+    const targetDate = manualForm.testDate || new Date().toISOString().split("T")[0];
     if (!targetProject) {
       showToast("Select a project first to detect site weather coordinates.");
       return;
     }
+    const currentReqId = ++weatherReqIdRef.current;
     setIsFetchingWeatherAuto(true);
     try {
       const data = await fetchGoogleWeather(targetProject, {
-        date: manualForm.testDate || new Date().toISOString().split("T")[0],
+        date: targetDate,
       });
+      // Guard: Ignore if another request was triggered while in flight
+      if (weatherReqIdRef.current !== currentReqId) {
+        return;
+      }
       if (!data.success) {
         throw new Error(data.error || "Could not retrieve Google Weather.");
       }
-      setManualForm((prev) => ({
-        ...prev,
-        weatherCondition: data.weather_condition || prev.weatherCondition,
-        surfaceTempC: data.temperature_c !== undefined ? String(data.temperature_c) : prev.surfaceTempC,
-        surfaceCondition: data.surface_condition || prev.surfaceCondition,
-        notes: prev.notes
-          ? `${prev.notes}\n[Google Weather: ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`
-          : `[Google Weather: ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`,
-      }));
-      setWeatherAutoDetectedNote(`${data.temperature_c}°C · ${data.weather_condition}`);
+      setManualForm((prev) => {
+        // Guard: Verify target project and testDate have not changed during request
+        const currentProject = prev.projectId || activeWorkspaceProjectId || projects[0]?.id;
+        const currentDate = prev.testDate || new Date().toISOString().split("T")[0];
+        if (currentProject !== targetProject || currentDate !== targetDate) {
+          return prev; // Ignore stale response for old project/date
+        }
+        return {
+          ...prev,
+          weatherCondition: data.weather_condition || prev.weatherCondition,
+          // Concrete surface temperature is measured with an IR probe per BS 1881-203.
+          // Keep fetched air temperature separate and preserve measured surfaceTempC!
+          surfaceCondition: data.surface_condition || prev.surfaceCondition,
+          notes: prev.notes
+            ? `${prev.notes}\n[Google Weather: Air ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`
+            : `[Google Weather: Air ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`,
+        };
+      });
+      setWeatherAutoDetectedNote(`Air: ${data.temperature_c}°C · ${data.weather_condition}`);
       showToast(
-        `Google Weather: ${data.temperature_c}°C, ${data.condition_description || data.weather_condition}. Mapped to test station.`
+        `Google Weather: Air ${data.temperature_c}°C, ${data.condition_description || data.weather_condition}. Mapped to test station.`
       );
     } catch (err: any) {
-      showToast(err.message || "Failed to auto-detect weather from Google Weather Platform.");
+      if (weatherReqIdRef.current === currentReqId) {
+        showToast(err.message || "Failed to auto-detect weather from Google Weather Platform.");
+      }
     } finally {
-      setIsFetchingWeatherAuto(false);
+      if (weatherReqIdRef.current === currentReqId) {
+        setIsFetchingWeatherAuto(false);
+      }
     }
   };
 
   const loadRecords = async () => {
+    const currentLoadId = ++loadRecordsIdRef.current;
     setRecordsError(null);
     try {
       const tests = await getPunditTests();
+      if (loadRecordsIdRef.current !== currentLoadId) return;
       const rows = Array.isArray(tests) ? tests : [];
       setPunditTests(rows);
       setActivePunditTest((prev) => {
@@ -351,16 +374,19 @@ function PunditWorkspaceInner() {
       });
 
       const devices = await getFieldDevices({ device_type: "pundit" });
+      if (loadRecordsIdRef.current !== currentLoadId) return;
       const devRows = Array.isArray(devices) ? devices : [];
       setPunditDevices(devRows);
       if (devRows.length > 0 && !selectedDeviceId) {
         setSelectedDeviceId(devRows[0].id);
       }
     } catch (err: any) {
-      setPunditTests(null);
-      setRecordsError(
-        err?.response?.data?.detail || err?.message || "The UPV test register could not be read."
-      );
+      if (loadRecordsIdRef.current === currentLoadId) {
+        setPunditTests(null);
+        setRecordsError(
+          err?.response?.data?.detail || err?.message || "The UPV test register could not be read."
+        );
+      }
     }
   };
 
@@ -1392,9 +1418,10 @@ function PunditWorkspaceInner() {
                 Target Project <span className="text-rose-500">*</span>
               </label>
               <select
+                disabled={isFetchingWeatherAuto}
                 value={manualForm.projectId}
                 onChange={(e) => setManualForm({ ...manualForm, projectId: e.target.value })}
-                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F]"
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] disabled:opacity-50"
               >
                 <option value="">Select project...</option>
                 {projects.map((p) => (
@@ -1437,9 +1464,10 @@ function PunditWorkspaceInner() {
               </label>
               <input
                 type="date"
+                disabled={isFetchingWeatherAuto}
                 value={manualForm.testDate}
                 onChange={(e) => setManualForm({ ...manualForm, testDate: e.target.value })}
-                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] bg-white"
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] bg-white disabled:opacity-50"
               />
             </div>
 

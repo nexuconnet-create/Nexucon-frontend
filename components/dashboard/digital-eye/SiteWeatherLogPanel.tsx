@@ -157,6 +157,28 @@ export default function SiteWeatherLogPanel({
   const [formRecorderName, setFormRecorderName] = useState<string>("Site Structural Inspector");
   const [formNotes, setFormNotes] = useState<string>("");
 
+  const activeLoadIdRef = React.useRef(0);
+  const activeWeatherReqRef = React.useRef(0);
+
+  const resetFormState = (targetDate?: string) => {
+    const defaultDate = targetDate || new Date().toISOString().slice(0, 10);
+    setCurrentWeatherId(null);
+    setGoogleTelemetry(null);
+    setSyncSuccessMsg(null);
+    setSelectedDate(defaultDate);
+    setFormCondition("Clear / Sunny");
+    setFormTempC(31);
+    setFormHumidity(62);
+    setFormSurface("Dry");
+    setFormPrecipitation("None");
+    setFormWindKmh(10);
+    setFormImpact(
+      "Optimal acoustic coupling achieved across all structural stations per BS 1881-203."
+    );
+    setFormRecorderName("Site Structural Inspector");
+    setFormNotes("");
+  };
+
   const toast = (message: string, type: "success" | "error" | "info") => {
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -168,9 +190,14 @@ export default function SiteWeatherLogPanel({
   };
 
   const loadData = async () => {
+    const currentLoadId = ++activeLoadIdRef.current;
+    const targetProjectId = projectId;
+    const targetBatchId = batchId;
+
     if (!projectId) {
       setTestingDays([]);
       setAllWeatherRecords([]);
+      resetFormState();
       setIsLoading(false);
       return;
     }
@@ -181,6 +208,15 @@ export default function SiteWeatherLogPanel({
         getPunditTestingDays(projectId),
         getPunditWeatherConditions(projectId, batchId),
       ]);
+
+      // Guard: Ignore if another loadData was triggered or project changed in flight
+      if (
+        activeLoadIdRef.current !== currentLoadId ||
+        projectId !== targetProjectId ||
+        batchId !== targetBatchId
+      ) {
+        return;
+      }
 
       setTestingDays(days);
       setAllWeatherRecords(records);
@@ -193,13 +229,23 @@ export default function SiteWeatherLogPanel({
         setSelectedDate(targetDay);
         populateFormForDate(targetDay, days, records);
       } else {
+        // Reset record ID and form whenever testing days are empty for the project
         const today = new Date().toISOString().slice(0, 10);
-        setSelectedDate(today);
+        resetFormState(today);
+        if (records.length > 0) {
+          const latestRecord = records[0];
+          setSelectedDate(latestRecord.test_date);
+          populateFormForDate(latestRecord.test_date, days, records);
+        }
       }
     } catch (err: any) {
-      toast("Could not load testing days or weather telemetry.", "error");
+      if (activeLoadIdRef.current === currentLoadId) {
+        toast("Could not load testing days or weather telemetry.", "error");
+      }
     } finally {
-      setIsLoading(false);
+      if (activeLoadIdRef.current === currentLoadId) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -258,6 +304,7 @@ export default function SiteWeatherLogPanel({
   };
 
   useEffect(() => {
+    resetFormState();
     loadData();
   }, [projectId, batchId]);
 
@@ -281,16 +328,30 @@ export default function SiteWeatherLogPanel({
       toast("Please select an active project first.", "error");
       return;
     }
+    const currentReqId = ++activeWeatherReqRef.current;
+    const targetProjectId = projectId;
     const dateToFetch = targetDateOverride || selectedDate || new Date().toISOString().split("T")[0];
+
     setIsFetchingGoogle(true);
     try {
       const data = await fetchGoogleWeather(projectId, {
         date: dateToFetch,
         autoApply,
       });
+
+      // Guard: Ignore if another weather request was triggered
+      if (activeWeatherReqRef.current !== currentReqId || projectId !== targetProjectId) {
+        return;
+      }
+      // If user switched date in the panel while fetching without override, ignore stale
+      if (!targetDateOverride && selectedDate !== dateToFetch) {
+        return;
+      }
+
       if (!data.success) {
         throw new Error(data.error || "Failed to retrieve Google Weather telemetry.");
       }
+
       setGoogleTelemetry(data);
       if (data.temperature_c !== undefined) setFormTempC(Math.round(data.temperature_c * 10) / 10);
       if (data.relative_humidity_pct !== undefined) setFormHumidity(Math.round(data.relative_humidity_pct));
@@ -302,26 +363,56 @@ export default function SiteWeatherLogPanel({
       if (!selectedDate) setSelectedDate(dateToFetch);
 
       if (autoApply) {
-        toast(`Google Weather applied & synchronized for ${dateToFetch} (${data.weather_condition}).`, "success");
-        setSyncSuccessMsg(`Google Weather Platform verified & applied for ${dateToFetch}. Synchronized to station tests.`);
-        await loadData();
+        if (data.applied === true) {
+          if (data.weather_record_id) {
+            setCurrentWeatherId(data.weather_record_id);
+          }
+          toast(`Google Weather applied & synchronized for ${dateToFetch} (${data.weather_condition}).`, "success");
+          setSyncSuccessMsg(
+            `Google Weather Platform verified & applied for ${dateToFetch}. Synchronized to ${data.synced_tests_count ?? "all"} station tests.`
+          );
+          await loadData();
+        } else {
+          // Explicitly save & sync the fetched values if backend did not confirm application
+          await handleSaveWeather(undefined, {
+            project_id: projectId,
+            batch_id: batchId || null,
+            test_date: dateToFetch,
+            weather_condition: data.weather_condition || formCondition,
+            temperature_c: data.temperature_c !== undefined ? Number(data.temperature_c) : Number(formTempC),
+            relative_humidity_pct: data.relative_humidity_pct !== undefined ? Number(data.relative_humidity_pct) : Number(formHumidity),
+            surface_condition: data.surface_condition || formSurface,
+            precipitation: data.precipitation || formPrecipitation,
+            wind_speed_kmh: data.wind_speed_kmh !== undefined ? Number(data.wind_speed_kmh) : Number(formWindKmh),
+            impact_on_testing: data.impact_on_testing || formImpact,
+            notes: `Auto-synchronized via Google Weather Platform (${data.condition_description || data.weather_condition}).`,
+          });
+        }
       } else {
         toast(`Live Google Weather retrieved for ${dateToFetch}: ${data.temperature_c}°C, ${data.condition_description}.`, "info");
       }
     } catch (err: any) {
-      toast(err.message || "Failed to fetch Google Weather telemetry.", "error");
+      if (activeWeatherReqRef.current === currentReqId) {
+        toast(err.message || "Failed to fetch Google Weather telemetry.", "error");
+      }
     } finally {
-      setIsFetchingGoogle(false);
+      if (activeWeatherReqRef.current === currentReqId) {
+        setIsFetchingGoogle(false);
+      }
     }
   };
 
-  const handleSaveWeather = async (e?: React.FormEvent) => {
+  const handleSaveWeather = async (
+    e?: React.FormEvent,
+    payloadOverride?: Partial<PunditWeatherCondition>
+  ) => {
     if (e) e.preventDefault();
     if (!projectId) {
       toast("Please select an active project first.", "error");
       return;
     }
-    if (!selectedDate) {
+    const targetDate = payloadOverride?.test_date || selectedDate;
+    if (!targetDate) {
       toast("Please specify the date testing occurred.", "error");
       return;
     }
@@ -333,7 +424,7 @@ export default function SiteWeatherLogPanel({
         id: currentWeatherId || undefined,
         project_id: projectId,
         batch_id: batchId || null,
-        test_date: selectedDate,
+        test_date: targetDate,
         weather_condition: formCondition.trim(),
         temperature_c: Number(formTempC),
         relative_humidity_pct: Number(formHumidity),
@@ -343,32 +434,29 @@ export default function SiteWeatherLogPanel({
         impact_on_testing: formImpact.trim(),
         recorded_by_name: formRecorderName.trim() || "Site Structural Inspector",
         notes: formNotes.trim(),
+        ...payloadOverride,
       };
 
       const saved = await createOrUpdatePunditWeatherCondition(payload);
       setCurrentWeatherId(saved.id);
 
       // Trigger automatic sync to tests for this testing date
+      let syncedCount = 0;
       if (saved.id && !saved.id.startsWith("local-")) {
-        await syncPunditWeatherToTests(saved.id);
+        const syncRes = await syncPunditWeatherToTests(saved.id);
+        syncedCount = syncRes.updated_test_count;
       }
 
       toast(
-        `Weather condition saved & synchronized for ${selectedDate} (${saved.weather_condition}).`,
+        `Weather condition saved & synchronized for ${targetDate} (${saved.weather_condition}).`,
         "success"
       );
       setSyncSuccessMsg(
-        `Synchronized to site activities on ${selectedDate}. Reflected in Section 3.1 NDT Dossier.`
+        `Synchronized to ${syncedCount > 0 ? `${syncedCount} site test stations` : "site activities"} on ${targetDate}. Reflected in Section 3.1 NDT Dossier.`
       );
 
       // Reload days and records
-      const [days, records] = await Promise.all([
-        getPunditTestingDays(projectId),
-        getPunditWeatherConditions(projectId, batchId),
-      ]);
-      setTestingDays(days);
-      setAllWeatherRecords(records);
-      if (onWeatherChanged) onWeatherChanged(records);
+      await loadData();
     } catch (err: any) {
       toast(
         err?.response?.data?.detail || err?.message || "Failed to save weather condition.",
@@ -394,8 +482,11 @@ export default function SiteWeatherLogPanel({
       setSyncSuccessMsg(
         `Successfully linked weather conditions to ${result.updated_test_count} test stations on site.`
       );
-    } catch {
-      toast("Synchronization completed with local cache.", "info");
+    } catch (err: any) {
+      toast(
+        err?.message || "Failed to synchronize weather condition with station tests.",
+        "error"
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -408,9 +499,10 @@ export default function SiteWeatherLogPanel({
     try {
       await deletePunditWeatherCondition(currentWeatherId);
       toast(`Weather record for ${selectedDate} deleted.`, "info");
-      loadData();
-    } catch {
-      toast("Could not delete weather record.", "error");
+      resetFormState(selectedDate);
+      await loadData();
+    } catch (err: any) {
+      toast(err?.message || "Could not delete weather record.", "error");
     }
   };
 
@@ -546,7 +638,18 @@ export default function SiteWeatherLogPanel({
                       <span className="font-mono font-bold text-xs">
                         {day.date}
                       </span>
-                      {hasWeather ? (
+                      {day.weather_record?.is_local_draft || day.weather_record?.id?.startsWith("local-") ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-purple-500/20 text-purple-300 border-purple-400/40"
+                              : "bg-purple-50 text-purple-700 border-purple-200"
+                          }`}
+                        >
+                          <Clock size={11} />
+                          <span>Local Draft</span>
+                        </span>
+                      ) : hasWeather ? (
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
                             isSelected
@@ -615,9 +718,14 @@ export default function SiteWeatherLogPanel({
         <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 flex-wrap">
                 <Sun className="text-amber-500" size={15} />
                 <span>2. Environmental Telemetry for Testing Day: {selectedDate || "Select Date"}</span>
+                {currentWeatherId?.startsWith("local-") && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                    Unsynchronized Local Draft
+                  </span>
+                )}
               </h4>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {activeDaySummary
@@ -634,9 +742,10 @@ export default function SiteWeatherLogPanel({
               <input
                 id="test-date-input"
                 type="date"
+                disabled={isFetchingGoogle || isSaving || isSyncing}
                 value={selectedDate}
                 onChange={(e) => handleSelectDate(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 shadow-sm"
+                className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 shadow-sm disabled:opacity-50"
               />
             </div>
           </div>

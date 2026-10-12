@@ -1318,6 +1318,8 @@ export interface PunditTestInput {
   surface_condition?: string;
   surface_temperature_c?: number | null;
   rebound_number?: number;
+  // Test date on which physical testing occurred (YYYY-MM-DD)
+  test_date?: string;
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
   floor?: string;
@@ -1349,6 +1351,7 @@ export const createPunditTest = async (input: PunditTestInput): Promise<PunditTe
     project: input.project,
     test_type: input.test_type || 'pulse_velocity',
   };
+  if (input.test_date) body.test_date = input.test_date;
   if (input.structural_element) body.structural_element = input.structural_element;
   if (input.transducer_frequency_khz != null) body.transducer_frequency_khz = input.transducer_frequency_khz;
   if (input.transducer_type) body.transducer_type = input.transducer_type.toLowerCase();
@@ -3898,6 +3901,7 @@ export interface PunditWeatherCondition {
   recorded_by_name?: string;
   notes?: string;
   test_count_on_day?: number;
+  is_local_draft?: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -3923,84 +3927,88 @@ export const getPunditWeatherConditions = async (
     const res = await api.get('/digital-eye/weather-conditions/', {
       params: { project: projectId, batch: batchId, test_date: testDate },
     });
-    const rows = unwrap<PunditWeatherCondition[]>(res, []);
-    if (rows && rows.length > 0) return rows;
-  } catch {}
-
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
-      if (raw) {
-        const stored: PunditWeatherCondition[] = JSON.parse(raw);
-        return stored.filter((item) => {
-          if (projectId && item.project_id !== projectId) return false;
-          if (batchId && item.batch_id !== batchId) return false;
-          if (testDate && item.test_date !== testDate) return false;
-          return true;
-        });
-      }
-    } catch {}
+    // On successful server response, return authoritative records directly (including empty [])
+    return unwrap<PunditWeatherCondition[]>(res, []);
+  } catch (err) {
+    // Only fall back to local browser drafts when the server is disconnected / offline
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
+        if (raw) {
+          const stored: PunditWeatherCondition[] = JSON.parse(raw);
+          return stored
+            .filter((item) => {
+              if (projectId && item.project_id !== projectId) return false;
+              if (batchId && item.batch_id !== batchId) return false;
+              if (testDate && item.test_date !== testDate) return false;
+              return true;
+            })
+            .map((item) => ({ ...item, is_local_draft: true }));
+        }
+      } catch {}
+    }
+    return [];
   }
-  return [];
 };
 
 export const createOrUpdatePunditWeatherCondition = async (
   payload: Partial<PunditWeatherCondition>
 ): Promise<PunditWeatherCondition> => {
+  let saved: PunditWeatherCondition | null = null;
   try {
     if (payload.id && !payload.id.startsWith('local-')) {
       const res = await api.patch(`/digital-eye/weather-conditions/${payload.id}/`, payload);
-      const updated = unwrap<PunditWeatherCondition | null>(res, null);
-      if (updated) return updated;
+      saved = unwrap<PunditWeatherCondition | null>(res, null);
     } else {
       const res = await api.post('/digital-eye/weather-conditions/', payload);
-      const created = unwrap<PunditWeatherCondition | null>(res, null);
-      if (created) return created;
+      saved = unwrap<PunditWeatherCondition | null>(res, null);
     }
-  } catch {}
-
-  const rec: PunditWeatherCondition = {
-    id: payload.id || `local-w-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    project_id: payload.project_id || '',
-    batch_id: payload.batch_id || null,
-    test_date: payload.test_date || new Date().toISOString().slice(0, 10),
-    weather_condition: payload.weather_condition || 'Clear / Sunny',
-    temperature_c: payload.temperature_c ?? 30,
-    relative_humidity_pct: payload.relative_humidity_pct ?? 60,
-    surface_condition: payload.surface_condition || 'Dry',
-    precipitation: payload.precipitation || 'None',
-    wind_speed_kmh: payload.wind_speed_kmh ?? 10,
-    impact_on_testing: payload.impact_on_testing || '',
-    recorded_by_name: payload.recorded_by_name || 'Site Structural Inspector',
-    notes: payload.notes || '',
-    test_count_on_day: payload.test_count_on_day || 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
-      let list: PunditWeatherCondition[] = raw ? JSON.parse(raw) : [];
-      const idx = list.findIndex(
-        (x) => x.id === rec.id || (x.project_id === rec.project_id && x.test_date === rec.test_date)
-      );
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...rec };
-      } else {
-        list.unshift(rec);
+    if (saved) {
+      // Clear any obsolete local draft for this specific project, batch and date upon successful server commit
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
+          if (raw) {
+            const list: PunditWeatherCondition[] = JSON.parse(raw);
+            const cleaned = list.filter(
+              (x) =>
+                !(
+                  x.project_id === payload.project_id &&
+                  (x.batch_id || null) === (payload.batch_id || null) &&
+                  x.test_date === payload.test_date
+                )
+            );
+            localStorage.setItem(LOCAL_WEATHER_KEY, JSON.stringify(cleaned));
+          }
+        } catch {}
       }
-      localStorage.setItem(LOCAL_WEATHER_KEY, JSON.stringify(list));
-    } catch {}
+      return saved;
+    }
+  } catch (err: any) {
+    // Surface real server error so caller does not falsely report successful sync
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to save weather condition to server.';
+    throw new Error(errorMsg);
   }
 
-  return rec;
+  throw new Error('Server returned an empty response while saving weather condition.');
 };
 
 export const deletePunditWeatherCondition = async (id: string): Promise<boolean> => {
   try {
     await api.delete(`/digital-eye/weather-conditions/${id}/`);
-  } catch {}
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to delete weather record from server.';
+    throw new Error(errorMsg);
+  }
+
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
@@ -4084,7 +4092,12 @@ export const syncPunditWeatherToTests = async (
     const res = await api.post(`/digital-eye/weather-conditions/${weatherId}/sync-tests/`);
     return unwrap(res, { status: 'synchronized', updated_test_count: 0, weather_condition: '', test_date: '' });
   } catch (err: any) {
-    return { status: 'synchronized', updated_test_count: 0, weather_condition: '', test_date: '' };
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to synchronize weather condition with station tests.';
+    throw new Error(errorMsg);
   }
 };
 
@@ -4137,76 +4150,17 @@ export const fetchGoogleWeather = async (
       longitude: options?.longitude,
       auto_apply: options?.autoApply ?? false,
     });
-    return unwrap(res, { success: false, error: 'Empty response' });
+    return unwrap(res, { success: false, error: 'Empty response from weather service.' });
   } catch (err: any) {
-    // Client-side direct fallback if backend endpoint cannot be reached
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_WEATHER_API_KEY || '';
-    if (!apiKey) {
-      return { success: false, error: 'Weather telemetry API unavailable' };
-    }
-    const lat = options?.latitude ?? 6.5244;
-    const lon = options?.longitude ?? 3.3792;
-    try {
-      const resp = await fetch(
-        `https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}&location.latitude=${lat.toFixed(6)}&location.longitude=${lon.toFixed(6)}`
-      );
-      if (!resp.ok) {
-        throw new Error(`Google Weather HTTP ${resp.status}`);
-      }
-      const data = await resp.json();
-      const tempC = Number(data.temperature?.degrees ?? 28);
-      const hum = Number(data.relativeHumidity ?? 60);
-      const desc = data.weatherCondition?.description?.text ?? 'Clear';
-      const condType = data.weatherCondition?.type ?? 'CLEAR';
-      const iconUrl = data.weatherCondition?.iconBaseUri ?? 'https://maps.gstatic.com/weather/v1/mostly_cloudy';
-      const windSpeed = Number(data.wind?.speed?.value ?? 10);
-      const windDir = data.wind?.direction?.cardinal ?? 'VAR';
-      const precipProb = Number(data.precipitation?.probability?.percent ?? 0);
-      const precipMm = Number(data.precipitation?.qpf?.quantity ?? 0);
-
-      let condName = 'Clear / Sunny';
-      let surfCond = 'Dry';
-      if (precipMm > 1.0 || condType.includes('RAIN') || condType.includes('THUNDERSTORM')) {
-        condName = 'Adverse Weather / Rain';
-        surfCond = 'Wet';
-      } else if (precipProb > 30 || condType.includes('DRIZZLE')) {
-        condName = 'Intermittent Drizzle';
-        surfCond = 'Damp';
-      } else if (condType.includes('CLOUDY') || hum > 80) {
-        condName = 'Overcast / High Humidity';
-      } else if (condType.includes('PARTLY')) {
-        condName = 'Partly Cloudy';
-      }
-      if (tempC > 35) condName = 'High Ambient Temperature (>35°C)';
-
-      return {
-        success: true,
-        provider: 'Google Weather Platform',
-        model: 'Google DeepMind WeatherNext',
-        coordinates: { latitude: lat, longitude: lon },
-        target_date: options?.date,
-        temperature_c: tempC,
-        feels_like_c: Number(data.feelsLikeTemperature?.degrees ?? tempC),
-        relative_humidity_pct: hum,
-        condition_description: desc,
-        condition_type: condType,
-        icon_url: iconUrl,
-        wind_speed_kmh: windSpeed,
-        wind_direction: windDir,
-        precipitation_probability: precipProb,
-        precipitation_mm: precipMm,
-        uv_index: data.uvIndex ?? 0,
-        weather_condition: condName,
-        surface_condition: surfCond,
-        precipitation: precipProb > 20 ? 'Light Drizzle / Rain' : 'None',
-        impact_on_testing: `Live observation via Google Weather Platform (${tempC}°C, ${desc}). Optimal acoustic coupling verified per BS 1881-203.`,
-      };
-    } catch (clientErr: any) {
-      return {
-        success: false,
-        error: err?.response?.data?.detail || clientErr?.message || 'Failed to fetch weather from Google Weather Platform.',
-      };
-    }
+    const detail =
+      err?.response?.data?.error ||
+      err?.response?.data?.detail ||
+      err?.message ||
+      'Failed to fetch weather from Google Weather Platform.';
+    return {
+      success: false,
+      error: detail,
+    };
   }
 };
 
