@@ -195,6 +195,9 @@ export interface PunditTest {
   estimated_crack_depth_mm?: number | null;
   operator_name: string;
   test_date: string;
+  tested_at?: string;
+  batch?: string;
+  structural_element?: string;
   latitude?: number | null;
   longitude?: number | null;
   notes?: string;
@@ -1315,6 +1318,8 @@ export interface PunditTestInput {
   surface_condition?: string;
   surface_temperature_c?: number | null;
   rebound_number?: number;
+  // Test date on which physical testing occurred (YYYY-MM-DD)
+  test_date?: string;
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
   floor?: string;
@@ -1346,6 +1351,7 @@ export const createPunditTest = async (input: PunditTestInput): Promise<PunditTe
     project: input.project,
     test_type: input.test_type || 'pulse_velocity',
   };
+  if (input.test_date) body.test_date = input.test_date;
   if (input.structural_element) body.structural_element = input.structural_element;
   if (input.transducer_frequency_khz != null) body.transducer_frequency_khz = input.transducer_frequency_khz;
   if (input.transducer_type) body.transducer_type = input.transducer_type.toLowerCase();
@@ -3870,5 +3876,291 @@ export const notifyProjectNdtInspectors = async (
 ): Promise<NdtNotificationResult> => {
   const res = await api.post(`/reports/projects/${projectId}/ndt-report/notify-inspectors/`, payload || {});
   return unwrap<NdtNotificationResult>(res, res as any);
+};
+
+// ============================================================================
+// PUNDIT SITE WEATHER CONDITIONS & ENVIRONMENTAL TELEMETRY
+// ============================================================================
+
+export interface PunditWeatherCondition {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  batch_id?: string | null;
+  batch_reference?: string | null;
+  batch_folder_name?: string | null;
+  test_date: string;
+  weather_condition: string;
+  temperature_c?: number | null;
+  relative_humidity_pct?: number | null;
+  surface_condition?: 'Dry' | 'Damp' | 'Wet' | 'Saturated' | string;
+  precipitation?: string;
+  wind_speed_kmh?: number | null;
+  impact_on_testing?: string;
+  recorded_by?: string | null;
+  recorded_by_name?: string;
+  notes?: string;
+  test_count_on_day?: number;
+  is_local_draft?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface TestingDayWeatherSummary {
+  date: string;
+  test_count: number;
+  batch_count: number;
+  elements_tested: string[];
+  has_weather: boolean;
+  weather_record?: PunditWeatherCondition | null;
+  test_weather_conditions: string[];
+}
+
+const LOCAL_WEATHER_KEY = 'nexucon_pundit_weather_conditions_v1';
+
+export const getPunditWeatherConditions = async (
+  projectId?: string,
+  batchId?: string,
+  testDate?: string
+): Promise<PunditWeatherCondition[]> => {
+  try {
+    const res = await api.get('/digital-eye/weather-conditions/', {
+      params: { project: projectId, batch: batchId, test_date: testDate },
+    });
+    // On successful server response, return authoritative records directly (including empty [])
+    return unwrap<PunditWeatherCondition[]>(res, []);
+  } catch (err) {
+    // Only fall back to local browser drafts when the server is disconnected / offline
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
+        if (raw) {
+          const stored: PunditWeatherCondition[] = JSON.parse(raw);
+          return stored
+            .filter((item) => {
+              if (projectId && item.project_id !== projectId) return false;
+              if (batchId && item.batch_id !== batchId) return false;
+              if (testDate && item.test_date !== testDate) return false;
+              return true;
+            })
+            .map((item) => ({ ...item, is_local_draft: true }));
+        }
+      } catch {}
+    }
+    return [];
+  }
+};
+
+export const createOrUpdatePunditWeatherCondition = async (
+  payload: Partial<PunditWeatherCondition>
+): Promise<PunditWeatherCondition> => {
+  let saved: PunditWeatherCondition | null = null;
+  try {
+    if (payload.id && !payload.id.startsWith('local-')) {
+      const res = await api.patch(`/digital-eye/weather-conditions/${payload.id}/`, payload);
+      saved = unwrap<PunditWeatherCondition | null>(res, null);
+    } else {
+      const res = await api.post('/digital-eye/weather-conditions/', payload);
+      saved = unwrap<PunditWeatherCondition | null>(res, null);
+    }
+    if (saved) {
+      // Clear any obsolete local draft for this specific project, batch and date upon successful server commit
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
+          if (raw) {
+            const list: PunditWeatherCondition[] = JSON.parse(raw);
+            const cleaned = list.filter(
+              (x) =>
+                !(
+                  x.project_id === payload.project_id &&
+                  (x.batch_id || null) === (payload.batch_id || null) &&
+                  x.test_date === payload.test_date
+                )
+            );
+            localStorage.setItem(LOCAL_WEATHER_KEY, JSON.stringify(cleaned));
+          }
+        } catch {}
+      }
+      return saved;
+    }
+  } catch (err: any) {
+    // Surface real server error so caller does not falsely report successful sync
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to save weather condition to server.';
+    throw new Error(errorMsg);
+  }
+
+  throw new Error('Server returned an empty response while saving weather condition.');
+};
+
+export const deletePunditWeatherCondition = async (id: string): Promise<boolean> => {
+  try {
+    await api.delete(`/digital-eye/weather-conditions/${id}/`);
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to delete weather record from server.';
+    throw new Error(errorMsg);
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(LOCAL_WEATHER_KEY);
+      if (raw) {
+        const list: PunditWeatherCondition[] = JSON.parse(raw);
+        localStorage.setItem(LOCAL_WEATHER_KEY, JSON.stringify(list.filter((x) => x.id !== id)));
+      }
+    } catch {}
+  }
+  return true;
+};
+
+export const getPunditTestingDays = async (projectId: string): Promise<TestingDayWeatherSummary[]> => {
+  try {
+    const res = await api.get('/digital-eye/weather-conditions/testing-days/', {
+      params: { project: projectId },
+    });
+    const rows = unwrap<TestingDayWeatherSummary[]>(res, []);
+    if (rows && rows.length > 0) return rows;
+  } catch {}
+
+  // Fallback to synthesizing testing days from tests & local weather
+  try {
+    const tests = await getPunditTests({ project: projectId });
+    const weatherList = await getPunditWeatherConditions(projectId);
+    const dayMap = new Map<string, TestingDayWeatherSummary>();
+
+    tests.forEach((t) => {
+      const date = (t.test_date || t.tested_at || '').slice(0, 10);
+      if (!date) return;
+      if (!dayMap.has(date)) {
+        dayMap.set(date, {
+          date,
+          test_count: 0,
+          batch_count: t.batch ? 1 : 0,
+          elements_tested: [],
+          has_weather: Boolean(t.weather_condition),
+          weather_record: weatherList.find((w) => w.test_date === date) || null,
+          test_weather_conditions: t.weather_condition ? [t.weather_condition] : [],
+        });
+      }
+      const entry = dayMap.get(date)!;
+      entry.test_count += 1;
+      const el = t.structural_element_name || t.structural_element;
+      if (el && !entry.elements_tested.includes(el) && entry.elements_tested.length < 5) {
+        entry.elements_tested.push(el);
+      }
+      if (t.weather_condition && !entry.test_weather_conditions.includes(t.weather_condition)) {
+        entry.test_weather_conditions.push(t.weather_condition);
+      }
+    });
+
+    weatherList.forEach((w) => {
+      if (!dayMap.has(w.test_date)) {
+        dayMap.set(w.test_date, {
+          date: w.test_date,
+          test_count: w.test_count_on_day || 0,
+          batch_count: 0,
+          elements_tested: [],
+          has_weather: true,
+          weather_record: w,
+          test_weather_conditions: [w.weather_condition],
+        });
+      } else {
+        const e = dayMap.get(w.test_date)!;
+        e.has_weather = true;
+        e.weather_record = w;
+      }
+    });
+
+    return Array.from(dayMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+  } catch {
+    return [];
+  }
+};
+
+export const syncPunditWeatherToTests = async (
+  weatherId: string
+): Promise<{ status: string; updated_test_count: number; weather_condition: string; test_date: string }> => {
+  try {
+    const res = await api.post(`/digital-eye/weather-conditions/${weatherId}/sync-tests/`);
+    return unwrap(res, { status: 'synchronized', updated_test_count: 0, weather_condition: '', test_date: '' });
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.detail ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to synchronize weather condition with station tests.';
+    throw new Error(errorMsg);
+  }
+};
+
+export interface GoogleWeatherTelemetry {
+  success: boolean;
+  provider?: string;
+  model?: string;
+  coordinates?: { latitude: number; longitude: number };
+  coordinate_resolution?: string;
+  project_id?: string;
+  project_name?: string;
+  target_date?: string;
+  timestamp?: string;
+  temperature_c?: number;
+  feels_like_c?: number;
+  relative_humidity_pct?: number;
+  condition_description?: string;
+  condition_type?: string;
+  icon_url?: string;
+  wind_speed_kmh?: number;
+  wind_direction?: string;
+  precipitation_probability?: number;
+  precipitation_mm?: number;
+  uv_index?: number;
+  weather_condition?: string;
+  surface_condition?: string;
+  precipitation?: string;
+  impact_on_testing?: string;
+  applied?: boolean;
+  weather_record_id?: string;
+  synced_tests_count?: number;
+  error?: string;
+  note?: string;
+}
+
+export const fetchGoogleWeather = async (
+  projectId?: string,
+  options?: {
+    date?: string;
+    latitude?: number;
+    longitude?: number;
+    autoApply?: boolean;
+  }
+): Promise<GoogleWeatherTelemetry> => {
+  try {
+    const res = await api.post('/digital-eye/weather-conditions/fetch-google-weather/', {
+      project: projectId,
+      date: options?.date,
+      latitude: options?.latitude,
+      longitude: options?.longitude,
+      auto_apply: options?.autoApply ?? false,
+    });
+    return unwrap(res, { success: false, error: 'Empty response from weather service.' });
+  } catch (err: any) {
+    const detail =
+      err?.response?.data?.error ||
+      err?.response?.data?.detail ||
+      err?.message ||
+      'Failed to fetch weather from Google Weather Platform.';
+    return {
+      success: false,
+      error: detail,
+    };
+  }
 };
 

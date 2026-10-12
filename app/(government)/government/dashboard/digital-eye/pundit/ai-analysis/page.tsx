@@ -26,6 +26,7 @@ import {
   ArrowDown,
   Users,
   FolderOpen,
+  Sun,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
@@ -39,6 +40,7 @@ import PunditScanBatchSelector from "@/components/dashboard/digital-eye/PunditSc
 import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCalibrationModal";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
 import { getProjects, Project } from "@/services/projects";
 import {
@@ -59,7 +61,7 @@ import {
   calibratePunditBatchModel,
 } from "@/services/digitalEye";
 
-type ActiveTab = "tomography" | "waveform" | "model" | "defects" | "observations" | "attendance";
+type ActiveTab = "tomography" | "waveform" | "model" | "defects" | "observations" | "attendance" | "weather";
 
 export default function PunditAIAnalysisPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -448,6 +450,18 @@ export default function PunditAIAnalysisPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab("weather")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "weather"
+                  ? "bg-[#022C4F] text-white shadow-sm"
+                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200/70"
+              }`}
+            >
+              <Sun size={14} className={activeTab === "weather" ? "text-amber-400" : "text-gray-400"} />
+              <span>Weather Conditions</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("defects")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === "defects"
@@ -761,6 +775,16 @@ export default function PunditAIAnalysisPage() {
         {activeTab === "attendance" && (
           <div className="p-6">
             <SiteAttendanceLogPanel
+              projectId={selectedProjectId}
+              batchId={selectedBatch?.id}
+            />
+          </div>
+        )}
+
+        {/* TAB 7: SITE WEATHER CONDITIONS & TELEMETRY */}
+        {activeTab === "weather" && (
+          <div className="p-6">
+            <SiteWeatherLogPanel
               projectId={selectedProjectId}
               batchId={selectedBatch?.id}
             />

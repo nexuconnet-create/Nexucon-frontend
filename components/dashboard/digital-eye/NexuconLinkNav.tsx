@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, TrendingUp, FileText, Settings, ChevronRight, ShieldCheck, Cpu } from "lucide-react";
+import { Activity, TrendingUp, FileText, Settings, ChevronRight, ShieldCheck, Cpu, Sun } from "lucide-react";
 
 export interface NexuconLinkNavItem {
   label: string;
@@ -32,6 +32,15 @@ export const NEXUCON_LINK_NAV: NexuconLinkNavItem[] = [
     icon: Activity,
     description: "The UPV readings recorded in the field, with the curve that produced each strength.",
     badge: "Field Data",
+  },
+  {
+    label: "Weather",
+    title: "Site Weather Telemetry",
+    href: "/government/dashboard/digital-eye/pundit/neural-link/weather",
+    aliases: ["/government/dashboard/digital-eye/pundit/weather"],
+    icon: Sun,
+    description: "Capture, verify, and report site weather conditions for specific testing dates (BS 1881-203 §3.1).",
+    badge: "Section 3.1",
   },
   {
     label: "Curve Manager",

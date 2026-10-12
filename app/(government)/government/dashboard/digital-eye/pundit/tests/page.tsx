@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Sun } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PaginationBar from "@/components/dashboard/PaginationBar";
 import {
   FolderViewToggle,
@@ -25,6 +26,7 @@ export default function PunditTestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [showWeatherPanel, setShowWeatherPanel] = useState<boolean>(false);
   // A1: row expansion reveals the element's per-point readings (A, B, C…).
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // 8 Sep meeting: registry folder structure — Floor folder -> Station
@@ -114,6 +116,16 @@ export default function PunditTestsPage() {
         <NexuconLinkNav subtitle="Measurements" />
       </div>
 
+      {/* Expandable Site Testing Day Weather Console */}
+      {showWeatherPanel && (
+        <div className="mb-6 animate-in slide-in-from-top-2 duration-200">
+          <SiteWeatherLogPanel
+            projectId={selectedProjectId}
+            onWeatherChanged={() => refreshTests()}
+          />
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
         <div className="p-5 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
           <div>
@@ -123,6 +135,19 @@ export default function PunditTestsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setShowWeatherPanel(!showWeatherPanel)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer border ${
+                showWeatherPanel
+                  ? "bg-amber-500 text-slate-950 border-amber-600 font-bold"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+              }`}
+              title="Record or inspect site weather conditions for testing days"
+            >
+              <Sun size={14} className={showWeatherPanel ? "text-slate-950" : "text-amber-500"} />
+              <span>{showWeatherPanel ? "Hide Weather" : "Testing Day Weather"}</span>
+            </button>
+
             <FolderViewToggle viewMode={folders.viewMode} onChange={folders.setViewMode} />
             {operators.length > 0 && (
               <select

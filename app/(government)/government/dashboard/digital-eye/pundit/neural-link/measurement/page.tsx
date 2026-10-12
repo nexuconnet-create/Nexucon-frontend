@@ -20,10 +20,12 @@ import {
   Radio,
   CheckCircle2,
   X,
+  Sun,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PaginationBar from "@/components/dashboard/PaginationBar";
 import {
   FolderViewToggle,
@@ -53,6 +55,7 @@ export default function NeuralLinkMeasurementPage() {
   const [ratingFilter, setRatingFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [showWeatherPanel, setShowWeatherPanel] = useState<boolean>(false);
 
   const folders = useFloorStationFolders(tests, punditFloorOf, punditStationOf);
 
@@ -273,6 +276,16 @@ export default function NeuralLinkMeasurementPage() {
         </div>
       </div>
 
+      {/* Expandable Site Testing Day Weather Console */}
+      {showWeatherPanel && (
+        <div className="mb-6 animate-in slide-in-from-top-2 duration-200">
+          <SiteWeatherLogPanel
+            projectId={selectedProjectId}
+            onWeatherChanged={() => refreshTests()}
+          />
+        </div>
+      )}
+
       {/* Main Measurement Console */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden mb-8">
         {/* Header Bar */}
@@ -291,6 +304,19 @@ export default function NeuralLinkMeasurementPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowWeatherPanel(!showWeatherPanel)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border ${
+                showWeatherPanel
+                  ? "bg-amber-500 text-slate-950 border-amber-600 font-bold"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+              }`}
+              title="Record or inspect site weather conditions for testing days"
+            >
+              <Sun size={14} className={showWeatherPanel ? "text-slate-950" : "text-amber-500"} />
+              <span>{showWeatherPanel ? "Hide Weather" : "Testing Day Weather"}</span>
+            </button>
+
             <FolderViewToggle viewMode={folders.viewMode} onChange={folders.setViewMode} />
 
             <button
@@ -386,6 +412,7 @@ export default function NeuralLinkMeasurementPage() {
                       <th className="py-2.5 px-4">Test Ref</th>
                       <th className="py-2.5 px-4">Station / Location</th>
                       <th className="py-2.5 px-3">Structural Element</th>
+                      <th className="py-2.5 px-3">Weather</th>
                       <th className="py-2.5 px-3 text-right">Pulse Velocity</th>
                       <th className="py-2.5 px-3 text-right">Comp. Strength</th>
                       <th className="py-2.5 px-3 text-center">BS 1881 Rating</th>
@@ -407,6 +434,16 @@ export default function NeuralLinkMeasurementPage() {
                         </td>
                         <td className="py-2.5 px-3 text-slate-600 font-medium">
                           {test.structural_element_name || "Structural Element"}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {test.weather_condition ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                              <Sun size={10} className="text-amber-500 shrink-0" />
+                              <span className="truncate max-w-[90px]">{test.weather_condition}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Not logged</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                           {formatVelocityMs(test.pulse_velocity_ms)}
@@ -451,6 +488,7 @@ export default function NeuralLinkMeasurementPage() {
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">Station / Location</th>
                     <th className="py-3 px-3">Structural Element</th>
+                    <th className="py-3 px-3">Weather</th>
                     <th className="py-3 px-3 text-right">Pulse Velocity</th>
                     <th className="py-3 px-3 text-right">Comp. Strength</th>
                     <th className="py-3 px-3 text-center">BS 1881 Rating</th>
@@ -460,7 +498,7 @@ export default function NeuralLinkMeasurementPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredTests.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                      <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                         No UPV test measurements match the selected filter criteria.
                       </td>
                     </tr>
@@ -476,6 +514,16 @@ export default function NeuralLinkMeasurementPage() {
                         </td>
                         <td className="py-3 px-3 text-slate-600 font-medium">
                           {test.structural_element_name || "Structural Element"}
+                        </td>
+                        <td className="py-3 px-3">
+                          {test.weather_condition ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                              <Sun size={10} className="text-amber-500 shrink-0" />
+                              <span className="truncate max-w-[90px]">{test.weather_condition}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Not logged</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
                           {formatVelocityMs(test.pulse_velocity_ms)}
