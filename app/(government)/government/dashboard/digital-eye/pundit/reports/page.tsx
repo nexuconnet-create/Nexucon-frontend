@@ -10,6 +10,7 @@ import ReportBrandingPanel from "@/components/dashboard/digital-eye/ReportBrandi
 import ReportSignOffPanel from "@/components/dashboard/digital-eye/ReportSignOffPanel";
 import NdtReportPreviewView from "@/components/dashboard/digital-eye/NdtReportPreviewView";
 import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import { Eye } from "lucide-react";
 import { getPunditTests } from "@/services/digitalEye";
 
@@ -191,10 +192,10 @@ export default function PunditReportsPage() {
             onPreviewNdt={openPreview}
           />
 
-          {/* Interactive test-point location map (§2.4): real recorded GPS
-              coordinates, colour-coded by strength band. */}
-          <div className="px-6 mt-6">
+          {/* Interactive test-point location map & weather telemetry (§2.4 & §3.1) */}
+          <div className="px-6 mt-6 space-y-6">
             <ReportLocationMap projectId={selectedProjectId || undefined} />
+            <SiteWeatherLogPanel projectId={selectedProjectId || undefined} />
           </div>
 
           {/* Recorded measurements (§A5): the reporting browser — filter the

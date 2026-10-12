@@ -10,6 +10,7 @@ import ReportBrandingPanel from "@/components/dashboard/digital-eye/ReportBrandi
 import ReportSignOffPanel from "@/components/dashboard/digital-eye/ReportSignOffPanel";
 import NdtReportPreviewView from "@/components/dashboard/digital-eye/NdtReportPreviewView";
 import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import { FileText, Eye, ShieldCheck, Download, CheckCircle2, AlertTriangle, Users } from "lucide-react";
 import { getPunditTests } from "@/services/digitalEye";
 
@@ -186,10 +187,15 @@ export default function NeuralLinkReportPage() {
           {/* Section 3: Branding & Statutory Header */}
           <ReportBrandingPanel projectId={selectedProjectId || undefined} />
 
-          {/* Section 4: Location Map */}
-          <ReportLocationMap
-            projectId={selectedProjectId || undefined}
-          />
+          {/* Section 4: Location Map & Environmental Telemetry (Dossier Section 3.1) */}
+          <div className="space-y-6">
+            <ReportLocationMap
+              projectId={selectedProjectId || undefined}
+            />
+            <SiteWeatherLogPanel
+              projectId={selectedProjectId || undefined}
+            />
+          </div>
 
           {/* Section 5: Measurement Browser Preview */}
           <MeasurementBrowserSection

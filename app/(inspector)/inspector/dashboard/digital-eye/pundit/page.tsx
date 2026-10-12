@@ -33,6 +33,8 @@ import {
   Send,
   Camera,
   Users,
+  Sun,
+  Globe,
 } from "lucide-react";
 import {
   PunditTest,
@@ -51,6 +53,7 @@ import {
   downloadNdtReport,
   submitInspectorPunditCollaboration,
   regenerateJointPunditAnalysis,
+  fetchGoogleWeather,
 } from "@/services/digitalEye";
 import { orDash, dateOr } from "@/lib/display";
 import {
@@ -66,6 +69,7 @@ import { getAssignableProjects } from "@/services/inspector";
 import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 import { useAuth } from "@/context/AuthContext";
 
@@ -161,7 +165,7 @@ function estimateCompressiveStrength(velocityMs: number): number | null {
 function PunditWorkspaceInner() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance">("live");
+  const [punditMode, setPunditMode] = useState<"live" | "manual" | "batch" | "device" | "observations" | "attendance" | "weather">("live");
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -234,6 +238,8 @@ function PunditWorkspaceInner() {
     projectId: string;
     elementName: string;
     elementLocation: string;
+    testDate: string;
+    weatherCondition: string;
     method: "DIRECT" | "SEMI_DIRECT" | "INDIRECT";
     frequencyKhz: number;
     pathLengthMm: string;
@@ -248,6 +254,8 @@ function PunditWorkspaceInner() {
     projectId: "",
     elementName: "",
     elementLocation: "",
+    testDate: new Date().toISOString().split("T")[0],
+    weatherCondition: "Clear / Sunny",
     method: "DIRECT",
     frequencyKhz: 54,
     pathLengthMm: "",
@@ -292,6 +300,43 @@ function PunditWorkspaceInner() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  const [isFetchingWeatherAuto, setIsFetchingWeatherAuto] = useState(false);
+  const [weatherAutoDetectedNote, setWeatherAutoDetectedNote] = useState<string | null>(null);
+
+  const handleAutoDetectGoogleWeather = async () => {
+    const targetProject = manualForm.projectId || activeWorkspaceProjectId || projects[0]?.id;
+    if (!targetProject) {
+      showToast("Select a project first to detect site weather coordinates.");
+      return;
+    }
+    setIsFetchingWeatherAuto(true);
+    try {
+      const data = await fetchGoogleWeather(targetProject, {
+        date: manualForm.testDate || new Date().toISOString().split("T")[0],
+      });
+      if (!data.success) {
+        throw new Error(data.error || "Could not retrieve Google Weather.");
+      }
+      setManualForm((prev) => ({
+        ...prev,
+        weatherCondition: data.weather_condition || prev.weatherCondition,
+        surfaceTempC: data.temperature_c !== undefined ? String(data.temperature_c) : prev.surfaceTempC,
+        surfaceCondition: data.surface_condition || prev.surfaceCondition,
+        notes: prev.notes
+          ? `${prev.notes}\n[Google Weather: ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`
+          : `[Google Weather: ${data.temperature_c}°C, ${data.relative_humidity_pct}% RH, ${data.condition_description}]`,
+      }));
+      setWeatherAutoDetectedNote(`${data.temperature_c}°C · ${data.weather_condition}`);
+      showToast(
+        `Google Weather: ${data.temperature_c}°C, ${data.condition_description || data.weather_condition}. Mapped to test station.`
+      );
+    } catch (err: any) {
+      showToast(err.message || "Failed to auto-detect weather from Google Weather Platform.");
+    } finally {
+      setIsFetchingWeatherAuto(false);
+    }
   };
 
   const loadRecords = async () => {
@@ -484,6 +529,8 @@ function PunditWorkspaceInner() {
     const payload = {
       project: manualForm.projectId,
       test_type: "pulse_velocity" as const,
+      test_date: manualForm.testDate || new Date().toISOString().split("T")[0],
+      weather_condition: manualForm.weatherCondition.trim() || undefined,
       structural_element: manualForm.elementName.trim(),
       test_location: manualForm.elementLocation.trim(),
       transducer_type: manualForm.method,
@@ -764,6 +811,7 @@ function PunditWorkspaceInner() {
             { id: "device", label: "Live Device Connect", icon: Radio },
             { id: "observations", label: "Visual Observations", icon: Camera },
             { id: "attendance", label: "Site Attendance Log", icon: Users },
+            { id: "weather", label: "Testing Day Weather", icon: Sun },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -1382,6 +1430,56 @@ function PunditWorkspaceInner() {
                 className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F]"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Testing Date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={manualForm.testDate}
+                onChange={(e) => setManualForm({ ...manualForm, testDate: e.target.value })}
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] bg-white"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Testing Day Weather
+                </label>
+                <button
+                  type="button"
+                  disabled={isFetchingWeatherAuto}
+                  onClick={handleAutoDetectGoogleWeather}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                  title="Query Google Weather Platform for site coordinates on this date"
+                >
+                  <Globe size={11} className={isFetchingWeatherAuto ? "animate-spin text-cyan-600" : "text-cyan-600"} />
+                  <span>{isFetchingWeatherAuto ? "Detecting…" : "Google Weather Auto-Detect"}</span>
+                </button>
+              </div>
+              <select
+                value={manualForm.weatherCondition}
+                onChange={(e) => setManualForm({ ...manualForm, weatherCondition: e.target.value })}
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F] bg-white cursor-pointer"
+              >
+                <option value="Clear / Sunny">☀️ Clear / Sunny</option>
+                <option value="Partly Cloudy">⛅ Partly Cloudy</option>
+                <option value="Overcast / High Humidity">☁️ Overcast / High Humidity</option>
+                <option value="Intermittent Drizzle">🌦️ Intermittent Drizzle</option>
+                <option value="Adverse Weather / Rain">🌧️ Adverse Weather / Rain</option>
+                <option value="High Ambient Temperature (>35°C)">🌡️ High Ambient Temperature (&gt;35°C)</option>
+              </select>
+              <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
+                <span className="text-amber-600">BS 1881-203 §3.1 Compliant</span>
+                {weatherAutoDetectedNote && (
+                  <span className="text-cyan-700 font-mono font-medium truncate max-w-[200px]">
+                    {weatherAutoDetectedNote}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Reading Input Row */}
@@ -1637,6 +1735,13 @@ function PunditWorkspaceInner() {
       {/* MODE 6: CLIENT & SITE ATTENDANCE REGISTER */}
       {punditMode === "attendance" && (
         <SiteAttendanceLogPanel
+          projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
+        />
+      )}
+
+      {/* MODE 7: SITE TESTING DAY WEATHER TELEMETRY */}
+      {punditMode === "weather" && (
+        <SiteWeatherLogPanel
           projectId={activeWorkspaceProjectId || manualForm.projectId || (projects[0]?.id ?? "")}
         />
       )}
