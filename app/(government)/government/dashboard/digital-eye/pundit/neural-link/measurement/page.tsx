@@ -25,7 +25,7 @@ import {
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
 import PunditWaveformViewer from "@/components/dashboard/digital-eye/PunditWaveformViewer";
-import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
+// import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PaginationBar from "@/components/dashboard/PaginationBar";
 import {
   FolderViewToggle,
@@ -276,15 +276,21 @@ export default function NeuralLinkMeasurementPage() {
         </div>
       </div>
 
-      {/* Expandable Site Testing Day Weather Console */}
+      {/* Site Testing Day Weather Console — commented out for the meantime:
+          weather telemetry input is inspector-only. */}
       {showWeatherPanel && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+          Site weather telemetry is captured by the field inspector and is not editable from this view.
+        </div>
+      )}
+      {/* {showWeatherPanel && (
         <div className="mb-6 animate-in slide-in-from-top-2 duration-200">
           <SiteWeatherLogPanel
             projectId={selectedProjectId}
             onWeatherChanged={() => refreshTests()}
           />
         </div>
-      )}
+      )} */}
 
       {/* Main Measurement Console */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden mb-8">

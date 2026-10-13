@@ -40,7 +40,7 @@ import PunditScanBatchSelector from "@/components/dashboard/digital-eye/PunditSc
 import PunditCalibrationModal from "@/components/dashboard/digital-eye/PunditCalibrationModal";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
-import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
+// import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
 import AiObservationText from "@/components/dashboard/digital-eye/AiObservationText";
 import { getProjects, Project } from "@/services/projects";
@@ -782,15 +782,21 @@ export default function PunditAIAnalysisPage() {
           </div>
         )}
 
-        {/* TAB 7: SITE WEATHER CONDITIONS & TELEMETRY */}
+        {/* TAB 7: SITE WEATHER CONDITIONS & TELEMETRY — commented out for the
+            meantime: weather telemetry input is inspector-only. */}
         {activeTab === "weather" && (
+          <div className="p-6 text-xs text-slate-600">
+            Site weather telemetry is captured by the field inspector and is not editable from this view.
+          </div>
+        )}
+        {/* {activeTab === "weather" && (
           <div className="p-6">
             <SiteWeatherLogPanel
               projectId={selectedProjectId}
               batchId={selectedBatch?.id}
             />
           </div>
-        )}
+        )} */}
       </div>
 
       {/* QUICK EXPLORATION CARDS: 3 DEDICATED MODULES */}

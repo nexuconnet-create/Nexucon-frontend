@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import NexuconLinkNav from "@/components/dashboard/digital-eye/NexuconLinkNav";
-import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
+// import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import { Sun, CloudSun, ShieldCheck, Thermometer, Droplets, FileText, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
@@ -97,8 +97,12 @@ export default function NeuralLinkWeatherPage() {
           </div>
         </div>
 
-        {/* Weather Input Console */}
-        <SiteWeatherLogPanel projectId={selectedProjectId} />
+        {/* Weather Input Console — commented out for the meantime:
+            weather telemetry input is inspector-only. */}
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+          Site weather telemetry is captured by the field inspector and is not editable from this view.
+        </div>
+        {/* <SiteWeatherLogPanel projectId={selectedProjectId} /> */}
       </div>
     </div>
   );
