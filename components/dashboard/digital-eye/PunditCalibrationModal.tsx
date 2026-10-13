@@ -120,23 +120,27 @@ export default function PunditCalibrationModal({
     const vKmS = velocityMs / 1000;
 
     if (type === "exponential") {
-      // f_cu = a * exp(b * V_km) + c
       const effA = paramA > 0 ? paramA : 1.2;
       const effB = paramB > 0 ? paramB : 0.85;
       const effC = paramC || 0.0;
       const res = effA * Math.exp(effB * vKmS) + effC;
       return Number(res.toFixed(1));
     } else if (type === "linear") {
-      // f_cu = 8.961 * V_km - 7.97
-      const res = 8.961 * vKmS - 7.97;
+      const m = paramA || 8.961;
+      const c = paramC !== undefined && paramC !== null ? paramC : -7.97;
+      const res = m * vKmS + c;
       return Number(res.toFixed(1));
     } else if (type === "polynomial") {
-      // f_cu = -12.5 + 4.2*V + 1.8*V^2
-      const res = -12.5 + 4.2 * vKmS + 1.8 * Math.pow(vKmS, 2);
+      const a = paramA !== undefined && paramA !== null ? paramA : -12.5;
+      const b = paramB !== undefined && paramB !== null ? paramB : 4.2;
+      const c = paramC !== undefined && paramC !== null ? paramC : 1.8;
+      const res = a + b * vKmS + c * Math.pow(vKmS, 2);
       return Number(res.toFixed(1));
     } else if (type === "sonreb") {
-      // f_cu = 0.0286 * (V_ms^0.84) * (R^0.35) [assume R=32]
-      const res = 0.0286 * Math.pow(velocityMs, 0.84) * Math.pow(32, 0.35);
+      const a = paramA > 0 ? paramA : 0.0286;
+      const b = paramB > 0 ? paramB : 0.84;
+      const c = paramC > 0 ? paramC : 0.35;
+      const res = a * Math.pow(velocityMs, b) * Math.pow(32, c);
       return Number(res.toFixed(1));
     }
     return null;
@@ -219,15 +223,23 @@ export default function PunditCalibrationModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const paramsPayload: { a: number; b: number; c: number; [key: string]: any } = {
+      a: Number(paramA),
+      b: Number(paramB),
+      c: Number(paramC),
+    };
+    if (curveType === "polynomial") {
+      paramsPayload.coeffs = [Number(paramA), Number(paramB), Number(paramC)];
+    } else if (curveType === "linear") {
+      paramsPayload.m = Number(paramA) || 8.961;
+      paramsPayload.c = Number(paramC) !== undefined ? Number(paramC) : -7.97;
+    }
+
     const payload: BatchCalibrationPayload = {
       project_id: projectId,
       batch_id: batchId,
       curve_type: curveType,
-      params: {
-        a: Number(paramA),
-        b: Number(paramB),
-        c: Number(paramC),
-      },
+      params: paramsPayload,
       design_strength_mpa: Number(designStrengthMpa),
       notes: calibrationNotes.trim(),
       cube_correlation_points: cubePoints,
@@ -309,7 +321,14 @@ export default function PunditCalibrationModal({
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {/* Exponential (Mandatory Default) */}
               <div
-                onClick={() => setCurveType("exponential")}
+                onClick={() => {
+                  if (curveType !== "exponential") {
+                    setParamA(1.2);
+                    setParamB(0.85);
+                    setParamC(0.0);
+                  }
+                  setCurveType("exponential");
+                }}
                 className={`p-4 rounded-xl border cursor-pointer transition-all relative ${
                   curveType === "exponential"
                     ? "bg-emerald-50/60 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm"
@@ -319,20 +338,27 @@ export default function PunditCalibrationModal({
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-bold text-slate-900">Exponential</span>
                   <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
-                    RECOMMENDED
+                    DEFAULT
                   </span>
                 </div>
                 <div className="text-[11px] font-mono text-emerald-800 font-semibold mb-1">
                   f_cu = a · e^(b·V) + c
                 </div>
                 <p className="text-[10px] text-slate-500 leading-tight">
-                  Accurately models non-linear concrete behavior, especially around strength thresholds.
+                  Accurately models non-linear concrete behavior across velocity thresholds.
                 </p>
               </div>
 
               {/* Polynomial */}
               <div
-                onClick={() => setCurveType("polynomial")}
+                onClick={() => {
+                  if (curveType !== "polynomial") {
+                    setParamA(-12.5);
+                    setParamB(4.2);
+                    setParamC(1.8);
+                  }
+                  setCurveType("polynomial");
+                }}
                 className={`p-4 rounded-xl border cursor-pointer transition-all ${
                   curveType === "polynomial"
                     ? "bg-sky-50/60 border-sky-500 ring-2 ring-sky-500/20"
@@ -350,7 +376,14 @@ export default function PunditCalibrationModal({
 
               {/* SonReb */}
               <div
-                onClick={() => setCurveType("sonreb")}
+                onClick={() => {
+                  if (curveType !== "sonreb") {
+                    setParamA(0.0286);
+                    setParamB(0.84);
+                    setParamC(0.35);
+                  }
+                  setCurveType("sonreb");
+                }}
                 className={`p-4 rounded-xl border cursor-pointer transition-all ${
                   curveType === "sonreb"
                     ? "bg-purple-50/60 border-purple-500 ring-2 ring-purple-500/20"
@@ -368,7 +401,14 @@ export default function PunditCalibrationModal({
 
               {/* Linear (With Warning) */}
               <div
-                onClick={() => setCurveType("linear")}
+                onClick={() => {
+                  if (curveType !== "linear") {
+                    setParamA(8.961);
+                    setParamB(1.0);
+                    setParamC(-7.97);
+                  }
+                  setCurveType("linear");
+                }}
                 className={`p-4 rounded-xl border cursor-pointer transition-all ${
                   curveType === "linear"
                     ? "bg-rose-50/60 border-rose-400 ring-2 ring-rose-400/20"
@@ -378,24 +418,24 @@ export default function PunditCalibrationModal({
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-bold text-slate-900">Linear</span>
                   <span className="text-[9px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">
-                    NOT RECOMMENDED
+                    LINEAR
                   </span>
                 </div>
                 <div className="text-[11px] font-mono text-slate-700 font-semibold mb-1">
                   f_cu = m·V + c
                 </div>
                 <p className="text-[10px] text-slate-500 leading-tight">
-                  Contradicts non-linear behavior; causes threshold misclassifications.
+                  Linear relationship: f_cu = m · V + c.
                 </p>
               </div>
             </div>
 
-            {/* Warning if Linear is selected */}
+            {/* Advisory note */}
             {curveType === "linear" && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2 animate-in fade-in">
-                <AlertTriangle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <strong>Critical Warning:</strong> The review meeting identified linear models as a core flaw in past reports. Concrete compressive strength does not grow linearly with acoustic wave speed. Use the Exponential model unless legally mandated otherwise.
+                  <strong>Linear Model Notice:</strong> Concrete acoustic response is generally non-linear. Exponential is standard, but the linear model will be strictly applied as selected.
                 </div>
               </div>
             )}
@@ -406,54 +446,63 @@ export default function PunditCalibrationModal({
             <h4 className="text-xs font-bold text-slate-800 flex items-center justify-between">
               <span>2. Mathematical Parameter Calibration</span>
               <span className="font-mono text-[11px] text-[#0284C7]">
-                Formula: f_cu = {paramA} · e^({paramB} · V_km/s) + {paramC}
+                {curveType === "exponential" && `Formula: f_cu = ${paramA} · e^(${paramB} · V_km/s) ${paramC < 0 ? `- ${Math.abs(paramC)}` : paramC > 0 ? `+ ${paramC}` : ""}`}
+                {curveType === "polynomial" && `Formula: f_cu = ${paramA} + ${paramB} · V + ${paramC} · V²`}
+                {curveType === "sonreb" && `Formula: f_cu = ${paramA} · V^${paramB} · R^${paramC}`}
+                {curveType === "linear" && `Formula: f_cu = ${paramA} · V ${paramC < 0 ? `- ${Math.abs(paramC)}` : `+ ${paramC}`}`}
               </span>
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Scaling Factor (a)
+                  {curveType === "exponential" ? "Scaling Factor (a)" : curveType === "polynomial" ? "Constant Offset (a)" : curveType === "sonreb" ? "Multiplier (a)" : "Slope (m)"}
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.001"
                   required
                   value={paramA}
                   onChange={(e) => setParamA(Number(e.target.value))}
                   className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#0284C7]"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">Baseline: 1.15 – 1.25</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {curveType === "exponential" ? "Baseline: 1.15 – 1.25" : curveType === "polynomial" ? "Baseline: -12.5" : curveType === "sonreb" ? "Baseline: 0.0286" : "Baseline: 8.961"}
+                </span>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Velocity Exponent (b)
+                  {curveType === "exponential" ? "Velocity Exponent (b)" : curveType === "polynomial" ? "Linear Coeff (b)" : curveType === "sonreb" ? "Velocity Exponent (b)" : "Multiplier (b)"}
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.001"
                   required
                   value={paramB}
                   onChange={(e) => setParamB(Number(e.target.value))}
                   className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#0284C7]"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">Baseline: 0.80 – 0.90 per km/s</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {curveType === "exponential" ? "Baseline: 0.80 – 0.90 per km/s" : curveType === "polynomial" ? "Baseline: 4.2" : curveType === "sonreb" ? "Baseline: 0.84" : "Default: 1.0"}
+                </span>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Intercept Offset (c) MPa
+                  {curveType === "exponential" ? "Intercept Offset (c) MPa" : curveType === "polynomial" ? "Quadratic Coeff (c)" : curveType === "sonreb" ? "Rebound Exponent (c)" : "Intercept (c) MPa"}
                 </label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.001"
                   required
                   value={paramC}
                   onChange={(e) => setParamC(Number(e.target.value))}
                   className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#0284C7]"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">Offset in MPa (Default: 0.0)</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {curveType === "exponential" ? "Default: 0.0" : curveType === "polynomial" ? "Baseline: 1.8" : curveType === "sonreb" ? "Baseline: 0.35" : "Baseline: -7.97"}
+                </span>
               </div>
 
               <div>

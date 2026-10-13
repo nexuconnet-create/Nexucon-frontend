@@ -269,6 +269,26 @@ export async function endTelemetrySession(
   return (res?.data || res) as TelemetryPromotion;
 }
 
+/**
+ * `PATCH telemetry/session/<id>/status/` — update session configuration & environmental inputs.
+ * Propagates weather, surface temperature, and moisture conditions directly to the session and
+ * associated statutory test records.
+ */
+export async function updateTelemetrySessionConfig(
+  sessionId: string,
+  params: {
+    surface_temperature_c?: number | null;
+    moisture_condition?: string;
+    weather_condition?: string;
+    visual_observation?: string;
+    location_address?: string;
+    session_config?: Record<string, unknown>;
+  }
+): Promise<any> {
+  const res: any = await api.patch(`/telemetry/session/${sessionId}/status/`, params);
+  return res?.data || res;
+}
+
 export interface TelemetryExportImport extends TelemetrySession {
   import_stats: {
     /** Rows read from the file. */

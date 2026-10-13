@@ -165,9 +165,10 @@ export default function DataCollectionPage() {
   const [formSurfacePoints, setFormSurfacePoints] = useState<string[]>([""]);
   const [formSurfaceTemperatureC, setFormSurfaceTemperatureC] = useState<number>(0);
   const [formReboundNumber, setFormReboundNumber] = useState<number | ''>('');
-  // Operator-recorded report context (weather / floor) — never auto-generated.
+  // Operator-recorded report context (weather / floor / moisture) — never auto-generated.
   const [formFloor, setFormFloor] = useState<string>("");
   const [formWeatherCondition, setFormWeatherCondition] = useState<string>("");
+  const [formMoistureCondition, setFormMoistureCondition] = useState<string>("dry");
   // 7 Sep meeting: optional concrete age at test time (days). '' = not
   // recorded — never a fabricated default.
   const [formConcreteAgeDays, setFormConcreteAgeDays] = useState<string | number>("");
@@ -204,6 +205,7 @@ export default function DataCollectionPage() {
     rebound_number: string;
     transducer_frequency_khz: string;
     transducer_type: 'DIRECT' | 'SEMI_DIRECT' | 'INDIRECT' | '';
+    moisture_condition: string;
     operator_name: string;
     notes: string;
   }>({
@@ -221,6 +223,7 @@ export default function DataCollectionPage() {
     rebound_number: '',
     transducer_frequency_khz: '',
     transducer_type: '',
+    moisture_condition: 'dry',
     operator_name: '',
     notes: '',
   });
@@ -242,6 +245,7 @@ export default function DataCollectionPage() {
       rebound_number: t.rebound_number != null ? String(t.rebound_number) : '',
       transducer_frequency_khz: t.transducer_frequency_khz ? String(t.transducer_frequency_khz) : '',
       transducer_type: t.transducer_type || '',
+      moisture_condition: (t as any).moisture_condition || 'dry',
       operator_name: t.operator_name || '',
       notes: t.notes || '',
     });
@@ -274,6 +278,7 @@ export default function DataCollectionPage() {
         surface_condition: editForm.surface_condition.trim() || undefined,
         surface_temperature_c: num(editForm.surface_temperature_c),
         rebound_number: num(editForm.rebound_number),
+        moisture_condition: editForm.moisture_condition || undefined,
         operator_name: editForm.operator_name.trim() || undefined,
         notes: editForm.notes.trim() || undefined,
       };
@@ -807,9 +812,8 @@ export default function DataCollectionPage() {
           floor: formFloor || undefined,
           weather_condition: formWeatherCondition || undefined,
         }),
-        ...(formTestType === 'surface_quality' ? {
-          surface_temperature_c: formSurfaceTemperatureC > 0 ? formSurfaceTemperatureC : undefined,
-        } : {}),
+        surface_temperature_c: formSurfaceTemperatureC > 0 ? formSurfaceTemperatureC : undefined,
+        moisture_condition: formMoistureCondition || 'dry',
         ...(formConcreteAgeDays !== '' && formConcreteAgeDays != null ? {
           concrete_age_days: Number(formConcreteAgeDays),
         } : {}),
@@ -1789,9 +1793,9 @@ export default function DataCollectionPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-1">Concrete Age at Test (days — optional)</label>
+                  <label className="block text-gray-700 font-semibold mb-1">Concrete Age at Test (days)</label>
                   <input
                     type="number"
                     min={1}
@@ -1802,7 +1806,36 @@ export default function DataCollectionPage() {
                     className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
                   />
                   <p className="text-[10px] text-gray-500 mt-1">
-                    Informative beyond 28 days (strength gain past 28 days is minimal); printed in the report when recorded.
+                    Informative beyond 28 days; printed in report.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Moisture Condition (BS 1881-203)</label>
+                  <select
+                    value={formMoistureCondition}
+                    onChange={(e) => setFormMoistureCondition(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 outline-none"
+                  >
+                    <option value="dry">Dry (Factor 1.00 — standard)</option>
+                    <option value="damp">Damp (Factor 1.03 — 3% correction)</option>
+                    <option value="saturated">Saturated (Factor 1.05 — 5% correction)</option>
+                  </select>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Corrects estimated strength for moisture content.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Surface Temperature (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 29.5"
+                    value={formSurfaceTemperatureC || ''}
+                    onChange={(e) => setFormSurfaceTemperatureC(Number(e.target.value))}
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-xs text-gray-800 outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Recorded in test conditions table.
                   </p>
                 </div>
               </div>
@@ -2537,6 +2570,18 @@ export default function DataCollectionPage() {
                     onChange={(e) => setEditForm(f => ({ ...f, surface_temperature_c: e.target.value }))}
                     className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
                   />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase text-gray-500">Moisture Condition</span>
+                  <select
+                    value={editForm.moisture_condition}
+                    onChange={(e) => setEditForm(f => ({ ...f, moisture_condition: e.target.value }))}
+                    className="mt-1 w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="dry">Dry (1.00)</option>
+                    <option value="damp">Damp (1.03)</option>
+                    <option value="saturated">Saturated (1.05)</option>
+                  </select>
                 </label>
                 <label className="block">
                   <span className="text-[10px] font-bold uppercase text-gray-500">Operator</span>

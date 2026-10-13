@@ -25,6 +25,11 @@ import {
   X,
   Plus,
   Compass,
+  CloudSun,
+  Thermometer,
+  Droplets,
+  Sun,
+  Save,
 } from "lucide-react";
 import {
   CoordinateSystem,
@@ -40,6 +45,7 @@ import {
   getTelemetrySessions,
   importTelemetryExport,
   startTelemetrySession,
+  updateTelemetrySessionConfig,
   type TelemetryDevice,
   type TelemetryPromotion,
   type TelemetrySession,
@@ -206,6 +212,168 @@ function Battery({ level }: { level: number | null }) {
       <Icon size={13} className={level <= 20 ? "text-rose-600" : "text-slate-500"} />
       {level}%
     </span>
+  );
+}
+
+/**
+ * Environmental conditions editor for any session (OPEN, ENDED, or SYNCED).
+ * Allows setting or updating Surface Temperature, Moisture Condition, and Weather
+ * Condition directly on an existing session and syncing to project tests.
+ */
+function SessionEnvironmentalCard({
+  session,
+  onUpdated,
+}: {
+  session: TelemetrySession;
+  onUpdated: (newConfig: Record<string, unknown>) => void;
+}) {
+  const cfg = (session.session_config || {}) as Record<string, any>;
+  const [surfaceTemp, setSurfaceTemp] = useState<string>(
+    cfg.surface_temperature_c != null ? String(cfg.surface_temperature_c) : "28.0"
+  );
+  const [moisture, setMoisture] = useState<string>(
+    cfg.moisture_condition ? String(cfg.moisture_condition).toLowerCase() : "dry"
+  );
+  const [weather, setWeather] = useState<string>(
+    cfg.weather_condition || cfg.weather || "Clear, Sunny"
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Sync state if session_config changes
+  useEffect(() => {
+    if (cfg.surface_temperature_c != null) {
+      setSurfaceTemp(String(cfg.surface_temperature_c));
+    }
+    if (cfg.moisture_condition) {
+      setMoisture(String(cfg.moisture_condition).toLowerCase());
+    }
+    if (cfg.weather_condition || cfg.weather) {
+      setWeather(cfg.weather_condition || cfg.weather);
+    }
+  }, [session.id, cfg.surface_temperature_c, cfg.moisture_condition, cfg.weather_condition, cfg.weather]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const tempNum = surfaceTemp !== "" ? parseFloat(surfaceTemp) : null;
+      await updateTelemetrySessionConfig(session.id, {
+        surface_temperature_c: tempNum,
+        moisture_condition: moisture,
+        weather_condition: weather,
+      });
+      const updatedConfig = {
+        ...cfg,
+        surface_temperature_c: tempNum,
+        moisture_condition: moisture,
+        weather_condition: weather,
+      };
+      onUpdated(updatedConfig);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: `✅ Environmental conditions saved: Surface Temp ${surfaceTemp}°C | Moisture: ${moisture} | Weather: ${weather}`,
+            type: "success",
+          },
+        })
+      );
+    } catch (err: any) {
+      window.dispatchEvent(
+        new CustomEvent("show-toast", {
+          detail: {
+            message: `⚠️ Failed to save environmental conditions: ${err?.message || "Unknown error"}`,
+            type: "error",
+          },
+        })
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
+          <CloudSun size={14} className="text-amber-600 shrink-0" />
+          <span>Environmental & Atmospheric Conditions (BS 1881-203)</span>
+        </div>
+        {saveSuccess && (
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+            <CheckCircle2 size={11} /> Synced to report & tests
+          </span>
+        )}
+      </div>
+
+      <p className="text-[10px] text-amber-900/80 leading-relaxed">
+        Recorded environmental parameters feed directly into Section 3.1 (Location & Weather) and Section 5.4 (Field Observations) of the official NDT report.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div>
+          <label className="block text-[10px] font-bold text-slate-700 mb-1 flex items-center gap-1">
+            <Thermometer size={11} className="text-rose-500" />
+            Surface Temp (°C)
+          </label>
+          <input
+            type="number"
+            step="0.1"
+            value={surfaceTemp}
+            onChange={(e) => setSurfaceTemp(e.target.value)}
+            placeholder="e.g. 28.0"
+            className="w-full text-xs rounded-lg border border-slate-300 p-2 bg-white font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-700 mb-1 flex items-center gap-1">
+            <Droplets size={11} className="text-blue-500" />
+            Moisture Condition
+          </label>
+          <select
+            value={moisture}
+            onChange={(e) => setMoisture(e.target.value)}
+            className="w-full text-xs rounded-lg border border-slate-300 p-2 bg-white font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+          >
+            <option value="dry">Dry (Factor 1.00 — standard)</option>
+            <option value="damp">Damp (Factor 1.03 — 3% correction)</option>
+            <option value="saturated">Saturated (Factor 1.05 — 5% correction)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-700 mb-1 flex items-center gap-1">
+            <Sun size={11} className="text-amber-500" />
+            Weather Condition
+          </label>
+          <input
+            type="text"
+            value={weather}
+            onChange={(e) => setWeather(e.target.value)}
+            placeholder="e.g. Clear, Sunny"
+            className="w-full text-xs rounded-lg border border-slate-300 p-2 bg-white font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="px-3.5 py-1.5 rounded-lg bg-[#022C4F] hover:bg-[#033B6B] text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {saving ? (
+            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Save size={12} />
+          )}
+          <span>{saving ? "Saving…" : "Save & Sync to Report"}</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1281,6 +1449,20 @@ export default function InspectorTelemetryPage() {
                             ) : null}
                           </div>
                         )}
+
+                        {/* Environmental & Atmospheric Conditions Card */}
+                        <SessionEnvironmentalCard
+                          session={session}
+                          onUpdated={(newCfg) => {
+                            setSessions((prev) =>
+                              prev.map((s) =>
+                                s.id === session.id
+                                  ? { ...s, session_config: { ...s.session_config, ...newCfg } }
+                                  : s
+                              )
+                            );
+                          }}
+                        />
 
                         {selected.status === "OPEN" ? (
                           <form onSubmit={handleAppend} className="space-y-2">

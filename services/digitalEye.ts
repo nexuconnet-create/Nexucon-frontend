@@ -160,6 +160,7 @@ export interface PunditTest {
   readings: PunditReading[];
   // Operator-recorded context for the NDT report (never auto-generated).
   weather_condition: string;
+  moisture_condition?: string;
   floor: string;
   // Optional concrete maturity at test time (7 Sep review item 18);
   // null = not recorded.
@@ -1322,6 +1323,7 @@ export interface PunditTestInput {
   test_date?: string;
   // Operator-recorded report context (Section 3.0 weather / floor grouping).
   weather_condition?: string;
+  moisture_condition?: string;
   floor?: string;
   // Optional concrete age at test time in days (7 Sep review item 18).
   concrete_age_days?: number | null;
@@ -3256,6 +3258,44 @@ export const fetchNdtReportPreviewBundle = async (
     sections: (res.sections ?? []) as NdtPreviewSection[],
     pageCount: Number(res.page_count ?? 0),
   };
+};
+
+/**
+ * Embedded AI QA Assistant: Reviews the active PDF page against raw project test data,
+ * deterministic mathematics, and international standards (BS 1881-203, BS EN 12504-4, ACI 228.2R).
+ */
+export interface NdtReportPageQAResponse {
+  page_number: number;
+  total_pages: number;
+  provider_used: string;
+  model_used: string;
+  verified: string[];
+  discrepancies: Array<{
+    error: string;
+    raw_payload_value: string;
+    exact_replacement: string;
+  }>;
+  compliance_flags: string[];
+  narrative_feedback: string;
+  page_excerpt: string;
+}
+
+export const reviewNdtReportPageQA = async (
+  projectId: string,
+  pageNumber: number,
+  userQuery?: string,
+  modelProvider?: 'anthropic' | 'deepseek' | 'auto',
+  operator?: string,
+  elementId?: string,
+): Promise<NdtReportPageQAResponse> => {
+  const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/`, {
+    page_number: pageNumber,
+    user_query: userQuery,
+    model_provider: modelProvider || 'anthropic',
+    operator,
+    elementId,
+  });
+  return res;
 };
 
 /**

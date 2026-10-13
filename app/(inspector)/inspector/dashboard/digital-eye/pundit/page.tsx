@@ -68,6 +68,7 @@ import {
 import { getAssignableProjects } from "@/services/inspector";
 import DeviceConnectPanel from "@/components/inspector/DeviceConnectPanel";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
+import AiObservationText from "@/components/dashboard/digital-eye/AiObservationText";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
@@ -237,9 +238,11 @@ function PunditWorkspaceInner() {
   const [manualForm, setManualForm] = useState<{
     projectId: string;
     elementName: string;
+    floor: string;
     elementLocation: string;
     testDate: string;
     weatherCondition: string;
+    moistureCondition: "dry" | "damp" | "saturated";
     method: "DIRECT" | "SEMI_DIRECT" | "INDIRECT";
     frequencyKhz: number;
     pathLengthMm: string;
@@ -253,9 +256,11 @@ function PunditWorkspaceInner() {
   }>({
     projectId: "",
     elementName: "",
+    floor: "",
     elementLocation: "",
     testDate: new Date().toISOString().split("T")[0],
     weatherCondition: "Clear / Sunny",
+    moistureCondition: "dry",
     method: "DIRECT",
     frequencyKhz: 54,
     pathLengthMm: "",
@@ -558,6 +563,7 @@ function PunditWorkspaceInner() {
       test_date: manualForm.testDate || new Date().toISOString().split("T")[0],
       weather_condition: manualForm.weatherCondition.trim() || undefined,
       structural_element: manualForm.elementName.trim(),
+      floor: manualForm.floor.trim() || undefined,
       test_location: manualForm.elementLocation.trim(),
       transducer_type: manualForm.method,
       transducer_frequency_khz: manualForm.frequencyKhz,
@@ -565,6 +571,7 @@ function PunditWorkspaceInner() {
       pulse_time_us: manualForm.points[0].timeUs,
       surface_condition: manualForm.surfaceCondition.trim(),
       surface_temperature_c: manualForm.surfaceTempC === "" ? null : Number(manualForm.surfaceTempC),
+      moisture_condition: manualForm.moistureCondition,
       concrete_age_days: manualForm.concreteAgeDays === "" ? null : Number(manualForm.concreteAgeDays),
       operator_name: manualForm.operatorName.trim(),
       notes: manualForm.notes.trim(),
@@ -1058,7 +1065,9 @@ function PunditWorkspaceInner() {
                                 {(activePunditReview.ai_observations || activePunditReview.ai_analysis?.observations || []).map((obs: string, idx: number) => (
                                   <li key={idx} className="flex items-start gap-1.5 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
                                     <span className="text-cyan-400 font-bold">•</span>
-                                    <span className="leading-snug">{obs}</span>
+                                    <span className="leading-snug">
+                                      <AiObservationText text={obs} tone="dark" />
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
@@ -1447,6 +1456,19 @@ function PunditWorkspaceInner() {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Floor / Level
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Ground Floor, First Floor"
+                value={manualForm.floor}
+                onChange={(e) => setManualForm({ ...manualForm, floor: e.target.value })}
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Location Details
               </label>
               <input
@@ -1507,6 +1529,21 @@ function PunditWorkspaceInner() {
                   </span>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Moisture Condition (BS 1881-203)
+              </label>
+              <select
+                value={manualForm.moistureCondition}
+                onChange={(e) => setManualForm({ ...manualForm, moistureCondition: e.target.value as any })}
+                className="w-full text-xs rounded-xl border border-slate-300 p-2.5 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-[#022C4F]"
+              >
+                <option value="dry">Dry (Factor 1.00 — standard)</option>
+                <option value="damp">Damp (Factor 1.03 — 3% correction)</option>
+                <option value="saturated">Saturated (Factor 1.05 — 5% correction)</option>
+              </select>
             </div>
           </div>
 

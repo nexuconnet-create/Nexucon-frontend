@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { CheckCircle, ShieldCheck, Download, Award, Box, RefreshCw } from "lucide-react";
 import { BIMModel, getBIMModels } from "@/services/bim";
+import BIMModelPreview from "@/components/dashboard/digital-eye/BIMModelPreview";
 
 export default function ApprovedBIM() {
   const [models, setModels] = useState<BIMModel[]>([]);
@@ -59,13 +60,22 @@ export default function ApprovedBIM() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-slate-900 rounded-2xl h-[500px] relative overflow-hidden flex flex-col items-center justify-center border-4 border-emerald-500/20">
-            <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm border border-emerald-500/30 flex items-center gap-2 font-bold backdrop-blur">
+          <div className="lg:col-span-2 bg-slate-900 rounded-2xl min-h-[500px] relative overflow-hidden flex flex-col border-4 border-emerald-500/20">
+            <div className="absolute top-4 right-4 z-20 bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm border border-emerald-500/30 flex items-center gap-2 font-bold backdrop-blur">
               <Award size={18}/> OFFICIALLY STAMPED & LOCKED
             </div>
-            <Box size={64} className="text-emerald-500/50 mb-6"/>
-            <p className="text-emerald-300/70 font-mono text-sm">WebGL Viewer: Certified IFC Model</p>
-            <p className="text-xs text-emerald-400/50 mt-1">{selectedModel?.name} ({selectedModel?.format || 'IFC4'})</p>
+            {selectedModel?.project ? (
+              <BIMModelPreview
+                projectId={selectedModel.project}
+                linkedElementCount={selectedModel.element_count || 0}
+              />
+            ) : (
+              <div className="h-[500px] flex flex-col items-center justify-center">
+                <Box size={64} className="text-emerald-500/50 mb-6"/>
+                <p className="text-emerald-300/70 font-mono text-sm">WebGL Viewer: Certified IFC Model</p>
+                <p className="text-xs text-emerald-400/50 mt-1">{selectedModel?.name} ({selectedModel?.format || 'IFC4'})</p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">

@@ -42,6 +42,7 @@ import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualOb
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
 import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
+import AiObservationText from "@/components/dashboard/digital-eye/AiObservationText";
 import { getProjects, Project } from "@/services/projects";
 import {
   DigitalEyeFinding,
@@ -616,7 +617,7 @@ export default function PunditAIAnalysisPage() {
                               key={i}
                               className="text-xs text-gray-800 bg-slate-50/90 border border-gray-200/80 rounded-xl p-3 leading-relaxed font-medium shadow-2xs hover:border-amber-200 transition-colors"
                             >
-                              {obs}
+                              <AiObservationText text={obs} />
                             </li>
                           ))}
                         </ul>

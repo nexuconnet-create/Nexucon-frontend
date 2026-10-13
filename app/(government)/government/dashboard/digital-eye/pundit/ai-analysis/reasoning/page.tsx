@@ -28,6 +28,7 @@ import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeade
 import PunditAiNav from "@/components/dashboard/digital-eye/PunditAiNav";
 import PunditAnalysisReviewPanel from "@/components/dashboard/digital-eye/PunditAnalysisReviewPanel";
 import PunditElementVelocityBarChart from "@/components/dashboard/digital-eye/PunditElementVelocityBarChart";
+import AiObservationText from "@/components/dashboard/digital-eye/AiObservationText";
 import {
   PunditAIAnalysis,
   getPunditAIAnalyses,
@@ -629,7 +630,11 @@ export default function PunditAIReasoningPage() {
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100">
                   <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
                     <Activity size={14} className="text-amber-500" />
-                    <span>Deterministic Observations ({parsedObservations.length})</span>
+                    <span>
+                      {activeAnalysis?.model_provider && activeAnalysis.model_provider !== 'deterministic'
+                        ? `AI Consensus Observations (${parsedObservations.length})`
+                        : `Deterministic Observations (${parsedObservations.length})`}
+                    </span>
                   </h4>
                   {parsedObservations.length > 1 && (
                     <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80 flex items-center gap-1">
@@ -647,7 +652,7 @@ export default function PunditAIReasoningPage() {
                           key={i}
                           className="text-xs text-gray-800 bg-slate-50/90 border border-gray-200/80 rounded-xl p-3 leading-relaxed font-medium shadow-2xs hover:border-amber-200 transition-colors"
                         >
-                          {obs}
+                          <AiObservationText text={obs} />
                         </li>
                       ))}
                     </ul>
