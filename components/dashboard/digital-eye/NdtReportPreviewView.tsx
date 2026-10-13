@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -23,7 +23,7 @@ import {
   CheckCircle,
   FileSpreadsheet,
 } from "lucide-react";
-import ContinuousPdfViewer from "./ContinuousPdfViewer";
+import ContinuousPdfViewer, { type TargetJump } from "./ContinuousPdfViewer";
 import {
   downloadNdtReport,
   fetchNdtReportPreviewBundle,
@@ -112,10 +112,16 @@ export default function NdtReportPreviewView({
         if (cancelled) return;
         objectUrl = window.URL.createObjectURL(blob);
         setBlobUrl(objectUrl);
-        setSections(secs);
+        const seenKeys = new Set<string>();
+        const uniqueSecs = (secs || []).filter((s) => {
+          if (seenKeys.has(s.key)) return false;
+          seenKeys.add(s.key);
+          return true;
+        });
+        setSections(uniqueSecs);
         setPageCount(total);
-        setCurrentPage(secs[0]?.page ?? 1);
-        setActiveKey(secs[0]?.key ?? null);
+        setCurrentPage(uniqueSecs[0]?.page ?? 1);
+        setActiveKey(uniqueSecs[0]?.key ?? null);
       })
       .catch((err: any) => {
         if (cancelled) return;
@@ -177,26 +183,35 @@ export default function NdtReportPreviewView({
     }
   };
 
+  const [targetJump, setTargetJump] = useState<TargetJump | null>(null);
+  const jumpSeqRef = useRef(0);
+
+  const triggerJump = (pageNum: number) => {
+    jumpSeqRef.current += 1;
+    setCurrentPage(pageNum);
+    setTargetJump({ page: pageNum, seq: jumpSeqRef.current });
+  };
+
   // Navigating to a section
   const jumpToSection = (section: NdtPreviewSection) => {
     setActiveKey(section.key);
-    setCurrentPage(section.page);
+    triggerJump(section.page);
   };
 
-  // Continuous scroll live page callback
+  // Continuous scroll live page callback (passive, never forces scroll)
   const handlePageScrollChange = useCallback((newPage: number) => {
     setCurrentPage(newPage);
   }, []);
 
   const handlePrevPage = () => {
     if (currentPage > 1) {
-      setCurrentPage((prev) => prev - 1);
+      triggerJump(currentPage - 1);
     }
   };
 
   const handleNextPage = () => {
     if (currentPage < pageCount) {
-      setCurrentPage((prev) => prev + 1);
+      triggerJump(currentPage + 1);
     }
   };
 
@@ -204,7 +219,7 @@ export default function NdtReportPreviewView({
     e.preventDefault();
     const val = parseInt(pageInput, 10);
     if (!isNaN(val) && val >= 1 && val <= pageCount) {
-      setCurrentPage(val);
+      triggerJump(val);
     } else {
       setPageInput(String(currentPage));
     }
@@ -468,10 +483,10 @@ export default function NdtReportPreviewView({
                   />
                 ))}
               {!loading &&
-                sections.map((section) => {
+                sections.map((section, idx) => {
                   const active = section.key === activeKey;
                   return (
-                    <li key={section.key} className="shrink-0 md:shrink">
+                    <li key={`${section.key}-${section.page}-${idx}`} className="shrink-0 md:shrink">
                       <button
                         type="button"
                         onClick={() => jumpToSection(section)}
@@ -525,6 +540,7 @@ export default function NdtReportPreviewView({
                 <ContinuousPdfViewer
                   blobUrl={blobUrl}
                   currentPage={currentPage}
+                  targetJump={targetJump}
                   onPageChange={handlePageScrollChange}
                   zoom={zoom}
                   className="max-h-[82vh]"
@@ -626,8 +642,8 @@ export default function NdtReportPreviewView({
                     className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 max-w-[210px] truncate shadow-2xs focus:border-[#022C4F] focus:outline-none"
                     aria-label="Select report section to audit"
                   >
-                    {sections.map((sec) => (
-                      <option key={sec.key} value={sec.key}>
+                    {sections.map((sec, idx) => (
+                      <option key={`${sec.key}-${sec.page}-${idx}`} value={sec.key}>
                         p.{sec.page} — {sec.label}
                       </option>
                     ))}
