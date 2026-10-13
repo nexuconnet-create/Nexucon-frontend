@@ -9,8 +9,8 @@ import ReportCmsPanel from "@/components/dashboard/digital-eye/ReportCmsPanel";
 import ReportBrandingPanel from "@/components/dashboard/digital-eye/ReportBrandingPanel";
 import ReportSignOffPanel from "@/components/dashboard/digital-eye/ReportSignOffPanel";
 import NdtReportPreviewView from "@/components/dashboard/digital-eye/NdtReportPreviewView";
-import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
-import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
+// import MeasurementBrowserSection from "@/components/dashboard/digital-eye/MeasurementBrowserSection";
+// import SiteWeatherLogPanel from "@/components/dashboard/digital-eye/SiteWeatherLogPanel";
 import { Eye } from "lucide-react";
 import { getPunditTests } from "@/services/digitalEye";
 
@@ -192,19 +192,17 @@ export default function PunditReportsPage() {
             onPreviewNdt={openPreview}
           />
 
-          {/* Interactive test-point location map & weather telemetry (§2.4 & §3.1) */}
+          {/* Interactive test-point location map (§2.4) */}
           <div className="px-6 mt-6 space-y-6">
             <ReportLocationMap projectId={selectedProjectId || undefined} />
-            <SiteWeatherLogPanel projectId={selectedProjectId || undefined} />
+            {/* Site Activities & Weather Telemetry (§3.1) commented out for the meantime (inspector-only telemetry input) */}
+            {/* <SiteWeatherLogPanel projectId={selectedProjectId || undefined} /> */}
           </div>
 
-          {/* Recorded measurements (§A5): the reporting browser — filter the
-              real readings, read them point by point, export that exact view.
-              Collapsed by default, per the client's "not everything in open
-              book" direction. */}
-          <div className="px-6 mt-6">
+          {/* Recorded measurements (§A5) commented out for the meantime (inspector-only telemetry browser) */}
+          {/* <div className="px-6 mt-6">
             <MeasurementBrowserSection projectId={selectedProjectId || undefined} />
-          </div>
+          </div> */}
 
           {/* Report branding (§2.3): per-project logo / watermark on the
               certified dossier. */}
