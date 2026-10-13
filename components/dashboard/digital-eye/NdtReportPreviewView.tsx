@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  ChevronLeft,
   ChevronRight,
   RefreshCw,
   X,
@@ -22,6 +23,7 @@ import {
   CheckCircle,
   FileSpreadsheet,
 } from "lucide-react";
+import ContinuousPdfViewer from "./ContinuousPdfViewer";
 import {
   downloadNdtReport,
   fetchNdtReportPreviewBundle,
@@ -68,6 +70,8 @@ export default function NdtReportPreviewView({
   const [sections, setSections] = useState<NdtPreviewSection[]>([]);
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [viewerMode, setViewerMode] = useState<"continuous" | "iframe">("continuous");
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -85,6 +89,17 @@ export default function NdtReportPreviewView({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copiedNarrative, setCopiedNarrative] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "narrative">("cards");
+
+  // Keep page input and activeKey in sync with currentPage
+  useEffect(() => {
+    setPageInput(String(currentPage));
+    const matchingSection = [...sections]
+      .reverse()
+      .find((s) => s.page <= currentPage);
+    if (matchingSection && matchingSection.key !== activeKey) {
+      setActiveKey(matchingSection.key);
+    }
+  }, [currentPage, sections, activeKey]);
 
   // Fetch the bundle fresh each time the view mounts
   useEffect(() => {
@@ -168,6 +183,33 @@ export default function NdtReportPreviewView({
     setCurrentPage(section.page);
   };
 
+  // Continuous scroll live page callback
+  const handlePageScrollChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+  }, []);
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < pageCount) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handlePageInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseInt(pageInput, 10);
+    if (!isNaN(val) && val >= 1 && val <= pageCount) {
+      setCurrentPage(val);
+    } else {
+      setPageInput(String(currentPage));
+    }
+  };
+
   const frameSrc = useMemo(
     () => (blobUrl && activeKey
       ? `${blobUrl}#page=${currentPage}`
@@ -176,8 +218,10 @@ export default function NdtReportPreviewView({
   );
 
   const activeSectionLabel = useMemo(() => {
-    const match = sections.find((s) => s.page === currentPage);
-    return match ? match.label : `Page ${currentPage}`;
+    const exact = sections.find((s) => s.page === currentPage);
+    if (exact) return exact.label;
+    const prior = [...sections].reverse().find((s) => s.page <= currentPage);
+    return prior ? prior.label : `Page ${currentPage}`;
   }, [sections, currentPage]);
 
   // Run AI Page QA Audit
@@ -246,14 +290,80 @@ export default function NdtReportPreviewView({
           </button>
         </div>
 
-        {/* Toolbar — Page X of Y | Zoom | AI QA Assistant | Download | Generate */}
+        {/* Toolbar — Page Navigation & Stepper | View Mode | Zoom | AI QA Assistant | Download | Generate */}
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
-          <span
-            className="text-xs font-medium text-[#4B5B66] tabular-nums"
-            aria-live="polite"
-          >
-            Page {currentPage} of {pageCount || "…"}
-          </span>
+          {/* Interactive Page Stepper */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={handlePrevPage}
+              disabled={currentPage <= 1}
+              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-colors"
+              title="Previous Page"
+              aria-label="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <form onSubmit={handlePageInputSubmit} className="flex items-center gap-1 text-xs font-semibold text-slate-700">
+              <span className="hidden sm:inline">Page</span>
+              <input
+                type="number"
+                min={1}
+                max={pageCount || 1}
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value)}
+                onBlur={() => {
+                  const val = parseInt(pageInput, 10);
+                  if (!isNaN(val) && val >= 1 && val <= pageCount) {
+                    setCurrentPage(val);
+                  } else {
+                    setPageInput(String(currentPage));
+                  }
+                }}
+                className="w-9 rounded border border-slate-300 px-1 py-0.5 text-center font-mono text-xs text-slate-900 focus:border-[#022C4F] focus:outline-none"
+                aria-label="Current page number"
+              />
+              <span className="text-slate-500 font-normal">of {pageCount || "…"}</span>
+            </form>
+            <button
+              type="button"
+              onClick={handleNextPage}
+              disabled={currentPage >= pageCount}
+              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-colors"
+              title="Next Page"
+              aria-label="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Mode Switcher: Continuous Scroll vs Native Plugin */}
+          <div className="hidden sm:inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs text-xs">
+            <button
+              type="button"
+              onClick={() => setViewerMode("continuous")}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                viewerMode === "continuous"
+                  ? "bg-[#022C4F] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Continuous vertical scroll with real-time page detection"
+            >
+              Continuous
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewerMode("iframe")}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                viewerMode === "iframe"
+                  ? "bg-[#022C4F] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Browser native PDF reader plugin"
+            >
+              Native
+            </button>
+          </div>
           <label className="flex items-center gap-1.5 text-xs text-[#4B5B66]">
             Zoom
             <select
@@ -388,7 +498,7 @@ export default function NdtReportPreviewView({
           </nav>
 
           {/* Preview pane: the real PDF */}
-          <div className="flex-grow overflow-auto bg-slate-100 min-h-[60vh]">
+          <div className="flex-grow overflow-hidden bg-slate-100 min-h-[60vh] flex flex-col">
             {loading && (
               <div
                 className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-3"
@@ -411,19 +521,29 @@ export default function NdtReportPreviewView({
               </div>
             )}
             {blobUrl && !loading && !loadError && (
-              <div className="flex justify-center p-4">
-                <iframe
-                  key={frameSrc}
-                  src={frameSrc}
-                  title="NDT report preview"
-                  className="bg-white shadow-lg border border-slate-300"
-                  style={{
-                    width: `${zoom}%`,
-                    height: "100%",
-                    minHeight: "72vh",
-                  }}
+              viewerMode === "continuous" ? (
+                <ContinuousPdfViewer
+                  blobUrl={blobUrl}
+                  currentPage={currentPage}
+                  onPageChange={handlePageScrollChange}
+                  zoom={zoom}
+                  className="max-h-[82vh]"
                 />
-              </div>
+              ) : (
+                <div className="flex justify-center p-4 overflow-auto">
+                  <iframe
+                    key={frameSrc}
+                    src={frameSrc}
+                    title="NDT report preview"
+                    className="bg-white shadow-lg border border-slate-300"
+                    style={{
+                      width: `${zoom}%`,
+                      height: "100%",
+                      minHeight: "72vh",
+                    }}
+                  />
+                </div>
+              )
             )}
           </div>
 
@@ -468,14 +588,50 @@ export default function NdtReportPreviewView({
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-800 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Active Target: Page <span className="font-mono">{currentPage}</span> of <span className="font-mono">{pageCount}</span>
+                    Active Target: Page <span className="font-mono text-slate-900 font-bold">{currentPage}</span> of <span className="font-mono">{pageCount}</span>
                   </span>
-                  <span
-                    className="text-[10px] font-medium text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md truncate max-w-[170px]"
-                    title={activeSectionLabel}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handlePrevPage}
+                      disabled={currentPage <= 1}
+                      className="rounded border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                      title="Step to previous page"
+                      aria-label="Previous Page"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextPage}
+                      disabled={currentPage >= pageCount}
+                      className="rounded border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                      title="Step to next page"
+                      aria-label="Next Page"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Direct Section Target Selector */}
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
+                  <span className="text-[11px] font-semibold text-slate-600 shrink-0">Section Target:</span>
+                  <select
+                    value={activeKey || ""}
+                    onChange={(e) => {
+                      const found = sections.find((s) => s.key === e.target.value);
+                      if (found) jumpToSection(found);
+                    }}
+                    className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 max-w-[210px] truncate shadow-2xs focus:border-[#022C4F] focus:outline-none"
+                    aria-label="Select report section to audit"
                   >
-                    {activeSectionLabel}
-                  </span>
+                    {sections.map((sec) => (
+                      <option key={sec.key} value={sec.key}>
+                        p.{sec.page} — {sec.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
