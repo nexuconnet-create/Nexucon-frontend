@@ -24,6 +24,7 @@ import {
   Check,
   X,
   Radio,
+  FolderCheck,
 } from "lucide-react";
 import { uploadInspectorEvidence, getAssignableProjects } from "@/services/inspector";
 
@@ -38,8 +39,31 @@ interface FieldVoiceNoteModalProps {
   onEvidenceCreated?: (record: any) => void;
 }
 
-// Nigerian language translation helper with local fallback
-async function translateVoiceText(text: string, targetLang: "yo" | "ig" | "en"): Promise<string> {
+export type TranslationLanguage = "en" | "yo" | "ha" | "ig";
+
+function getOptimalAudioFormat(): { mimeType: string; extension: string } {
+  if (typeof window === "undefined" || !(window as any).MediaRecorder) {
+    return { mimeType: "audio/webm", extension: ".webm" };
+  }
+  const MR = (window as any).MediaRecorder;
+  const candidates = [
+    { mimeType: "audio/webm;codecs=opus", extension: ".webm" },
+    { mimeType: "audio/webm", extension: ".webm" },
+    { mimeType: "audio/mp4;codecs=mp4a.40.2", extension: ".mp4" },
+    { mimeType: "audio/mp4", extension: ".mp4" },
+    { mimeType: "audio/ogg;codecs=opus", extension: ".ogg" },
+    { mimeType: "audio/ogg", extension: ".ogg" },
+  ];
+  for (const c of candidates) {
+    if (MR.isTypeSupported && MR.isTypeSupported(c.mimeType)) {
+      return c;
+    }
+  }
+  return { mimeType: "", extension: ".webm" };
+}
+
+// Nigerian language translation helper with local fallback (Yoruba, Hausa, Igbo, English)
+async function translateVoiceText(text: string, targetLang: TranslationLanguage): Promise<string> {
   if (!text.trim() || targetLang === "en") return text;
 
   try {
@@ -64,6 +88,9 @@ async function translateVoiceText(text: string, targetLang: "yo" | "ig" | "en"):
   // Fallback prefix
   if (targetLang === "yo") {
     return `[Àkọsílẹ̀ Ohùn Yorùbá]: ${text}`;
+  }
+  if (targetLang === "ha") {
+    return `[Rubutun Murya Hausa]: ${text}`;
   }
   if (targetLang === "ig") {
     return `[Ihe Ndekọ Olu Igbo]: ${text}`;
@@ -101,13 +128,14 @@ export default function FieldVoiceNoteModal({
   const [speechSupported, setSpeechSupported] = useState(true);
   const recognitionRef = useRef<any>(null);
 
-  // Multi-Lingual Translation Channel (Yorùbá, Igbo, English)
+  // Multi-Lingual Translation Channel (Yorùbá, Hausa, Igbo, English)
   const [translations, setTranslations] = useState<{
     en: string;
     yo: string;
+    ha: string;
     ig: string;
-  }>({ en: "", yo: "", ig: "" });
-  const [activeLangTab, setActiveLangTab] = useState<"en" | "yo" | "ig">("en");
+  }>({ en: "", yo: "", ha: "", ig: "" });
+  const [activeLangTab, setActiveLangTab] = useState<TranslationLanguage>("en");
   const [isTranslating, setIsTranslating] = useState(false);
 
   // Form Fields
@@ -151,24 +179,32 @@ export default function FieldVoiceNoteModal({
     }
   }, []);
 
-  // Modal open/close reset
+  // Modal open/close reset & project synchronization persistence
   useEffect(() => {
     if (isOpen) {
       setCoordinates(null);
       setGpsError(null);
-      if (initialProjectId) {
-        setSelectedProjectId(initialProjectId);
-      } else {
-        getAssignableProjects()
-          .then((res) => {
-            const list = Array.isArray(res) ? res : [];
-            setProjects(list);
-            if (list.length > 0 && !selectedProjectId) {
-              setSelectedProjectId(list[0].id);
+      getAssignableProjects()
+        .then((res) => {
+          const list = Array.isArray(res) ? res : [];
+          setProjects(list);
+          const remembered =
+            typeof window !== "undefined"
+              ? sessionStorage.getItem("nexucon_active_inspector_project")
+              : null;
+          if (initialProjectId) {
+            setSelectedProjectId(initialProjectId);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("nexucon_active_inspector_project", initialProjectId);
             }
-          })
-          .catch(() => {});
-      }
+          } else if (remembered && list.some((p: any) => p.id === remembered)) {
+            setSelectedProjectId(remembered);
+          } else if (list.length > 0 && !selectedProjectId) {
+            setSelectedProjectId(list[0].id);
+          }
+        })
+        .catch(() => {});
+
       if (initialElementId) {
         setStructuralElement(initialElementId);
       }
@@ -179,6 +215,13 @@ export default function FieldVoiceNoteModal({
     }
   }, [isOpen, initialProjectId, initialElementId]);
 
+  const handleSelectProject = (id: string) => {
+    setSelectedProjectId(id);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("nexucon_active_inspector_project", id);
+    }
+  };
+
   const resetState = () => {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
@@ -186,7 +229,7 @@ export default function FieldVoiceNoteModal({
     setAudioBlob(null);
     setAudioUrl(null);
     setTranscript("");
-    setTranslations({ en: "", yo: "", ig: "" });
+    setTranslations({ en: "", yo: "", ha: "", ig: "" });
     setRecordingSeconds(0);
     setSha256Digest("");
     setSubmitError(null);
@@ -245,7 +288,7 @@ export default function FieldVoiceNoteModal({
     }
   };
 
-  // Start Voice Recording & Speech Recognition
+  // Start Voice Recording & Speech Recognition with studio-grade voice clarity
   const startRecording = async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -253,20 +296,36 @@ export default function FieldVoiceNoteModal({
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Studio-clarity voice audio constraints with echo cancellation, noise suppression, and mono channel
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1, // Mono eliminates stereo phase cancellation and distortion
+          sampleRate: 48000,
+          sampleSize: 16,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/ogg";
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const { mimeType, extension } = getOptimalAudioFormat();
+      const options: MediaRecorderOptions = {
+        audioBitsPerSecond: 128000, // 128kbps crystal-clear voice fidelity
+      };
+      if (mimeType) {
+        options.mimeType = mimeType;
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
           audioChunksRef.current.push(e.data);
         }
       };
 
-      mediaRecorder.start(250);
+      // Continuous unfragmented recording to prevent broken timestamps / chipmunk audio distortion
+      mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
       setRecordingSeconds(0);
@@ -332,32 +391,45 @@ export default function FieldVoiceNoteModal({
       } catch (e) {}
     }
 
-    mediaRecorderRef.current.onstop = async () => {
-      const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm";
-      const blob = new Blob(audioChunksRef.current, { type: mimeType });
+    const recorder = mediaRecorderRef.current;
+    recorder.onstop = async () => {
+      const { mimeType: defaultMime, extension: defaultExt } = getOptimalAudioFormat();
+      const effectiveMime = recorder.mimeType || defaultMime || "audio/webm";
+      const blob = new Blob(audioChunksRef.current, { type: effectiveMime });
       const url = URL.createObjectURL(blob);
       setAudioBlob(blob);
       setAudioUrl(url);
 
-      const ext = mimeType.includes("webm") ? ".webm" : ".ogg";
+      const ext = effectiveMime.includes("mp4")
+        ? ".mp4"
+        : effectiveMime.includes("ogg")
+        ? ".ogg"
+        : ".webm";
       const fName = `field_voice_note_${Date.now()}${ext}`;
       setFileName(fName);
 
       // Stop stream tracks
-      mediaRecorderRef.current?.stream?.getTracks().forEach((track) => track.stop());
+      recorder.stream?.getTracks().forEach((track) => track.stop());
       setIsRecording(false);
 
       // Compute tamper-evident SHA-256 hash
       await computeDigest(blob);
 
-      // Automatically translate current transcript
+      // Automatically translate current transcript into Yoruba, Hausa, Igbo
       const textToTranslate = transcript.trim() || description.trim();
       if (textToTranslate) {
         translateToAllLanguages(textToTranslate);
       }
     };
 
-    mediaRecorderRef.current.stop();
+    try {
+      if (recorder.state === "recording") {
+        recorder.requestData();
+        recorder.stop();
+      }
+    } catch {
+      recorder.stop();
+    }
   };
 
   const cancelRecording = () => {
@@ -380,19 +452,21 @@ export default function FieldVoiceNoteModal({
     audioChunksRef.current = [];
   };
 
-  // Translate transcript into Yoruba, Igbo, and English
+  // Translate transcript into Yoruba, Hausa, Igbo, and English
   const translateToAllLanguages = async (baseText: string) => {
     if (!baseText.trim()) return;
     setIsTranslating(true);
     try {
-      const [yoRes, igRes] = await Promise.all([
+      const [yoRes, haRes, igRes] = await Promise.all([
         translateVoiceText(baseText, "yo"),
+        translateVoiceText(baseText, "ha"),
         translateVoiceText(baseText, "ig"),
       ]);
 
       setTranslations({
         en: baseText,
         yo: yoRes,
+        ha: haRes,
         ig: igRes,
       });
     } catch (err) {
@@ -400,6 +474,7 @@ export default function FieldVoiceNoteModal({
       setTranslations({
         en: baseText,
         yo: `[Àkọsílẹ̀ Ohùn Yorùbá]: ${baseText}`,
+        ha: `[Rubutun Murya Hausa]: ${baseText}`,
         ig: `[Ihe Ndekọ Olu Igbo]: ${baseText}`,
       });
     } finally {
@@ -439,8 +514,9 @@ export default function FieldVoiceNoteModal({
     setUploadProgress(0.1);
 
     try {
-      const mimeType = audioBlob.type || "audio/webm";
-      const ext = mimeType.includes("webm") ? ".webm" : ".ogg";
+      const { mimeType: defaultMime } = getOptimalAudioFormat();
+      const mimeType = audioBlob.type || defaultMime || "audio/webm";
+      const ext = mimeType.includes("mp4") ? ".mp4" : mimeType.includes("ogg") ? ".ogg" : ".webm";
       const fileToUpload = new File([audioBlob], fileName || `field_voice_${Date.now()}${ext}`, {
         type: mimeType,
       });
@@ -449,6 +525,7 @@ export default function FieldVoiceNoteModal({
       const finalTranslations = {
         en: translations.en || effectiveTranscript,
         yo: translations.yo || (await translateVoiceText(effectiveTranscript, "yo")),
+        ha: translations.ha || (await translateVoiceText(effectiveTranscript, "ha")),
         ig: translations.ig || (await translateVoiceText(effectiveTranscript, "ig")),
       };
 
@@ -523,7 +600,7 @@ export default function FieldVoiceNoteModal({
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Dictate field findings with multi-language Yorùbá, Igbo & English translation channels
+                Dictate field findings with multi-language Yorùbá, Hausa, Igbo & English translation channels
               </p>
             </div>
           </div>
@@ -591,6 +668,39 @@ export default function FieldVoiceNoteModal({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Project Synchronization Bar */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#022C4F] text-cyan-400 flex items-center justify-center shrink-0 shadow-inner">
+                    <FolderCheck size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Synchronized Target Project</span>
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    </div>
+                    <div className="text-xs font-extrabold text-[#022C4F] truncate max-w-[240px] sm:max-w-xs">
+                      {projects.find((p) => p.id === selectedProjectId)?.name || "Select Project To Bind Evidence"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-auto sm:min-w-[240px]">
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => handleSelectProject(e.target.value)}
+                    className="w-full p-2 px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-xs"
+                  >
+                    <option value="">-- Choose Assigned Project --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.reference_number || "Project"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Voice Recording Deck */}
               <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-[#022C4F] text-white border border-slate-800 shadow-md space-y-4">
                 <div className="flex items-center justify-between">
@@ -786,6 +896,7 @@ export default function FieldVoiceNoteModal({
                   {[
                     { code: "en" as const, label: "English (EN)", flag: "🌐" },
                     { code: "yo" as const, label: "Yorùbá (YO)", flag: "🇳🇬" },
+                    { code: "ha" as const, label: "Hausa (HA)", flag: "🇳🇬" },
                     { code: "ig" as const, label: "Igbo (IG)", flag: "🇳🇬" },
                   ].map((lang) => (
                     <button
@@ -821,6 +932,11 @@ export default function FieldVoiceNoteModal({
                           {translations.yo || "Yorùbá translation channel will populate upon recording or translation."}
                         </p>
                       )}
+                      {activeLangTab === "ha" && (
+                        <p className="font-medium text-indigo-950">
+                          {translations.ha || "Hausa translation channel will populate upon recording or translation."}
+                        </p>
+                      )}
                       {activeLangTab === "ig" && (
                         <p className="font-medium text-indigo-950">
                           {translations.ig || "Igbo translation channel will populate upon recording or translation."}
@@ -840,7 +956,7 @@ export default function FieldVoiceNoteModal({
                   </label>
                   <select
                     value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    onChange={(e) => handleSelectProject(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   >
                     {projects.map((p) => (

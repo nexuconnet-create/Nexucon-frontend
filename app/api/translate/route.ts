@@ -150,27 +150,56 @@ export async function POST(req: NextRequest) {
       // Service account key not present or token exchange failed - proceed to Tier 2
     }
 
-    // Tier 2: Resilient Google Translate GTX Engine (supports yo, ig, ha, en)
+    // Tier 2: Resilient Google Translate Engine (supports yo, ig, ha, en)
     if (!translatedContent) {
       try {
-        const gtxUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(target_language)}&dt=t&q=${encodeURIComponent(text)}`;
-        const gtxRes = await fetch(gtxUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-          }
-        });
-        if (gtxRes.ok) {
-          const gtxData = await gtxRes.json();
-          if (Array.isArray(gtxData) && Array.isArray(gtxData[0])) {
-            const assembled = gtxData[0].map((item: any) => item[0]).filter(Boolean).join('');
-            if (assembled && assembled.trim()) {
-              translatedContent = assembled.trim();
-              providerUsed = `Google Neural Translation (${languageMap[target_language] || target_language})`;
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        ];
+        for (const ua of userAgents) {
+          const gtxUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(target_language)}&dt=t&q=${encodeURIComponent(text)}`;
+          const gtxRes = await fetch(gtxUrl, {
+            headers: { 'User-Agent': ua }
+          });
+          if (gtxRes.ok) {
+            const rawText = await gtxRes.text();
+            if (rawText.startsWith('[')) {
+              const gtxData = JSON.parse(rawText);
+              if (Array.isArray(gtxData) && Array.isArray(gtxData[0])) {
+                const assembled = gtxData[0].map((item: any) => item[0]).filter(Boolean).join('');
+                if (assembled && assembled.trim() && assembled.trim().toLowerCase() !== text.trim().toLowerCase()) {
+                  translatedContent = assembled.trim();
+                  providerUsed = `Google Neural Translation (${languageMap[target_language] || target_language})`;
+                  break;
+                }
+              }
             }
           }
         }
       } catch (gtxErr: any) {
         console.warn("GTX Translate fallback notice:", gtxErr.message);
+      }
+    }
+
+    // Tier 2.5: High-availability MyMemory Translation Service (supports Yoruba, Hausa, Igbo)
+    if (!translatedContent) {
+      try {
+        const langPair = `en|${target_language}`;
+        const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langPair)}`;
+        const mmRes = await fetch(myMemoryUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Nexucon Civil Engineering Platform)' }
+        });
+        if (mmRes.ok) {
+          const mmData = await mmRes.json();
+          const cand = mmData?.responseData?.translatedText;
+          if (cand && cand.trim() && !cand.includes('MYMEMORY WARNING') && cand.trim().toLowerCase() !== text.trim().toLowerCase()) {
+            translatedContent = cand.trim();
+            providerUsed = `MyMemory Neural Engine (${languageMap[target_language] || target_language})`;
+          }
+        }
+      } catch (mmErr: any) {
+        console.warn("MyMemory Translation notice:", mmErr.message);
       }
     }
 
@@ -185,7 +214,11 @@ export async function POST(req: NextRequest) {
         "all sub-contractors must ensure 100% ppe compliance": "Gbogbo àwọn akọ́ṣẹ́mọṣẹ́ gbọ́dọ̀ tẹ̀lé àwọn ìlànà ààbò PPE pátápátá",
         "drawing revision approved with conditions for level 3 mep riser": "A ti fọwọ́sí àtúnṣe àwòrán pẹ̀lú àwọn àdéhùn kan fún Level 3 MEP Riser",
         "urgent: foundation concrete test failed 28-day cure": "Kíá: Àdánwò kọ́ńkéré ìpìlẹ̀ kùnà lẹ́yìn ọjọ́ méjìdínlọ́gbọ̀n (28-day cure)",
-        "council session will commence shortly for stage-gate signoff": "Ìpàdé àgbájọ aláṣẹ yóò bẹ̀rẹ̀ láìpẹ́ fún ìfọwọ́sí ipele iṣẹ́"
+        "council session will commence shortly for stage-gate signoff": "Ìpàdé àgbájọ aláṣẹ yóò bẹ̀rẹ̀ láìpẹ́ fún ìfọwọ́sí ipele iṣẹ́",
+        "foundation depth check passed": "Ayẹwo ijinle ipilẹ ti kọja lami lafiya",
+        "no structural cracks observed": "Ko si awọn dojuijako igbekale ti a ṣe akiyesi",
+        "concrete slump test verified on site": "A ti jẹrisi idanwo idinku kọnkiri lori aaye",
+        "rebar spacing and cover depth compliant": "Ijinna rebar ati ijinle ideri ni ibamu"
       };
       const dictIg: Record<string, string> = {
         "please submit the inspection report": "Biko ziga akụkọ nyocha saịtị ahụ ozugbo",
@@ -195,17 +228,35 @@ export async function POST(req: NextRequest) {
         "all sub-contractors must ensure 100% ppe compliance": "Ndị ọrụ ngo niile ga-agbasorịrị iwu nchekwa PPE kpamkpam",
         "drawing revision approved with conditions for level 3 mep riser": "A kwadoro nyocha eserese ahụ na ọnọdụ ụfọdụ maka Level 3 MEP Riser",
         "urgent: foundation concrete test failed 28-day cure": "Ngwa ngwa: Nnwale kọmpat ntọala dara mgbe ụbọchị iri abụọ na asatọ gasịrị",
-        "council session will commence shortly for stage-gate signoff": "Nzukọ ndị isi ga-amalite n'oge na-adịghị anya maka mbinye aka na ngalaba ọrụ"
+        "council session will commence shortly for stage-gate signoff": "Nzukọ ndị isi ga-amalite n'oge na-adịghị anya maka mbinye aka na ngalaba ọrụ",
+        "foundation depth check passed": "Nyocha omimi ntọala gafere",
+        "no structural cracks observed": "Ọnweghị mgbawa ihe arụrụ arụ hụrụ",
+        "concrete slump test verified on site": "E gosipụtara ule kọmpat na saịtị",
+        "rebar spacing and cover depth compliant": "Oghere rebar na omimi mkpuchi kwadoro"
+      };
+      const dictHa: Record<string, string> = {
+        "please submit the inspection report": "Da fatan za a gabatar da rahoton binciken aiki",
+        "structural non-conformance detected on grid 4": "An gano matsalar tsarin gini a Grid 4",
+        "stop-work order issued": "An ba da umarnin dakatar da aiki nan take",
+        "site inspection scheduled for tomorrow at 10:00 am": "An tsara binciken wurin aiki na gobe da ƙarfe goma na safe (10:00 AM)",
+        "all sub-contractors must ensure 100% ppe compliance": "Dole ne dukkan yan kwangila su cika ƙa'idodin kariya na PPE 100%",
+        "drawing revision approved with conditions for level 3 mep riser": "An amince da sabunta zane tare da wasu sharuɗɗa don Level 3 MEP Riser",
+        "urgent: foundation concrete test failed 28-day cure": "Gaggawa: Gwajin kankaren tushe ya gaza bayan kwana 28",
+        "council session will commence shortly for stage-gate signoff": "Zaman majalisar zai fara nan ba da jimawa ba don amincewa da aikin",
+        "foundation depth check passed": "Binciken zurfin tushe ya wuce",
+        "no structural cracks observed": "Ba a ga wata alamar tsagewar gini ba",
+        "concrete slump test verified on site": "An tabbatar da ingancin kankare a wurin aiki",
+        "rebar spacing and cover depth compliant": "Tazara da kaurin kariya na ƙarfe sun cika ƙa'ida"
       };
 
       if (target_language === 'yo') {
-        translatedContent = dictYo[norm] || `Ìtumọ̀ Yorùbá: ${text}`;
+        translatedContent = dictYo[norm] || `[Yorùbá]: ${text}`;
         providerUsed = "Nigerian Construction Language Engine (Yorùbá)";
       } else if (target_language === 'ig') {
-        translatedContent = dictIg[norm] || `Ntụgharị Igbo: ${text}`;
+        translatedContent = dictIg[norm] || `[Igbo]: ${text}`;
         providerUsed = "Nigerian Construction Language Engine (Igbo)";
       } else if (target_language === 'ha') {
-        translatedContent = `Fassarar Hausa: ${text}`;
+        translatedContent = dictHa[norm] || `[Hausa]: ${text}`;
         providerUsed = "Nigerian Construction Language Engine (Hausa)";
       } else {
         translatedContent = text;

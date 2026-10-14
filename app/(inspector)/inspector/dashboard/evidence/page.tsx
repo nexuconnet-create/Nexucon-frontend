@@ -20,8 +20,13 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  FolderCheck,
 } from "lucide-react";
-import { getInspectorEvidence, verifyInspectorEvidence } from "@/services/inspector";
+import {
+  getInspectorEvidence,
+  verifyInspectorEvidence,
+  getAssignableProjects,
+} from "@/services/inspector";
 import { dateOr, orDash } from "@/lib/display";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 import FieldVoiceNoteModal from "@/components/inspector/FieldVoiceNoteModal";
@@ -181,6 +186,8 @@ function VoiceNoteCardPlayer({ url, duration = 0 }: { url: string; duration?: nu
 
 export default function InspectorEvidencePage() {
   const [evidenceList, setEvidenceList] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -195,8 +202,8 @@ export default function InspectorEvidencePage() {
   const [verifyingMap, setVerifyingMap] = useState<Record<string, boolean>>({});
   const [verifyOutcomeMap, setVerifyOutcomeMap] = useState<Record<string, any>>({});
 
-  // Active translation channel tab per card: { [evidenceId]: 'en' | 'yo' | 'ig' }
-  const [cardLangMap, setCardLangMap] = useState<Record<string, "en" | "yo" | "ig">>({});
+  // Active translation channel tab per card: { [evidenceId]: 'en' | 'yo' | 'ha' | 'ig' }
+  const [cardLangMap, setCardLangMap] = useState<Record<string, "en" | "yo" | "ha" | "ig">>({});
 
   // Folder view: Folders (Project → source type) or the flat card grid.
   const [viewMode, setViewMode] = useState<FolderViewMode>("grouped");
@@ -261,12 +268,21 @@ export default function InspectorEvidencePage() {
     );
   };
 
+  useEffect(() => {
+    getAssignableProjects()
+      .then((data) => {
+        setProjects(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+  }, []);
+
   const fetchEvidence = async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
       const data = await getInspectorEvidence({
         source_type: sourceFilter !== "ALL" ? sourceFilter : undefined,
+        project: selectedProjectId !== "ALL" ? selectedProjectId : undefined,
       });
       setEvidenceList(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -310,9 +326,9 @@ export default function InspectorEvidencePage() {
   useEffect(() => {
     fetchEvidence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceFilter]);
+  }, [sourceFilter, selectedProjectId]);
 
-  const setCardLang = (id: string, lang: "en" | "yo" | "ig", e: React.MouseEvent) => {
+  const setCardLang = (id: string, lang: "en" | "yo" | "ha" | "ig", e: React.MouseEvent) => {
     e.stopPropagation();
     setCardLangMap((prev) => ({ ...prev, [id]: lang }));
   };
@@ -440,6 +456,7 @@ export default function InspectorEvidencePage() {
                     {[
                       { code: "en" as const, label: "EN" },
                       { code: "yo" as const, label: "YO" },
+                      { code: "ha" as const, label: "HA" },
                       { code: "ig" as const, label: "IG" },
                     ].map((lang) => (
                       <button
@@ -634,29 +651,50 @@ export default function InspectorEvidencePage() {
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {[
-          { id: "ALL", label: "All Evidence Types" },
-          { id: "photo", label: "PHOTOS" },
-          { id: "voice_note", label: "VOICE NOTES" },
-          { id: "gpr", label: "GPR" },
-          { id: "pundit", label: "PUNDIT" },
-          { id: "bim_element", label: "BIM" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setSourceFilter(item.id)}
-            className={`px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer shrink-0 shadow-sm ${
-              sourceFilter === item.id
-                ? "bg-[#022C4F] text-white font-bold"
-                : "bg-white text-slate-600 hover:text-[#022C4F] border border-slate-200/80 font-medium"
-            }`}
+      {/* Filter Toolbar: Project Synchronization & Evidence Type */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs">
+        {/* Project Selector */}
+        <div className="flex items-center gap-2">
+          <FolderCheck size={16} className="text-[#022C4F] shrink-0" />
+          <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Target Project:</span>
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            className="p-1.5 px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-[#022C4F] focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-xs max-w-[260px] sm:max-w-xs truncate"
           >
-            {item.label}
-          </button>
-        ))}
+            <option value="ALL">All Assigned Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.reference_number || "Project"})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Source Type Filter */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {[
+            { id: "ALL", label: "All Types" },
+            { id: "photo", label: "PHOTOS" },
+            { id: "voice_note", label: "VOICE NOTES" },
+            { id: "gpr", label: "GPR" },
+            { id: "pundit", label: "PUNDIT" },
+            { id: "bim_element", label: "BIM" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setSourceFilter(item.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs transition-colors cursor-pointer shrink-0 shadow-xs ${
+                sourceFilter === item.id
+                  ? "bg-[#022C4F] text-white font-bold"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isLoading && (
@@ -924,7 +962,7 @@ export default function InspectorEvidencePage() {
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-[#022C4F] flex items-center gap-1.5">
                     <Globe size={14} className="text-indigo-600" />
-                    <span>Transcribed Voice Channels (English, Yorùbá, Igbo)</span>
+                    <span>Transcribed Voice Channels (English, Yorùbá, Hausa, Igbo)</span>
                   </h4>
                   <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full font-bold">
                     Official Translation
@@ -958,6 +996,21 @@ export default function InspectorEvidencePage() {
                   </div>
                   <p className="text-xs text-amber-900 leading-relaxed font-sans">
                     {selectedVoiceEvidence.payload?.translations?.yo ||
+                      "Translation channel pending."}
+                  </p>
+                </div>
+
+                {/* Hausa Channel */}
+                <div className="p-3.5 rounded-xl bg-cyan-50/60 border border-cyan-200 space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-cyan-950">
+                    <span className="flex items-center gap-1">
+                      <span>🇳🇬</span>
+                      <span>Hausa Translation Channel</span>
+                    </span>
+                    <span className="text-[10px] text-cyan-800 font-mono">Hausa (ha)</span>
+                  </div>
+                  <p className="text-xs text-cyan-900 leading-relaxed font-sans">
+                    {selectedVoiceEvidence.payload?.translations?.ha ||
                       "Translation channel pending."}
                   </p>
                 </div>
@@ -1018,6 +1071,7 @@ export default function InspectorEvidencePage() {
       <FieldPhotoCaptureModal
         isOpen={isPhotoModalOpen}
         onClose={() => setIsPhotoModalOpen(false)}
+        projectId={selectedProjectId !== "ALL" ? selectedProjectId : undefined}
         onEvidenceCreated={() => {
           fetchEvidence();
         }}
@@ -1027,6 +1081,7 @@ export default function InspectorEvidencePage() {
       <FieldVoiceNoteModal
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}
+        projectId={selectedProjectId !== "ALL" ? selectedProjectId : undefined}
         onEvidenceCreated={() => {
           fetchEvidence();
         }}

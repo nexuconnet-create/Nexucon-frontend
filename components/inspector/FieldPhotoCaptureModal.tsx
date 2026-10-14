@@ -88,12 +88,21 @@ export default function FieldPhotoCaptureModal({
       setGpsError(null);
       if (initialProjectId) {
         setSelectedProjectId(initialProjectId);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("nexucon_active_inspector_project", initialProjectId);
+        }
       } else {
         getAssignableProjects()
           .then((res) => {
             const list = Array.isArray(res) ? res : [];
             setProjects(list);
-            if (list.length > 0 && !selectedProjectId) {
+            const remembered =
+              typeof window !== "undefined"
+                ? sessionStorage.getItem("nexucon_active_inspector_project")
+                : null;
+            if (remembered && list.some((p: any) => p.id === remembered)) {
+              setSelectedProjectId(remembered);
+            } else if (list.length > 0 && !selectedProjectId) {
               setSelectedProjectId(list[0].id);
             }
           })

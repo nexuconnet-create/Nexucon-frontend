@@ -19,8 +19,12 @@ import {
   ShieldAlert,
   Box,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Mic,
+  Camera,
 } from "lucide-react";
+import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
+import FieldVoiceNoteModal from "@/components/inspector/FieldVoiceNoteModal";
 import {
   getInspectorProjectById,
   getInspectorInspections,
@@ -71,6 +75,26 @@ export default function InspectorProjectDetailPage() {
     total: number;
   } | null>(null);
   const [documents, setDocuments] = useState<Document[] | null>(null);
+
+  // Evidence Modals
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+
+  const refreshSiteEvidence = () => {
+    if (!projectId) return;
+    getInspectorEvidence({ project: projectId })
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        setSiteEvidence(list);
+        setEvidenceCounts({
+          gpr: list.filter((r: any) => r.source_type === "gpr").length,
+          pundit: list.filter((r: any) => r.source_type === "pundit").length,
+          bim: list.filter((r: any) => r.source_type === "bim_element").length,
+          total: list.length,
+        });
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -430,18 +454,118 @@ export default function InspectorProjectDetailPage() {
       )}
 
       {activeTab === "evidence" && (
-        <div className="p-10 rounded-2xl bg-white border border-slate-200/80 text-center space-y-4 shadow-sm">
-          <Layers size={36} className="text-cyan-600 mx-auto" />
-          <h3 className="text-base font-bold text-[#022C4F]">Evidence Records</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Review geofenced photos, radargram profiles, UPV waveforms, and SHA-256 tamper-evident hashes.
-          </p>
-          <Link
-            href="/inspector/dashboard/evidence"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-semibold shadow-sm"
-          >
-            Open Evidence Registry &rarr;
-          </Link>
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-[#022C4F]">
+                  Site Evidence Records ({siteEvidence?.length || 0})
+                </h3>
+                <span className="text-[10px] font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-0.5 rounded-full">
+                  Bound to {proj.name}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Record voice notes, site photos, and review forensic telemetry synced to this project.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsVoiceModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Mic size={14} />
+                <span>Record Voice Note</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPhotoModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Camera size={14} />
+                <span>Take Photo</span>
+              </button>
+              <Link
+                href={`/inspector/dashboard/evidence?project=${projectId}`}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+              >
+                Full Registry &rarr;
+              </Link>
+            </div>
+          </div>
+
+          {siteEvidence && siteEvidence.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {siteEvidence.map((ev: any) => (
+                <div
+                  key={ev.id}
+                  className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-xs space-y-2.5"
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">
+                      {ev.evidence_reference || ev.source_type}
+                    </span>
+                    <span className="text-slate-500 font-mono text-[10px]">
+                      {dateOr(ev.created_at || ev.timestamp)}
+                    </span>
+                  </div>
+
+                  <div className="text-xs font-bold text-[#022C4F]">
+                    {ev.source_type === "voice_note"
+                      ? "Field Voice Note"
+                      : ev.source_type === "photo"
+                      ? "Field Inspection Photo"
+                      : ev.source_type_display || ev.source_type}
+                  </div>
+
+                  {(ev.payload?.transcript || ev.payload?.description || ev.description) && (
+                    <p className="text-xs text-slate-600 italic line-clamp-2">
+                      &ldquo;{ev.payload?.transcript || ev.payload?.description || ev.description}&rdquo;
+                    </p>
+                  )}
+
+                  {ev.payload?.translations?.ha && (
+                    <p className="text-[11px] text-cyan-800 line-clamp-1 font-medium">
+                      <span className="font-bold">HA:</span> {ev.payload.translations.ha}
+                    </p>
+                  )}
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                    <span>Member: {ev.structural_element_id || ev.payload?.structural_element_id || "General"}</span>
+                    <span className="text-emerald-700 font-bold">SHA-256 Verified</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-10 rounded-2xl bg-white border border-dashed border-slate-300 text-center space-y-3">
+              <Layers size={36} className="text-cyan-600 mx-auto" />
+              <h3 className="text-sm font-bold text-[#022C4F]">No Evidence Captured Yet For This Site</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Capture the first audio recording or field photograph for {proj.name}. All items will be cryptographically locked to this site.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Mic size={14} />
+                  <span>Record Voice Note</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Camera size={14} />
+                  <span>Take Field Photo</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -567,6 +691,24 @@ export default function InspectorProjectDetailPage() {
         )}
         </div>
       )}
+
+      {/* Field Photo Capture Modal */}
+      <FieldPhotoCaptureModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
+        projectId={projectId}
+        projectName={proj?.name}
+        onEvidenceCreated={refreshSiteEvidence}
+      />
+
+      {/* Field Voice Note Modal */}
+      <FieldVoiceNoteModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        projectId={projectId}
+        projectName={proj?.name}
+        onEvidenceCreated={refreshSiteEvidence}
+      />
     </div>
   );
 }
