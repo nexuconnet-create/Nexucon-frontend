@@ -23,7 +23,17 @@ import {
   CheckCircle,
   FileSpreadsheet,
 } from "lucide-react";
-import ContinuousPdfViewer, { type TargetJump } from "./ContinuousPdfViewer";
+import dynamic from "next/dynamic";
+import type { TargetJump } from "./ContinuousPdfViewer";
+
+const ContinuousPdfViewer = dynamic(() => import("./ContinuousPdfViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center p-8 text-xs text-slate-400">
+      Loading document viewer...
+    </div>
+  ),
+});
 import {
   downloadNdtReport,
   fetchNdtReportPreviewBundle,
