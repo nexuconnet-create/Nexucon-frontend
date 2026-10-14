@@ -18,6 +18,7 @@ export type CoordinateSystem =
 export interface CornerInput {
   id: number;
   label: string; // e.g. "Corner 1 (NW)", "Corner 2 (NE)", etc.
+  pointNumber?: string; // Corner/Point identifier e.g. "1", "2", "Corner 1", "P-1", "BC-LA-2026/089"
   // Decimal Degrees
   lat?: number | string;
   lng?: number | string;
@@ -37,6 +38,7 @@ export interface CornerInput {
 
 export interface ConvertedCorner {
   id: number;
+  pointNumber: string;
   label: string;
   lat: number;
   lng: number;
@@ -376,9 +378,17 @@ export function convertCorners(
       utmZone = `${zoneNum}N`;
     }
 
+    const pointNumber = String(corner.pointNumber || corner.id || (index + 1)).trim();
+    const label = corner.label && corner.label.trim()
+      ? corner.label.trim()
+      : pointNumber
+      ? (isNaN(Number(pointNumber)) ? pointNumber : `Corner ${pointNumber}`)
+      : `Corner ${index + 1}`;
+
     return {
       id: corner.id ?? index + 1,
-      label: corner.label || `Corner ${index + 1}`,
+      pointNumber,
+      label,
       lat: parseFloat(lat.toFixed(6)),
       lng: parseFloat(lng.toFixed(6)),
       formattedLatDms: formatDms(lat, true),

@@ -1,7 +1,20 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
+
+const SurveyBoundaryMapPreview = dynamic(
+  () => import('@/components/dashboard/SurveyBoundaryMapPreview'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500">
+        <Loader2 className="w-5 h-5 animate-spin mr-2 text-[#022C4F]" /> Loading high-precision survey boundary map...
+      </div>
+    ),
+  }
+);
 import Link from 'next/link';
 import {
   createProject,
@@ -95,48 +108,48 @@ interface ExtendedProfessional extends ProjectProfessional {
 }
 
 const DEFAULT_CORNERS: CornerInput[] = [
-  { id: 1, label: 'Corner 1 (North-West)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
-  { id: 2, label: 'Corner 2 (North-East)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
-  { id: 3, label: 'Corner 3 (South-East)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
-  { id: 4, label: 'Corner 4 (South-West)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
+  { id: 1, pointNumber: '1', label: 'Corner 1 (NW)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
+  { id: 2, pointNumber: '2', label: 'Corner 2 (NE)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
+  { id: 3, pointNumber: '3', label: 'Corner 3 (SE)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
+  { id: 4, pointNumber: '4', label: 'Corner 4 (SW)', lat: '', lng: '', easting: '', northing: '', latDeg: '', latMin: '', latSec: '', latDir: 'N', lngDeg: '', lngMin: '', lngSec: '', lngDir: 'E' },
 ];
 
 const SAMPLE_LAGOS_CORNERS: Record<CoordinateSystem, Partial<CornerInput>[]> = {
   WGS84_DD: [
-    { lat: '6.431200', lng: '3.421500' },
-    { lat: '6.431200', lng: '3.422200' },
-    { lat: '6.430500', lng: '3.422200' },
-    { lat: '6.430500', lng: '3.421500' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', lat: '6.424359', lng: '3.385914' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', lat: '6.424398', lng: '3.386816' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', lat: '6.423947', lng: '3.386836' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', lat: '6.423908', lng: '3.385934' },
   ],
   DMS: [
-    { latDeg: '6', latMin: '25', latSec: '52.32', latDir: 'N', lngDeg: '3', lngMin: '25', lngSec: '17.40', lngDir: 'E' },
-    { latDeg: '6', latMin: '25', latSec: '52.32', latDir: 'N', lngDeg: '3', lngMin: '25', lngSec: '19.92', lngDir: 'E' },
-    { latDeg: '6', latMin: '25', latSec: '49.80', latDir: 'N', lngDeg: '3', lngMin: '25', lngSec: '19.92', lngDir: 'E' },
-    { latDeg: '6', latMin: '25', latSec: '49.80', latDir: 'N', lngDeg: '3', lngMin: '25', lngSec: '17.40', lngDir: 'E' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', latDeg: '6', latMin: '25', latSec: '27.69', latDir: 'N', lngDeg: '3', lngMin: '23', lngSec: '9.29', lngDir: 'E' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', latDeg: '6', latMin: '25', latSec: '27.83', latDir: 'N', lngDeg: '3', lngMin: '23', lngSec: '12.54', lngDir: 'E' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', latDeg: '6', latMin: '25', latSec: '26.21', latDir: 'N', lngDeg: '3', lngMin: '23', lngSec: '12.61', lngDir: 'E' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', latDeg: '6', latMin: '25', latSec: '26.07', latDir: 'N', lngDeg: '3', lngMin: '23', lngSec: '9.36', lngDir: 'E' },
   ],
   UTM_31N_WGS84: [
-    { easting: '546640.20', northing: '711050.80' },
-    { easting: '546717.50', northing: '711050.80' },
-    { easting: '546717.50', northing: '710973.40' },
-    { easting: '546640.20', northing: '710973.40' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', easting: '542675.01', northing: '710130.59' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', easting: '542774.75', northing: '710134.97' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', easting: '542777.00', northing: '710085.12' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', easting: '542677.26', northing: '710080.73' },
   ],
   UTM_31N_MINNA: [
-    { easting: '546640.20', northing: '711050.80' },
-    { easting: '546717.50', northing: '711050.80' },
-    { easting: '546717.50', northing: '710973.40' },
-    { easting: '546640.20', northing: '710973.40' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', easting: '542675.01', northing: '710130.59' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', easting: '542774.75', northing: '710134.97' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', easting: '542777.00', northing: '710085.12' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', easting: '542677.26', northing: '710080.73' },
   ],
   UTM_32N_WGS84: [
-    { easting: '325400.00', northing: '711200.00' },
-    { easting: '325480.00', northing: '711200.00' },
-    { easting: '325480.00', northing: '711120.00' },
-    { easting: '325400.00', northing: '711120.00' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', easting: '325400.00', northing: '711200.00' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', easting: '325480.00', northing: '711200.00' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', easting: '325480.00', northing: '711120.00' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', easting: '325400.00', northing: '711120.00' },
   ],
   UTM_32N_MINNA: [
-    { easting: '325400.00', northing: '711200.00' },
-    { easting: '325480.00', northing: '711200.00' },
-    { easting: '325480.00', northing: '711120.00' },
-    { easting: '325400.00', northing: '711120.00' },
+    { pointNumber: '1', label: 'Corner 1 (NW)', easting: '325400.00', northing: '711200.00' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', easting: '325480.00', northing: '711200.00' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', easting: '325480.00', northing: '711120.00' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', easting: '325400.00', northing: '711120.00' },
   ],
 };
 
@@ -312,16 +325,60 @@ export default function RegisterProjectWizard() {
     });
   };
 
+  const handleAddCorner = () => {
+    setCorners(prev => {
+      const nextNum = prev.length + 1;
+      return [
+        ...prev,
+        {
+          id: nextNum,
+          pointNumber: String(nextNum),
+          label: `Corner ${nextNum}`,
+          lat: '',
+          lng: '',
+          easting: '',
+          northing: '',
+          latDeg: '',
+          latMin: '',
+          latSec: '',
+          latDir: 'N',
+          lngDeg: '',
+          lngMin: '',
+          lngSec: '',
+          lngDir: 'E'
+        }
+      ];
+    });
+  };
+
+  const handleRemoveCorner = (index: number) => {
+    if (corners.length <= 3) return; // Maintain minimum 3 points for closed polygon
+    setCorners(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleApplySampleCorners = () => {
     const sampleSet = SAMPLE_LAGOS_CORNERS[coordinateSystem];
-    if (!sampleSet) return;
-    setCorners(prev =>
-      prev.map((c, idx) => ({
-        ...c,
-        ...(sampleSet[idx] || {})
-      }))
-    );
-    setConversionFeedback('Lagos test coordinates loaded. Click "Convert & Calculate Building Footprint" below.');
+    if (sampleSet) {
+      setCorners(sampleSet.map((s, idx) => ({
+        id: idx + 1,
+        pointNumber: s.pointNumber || String(idx + 1),
+        label: s.label || `Corner ${idx + 1}`,
+        lat: s.lat || '',
+        lng: s.lng || '',
+        easting: s.easting || '',
+        northing: s.northing || '',
+        latDeg: s.latDeg || '',
+        latMin: s.latMin || '',
+        latSec: s.latSec || '',
+        latDir: s.latDir || 'N',
+        lngDeg: s.lngDeg || '',
+        lngMin: s.lngMin || '',
+        lngSec: s.lngSec || '',
+        lngDir: s.lngDir || 'E',
+      })));
+      setConversionResult(null);
+      setConversionFeedback('Lagos survey boundary sample loaded (Figure 3.1 & Table 3.1 dataset). Click "Convert & Calculate Building Footprint" to verify.');
+    }
   };
 
   const handleConvertCoordinates = async () => {
@@ -796,18 +853,43 @@ export default function RegisterProjectWizard() {
             </div>
           </div>
 
-          {/* 4 Corners Inputs Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+          {/* Corners Inputs Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             {corners.map((corner, idx) => (
               <div
                 key={corner.id}
                 className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs hover:border-blue-300 transition-colors"
               >
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-xs font-bold text-[#022C4F] bg-blue-100/70 text-blue-900 px-2 py-0.5 rounded-md">
-                    {corner.label}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">Corner #{corner.id}</span>
+                {/* Editable Corner / Point Number Designation */}
+                <div className="flex items-center justify-between gap-3 mb-3 pb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-1">
+                    <label className="text-[11px] font-bold text-[#022C4F] uppercase tracking-wide whitespace-nowrap">
+                      Corner / Point #:
+                    </label>
+                    <input
+                      type="text"
+                      value={corner.label || ''}
+                      onChange={(e) => handleCornerChange(idx, 'label', e.target.value)}
+                      placeholder={`Corner ${corner.pointNumber || idx + 1}`}
+                      className="w-full max-w-[210px] px-2.5 py-1 bg-blue-50/70 border border-blue-200 rounded-lg text-xs font-bold text-[#022C4F] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#022C4F]"
+                      title="Survey point or boundary corner designation e.g. Corner 1 (NW), P-1, BC-LA-2026/089"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono font-medium">
+                      Pt #{corner.pointNumber || idx + 1}
+                    </span>
+                    {corners.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCorner(idx)}
+                        className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                        title="Remove this boundary point"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Decimal Degrees Form */}
@@ -954,6 +1036,18 @@ export default function RegisterProjectWizard() {
             ))}
           </div>
 
+          {/* Add Corner Point Button */}
+          <div className="mb-5 flex justify-end">
+            <button
+              type="button"
+              onClick={handleAddCorner}
+              className="px-3.5 py-1.5 bg-white border border-dashed border-blue-300 text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+            >
+              <Plus size={13} />
+              Add Boundary Point / Pillar
+            </button>
+          </div>
+
           {/* Action Button: Convert Coordinates */}
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -989,94 +1083,17 @@ export default function RegisterProjectWizard() {
             )}
           </div>
 
-          {/* CONVERSION RESULTS CARD & GOOGLE SATELLITE PREVIEW */}
+          {/* CONVERSION RESULTS CARD WITH HIGH-PRECISION SATELLITE PREVIEW & TABLE 3.1 */}
           {conversionResult && (
-            <div className="mt-6 p-4 bg-white border border-blue-200 rounded-xl shadow-xs animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#022C4F]">
-                    Converted Coordinates & Geospatial Analysis
-                  </span>
-                </div>
-                <a
-                  href={conversionResult.googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
-                >
-                  <Globe size={13} />
-                  View Satellite Boundary Map
-                  <ExternalLink size={11} />
-                </a>
-              </div>
-
-              {/* Metrics Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="text-[11px] text-slate-500 font-semibold">Center Latitude</div>
-                  <div className="text-sm font-bold text-[#022C4F] font-mono mt-0.5">
-                    {conversionResult.center.lat.toFixed(6)}°
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate">{conversionResult.center.formattedLatDms}</div>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="text-[11px] text-slate-500 font-semibold">Center Longitude</div>
-                  <div className="text-sm font-bold text-[#022C4F] font-mono mt-0.5">
-                    {conversionResult.center.lng.toFixed(6)}°
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate">{conversionResult.center.formattedLngDms}</div>
-                </div>
-
-                <div className="p-3 bg-emerald-50/70 rounded-lg border border-emerald-100">
-                  <div className="text-[11px] text-emerald-700 font-semibold">Footprint Area</div>
-                  <div className="text-sm font-bold text-emerald-900 font-mono mt-0.5">
-                    {conversionResult.footprintAreaSqm.toLocaleString()} sqm
-                  </div>
-                  <div className="text-[10px] text-emerald-600">
-                    {(conversionResult.footprintAreaSqm / 10000).toFixed(4)} ha
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-50/70 rounded-lg border border-blue-100">
-                  <div className="text-[11px] text-blue-700 font-semibold">Building Perimeter</div>
-                  <div className="text-sm font-bold text-blue-900 font-mono mt-0.5">
-                    {conversionResult.perimeterMeters.toLocaleString()} m
-                  </div>
-                  <div className="text-[10px] text-blue-600">Closed Polygon</div>
-                </div>
-              </div>
-
-              {/* 4 Corners Converted Table */}
-              <div className="overflow-x-auto rounded-lg border border-slate-100">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3">Corner</th>
-                      <th className="py-2 px-3 font-mono">Latitude (WGS84 DD)</th>
-                      <th className="py-2 px-3 font-mono">Longitude (WGS84 DD)</th>
-                      <th className="py-2 px-3">DMS Format</th>
-                      <th className="py-2 px-3 font-mono">UTM Metric (Easting, Northing)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {conversionResult.corners.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50/80">
-                        <td className="py-2 px-3 font-bold text-[#022C4F]">{c.label}</td>
-                        <td className="py-2 px-3 font-mono">{c.lat.toFixed(6)}°</td>
-                        <td className="py-2 px-3 font-mono">{c.lng.toFixed(6)}°</td>
-                        <td className="py-2 px-3 text-[11px] text-slate-500">
-                          {c.formattedLatDms}, {c.formattedLngDms}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-[11px]">
-                          E: {c.easting.toLocaleString()} | N: {c.northing.toLocaleString()} ({c.utmZone})
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="mt-6 animate-in fade-in slide-in-from-bottom-2">
+              <SurveyBoundaryMapPreview
+                corners={conversionResult.corners}
+                center={conversionResult.center}
+                footprintAreaSqm={conversionResult.footprintAreaSqm}
+                perimeterMeters={conversionResult.perimeterMeters}
+                coordinateSystem={conversionResult.system}
+                googleMapsUrl={conversionResult.googleMapsUrl}
+              />
             </div>
           )}
         </div>

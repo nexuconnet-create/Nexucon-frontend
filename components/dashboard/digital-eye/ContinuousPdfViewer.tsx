@@ -187,6 +187,7 @@ export default function ContinuousPdfViewer({
 
     async function loadPdf() {
       try {
+        // @ts-ignore
         const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.js');
         if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
           pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;

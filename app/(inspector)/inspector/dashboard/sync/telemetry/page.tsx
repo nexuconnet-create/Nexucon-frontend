@@ -30,6 +30,7 @@ import {
   Droplets,
   Sun,
   Save,
+  Trash2,
 } from "lucide-react";
 import {
   CoordinateSystem,
@@ -428,12 +429,47 @@ export default function InspectorTelemetryPage() {
   // 4-Corner Boundary Coordinates & System for Test Location
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("WGS84_DD");
   const [corners, setCorners] = useState<CornerInput[]>([
-    { id: 1, label: "Corner 1 (NW)", lat: "", lng: "", easting: "", northing: "" },
-    { id: 2, label: "Corner 2 (NE)", lat: "", lng: "", easting: "", northing: "" },
-    { id: 3, label: "Corner 3 (SE)", lat: "", lng: "", easting: "", northing: "" },
-    { id: 4, label: "Corner 4 (SW)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 1, pointNumber: "1", label: "Corner 1 (NW)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 2, pointNumber: "2", label: "Corner 2 (NE)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 3, pointNumber: "3", label: "Corner 3 (SE)", lat: "", lng: "", easting: "", northing: "" },
+    { id: 4, pointNumber: "4", label: "Corner 4 (SW)", lat: "", lng: "", easting: "", northing: "" },
   ]);
   const [conversionResult, setConversionResult] = useState<ConversionResult | null>(null);
+
+  const handleAddCorner = () => {
+    setCorners(prev => {
+      const nextNum = prev.length + 1;
+      const updated = [
+        ...prev,
+        {
+          id: nextNum,
+          pointNumber: String(nextNum),
+          label: `Corner ${nextNum}`,
+          lat: "",
+          lng: "",
+          easting: "",
+          northing: "",
+        }
+      ];
+      try {
+        const res = convertCorners(coordSystem, updated);
+        setConversionResult(res);
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleRemoveCorner = (index: number) => {
+    if (corners.length <= 3) return;
+    setCorners(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      try {
+        const res = convertCorners(coordSystem, updated);
+        setConversionResult(res);
+      } catch {}
+      return updated;
+    });
+  };
 
   const handleCornerChange = (index: number, field: keyof CornerInput, value: string) => {
     const updated = [...corners];
@@ -473,8 +509,9 @@ export default function InspectorTelemetryPage() {
       }
       setCorners(
         existing.corners.map((c: any, idx: number) => ({
-          id: idx + 1,
-          label: c.label || `Corner ${idx + 1}`,
+          id: c.id || idx + 1,
+          pointNumber: c.pointNumber || String(idx + 1),
+          label: c.label || `Corner ${c.pointNumber || idx + 1}`,
           lat: c.lat ?? "",
           lng: c.lng ?? "",
           easting: c.easting ?? "",
@@ -1917,8 +1954,37 @@ export default function InspectorTelemetryPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {corners.map((c, idx) => (
-                <div key={c.id} className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-2">
-                  <span className="text-xs font-bold text-blue-700 block">{c.label}</span>
+                <div key={c.id || idx} className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/60">
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <label className="text-[10px] font-bold text-[#022C4F] uppercase tracking-wide whitespace-nowrap">
+                        Corner / Point #:
+                      </label>
+                      <input
+                        type="text"
+                        value={c.label || ''}
+                        onChange={(e) => handleCornerChange(idx, 'label', e.target.value)}
+                        placeholder={`Corner ${c.pointNumber || idx + 1}`}
+                        className="w-full max-w-[160px] px-2 py-0.5 bg-white border border-slate-200 rounded-md text-xs font-bold text-[#022C4F] focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                        title="Survey point or boundary corner designation"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] bg-white text-slate-500 font-mono px-1.5 py-0.5 rounded border border-slate-200">
+                        #{c.pointNumber || idx + 1}
+                      </span>
+                      {corners.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCorner(idx)}
+                          className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                          title="Remove point"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   {coordSystem.startsWith('UTM') ? (
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -1973,6 +2039,50 @@ export default function InspectorTelemetryPage() {
                 </div>
               ))}
             </div>
+
+            {/* Add Point Button */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleAddCorner}
+                className="px-3 py-1.5 bg-white border border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <Plus size={13} /> Add Boundary Point / Pillar
+              </button>
+            </div>
+
+            {/* Converted Summary Table */}
+            {conversionResult && (
+              <div className="mt-3 pt-3 border-t border-emerald-100">
+                <div className="text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-2">
+                  Table 3.1: Boundary Mapping &amp; Coordinates
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-emerald-200 bg-white">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-emerald-50/70 border-b border-emerald-200 font-bold text-slate-700">
+                      <tr>
+                        <th className="py-1.5 px-3">Corner / Point</th>
+                        <th className="py-1.5 px-3 text-center">Latitude (°N)</th>
+                        <th className="py-1.5 px-3 text-center">Longitude (°E)</th>
+                        <th className="py-1.5 px-3 text-center">UTM Easting (m)</th>
+                        <th className="py-1.5 px-3 text-center">UTM Northing (m)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {conversionResult.corners.map((cn, i) => (
+                        <tr key={cn.id || i} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-3 font-semibold text-[#022C4F]">{cn.label || `Corner ${cn.pointNumber || i + 1}`}</td>
+                          <td className="py-1.5 px-3 text-center font-mono">{cn.lat ? `${cn.lat.toFixed(6)}°` : '-'}</td>
+                          <td className="py-1.5 px-3 text-center font-mono">{cn.lng ? `${cn.lng.toFixed(6)}°` : '-'}</td>
+                          <td className="py-1.5 px-3 text-center font-mono">{cn.easting ? cn.easting.toLocaleString() : '-'}</td>
+                          <td className="py-1.5 px-3 text-center font-mono">{cn.northing ? cn.northing.toLocaleString() : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {(importLatitude && importLongitude) || importLocationAddress.trim() !== '' ? (
