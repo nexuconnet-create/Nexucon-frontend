@@ -91,7 +91,9 @@ async function getAccessToken(): Promise<string> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { text, target_language, message_id } = body;
+    const text = body.text;
+    const target_language = body.target_language || body.target || body.lang;
+    const message_id = body.message_id;
 
     if (!text || !target_language) {
       return NextResponse.json({ error: "Missing text or target_language" }, { status: 400 });
