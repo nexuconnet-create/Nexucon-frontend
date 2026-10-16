@@ -2758,6 +2758,34 @@ export interface ActiveCurveResponse {
   source: 'project_setting' | 'platform_default' | 'builtin_fallback';
   curve: StrengthCurve | null;
   curve_snapshot: CurveSnapshot;
+  /** Which of the two strengths this project reports. True means the measured
+   *  value the data arrived with; false means the curve's own figure. The
+   *  answer is stated here so the settings page does not need a second round
+   *  trip to know what the tables will print. */
+  prefer_measured_strength: boolean;
+  strength_basis_options: StrengthBasisOption[];
+}
+
+/** One choice of strength to report. The `tag` is what the reports print
+ *  beside the figure — (M) measured, (C) correlated. */
+export interface StrengthBasisOption {
+  key: StrengthBasisKey;
+  label: string;
+  detail: string;
+  tag: string;
+}
+
+export type StrengthBasisKey = 'measured' | 'correlated';
+
+/** Body of GET/POST …/curves/strength-basis/?project=<id>. */
+export interface StrengthBasisResponse {
+  project: string;
+  prefer_measured_strength: boolean;
+  reported_basis: StrengthBasisKey;
+  /** How many readings on this project actually carry a measured value. Zero
+   *  is a real answer: choosing "measured" then reports nothing new. */
+  measured_points_on_record: number;
+  options: StrengthBasisOption[];
 }
 
 /** One fitted candidate from the calibration regression
@@ -2855,6 +2883,83 @@ export const getActiveCurve = async (projectId: string): Promise<ActiveCurveResp
     params: { project: projectId },
   });
   return unwrap<any>(res, null);
+};
+
+/**
+ * Which strength a project reports — the measured value its data arrived with,
+ * or the figure its calibration curve derives (15 Oct 2026 meeting: "users
+ * should choose which value to print or analyze").
+ *
+ * Neither basis is destroyed by the choice. The measured value stays on every
+ * reading and the correlated value stays on every test; only the reported
+ * basis moves, so this is safe to switch back and forth.
+ */
+export const getStrengthBasis = async (
+  projectId: string
+): Promise<StrengthBasisResponse | null> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/strength-basis/', {
+    params: { project: projectId },
+  });
+  return unwrap<any>(res, null);
+};
+
+export const setStrengthBasis = async (
+  projectId: string,
+  preferMeasuredStrength: boolean
+): Promise<StrengthBasisResponse> => {
+  const res = await api.post('/digital-eye/nexucon-link/curves/strength-basis/', {
+    project: projectId,
+    prefer_measured_strength: preferMeasuredStrength,
+  });
+  return unwrap<any>(res, res);
+};
+
+/** One platform-seeded default exponential model — the Standard Mix, the Jones
+ *  Equation or the Aggregate Mix. Selecting one makes it the project's active
+ *  calibration; these are the documented correlations of the 15 Oct 2026
+ *  meeting, not a single hard-coded formula. */
+export interface PresetExponentialModel {
+  key: string;
+  name: string;
+  curve_type: CurveType;
+  standard: string;
+  formula_params: Record<string, number>;
+  valid_range_min_ms: number;
+  valid_range_max_ms: number;
+  description: string;
+}
+
+/** Body of GET …/curves/preset-models/ — the models themselves plus the
+ *  platform-seeded curve records they correspond to. */
+export interface PresetModelsResponse {
+  presets: Record<string, PresetExponentialModel>;
+  curves: StrengthCurve[];
+}
+
+/** The default exponential models a project's calibration can be set to. */
+export const getPresetModels = async (): Promise<PresetModelsResponse | null> => {
+  const res = await api.get('/digital-eye/nexucon-link/curves/preset-models/');
+  return unwrap<any>(res, null);
+};
+
+/** Make one default exponential model the project's active calibration
+ *  (Director-level). Returns the model key and the resulting curve snapshot,
+ *  so the caller reports what actually became active rather than what was
+ *  clicked. */
+export const activatePresetModel = async (
+  projectId: string,
+  modelKey: string
+): Promise<{
+  project: string;
+  model_key: string;
+  active_curve: string;
+  curve_snapshot: CurveSnapshot;
+}> => {
+  const res = await api.post('/digital-eye/nexucon-link/curves/preset-models/', {
+    project: projectId,
+    model_key: modelKey,
+  });
+  return unwrap<any>(res, res);
 };
 
 /**

@@ -19,12 +19,19 @@ import {
   ActiveCurveResponse,
   CurveType,
   NexuconLinkSettings,
+  PresetExponentialModel,
   SEAnalysis,
   StandardEntry,
+  StrengthBasisResponse,
+  StrengthCurve,
+  activatePresetModel,
   getActiveCurve,
   getNexuconLinkSettings,
+  getPresetModels,
   getSEAnalysis,
   getStandards,
+  getStrengthBasis,
+  setStrengthBasis,
   updateNexuconLinkSettings,
 } from "@/services/digitalEye";
 
@@ -37,7 +44,12 @@ import {
  *     pre-selects and recommends it;
  *   * the reference standard new curves are recorded against;
  *   * the display units;
- *   * the active curve for the selected project, with its live statistics.
+ *   * the active curve for the selected project, with its live statistics;
+ *   * which strength the project REPORTS — the measured value the injected
+ *     data carried, or the figure the curve derives from the mean pulse
+ *     velocity (15 Oct 2026 meeting);
+ *   * which of the documented default exponential models (Standard Mix, Jones
+ *     Equation, Aggregate Mix) the project calibrates through.
  *
  * It also carries the two documents the client asked for at that review: the
  * STANDARDS REGISTRY (which document governs the measurement and which
@@ -131,6 +143,21 @@ export default function NexuconLinkSettingsPage() {
   const [standards, setStandards] = useState<StandardEntry[]>([]);
   const [active, setActive] = useState<ActiveCurveResponse | null>(null);
   const [analysis, setAnalysis] = useState<SEAnalysis | null>(null);
+  // Which strength this project reports. Held separately from `active` because
+  // it is changed by its own action — the active-curve read only carries a
+  // copy of it for convenience.
+  const [basis, setBasis] = useState<StrengthBasisResponse | null>(null);
+  // The documented default exponential models. Static platform reference data:
+  // a failure here surfaces rather than silently showing an empty list, which
+  // would read as "there are no models".
+  const [presets, setPresets] = useState<PresetExponentialModel[]>([]);
+  // The platform-seeded curve records the models correspond to, so each card
+  // can print the same formula string the rest of the platform shows rather
+  // than a second rendering of the parameters.
+  const [presetCurves, setPresetCurves] = useState<StrengthCurve[]>([]);
+  const [presetsFailed, setPresetsFailed] = useState(false);
+  const [savingBasis, setSavingBasis] = useState(false);
+  const [activatingPreset, setActivatingPreset] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // The editable draft. Null means "nothing staged" — the form then mirrors
@@ -140,9 +167,10 @@ export default function NexuconLinkSettingsPage() {
 
   const load = useCallback(async (projectId: string) => {
     setLoading(true);
-    const [settingsRes, standardsRes] = await Promise.allSettled([
+    const [settingsRes, standardsRes, presetsRes] = await Promise.allSettled([
       getNexuconLinkSettings(),
       getStandards(),
+      getPresetModels(),
     ]);
     if (settingsRes.status === "fulfilled") {
       setSettings(settingsRes.value);
@@ -160,18 +188,37 @@ export default function NexuconLinkSettingsPage() {
       toast(`⚠️ Standards registry unavailable — ${errText(standardsRes.reason)}`, "error");
     }
 
+    if (presetsRes.status === "fulfilled" && presetsRes.value) {
+      setPresets(Object.values(presetsRes.value.presets || {}));
+      setPresetCurves(presetsRes.value.curves || []);
+      setPresetsFailed(false);
+    } else {
+      setPresets([]);
+      setPresetCurves([]);
+      setPresetsFailed(true);
+      if (presetsRes.status === "rejected") {
+        toast(
+          `⚠️ Default exponential models unavailable — ${errText(presetsRes.reason)}`,
+          "error"
+        );
+      }
+    }
+
     if (!projectId) {
       setActive(null);
       setAnalysis(null);
+      setBasis(null);
       setLoading(false);
       return;
     }
-    const [activeRes, seRes] = await Promise.allSettled([
+    const [activeRes, seRes, basisRes] = await Promise.allSettled([
       getActiveCurve(projectId),
       getSEAnalysis(projectId),
+      getStrengthBasis(projectId),
     ]);
     setActive(activeRes.status === "fulfilled" ? activeRes.value : null);
     setAnalysis(seRes.status === "fulfilled" ? seRes.value.analysis : null);
+    setBasis(basisRes.status === "fulfilled" ? basisRes.value : null);
     if (activeRes.status === "rejected") {
       toast(`⚠️ ${errText(activeRes.reason)}`, "error");
     }
@@ -220,6 +267,52 @@ export default function NexuconLinkSettingsPage() {
       toast(`⚠️ ${errText(err)}`, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Switch which of the two strengths this project reports. Nothing stored is
+  // rewritten by the switch, so the toast says what changed rather than
+  // implying a recalculation happened.
+  const changeBasis = async (preferMeasured: boolean) => {
+    if (!selectedProjectId || savingBasis) return;
+    if (basis && basis.prefer_measured_strength === preferMeasured) return;
+    setSavingBasis(true);
+    try {
+      const updated = await setStrengthBasis(selectedProjectId, preferMeasured);
+      if (!updated) throw new Error("Request failed.");
+      setBasis(updated);
+      // The active-curve read carries the same flag; keep the two in step so a
+      // later refresh cannot show the previous basis.
+      setActive((prev) =>
+        prev ? { ...prev, prefer_measured_strength: updated.prefer_measured_strength } : prev
+      );
+      toast(
+        updated.reported_basis === "measured"
+          ? "This project now reports the MEASURED strength — the value each reading arrived with, used as-is and not recalculated."
+          : "This project now reports the CORRELATED strength — the figure its calibration curve derives from the mean pulse velocity.",
+        "success"
+      );
+    } catch (err) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setSavingBasis(false);
+    }
+  };
+
+  const activatePreset = async (model: PresetExponentialModel) => {
+    if (!selectedProjectId || activatingPreset) return;
+    setActivatingPreset(model.key);
+    try {
+      const res = await activatePresetModel(selectedProjectId, model.key);
+      toast(
+        `'${res.active_curve}' is now this project's active calibration. The mean pulse velocity of each element is converted through it.`,
+        "success"
+      );
+      await load(selectedProjectId);
+    } catch (err) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setActivatingPreset(null);
     }
   };
 
@@ -554,6 +647,174 @@ export default function NexuconLinkSettingsPage() {
                   <p className="mt-1 text-slate-600">{analysis.recommendation}</p>
                 )}
               </div>
+            </div>
+          )}
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Which strength this project reports — measured or correlated      */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-4 py-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <ShieldCheck className="h-4 w-4 text-slate-400" />
+              Reported strength
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              The injected data can carry a compressive strength of its own. That value
+              is never recalculated or overwritten, and the calibration curve still
+              derives its own figure from the mean pulse velocity. This chooses which of
+              the two the tables, exports and reports print.
+            </p>
+          </div>
+
+          {!selectedProjectId ? (
+            <p className="px-4 py-6 text-sm text-slate-500">
+              Select a project to choose which strength it reports.
+            </p>
+          ) : !basis ? (
+            <p className="px-4 py-6 text-sm text-slate-500">
+              {loading
+                ? "Loading the reporting basis…"
+                : "The reporting basis could not be read. Nothing is being assumed in its place — retry with Refresh."}
+            </p>
+          ) : (
+            <div className="space-y-3 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {basis.options.map((option) => {
+                  const selected =
+                    (option.key === "measured") === basis.prefer_measured_strength;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => changeBasis(option.key === "measured")}
+                      disabled={savingBasis}
+                      aria-pressed={selected}
+                      className={`rounded-md border p-3 text-left transition disabled:opacity-60 ${
+                        selected
+                          ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-slate-500">
+                          {option.tag}
+                        </span>
+                        <span className="text-sm font-medium text-slate-900">
+                          {option.label}
+                        </span>
+                        {selected && (
+                          <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-600" />
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-snug text-slate-600">
+                        {option.detail}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs text-slate-600">
+                {basis.measured_points_on_record > 0
+                  ? `${basis.measured_points_on_record} reading${
+                      basis.measured_points_on_record === 1 ? "" : "s"
+                    } on this project arrived with a measured strength.`
+                  : "No reading on this project has arrived with a measured strength yet, so the measured basis would report nothing that the data did not bring."}
+              </p>
+
+              <p className="flex items-start gap-2 text-xs text-slate-500">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                Changing this is Director-level and audit-logged. It rewrites no stored
+                figure — both values stay on their records and you can switch back at any
+                time.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Default exponential models                                        */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-4 py-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <LineChart className="h-4 w-4 text-slate-400" />
+              Default exponential models
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              The documented correlations for data that arrives without a compressive
+              strength. Choosing one makes it the selected project&apos;s active
+              calibration, so every element&apos;s mean pulse velocity converts through it.
+            </p>
+          </div>
+
+          {presetsFailed ? (
+            <p className="flex items-start gap-2 px-4 py-6 text-sm text-slate-600">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              The default models could not be read. No model is being shown in their
+              place — retry with Refresh.
+            </p>
+          ) : presets.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-500">
+              {loading ? "Loading models…" : "The platform has no default models recorded."}
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {presets.map((model) => {
+                const curveRecord = presetCurves.find((c) => c.name === model.name);
+                const isActive =
+                  !!active?.curve && active.curve.name === model.name;
+                const isThisLoading = activatingPreset === model.key;
+                const busy = activatingPreset != null;
+                return (
+                  <div key={model.key} className="px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {model.name}
+                      </span>
+                      {isActive && (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800">
+                          Active for this project
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-700">{model.description}</p>
+                    <div className="mt-2 rounded-md bg-slate-50 px-3 py-2 font-mono text-xs text-slate-800">
+                      {curveRecord?.formula_display || "—"}
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {model.standard}
+                      {" · valid "}
+                      {model.valid_range_min_ms.toLocaleString()}–
+                      {model.valid_range_max_ms.toLocaleString()} m/s
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => activatePreset(model)}
+                      disabled={!selectedProjectId || busy || isActive}
+                      className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {isThisLoading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      {isActive
+                        ? "Already this project's calibration"
+                        : isThisLoading
+                          ? "Activating…"
+                          : "Use for this project"}
+                    </button>
+                    {!selectedProjectId && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Select a project first — the choice is per project.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
