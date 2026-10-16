@@ -31,6 +31,11 @@ import {
   Sun,
   Save,
   Trash2,
+  Pencil,
+  UploadCloud,
+  FileSpreadsheet,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   CoordinateSystem,
@@ -47,6 +52,8 @@ import {
   importTelemetryExport,
   startTelemetrySession,
   updateTelemetrySessionConfig,
+  deleteTelemetrySession,
+  updateTelemetrySession,
   type TelemetryDevice,
   type TelemetryPromotion,
   type TelemetrySession,
@@ -626,6 +633,185 @@ export default function InspectorTelemetryPage() {
     setSessions(sessionRows);
     return sessionRows;
   }, []);
+
+  // --- Delete Session Modal State & Handlers ---
+  const [deletingSession, setDeletingSession] = useState<TelemetrySession | null>(null);
+  const [deletePromotedTests, setDeletePromotedTests] = useState(true);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const openDeleteModal = (session: TelemetrySession) => {
+    setDeletingSession(session);
+    setDeletePromotedTests(true);
+    setDeleteError(null);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!deletingSession) return;
+    setIsDeletingSession(true);
+    setDeleteError(null);
+    try {
+      const res = await deleteTelemetrySession(deletingSession.id, {
+        deletePromoted: deletePromotedTests,
+      });
+      if (selectedId === deletingSession.id) {
+        setSelectedId(null);
+        setSelected(null);
+      }
+      setNotice(
+        `Session ${deletingSession.session_reference} was deleted.${
+          res?.deleted_promoted_tests
+            ? ` Cleaned up ${res.deleted_promoted_tests} promoted test(s) from the registry.`
+            : ""
+        }`
+      );
+      setDeletingSession(null);
+      await readAll();
+    } catch (err: any) {
+      setDeleteError(errorOf(err, "Failed to delete session."));
+    } finally {
+      setIsDeletingSession(false);
+    }
+  };
+
+  // --- Edit Session & Re-import File Modal State & Handlers ---
+  const [editingSession, setEditingSession] = useState<TelemetrySession | null>(null);
+  const [editFolderName, setEditFolderName] = useState("");
+  const [editProject, setEditProject] = useState("");
+  const [editElement, setEditElement] = useState("");
+  const [editFloor, setEditFloor] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editLocationAddress, setEditLocationAddress] = useState("");
+  const [editWeatherCondition, setEditWeatherCondition] = useState("");
+  const [editAttendanceLog, setEditAttendanceLog] = useState("");
+  const [editVisualObservation, setEditVisualObservation] = useState("");
+  const [editTransducerType, setEditTransducerType] = useState("");
+  const [editTransducerFrequencyKhz, setEditTransducerFrequencyKhz] = useState("");
+  const [editLatitude, setEditLatitude] = useState("");
+  const [editLongitude, setEditLongitude] = useState("");
+  const [editReplacementFile, setEditReplacementFile] = useState<File | null>(null);
+  const [editPhotoAttachments, setEditPhotoAttachments] = useState<PhotoAttachment[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isGettingEditLocation, setIsGettingEditLocation] = useState(false);
+
+  const openEditModal = (session: TelemetrySession) => {
+    const cfg = (session.session_config || {}) as Record<string, any>;
+    setEditingSession(session);
+    setEditFolderName(session.session_reference || cfg.folder_name || "");
+    setEditProject(session.project || "");
+    setEditElement(cfg.structural_element || "");
+    setEditFloor(cfg.floor || "");
+    setEditLocation(cfg.test_location || "");
+    setEditLocationAddress(cfg.location_address || "");
+    setEditWeatherCondition(cfg.weather_condition || cfg.weather || "");
+    setEditAttendanceLog(cfg.attendance_log || "");
+    setEditVisualObservation(cfg.visual_observation || "");
+    setEditTransducerType(cfg.transducer_type || "");
+    setEditTransducerFrequencyKhz(
+      cfg.transducer_frequency_khz != null ? String(cfg.transducer_frequency_khz) : ""
+    );
+    setEditLatitude(cfg.latitude != null ? String(cfg.latitude) : "");
+    setEditLongitude(cfg.longitude != null ? String(cfg.longitude) : "");
+    setEditReplacementFile(null);
+    setEditPhotoAttachments([]);
+    setEditError(null);
+  };
+
+  const handleEditPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+    const newItems: PhotoAttachment[] = selectedFiles.map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      name: file.name,
+      size: (file.size / 1024).toFixed(0) + " KB",
+    }));
+    setEditPhotoAttachments((prev) => [...prev, ...newItems]);
+    e.target.value = "";
+  };
+
+  const removeEditPhotoAttachment = (indexToRemove: number) => {
+    setEditPhotoAttachments((prev) => {
+      const target = prev[indexToRemove];
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, idx) => idx !== indexToRemove);
+    });
+  };
+
+  const handleGetEditLocation = () => {
+    setEditError(null);
+    setIsGettingEditLocation(true);
+    readDevicePosition()
+      .then((position) => {
+        setEditLatitude(position.coords.latitude.toFixed(7));
+        setEditLongitude(position.coords.longitude.toFixed(7));
+      })
+      .catch((err: Error) => {
+        setEditError(err.message);
+      })
+      .finally(() => setIsGettingEditLocation(false));
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+    setIsSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const form = new FormData();
+      if (editFolderName.trim()) {
+        form.append("session_reference", editFolderName.trim());
+        form.append("folder_name", editFolderName.trim());
+      }
+      if (editProject) {
+        form.append("project", editProject);
+      }
+      form.append("structural_element", editElement);
+      form.append("floor", editFloor);
+      form.append("test_location", editLocation);
+      form.append("location_address", editLocationAddress);
+      form.append("weather_condition", editWeatherCondition);
+      form.append("attendance_log", editAttendanceLog);
+      form.append("visual_observation", editVisualObservation);
+      if (editLatitude) form.append("latitude", editLatitude);
+      if (editLongitude) form.append("longitude", editLongitude);
+      if (editTransducerType) form.append("transducer_type", editTransducerType);
+      if (editTransducerFrequencyKhz) {
+        form.append("transducer_frequency_khz", editTransducerFrequencyKhz);
+      }
+
+      if (editReplacementFile) {
+        form.append("file", editReplacementFile);
+      }
+
+      for (const photo of editPhotoAttachments) {
+        form.append("photos", photo.file);
+      }
+
+      const updated = await updateTelemetrySession(editingSession.id, form);
+
+      editPhotoAttachments.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setEditPhotoAttachments([]);
+      setEditingSession(null);
+
+      setNotice(
+        editReplacementFile
+          ? `Session ${updated.session_reference} scan file replaced with ${editReplacementFile.name}. Readings re-parsed and registry refreshed.`
+          : `Session ${updated.session_reference} inputs updated successfully.`
+      );
+      await readAll();
+      if (selectedId === updated.id) {
+        void readSelected(updated.id);
+      }
+    } catch (err: any) {
+      setEditError(errorOf(err, "Failed to update session."));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
 
   useEffect(() => {
     let cancelled = false;
@@ -1314,6 +1500,34 @@ export default function InspectorTelemetryPage() {
                           {busyId === session.id ? "Retrying…" : "Retry promotion"}
                         </button>
                       )}
+
+                    {/* Edit Session & Re-import scan file button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(session);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                      title="Edit session inputs or replace/re-import scan file"
+                    >
+                      <Pencil size={11} className="text-slate-500" />
+                      <span>Edit</span>
+                    </button>
+
+                    {/* Delete Session button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteModal(session);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-[11px] font-semibold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                      title="Delete session"
+                    >
+                      <Trash2 size={11} className="text-rose-500" />
+                      <span>Delete</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2499,6 +2713,491 @@ export default function InspectorTelemetryPage() {
                 Confirm Injection
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE SESSION CONFIRMATION MODAL */}
+      {deletingSession && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="bg-rose-900 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trash2 size={18} className="text-rose-300" />
+                <h3 className="font-bold text-sm">Delete Telemetry Session</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingSession(null)}
+                disabled={isDeletingSession}
+                className="text-rose-200 hover:text-white transition-colors cursor-pointer text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-2">
+                <div className="font-semibold text-sm flex items-center gap-1.5 text-rose-800">
+                  <AlertTriangle size={15} className="shrink-0 text-rose-600" />
+                  <span>Are you sure you want to delete this session?</span>
+                </div>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  Session reference: <strong className="font-mono">{deletingSession.session_reference}</strong>
+                  <br />
+                  Captured on instrument: <strong className="font-mono">{deletingSession.device_id}</strong> ({deletingSession.data_type_display})
+                  <br />
+                  Packets held: <strong>{deletingSession.packet_count}</strong>
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80 cursor-pointer hover:bg-slate-100/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={deletePromotedTests}
+                  onChange={(e) => setDeletePromotedTests(e.target.checked)}
+                  disabled={isDeletingSession}
+                  className="mt-0.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-800">Also delete promoted tests from registry</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-normal">
+                    If enabled, any PUNDIT / GPR statutory tests created in the project registry from this session will be permanently removed.
+                  </p>
+                </div>
+              </label>
+
+              {deleteError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-800">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingSession(null)}
+                disabled={isDeletingSession}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteSession()}
+                disabled={isDeletingSession}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeletingSession ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Deleting…</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Delete Session</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT SESSION & RE-IMPORT FILE MODAL */}
+      {editingSession && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+            {/* Modal Header */}
+            <div className="bg-[#022C4F] text-white p-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-white/10 text-amber-400">
+                  <Pencil size={17} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Edit Telemetry Session</h3>
+                  <div className="text-[11px] text-slate-300 flex items-center gap-2 mt-0.5">
+                    <span className="font-mono font-semibold">{editingSession.session_reference}</span>
+                    <span>·</span>
+                    <span>{editingSession.data_type_display}</span>
+                    <span>·</span>
+                    <span className="px-1.5 py-0.2 rounded bg-white/15 text-[10px]">
+                      Registry: {editingSession.sync_status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSession(null)}
+                disabled={isSavingEdit}
+                className="text-slate-300 hover:text-white transition-colors cursor-pointer text-xl leading-none px-1"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Form Content */}
+            <form onSubmit={handleSaveEdit} className="flex-1 overflow-y-auto p-5 space-y-5 text-slate-800">
+              {editingSession.sync_status === "SYNCED" && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2">
+                  <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] leading-relaxed">
+                    <strong>Live Registry Linked:</strong> This session has already been promoted to statutory test records. Editing structural element, floor, location, or address will update those tests directly. Replacing the scan file will re-parse all readings and refresh the tests in the registry.
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: Scan File Re-import */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#022C4F] uppercase tracking-wider flex items-center gap-1.5">
+                    <FileSpreadsheet size={14} className="text-amber-600" />
+                    Scan File / Readings Source
+                  </span>
+                  {editingSession.source_file_name && (
+                    <span className="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Current: {editingSession.source_file_name}
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-xl bg-white border border-dashed border-slate-300 hover:border-[#022C4F] transition-colors">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-semibold text-slate-800">
+                        {editReplacementFile ? (
+                          <span className="text-emerald-700 flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="text-emerald-600" />
+                            Replacement file selected: <strong>{editReplacementFile.name}</strong>
+                          </span>
+                        ) : (
+                          "Replace Scan File in-place"
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        {editReplacementFile
+                          ? `${(editReplacementFile.size / 1024).toFixed(1)} KB · Will re-parse readings with active calibration equations.`
+                          : "Upload a revised .xlsx, .csv, or .pnd file to re-parse this session without creating a new one."}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {editReplacementFile ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditReplacementFile(null)}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      ) : (
+                        <label className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs flex items-center gap-1.5 transition-colors">
+                          <UploadCloud size={13} />
+                          <span>Select New File</span>
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls,.csv,.pnd,.txt"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) setEditReplacementFile(f);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: Reference & Project */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Folder Name / Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={editFolderName}
+                    onChange={(e) => setEditFolderName(e.target.value)}
+                    placeholder="e.g. Laydown Area Phase 2"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Assigned Project
+                  </label>
+                  <select
+                    value={editProject}
+                    onChange={(e) => setEditProject(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  >
+                    <option value="">Unassigned</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* SECTION: Structural Element, Floor, Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Structural Element
+                  </label>
+                  <input
+                    type="text"
+                    value={editElement}
+                    onChange={(e) => setEditElement(e.target.value)}
+                    placeholder="e.g. Reinforce Concrete Floor Slab"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Floor / Level
+                  </label>
+                  <input
+                    type="text"
+                    value={editFloor}
+                    onChange={(e) => setEditFloor(e.target.value)}
+                    placeholder="e.g. Ground Floor, Laydown Area"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Test Location / Station Group
+                  </label>
+                  <input
+                    type="text"
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    placeholder="e.g. Laydown Area 2 (Phase 2)"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Location Address
+                  </label>
+                  <input
+                    type="text"
+                    value={editLocationAddress}
+                    onChange={(e) => setEditLocationAddress(e.target.value)}
+                    placeholder="e.g. Lekki Phase 1, Lagos"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION: Site Conditions & Transducer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Weather Condition
+                  </label>
+                  <input
+                    type="text"
+                    value={editWeatherCondition}
+                    onChange={(e) => setEditWeatherCondition(e.target.value)}
+                    placeholder="e.g. Sunny, 28°C"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Transducer Type
+                    </label>
+                    <input
+                      type="text"
+                      value={editTransducerType}
+                      onChange={(e) => setEditTransducerType(e.target.value)}
+                      placeholder="e.g. P-wave"
+                      className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Freq (kHz)
+                    </label>
+                    <input
+                      type="number"
+                      value={editTransducerFrequencyKhz}
+                      onChange={(e) => setEditTransducerFrequencyKhz(e.target.value)}
+                      placeholder="54"
+                      className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: Attendance & Observations */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Attendance Log
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editAttendanceLog}
+                    onChange={(e) => setEditAttendanceLog(e.target.value)}
+                    placeholder="Names of field witnesses, QA personnel, inspector..."
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Visual Observations
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editVisualObservation}
+                    onChange={(e) => setEditVisualObservation(e.target.value)}
+                    placeholder="Concrete condition, cracks, voids, smooth finishing..."
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION: GPS Coordinates */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    GPS Coordinates
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGetEditLocation}
+                    disabled={isGettingEditLocation}
+                    className="text-[11px] font-semibold text-[#022C4F] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <Compass size={12} className={isGettingEditLocation ? "animate-spin" : ""} />
+                    <span>{isGettingEditLocation ? "Acquiring GPS…" : "Use Device GPS"}</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={editLatitude}
+                    onChange={(e) => setEditLatitude(e.target.value)}
+                    placeholder="Latitude (e.g. 6.428100)"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={editLongitude}
+                    onChange={(e) => setEditLongitude(e.target.value)}
+                    placeholder="Longitude (e.g. 3.421900)"
+                    className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#022C4F] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION: Photos */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Attach Site Observation Photos
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 cursor-pointer shadow-xs flex items-center gap-1.5 transition-colors">
+                    <ImageIcon size={13} className="text-slate-500" />
+                    <span>Add Photos</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleEditPhotoSelect}
+                    />
+                  </label>
+                  {editPhotoAttachments.length > 0 && (
+                    <span className="text-[11px] text-slate-500">
+                      {editPhotoAttachments.length} photo{editPhotoAttachments.length === 1 ? "" : "s"} queued
+                    </span>
+                  )}
+                </div>
+
+                {editPhotoAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2.5">
+                    {editPhotoAttachments.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className="relative group w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
+                      >
+                        <img
+                          src={p.previewUrl}
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeEditPhotoAttachment(idx)}
+                          className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors cursor-pointer"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {editError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                  {editError}
+                </div>
+              )}
+
+              {/* Modal Footer inside form */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingSession(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Saving…</span>
+                    </>
+                  ) : editReplacementFile ? (
+                    <>
+                      <UploadCloud size={13} />
+                      <span>Save & Re-import File</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={13} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

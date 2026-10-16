@@ -459,3 +459,40 @@ export async function revokeDeviceToken(
   const res: any = await api.post(`/telemetry/device-tokens/${tokenId}/revoke/`);
   return (res?.data || res) as TelemetryDeviceToken;
 }
+
+/** `GET telemetry/session/<id>/` — inspect session config and metadata. */
+export async function getTelemetrySessionDetail(
+  sessionId: string
+): Promise<TelemetrySession> {
+  const res: any = await api.get(`/telemetry/session/${sessionId}/`);
+  return (res?.data || res) as TelemetrySession;
+}
+
+/**
+ * `DELETE telemetry/session/<id>/` — delete a session and optionally clean up
+ * promoted test records from the registry.
+ */
+export async function deleteTelemetrySession(
+  sessionId: string,
+  options?: { deletePromoted?: boolean }
+): Promise<{ deleted: boolean; deleted_promoted_tests?: number }> {
+  const res: any = await api.delete(`/telemetry/session/${sessionId}/`, {
+    params: {
+      delete_promoted: options?.deletePromoted !== false ? 'true' : 'false',
+    },
+  });
+  return (res?.data || res);
+}
+
+/**
+ * `PATCH telemetry/session/<id>/` — edit session inputs (project, folder name,
+ * element, location, weather, photos, GPS) or replace the scan file in-place.
+ */
+export async function updateTelemetrySession(
+  sessionId: string,
+  data: FormData | Record<string, unknown>
+): Promise<TelemetrySession> {
+  const res: any = await api.patch(`/telemetry/session/${sessionId}/`, data);
+  return (res?.data || res) as TelemetrySession;
+}
+
