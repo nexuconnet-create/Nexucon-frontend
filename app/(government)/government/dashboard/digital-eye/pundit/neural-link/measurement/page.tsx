@@ -168,24 +168,18 @@ export default function NeuralLinkMeasurementPage() {
     if (!tests.length) {
       return { total: 0, meanVel: 0, meanStrength: 0, passingPct: 0, doubtful: 0 };
     }
-    let totalVel = 0;
-    let totalStrength = 0;
-    let passing = 0;
-    let doubtfulCount = 0;
-
-    tests.forEach((t) => {
-      totalVel += t.pulse_velocity_ms || 0;
-      const str = t.estimated_compressive_strength_mpa || 0;
-      totalStrength += str;
-      if (str >= 25.0) passing++;
-      if (t.concrete_quality_rating === "DOUBTFUL" || t.concrete_quality_rating === "VERY_POOR") doubtfulCount++;
-    });
+    const validVelTests = tests.filter((t) => t.pulse_velocity_ms && t.pulse_velocity_ms > 0 && t.pulse_velocity_ms <= 5000);
+    const validStrTests = tests.filter((t) => t.estimated_compressive_strength_mpa != null && t.estimated_compressive_strength_mpa > 0);
+    const totalVel = validVelTests.reduce((sum, t) => sum + (t.pulse_velocity_ms || 0), 0);
+    const totalStrength = validStrTests.reduce((sum, t) => sum + (t.estimated_compressive_strength_mpa || 0), 0);
+    const passing = validStrTests.filter((t) => (t.estimated_compressive_strength_mpa || 0) >= 25.0).length;
+    const doubtfulCount = tests.filter((t) => t.concrete_quality_rating === "DOUBTFUL" || t.concrete_quality_rating === "VERY_POOR").length;
 
     return {
       total: tests.length,
-      meanVel: Math.round(totalVel / tests.length),
-      meanStrength: +(totalStrength / tests.length).toFixed(1),
-      passingPct: Math.round((passing / tests.length) * 100),
+      meanVel: validVelTests.length ? Math.round(totalVel / validVelTests.length) : 0,
+      meanStrength: validStrTests.length ? +(totalStrength / validStrTests.length).toFixed(1) : 0,
+      passingPct: validStrTests.length ? Math.round((passing / validStrTests.length) * 100) : 0,
       doubtful: doubtfulCount,
     };
   }, [tests]);
@@ -458,6 +452,11 @@ export default function NeuralLinkMeasurementPage() {
                           {test.estimated_compressive_strength_mpa != null
                             ? `${test.estimated_compressive_strength_mpa.toFixed(1)} MPa`
                             : "—"}
+                          {test.measured_compressive_strength_mpa != null && test.correlated_compressive_strength_mpa != null && (
+                            <div className="text-[10px] text-slate-400 font-normal">
+                              Meas: {test.measured_compressive_strength_mpa.toFixed(1)} | Cal: {test.correlated_compressive_strength_mpa.toFixed(1)}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span
@@ -538,6 +537,11 @@ export default function NeuralLinkMeasurementPage() {
                           {test.estimated_compressive_strength_mpa != null
                             ? `${test.estimated_compressive_strength_mpa.toFixed(1)} MPa`
                             : "—"}
+                          {test.measured_compressive_strength_mpa != null && test.correlated_compressive_strength_mpa != null && (
+                            <div className="text-[10px] text-slate-400 font-normal">
+                              Meas: {test.measured_compressive_strength_mpa.toFixed(1)} | Cal: {test.correlated_compressive_strength_mpa.toFixed(1)}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span

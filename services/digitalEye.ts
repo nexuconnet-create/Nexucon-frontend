@@ -180,6 +180,8 @@ export interface PunditTest {
   surface_temperature_c: number | null;
   pulse_velocity_ms: number; // m/s; 0 until the server-side BS 1881-203 analysis has run
   estimated_compressive_strength_mpa: number | null; // E.C.S via the platform calibration curve; null outside its 2.0-5.0 km/s validity
+  measured_compressive_strength_mpa?: number | null;
+  correlated_compressive_strength_mpa?: number | null;
   /** Provenance of the figure above, stored with it at write time: which
    *  curve produced it and what its standard-error policy did to it. The
    *  server returns this on every test row; the UI reads it so a strength
@@ -476,6 +478,8 @@ function mapPunditTest(row: any): PunditTest {
     surface_temperature_c: row.surface_temperature_c ?? null,
     pulse_velocity_ms: row.velocity_km_s != null ? Math.round(row.velocity_km_s * 1000) : 0,
     estimated_compressive_strength_mpa: row.estimated_compressive_strength_mpa ?? null,
+    measured_compressive_strength_mpa: row.measured_compressive_strength_mpa ?? null,
+    correlated_compressive_strength_mpa: row.correlated_compressive_strength_mpa ?? null,
     concrete_quality_rating: GRADE_TO_RATING[row.quality_grade] ?? 'PENDING',
     estimated_crack_depth_mm: row.crack_depth_mm ?? null,
     operator_name: row.operator_name ?? '',

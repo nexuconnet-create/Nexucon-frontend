@@ -526,6 +526,11 @@ export default function FindingDetailDrawer({
                         <span className="font-bold text-amber-700">
                           {test.velocity_km_s != null ? `${formatVelocityMs(test.velocity_km_s * 1000)} m/s` : 'Pending'}
                         </span>
+                        {test.ecs_mpa != null && (
+                          <span className="ml-2 font-bold text-teal-700">
+                            {test.ecs_mpa.toFixed(1)} MPa
+                          </span>
+                        )}
                         <span className="ml-2 text-[10px] uppercase font-bold text-gray-500">
                           ({test.quality_grade})
                         </span>

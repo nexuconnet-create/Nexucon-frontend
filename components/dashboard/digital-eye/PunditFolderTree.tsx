@@ -43,6 +43,10 @@ export const punditFloorOf = (t: PunditTest): string =>
 export const punditStationOf = (t: PunditTest): string =>
   (t.structural_element_name || t.test_location || '').trim() || 'Station not named';
 
+/** Natural alphanumeric sorting helper (e.g. S1, S2, ..., S9, S10, S11, ..., S20) */
+export const naturalSortStations = (a: string, b: string): number =>
+  a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
 /** Grouping key for the outer folder level, for pages whose records span more
  *  than one project (the Inspector workspace sees every project in their
  *  scope, so `Floor:200THK RC SLAB` legitimately recurs across projects and
@@ -54,8 +58,8 @@ export const punditProjectOf = (t: PunditTest): string =>
 /** Mean velocity / mean f_cu / worst rating across a station's tests
  *  (server-persisted element means per test). */
 export const punditStationSummary = (rows: PunditTest[]): StationSummary => {
-  const vs = rows.map((t) => t.pulse_velocity_ms).filter((v): v is number => v > 0);
-  const fs = rows.map((t) => t.estimated_compressive_strength_mpa).filter((f): f is number => f != null);
+  const vs = rows.map((t) => t.pulse_velocity_ms).filter((v): v is number => v != null && v > 0 && v <= 5000);
+  const fs = rows.map((t) => t.estimated_compressive_strength_mpa).filter((f): f is number => f != null && f > 0);
   return {
     meanV: vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : null,
     meanF: fs.length ? fs.reduce((s, f) => s + f, 0) / fs.length : null,
@@ -82,7 +86,7 @@ export function useFloorStationFolders<T>(
   const [openFloors, setOpenFloors] = useState<Set<string>>(new Set());
   const [openStations, setOpenStations] = useState<Set<string>>(new Set());
 
-  // Floor folder -> Station sub-menu -> items, in record order.
+  // Floor folder -> Station sub-menu -> items, in natural station order.
   const groups = useMemo<[string, Map<string, T[]>][]>(() => {
     const floors = new Map<string, Map<string, T[]>>();
     for (const item of items) {
@@ -92,6 +96,13 @@ export function useFloorStationFolders<T>(
       const stations = floors.get(floorKey)!;
       if (!stations.has(stationKey)) stations.set(stationKey, []);
       stations.get(stationKey)!.push(item);
+    }
+    // Sort stations within each floor naturally (S1, S2, ..., S20)
+    for (const [floorKey, stations] of floors.entries()) {
+      const sortedEntries = Array.from(stations.entries()).sort(([a], [b]) =>
+        naturalSortStations(a, b)
+      );
+      floors.set(floorKey, new Map(sortedEntries));
     }
     return Array.from(floors.entries());
   }, [items, getFloor, getStation]);
@@ -136,7 +147,7 @@ export function useProjectFloorStationFolders<T>(
   const [openFloors, setOpenFloors] = useState<Set<string>>(new Set());
   const [openStations, setOpenStations] = useState<Set<string>>(new Set());
 
-  // Project folder -> Floor folder -> Station sub-menu -> items, in record order.
+  // Project folder -> Floor folder -> Station sub-menu -> items, in natural station order.
   const groups = useMemo<[string, Map<string, Map<string, T[]>>][]>(() => {
     const projects = new Map<string, Map<string, Map<string, T[]>>>();
     for (const item of items) {
@@ -149,6 +160,15 @@ export function useProjectFloorStationFolders<T>(
       const stations = floors.get(floorKey)!;
       if (!stations.has(stationKey)) stations.set(stationKey, []);
       stations.get(stationKey)!.push(item);
+    }
+    // Sort stations within each floor of each project naturally (S1, S2, ..., S20)
+    for (const [projectKey, floors] of projects.entries()) {
+      for (const [floorKey, stations] of floors.entries()) {
+        const sortedEntries = Array.from(stations.entries()).sort(([a], [b]) =>
+          naturalSortStations(a, b)
+        );
+        floors.set(floorKey, new Map(sortedEntries));
+      }
     }
     return Array.from(projects.entries());
   }, [items, getProject, getFloor, getStation]);
@@ -515,7 +535,7 @@ export function ElementFolderList<T>({
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(item);
     }
-    return Array.from(map.entries());
+    return Array.from(map.entries()).sort(([a], [b]) => naturalSortStations(a, b));
   }, [items, getGroup]);
 
   const toggleGroup = (key: string) =>

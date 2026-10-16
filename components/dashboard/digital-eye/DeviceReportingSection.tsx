@@ -597,7 +597,7 @@ export default function DeviceReportingSection({
             <span className="text-xl font-bold text-emerald-800 font-mono mt-0.5 block">
               {deviceType === "pundit"
                 ? (() => {
-                    const assessed = punditTests.filter(t => t.estimated_compressive_strength_mpa != null);
+                    const assessed = punditTests.filter(t => t.estimated_compressive_strength_mpa != null && (t.estimated_compressive_strength_mpa as number) > 0);
                     if (assessed.length === 0) return "—";
                     const passed = assessed.filter(t => (t.estimated_compressive_strength_mpa as number) >= 25).length;
                     return `${Math.round((passed / assessed.length) * 100)}%`;

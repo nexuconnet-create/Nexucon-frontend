@@ -161,11 +161,11 @@ export default function PunditAIAnalysisPage() {
   }, [selectedProjectId, selectedElementId]);
 
   // Real computed metrics
-  const analyzedTests = tests.filter((t) => t.pulse_velocity_ms > 0);
+  const analyzedTests = tests.filter((t) => t.pulse_velocity_ms > 0 && t.pulse_velocity_ms <= 5000);
   const meanVelocity = analyzedTests.length > 0
     ? Math.round(analyzedTests.reduce((sum, t) => sum + t.pulse_velocity_ms, 0) / analyzedTests.length)
     : null;
-  const assessedTests = tests.filter((t) => t.estimated_compressive_strength_mpa != null);
+  const assessedTests = tests.filter((t) => t.estimated_compressive_strength_mpa != null && t.estimated_compressive_strength_mpa > 0);
   const meanFcu = assessedTests.length > 0
     ? Number((assessedTests.reduce((sum, t) => sum + (t.estimated_compressive_strength_mpa as number), 0) / assessedTests.length).toFixed(1))
     : null;
