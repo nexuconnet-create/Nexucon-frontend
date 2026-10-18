@@ -17,7 +17,12 @@ import {
   ChevronRight,
   FileCheck2,
 } from "lucide-react";
-import { CurveType, BatchCalibrationPayload } from "@/services/digitalEye";
+import {
+  CurveType,
+  BatchCalibrationPayload,
+  getActiveCurve,
+  ActiveCurveResponse,
+} from "@/services/digitalEye";
 
 interface PunditCalibrationModalProps {
   isOpen: boolean;
@@ -59,59 +64,89 @@ export default function PunditCalibrationModal({
     "Calibrated for project mix design using non-linear exponential acoustic response."
   );
 
+  // Active strength curve metadata resolved from server
+  const [activeCurveInfo, setActiveCurveInfo] = useState<ActiveCurveResponse | null>(null);
+  const [isLoadingCurve, setIsLoadingCurve] = useState<boolean>(false);
+
   // Calibration Cube Test data points (optional ground truth pairs)
   const [cubePoints, setCubePoints] = useState<Array<{ velocity_ms: number; cube_strength_mpa: number }>>([]);
   const [newVel, setNewVel] = useState<string>("");
   const [newCube, setNewCube] = useState<string>("");
 
-  // Load project-specific calibration parameters whenever projectId or modal open state changes
+  // Load project-specific calibration parameters dynamically from the project's active strength curve API
   React.useEffect(() => {
-    if (projectId && typeof window !== "undefined") {
+    if (!isOpen || !projectId) return;
+
+    let cancelled = false;
+
+    // 1. Initial pre-fill from localStorage if available
+    if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem(`pundit_cal_${projectId}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          const loadedDesign = parsed.design_strength_mpa && Number(parsed.design_strength_mpa) > 0 ? Number(parsed.design_strength_mpa) : 25.0;
-          setDesignStrengthMpa(loadedDesign);
-          setCurveType(parsed.curve_type || "exponential");
-
+          if (parsed.design_strength_mpa && Number(parsed.design_strength_mpa) > 0) {
+            setDesignStrengthMpa(Number(parsed.design_strength_mpa));
+          }
+          if (parsed.curve_type) setCurveType(parsed.curve_type);
           if (parsed.params) {
-            const aVal = parsed.params.a && Number(parsed.params.a) > 0 ? Number(parsed.params.a) : 1.2;
-            const bVal = parsed.params.b && Number(parsed.params.b) > 0 ? Number(parsed.params.b) : 0.85;
-            const cVal = parsed.params.c !== undefined && parsed.params.c !== null ? Number(parsed.params.c) : 0.0;
+            if (parsed.params.a != null) setParamA(Number(parsed.params.a));
+            if (parsed.params.b != null) setParamB(Number(parsed.params.b));
+            if (parsed.params.c != null) setParamC(Number(parsed.params.c));
+          }
+          if (parsed.notes) setCalibrationNotes(parsed.notes);
+          if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points)) {
+            setCubePoints(parsed.cube_correlation_points);
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Query project's active strength curve from the backend API
+    setIsLoadingCurve(true);
+    getActiveCurve(projectId)
+      .then((res) => {
+        if (cancelled || !res) return;
+        setActiveCurveInfo(res);
+        const curve = res.curve;
+        if (curve) {
+          if (curve.curve_type) setCurveType(curve.curve_type);
+          const p = curve.formula_params || {};
+          if (curve.curve_type === "exponential") {
+            const aVal = p.a != null ? Number(p.a) : 1.2;
+            let bVal = p.b != null ? Number(p.b) : 0.85;
+            // If stored in m/s domain (e.g. 0.00085), convert to km/s for display
+            if (bVal > 0 && bVal < 0.01) bVal = Number((bVal * 1000).toFixed(4));
+            const cVal = p.c != null ? Number(p.c) : 0.0;
             setParamA(aVal);
             setParamB(bVal);
             setParamC(cVal);
-          } else {
-            setParamA(1.2);
-            setParamB(0.85);
-            setParamC(0.0);
+          } else if (curve.curve_type === "linear") {
+            const mVal = p.m != null ? Number(p.m) : (p.a != null ? Number(p.a) : 8.961);
+            const cVal = p.c != null ? Number(p.c) : -7.97;
+            setParamA(mVal);
+            setParamC(cVal);
+          } else if (curve.curve_type === "polynomial") {
+            if (Array.isArray(p.coeffs) && p.coeffs.length >= 3) {
+              setParamA(p.coeffs[0]);
+              setParamB(p.coeffs[1]);
+              setParamC(p.coeffs[2]);
+            } else {
+              if (p.a != null) setParamA(Number(p.a));
+              if (p.b != null) setParamB(Number(p.b));
+              if (p.c != null) setParamC(Number(p.c));
+            }
           }
-
-          if (parsed.notes != null) {
-            setCalibrationNotes(parsed.notes);
-          }
-          if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points)) {
-            setCubePoints(parsed.cube_correlation_points);
-          } else if (parsed.cubePoints && Array.isArray(parsed.cubePoints)) {
-            setCubePoints(parsed.cubePoints);
-          } else {
-            setCubePoints([]);
-          }
-        } else {
-          // Reset to default baseline for uncalibrated project
-          setDesignStrengthMpa(25.0);
-          setCurveType("exponential");
-          setParamA(1.2);
-          setParamB(0.85);
-          setParamC(0.0);
-          setCalibrationNotes("Calibrated for project mix design using non-linear exponential acoustic response.");
-          setCubePoints([]);
         }
-      } catch (e) {
-        // ignore parse error
-      }
-    }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoadingCurve(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, isOpen]);
 
   // Function to calculate f_cu based on current parameters
@@ -452,6 +487,30 @@ export default function PunditCalibrationModal({
                 {curveType === "linear" && `Formula: f_cu = ${paramA} · V ${paramC < 0 ? `- ${Math.abs(paramC)}` : `+ ${paramC}`}`}
               </span>
             </h4>
+
+            {activeCurveInfo?.curve && (
+              <div className="flex items-center justify-between text-[11px] bg-sky-50 border border-sky-100 px-3 py-1.5 rounded-xl">
+                <span className="text-slate-600 flex items-center gap-1.5 font-medium">
+                  <Sparkles size={13} className="text-sky-500" />
+                  <span>Active Strength Curve:</span>
+                  <strong className="text-slate-800">{activeCurveInfo.curve.name}</strong>
+                  {activeCurveInfo.source === "project_setting" ? (
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                      Project Curve
+                    </span>
+                  ) : (
+                    <span className="bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded text-[10px]">
+                      Platform Baseline
+                    </span>
+                  )}
+                </span>
+                {activeCurveInfo.curve.standard && (
+                  <span className="text-slate-400 text-[10px] font-mono">
+                    {activeCurveInfo.curve.standard}
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
               <div>
