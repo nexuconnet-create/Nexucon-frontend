@@ -673,16 +673,16 @@ export default function PunditCalibrationModal({
 
   const handleLoadSamplePairs = () => {
     const sample10Pairs = [
-      { velocity_ms: 3200, cube_strength_mpa: 21.3, rebound: 26 },
-      { velocity_ms: 3400, cube_strength_mpa: 23.4, rebound: 28 },
-      { velocity_ms: 3600, cube_strength_mpa: 24.8, rebound: 30 },
-      { velocity_ms: 3800, cube_strength_mpa: 26.5, rebound: 31 },
-      { velocity_ms: 4000, cube_strength_mpa: 28.2, rebound: 33 },
-      { velocity_ms: 4200, cube_strength_mpa: 30.1, rebound: 34 },
-      { velocity_ms: 4400, cube_strength_mpa: 31.8, rebound: 35 },
-      { velocity_ms: 4600, cube_strength_mpa: 33.6, rebound: 37 },
-      { velocity_ms: 4800, cube_strength_mpa: 35.2, rebound: 38 },
-      { velocity_ms: 5000, cube_strength_mpa: 36.8, rebound: 40 },
+      { velocity_ms: 3200, cube_strength_mpa: 21.3 },
+      { velocity_ms: 3400, cube_strength_mpa: 23.4 },
+      { velocity_ms: 3600, cube_strength_mpa: 24.8 },
+      { velocity_ms: 3800, cube_strength_mpa: 26.5 },
+      { velocity_ms: 4000, cube_strength_mpa: 28.2 },
+      { velocity_ms: 4200, cube_strength_mpa: 30.1 },
+      { velocity_ms: 4400, cube_strength_mpa: 31.8 },
+      { velocity_ms: 4600, cube_strength_mpa: 33.6 },
+      { velocity_ms: 4800, cube_strength_mpa: 35.2 },
+      { velocity_ms: 5000, cube_strength_mpa: 36.8 },
     ];
     setCubePoints(sample10Pairs);
     const res = fitExponentialFromPairs(sample10Pairs);
