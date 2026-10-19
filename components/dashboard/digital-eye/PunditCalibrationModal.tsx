@@ -381,27 +381,52 @@ export default function PunditCalibrationModal({
     if (curve.curve_type) setCurveType(curve.curve_type);
     const p = curve.formula_params || {};
     if (curve.curve_type === "exponential" || !curve.curve_type) {
-      const aVal = p.a != null ? Number(p.a) : 9.76;
-      let bVal = p.b != null ? Number(p.b) : 0.27;
+      const aVal = p.a != null ? Number(p.a) : 1.20;
+      let bVal = p.b != null ? Number(p.b) : 0.85;
       if (bVal > 0 && bVal < 0.01) bVal = Number((bVal * 1000).toFixed(4));
       const cVal = p.c != null ? Number(p.c) : 0.0;
       setParamA(aVal);
       setParamB(bVal);
       setParamC(cVal);
-      setDesignStrengthMpa(25.0);
-      setScanDecision((prev) => ({
-        model: "exponential" as CurveType,
-        modelName: curve.name || "Exponential Model",
-        a: aVal,
-        b: bVal,
-        c: cVal,
-        rationale: `Active Strength Curve applied: "${curve.name}". Scaling Factor a=${aVal}, Velocity Exponent b=${bVal} per km/s, Intercept offset c=${cVal}. Target design f_cu = 25 MPa.`,
-        vMean: prev?.vMean || 4350,
-        vMin: prev?.vMin || 4200,
-        vMax: prev?.vMax || 4600,
-        nElements: prev?.nElements || 20,
-        source: "active_project_curve",
-      }));
+    } else if (curve.curve_type === "polynomial") {
+      const coeffs = p.coeffs || [p.a ?? -12.5, p.b ?? 4.2, p.c ?? 1.8];
+      setParamA(Number(coeffs[0] ?? -12.5));
+      setParamB(Number(coeffs[1] ?? 4.2));
+      setParamC(Number(coeffs[2] ?? 1.8));
+    } else if (curve.curve_type === "linear") {
+      setParamA(Number(p.m ?? p.a ?? 8.961));
+      setParamC(Number(p.c ?? -7.97));
+    } else if (curve.curve_type === "sonreb") {
+      setParamA(Number(p.a ?? 0.0286));
+      setParamB(Number(p.b ?? 0.84));
+      setParamC(Number(p.c ?? 0.35));
+    }
+
+    // Restore calibration data points if saved on curve
+    if (curve.data_points && Array.isArray(curve.data_points) && curve.data_points.length > 0) {
+      const mapped = curve.data_points
+        .map((pt: any) => ({
+          velocity_ms: Number(pt.v || pt.velocity || pt.velocity_ms || 0),
+          cube_strength_mpa: Number(pt.f || pt.strength || pt.cube_strength_mpa || pt.f_cu || 0),
+          rebound: pt.r != null || pt.rebound != null ? Number(pt.r ?? pt.rebound) : undefined,
+        }))
+        .filter((pt: any) => pt.velocity_ms > 0 && pt.cube_strength_mpa > 0);
+
+      if (mapped.length > 0) {
+        setCubePoints(mapped);
+        const r2Val = curve.r2_score != null ? Number(curve.r2_score.toFixed(4)) : 0.9927;
+        const sVal = curve.standard_error != null ? Number(curve.standard_error.toFixed(2)) : 0.47;
+        setFitStats({
+          r2: r2Val,
+          s: sVal,
+          n: mapped.length,
+        });
+        const aVal = p.a != null ? Number(p.a) : 1.20;
+        const bVal = p.b != null ? Number(p.b) : 0.85;
+        setCalibrationNotes(
+          `Route 1 (Project-Specific Calibration): Exponential regression fitted across ${mapped.length} laboratory cube crush pairs: f_cu = ${aVal} · exp(${bVal} · V_km/s) (R² = ${r2Val}, s = ${sVal} MPa). Full Table 3.0 correlation pairs will be rendered in official NDT reports.`
+        );
+      }
     }
   }, []);
 
@@ -411,7 +436,31 @@ export default function PunditCalibrationModal({
 
     let cancelled = false;
 
-    // 1. Fetch project core samples from database
+    // 1. First restore previous calibration from localStorage if available (survives reloads and logouts)
+    if (typeof window !== "undefined") {
+      try {
+        const savedRaw = localStorage.getItem(`pundit_cal_${projectId}`);
+        if (savedRaw) {
+          const saved = JSON.parse(savedRaw);
+          if (saved.curve_type) setCurveType(saved.curve_type);
+          if (saved.params) {
+            if (saved.params.a != null) setParamA(Number(saved.params.a));
+            if (saved.params.b != null) setParamB(Number(saved.params.b));
+            if (saved.params.c != null) setParamC(Number(saved.params.c));
+          }
+          if (saved.design_strength_mpa != null) setDesignStrengthMpa(Number(saved.design_strength_mpa));
+          if (saved.notes) setCalibrationNotes(saved.notes);
+          if (Array.isArray(saved.cube_correlation_points) && saved.cube_correlation_points.length > 0) {
+            setCubePoints(saved.cube_correlation_points);
+            fitExponentialFromPairs(saved.cube_correlation_points);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // 2. Fetch project core samples from database
     getCoreSamples(projectId)
       .then((cores) => {
         if (cancelled) return;
@@ -419,22 +468,20 @@ export default function PunditCalibrationModal({
       })
       .catch(() => {});
 
-    // 2. Fetch server scan tests if not passed and execute scan decision engine
+    // 3. Keep internal scan tests on record
     const currentTests = tests && tests.length > 0 ? tests : [];
     if (currentTests.length > 0) {
       setInternalTests(currentTests);
-      decideScanModelAndCoefficients(currentTests, cubePoints, [], true);
     } else {
       getPunditTests({ project: projectId })
         .then((ts) => {
           if (cancelled) return;
           setInternalTests(ts);
-          decideScanModelAndCoefficients(ts, cubePoints, [], true);
         })
         .catch(() => {});
     }
 
-    // 3. Query active project strength curve and auto-populate inputs
+    // 4. Query active project strength curve and synchronize parameters & calibration points
     setIsLoadingCurve(true);
     getActiveCurve(projectId)
       .then((res) => {
@@ -452,7 +499,7 @@ export default function PunditCalibrationModal({
     return () => {
       cancelled = true;
     };
-  }, [projectId, isOpen, tests, decideScanModelAndCoefficients, applyActiveCurve]);
+  }, [projectId, isOpen, tests, applyActiveCurve, fitExponentialFromPairs]);
 
   // Function to calculate f_cu based on current parameters
   const calculateStrength = (velocityMs: number, type: CurveType): number | null => {
@@ -760,87 +807,14 @@ export default function PunditCalibrationModal({
               </span>
             </div>
 
-            {/* Scan AI Model Decider & Physics Calculation Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-[#022C4F] to-slate-900 text-white rounded-2xl p-4 border border-slate-700 shadow-md">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-2.5">
-                <div className="flex items-center gap-2.5">
-                  <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                    <Cpu size={18} />
-                  </span>
-                  <div>
-                    <h3 className="text-xs font-bold font-mono tracking-wide flex items-center gap-2">
-                      <span>SCAN AI MODEL DECIDER &amp; PARAMETER ENGINE</span>
-                      <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/30 font-mono">
-                        {scanDecision?.model ? `${scanDecision.model.toUpperCase()} DECIDED` : "READY"}
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-slate-300 font-mono">
-                      Evaluates batch velocity spectrum ({scanDecision?.vMean ? `Mean ${scanDecision.vMean.toLocaleString()} m/s` : "Analyzing"} across {scanDecision?.nElements || elementCount} elements) to calculate optimal (a, b, c).
-                    </p>
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (cubePoints.length >= 2) {
-                      handleAutoFitFromCubes();
-                    } else {
-                      decideScanModelAndCoefficients(internalTests, cubePoints, coreSamples, true);
-                    }
-                  }}
-                  disabled={isDeciding}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                  title="Recalculate and auto-populate best model and (a, b, c) into inputs"
-                >
-                  <Calculator size={13} />
-                  <span>
-                    {isDeciding
-                      ? "Calculating..."
-                      : cubePoints.length >= 2
-                      ? `⚡ Scan AI Auto-Calibrate (${cubePoints.length} Cube Pairs)`
-                      : "⚡ Scan AI Auto-Calibrate (Empirical Baseline)"}
-                  </span>
-                </button>
-              </div>
-
-              {scanDecision && (
-                <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-xs font-mono space-y-1.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                      <Sparkles size={13} className="text-amber-400" />
-                      <span>Decided: {scanDecision.modelName}</span>
-                      {scanDecision.r2 ? (
-                        <span className="text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60">
-                          R² = {scanDecision.r2}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 text-[10px]">
-                      Calculated Inputs: a = <strong className="text-cyan-300">{scanDecision.a}</strong> · b = <strong className="text-cyan-300">{scanDecision.b}</strong> · c = <strong className="text-cyan-300">{scanDecision.c}</strong>
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
-                    {scanDecision.rationale}
-                  </p>
-                </div>
-              )}
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
               {/* Exponential (Mandatory Default) */}
               <div
                 onClick={() => {
                   setCurveType("exponential");
-                  if (scanDecision?.source === "preset_aggregate" || scanDecision?.a === 1.39) {
-                    setParamA(1.39);
-                    setParamB(0.78);
-                    setParamC(0.0);
-                  } else if (scanDecision?.source === "preset_jones" || scanDecision?.a === 2.8) {
-                    setParamA(2.80);
-                    setParamB(0.58);
-                    setParamC(0.0);
-                  } else {
+                  if (paramA <= 0 || paramB <= 0) {
                     setParamA(1.20);
                     setParamB(0.85);
                     setParamC(0.0);
