@@ -1035,8 +1035,8 @@ export default function NeuralLinkPage() {
             <span className="text-sm font-black text-amber-300 font-mono">
               {active?.curve?.standard_error != null
                 ? `±${active.curve.standard_error.toFixed(2)} MPa`
-                : (active?.curve_snapshot as any)?.standard_error != null
-                ? `±${(active.curve_snapshot as any).standard_error.toFixed(2)} MPa`
+                : active?.curve_snapshot?.standard_error != null
+                ? `±${active.curve_snapshot.standard_error.toFixed(2)} MPa`
                 : (active?.curve?.data_points && active.curve.data_points.length > 0)
                 ? "±0.47 MPa"
                 : "±1.85 MPa"}
