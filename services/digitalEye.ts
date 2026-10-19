@@ -2673,6 +2673,7 @@ export interface CurveSnapshot {
   formula_params: Record<string, any>;
   valid_range_ms: [number, number] | null;
   r2_score?: number | null;
+  standard_error?: number | null;
   provenance_source?: string | null;
   temperature_correction_applied?: boolean;
   /** What the standard-error policy did to the figure this snapshot
