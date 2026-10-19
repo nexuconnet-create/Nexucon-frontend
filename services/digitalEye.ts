@@ -3424,6 +3424,7 @@ export interface ReportBrandingConfig {
   cover_logo_url?: string | null;
   cover_logo_hidden?: boolean;
   watermark_url?: string | null;
+  watermark_hidden?: boolean;
   watermark_opacity_pct?: number;
   watermark_position?: string;
   updated_at?: string;
@@ -3447,6 +3448,7 @@ export const updateReportBranding = async (
   fields: {
     logo?: File | '' | 'remove' | null;
     watermark?: File | '' | 'remove' | null;
+    watermark_hidden?: boolean;
     cover_logo?: File | '' | 'remove' | null;
     cover_logo_hidden?: boolean;
     logo_position?: string;
