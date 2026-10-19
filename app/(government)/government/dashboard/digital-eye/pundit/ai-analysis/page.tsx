@@ -346,7 +346,7 @@ export default function PunditAIAnalysisPage() {
               BS 1881-203
             </span>
           </div>
-          <span className="text-xs font-bold text-gray-500 uppercase">Mean Velocity (AI Calibrated)</span>
+          <span className="text-xs font-bold text-gray-500 uppercase">Mean Velocity (Acoustic Inversion)</span>
           <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">{meanVelocity != null ? `${formatVelocityMs(meanVelocity)} m/s` : "—"}</p>
           <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
             {meanFcu != null ? `Est. Strength: ${meanFcu} MPa (E.C.S)` : "Exponential Model (Default)"}
@@ -572,12 +572,14 @@ export default function PunditAIAnalysisPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-cyan-300 uppercase tracking-wide">
-                        Calibrated Correlation Model:
+                        {(calibratedProfile as any)?.cube_correlation_points?.length > 0
+                          ? `Project Calibration Model (Route 1 · ${(calibratedProfile as any).cube_correlation_points.length} Lab Pairs):`
+                          : "Empirical Baseline Model (Route 2 · 0 Lab Pairs):"}
                       </span>
                       <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded border border-white/20">
                         {calibratedProfile
                           ? `Exponential: f_cu = ${calibratedProfile.params.a}·e^(${calibratedProfile.params.b}·V) + ${calibratedProfile.params.c}`
-                          : "Exponential Model (BS 1881-203 / Non-Linear Default)"}
+                          : "Exponential Model (BS 1881-203 / Empirical Baseline)"}
                       </span>
                     </div>
                     <span className="text-[11px] text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
@@ -585,9 +587,9 @@ export default function PunditAIAnalysisPage() {
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300">
-                    {selectedBatch
-                      ? `Analysis is isolated to folder: "${selectedBatch.folder_name}" (${tests.length > 0 ? tests.length : selectedBatch.element_count} elements). Data clashes from secondary/re-test scans have been eliminated.`
-                      : "AI Executive Summary integrates ultrasonic wave speeds with on-site visual defect observations and verified client/site attendance logs."}
+                    {(calibratedProfile as any)?.cube_correlation_points?.length > 0
+                      ? `Project-specific calibration established from ${(calibratedProfile as any).cube_correlation_points.length} destructive cube/core crush tests. Correlation data is rendered in report Table 3.0.`
+                      : "Route 2 Empirical Baseline active (0 stored calibration pairs). No destructive testing performed; correlation Table 3.0 is omitted from statutory reports per BS 1881-203."}
                   </p>
                 </div>
 

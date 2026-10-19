@@ -137,8 +137,10 @@ export default function PunditCalibrationModal({
       const vMax = Math.max(...effectiveVels);
       const vMean = Math.round(effectiveVels.reduce((acc, val) => acc + val, 0) / n);
 
-      // 2. Gather destructive test pairs (cubes + cores) OR project scan element pairs
-      let allPairs: Array<{ v: number; f: number; r?: number }> = [
+      // 2. Gather destructive test pairs (cubes + cores) only
+      // Per engineering workflow: Route 1 applies ONLY when real physical cube/core laboratory crush tests exist.
+      // If no destructive tests exist, the system operates in Route 2 (Empirical Baseline) without fabricating correlation data.
+      const allPairs: Array<{ v: number; f: number; r?: number }> = [
         ...cubes.map((c) => ({ v: c.velocity_ms, f: c.cube_strength_mpa, r: c.rebound })),
         ...cores
           .filter((c) => c.calibration_pair && c.calibration_pair.v > 1500 && c.calibration_pair.f > 0)
@@ -149,30 +151,7 @@ export default function PunditCalibrationModal({
           })),
       ];
 
-      // If no site laboratory cube pairs were manually added, harvest verified project scan element pairs
-      let isUsingScanElements = false;
-      if (allPairs.length < 2) {
-        const scanPairs = scanData
-          .filter(
-            (t) =>
-              t.pulse_velocity_ms &&
-              Number(t.pulse_velocity_ms) > 1500 &&
-              Number(t.pulse_velocity_ms) < 6000 &&
-              t.estimated_compressive_strength_mpa &&
-              Number(t.estimated_compressive_strength_mpa) > 0
-          )
-          .map((t) => ({
-            v: Number(t.pulse_velocity_ms),
-            f: Number(t.estimated_compressive_strength_mpa),
-            r: t.rebound_number ? Number(t.rebound_number) : undefined,
-          }));
-        if (scanPairs.length >= 2) {
-          allPairs = scanPairs;
-          isUsingScanElements = true;
-        }
-      }
-
-      // CASE A: 2 or more empirical ground-truth pairs exist
+      // CASE A: 2 or more empirical ground-truth pairs exist (Route 1: Project-Specific Calibration)
       if (allPairs.length >= 2) {
         const N_pts = allPairs.length;
         const vKm = allPairs.map((p) => p.v / 1000.0);
@@ -272,21 +251,21 @@ export default function PunditCalibrationModal({
         }
 
         // Decide between Polynomial and Exponential based on R2
-        const labelSource = isUsingScanElements ? "verified project scan elements" : "ground-truth lab pairs";
+        const labelSource = "ground-truth laboratory cube/core pairs";
         if (polyR2 > expR2 + 0.03 && polyC !== 0) {
           const decision = {
             model: "polynomial" as CurveType,
-            modelName: isUsingScanElements ? "Polynomial (Scan Batch Curvature)" : "Polynomial (2nd Degree Curvature)",
+            modelName: "Polynomial (Route 1: 2nd Degree Curvature)",
             a: polyA,
             b: polyB,
             c: polyC,
             r2: Number(polyR2.toFixed(4)),
-            rationale: `Polynomial 2nd order regression provides superior empirical fit (R² = ${polyR2.toFixed(4)}) across ${N_pts} ${labelSource} over acoustic velocity span (${vMin}–${vMax} m/s).`,
+            rationale: `Route 1 (Project-Specific Calibration): Polynomial 2nd order regression provides superior empirical fit (R² = ${polyR2.toFixed(4)}) across ${N_pts} ${labelSource} over acoustic velocity span (${vMin}–${vMax} m/s).`,
             vMean,
             vMin,
             vMax,
             nElements: n,
-            source: isUsingScanElements ? "scan_elements_poly" : "polynomial_regression",
+            source: "polynomial_regression",
           };
           setScanDecision(decision);
           if (applyToInputs) {
@@ -300,17 +279,17 @@ export default function PunditCalibrationModal({
         } else {
           const decision = {
             model: "exponential" as CurveType,
-            modelName: isUsingScanElements ? "Exponential (Scan Batch Regression)" : "Exponential (Empirical Site Regression)",
+            modelName: "Exponential (Route 1: Site Laboratory Regression)",
             a: expA,
             b: expB,
             c: expC,
             r2: Number(expR2.toFixed(4)),
-            rationale: `Exponential non-linear regression fitted across ${N_pts} ${labelSource} (R² = ${expR2.toFixed(4)}). Optimal physical acoustic curve for structural concrete.`,
+            rationale: `Route 1 (Project-Specific Calibration): Exponential non-linear regression fitted across ${N_pts} ground-truth laboratory cube/core pairs (R² = ${expR2.toFixed(4)}). Table 3.0 correlation pairs and regression summary will be rendered in the final report.`,
             vMean,
             vMin,
             vMax,
             nElements: n,
-            source: isUsingScanElements ? "scan_elements_regression" : "lab_regression",
+            source: "lab_regression",
           };
           setScanDecision(decision);
           if (applyToInputs) {
@@ -324,16 +303,16 @@ export default function PunditCalibrationModal({
         }
       }
 
-      // CASE B: No destructive lab pairs entered yet
-      // User rule: "and if nothing is entered it should use the default exponential either jones or aggregate mix"
+      // CASE B: No destructive lab pairs entered yet (Route 2: Empirical Baseline)
+      // When no destructive test data exists, the platform operates in Route 2, omitting correlation tables from the final report.
       if (vMean >= 4150) {
         const decision = {
           model: "exponential" as CurveType,
-          modelName: "Exponential (High-Density Aggregate Mix)",
+          modelName: "Empirical Baseline: High-Density Aggregate Mix",
           a: 1.39,
           b: 0.78,
           c: 0.0,
-          rationale: `Dense Coarse Aggregate Mix decided: Scan mean velocity of ${vMean.toLocaleString()} m/s (≥ 4,150 m/s threshold) indicates high coarse-aggregate packing typical of heavy-duty floor slabs. Mix calibration: a=1.39, b=0.78 per BS 1881-203.`,
+          rationale: `Route 2 (Empirical Baseline): No destructive test data uploaded (0 stored calibration pairs). Default High-Density Aggregate Mix adopted (a=1.39, b=0.78, c=0.0) based on scan mean velocity (${vMean.toLocaleString()} m/s ≥ 4,150 m/s). Correlation tables (Table 3.0) will be safely omitted from the final report per BS 1881-203.`,
           vMean,
           vMin,
           vMax,
@@ -352,11 +331,11 @@ export default function PunditCalibrationModal({
       } else {
         const decision = {
           model: "exponential" as CurveType,
-          modelName: "Exponential (Jones Equation 1962 Benchmark)",
+          modelName: "Empirical Baseline: Jones Equation (1962 Benchmark)",
           a: 2.80,
-          b: 0.53,
+          b: 0.58,
           c: 0.0,
-          rationale: `Jones Equation (1962) decided: Scan mean velocity of ${vMean.toLocaleString()} m/s (< 4,150 m/s) correlates with classical medium-grade structural concrete envelope (up to ~27.2 MPa) per RILEM / BS 1881 standard benchmark.`,
+          rationale: `Route 2 (Empirical Baseline): No destructive test data uploaded (0 stored calibration pairs). Standard Jones Equation empirical model adopted (A=2.80, B=0.58, C=0.0) based on scan mean velocity (${vMean.toLocaleString()} m/s < 4,150 m/s). Correlation tables (Table 3.0) will be safely omitted from the final report.`,
           vMean,
           vMin,
           vMax,
@@ -367,7 +346,7 @@ export default function PunditCalibrationModal({
         if (applyToInputs) {
           setCurveType("exponential");
           setParamA(2.80);
-          setParamB(0.53);
+          setParamB(0.58);
           setParamC(0.0);
           setCalibrationNotes(decision.rationale);
         }
@@ -378,91 +357,72 @@ export default function PunditCalibrationModal({
     }
   }, []);
 
+  const applyActiveCurve = useCallback((curve: any) => {
+    if (!curve) return;
+    if (curve.curve_type) setCurveType(curve.curve_type);
+    const p = curve.formula_params || {};
+    if (curve.curve_type === "exponential" || !curve.curve_type) {
+      const aVal = p.a != null ? Number(p.a) : 9.76;
+      let bVal = p.b != null ? Number(p.b) : 0.27;
+      if (bVal > 0 && bVal < 0.01) bVal = Number((bVal * 1000).toFixed(4));
+      const cVal = p.c != null ? Number(p.c) : 0.0;
+      setParamA(aVal);
+      setParamB(bVal);
+      setParamC(cVal);
+      setDesignStrengthMpa(25.0);
+      setScanDecision((prev) => ({
+        model: "exponential" as CurveType,
+        modelName: curve.name || "Exponential Model",
+        a: aVal,
+        b: bVal,
+        c: cVal,
+        rationale: `Active Strength Curve applied: "${curve.name}". Scaling Factor a=${aVal}, Velocity Exponent b=${bVal} per km/s, Intercept offset c=${cVal}. Target design f_cu = 25 MPa.`,
+        vMean: prev?.vMean || 4350,
+        vMin: prev?.vMin || 4200,
+        vMax: prev?.vMax || 4600,
+        nElements: prev?.nElements || 20,
+        source: "active_project_curve",
+      }));
+    }
+  }, []);
+
   // Load project data, scan tests, and auto-evaluate calibration
   useEffect(() => {
     if (!isOpen || !projectId) return;
 
     let cancelled = false;
 
-    // 1. Pre-fill from localStorage only if user explicitly saved non-dummy parameters
-    let hasSavedLocal = false;
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(`pundit_cal_${projectId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          const isOldDummyDefault =
-            parsed.params &&
-            Number(parsed.params.a) === 1.2 &&
-            Number(parsed.params.b) === 0.85 &&
-            (!parsed.cube_correlation_points || parsed.cube_correlation_points.length === 0);
-
-          if (!isOldDummyDefault) {
-            hasSavedLocal = true;
-            if (parsed.design_strength_mpa && Number(parsed.design_strength_mpa) > 0) {
-              setDesignStrengthMpa(Number(parsed.design_strength_mpa));
-            }
-            if (parsed.curve_type) setCurveType(parsed.curve_type);
-            if (parsed.params) {
-              if (parsed.params.a != null) setParamA(Number(parsed.params.a));
-              if (parsed.params.b != null) setParamB(Number(parsed.params.b));
-              if (parsed.params.c != null) setParamC(Number(parsed.params.c));
-            }
-            if (parsed.notes) setCalibrationNotes(parsed.notes);
-            if (parsed.cube_correlation_points && Array.isArray(parsed.cube_correlation_points)) {
-              setCubePoints(parsed.cube_correlation_points);
-            }
-          }
-        }
-      } catch {}
-    }
+    // 1. Fetch project core samples from database
+    getCoreSamples(projectId)
+      .then((cores) => {
+        if (cancelled) return;
+        setCoreSamples(cores);
+      })
+      .catch(() => {});
 
     // 2. Fetch server scan tests if not passed and execute scan decision engine
     const currentTests = tests && tests.length > 0 ? tests : [];
     if (currentTests.length > 0) {
       setInternalTests(currentTests);
-      decideScanModelAndCoefficients(currentTests, cubePoints, [], !hasSavedLocal);
+      decideScanModelAndCoefficients(currentTests, cubePoints, [], true);
     } else {
       getPunditTests({ project: projectId })
         .then((ts) => {
           if (cancelled) return;
           setInternalTests(ts);
-          decideScanModelAndCoefficients(ts, cubePoints, [], !hasSavedLocal);
+          decideScanModelAndCoefficients(ts, cubePoints, [], true);
         })
         .catch(() => {});
     }
 
-    // 3. Fetch project core samples from database
-    getCoreSamples(projectId)
-      .then((cores) => {
-        if (cancelled) return;
-        setCoreSamples(cores);
-        const pairs = cores.filter((c) => c.calibration_pair && c.calibration_pair.v > 1500);
-        if (pairs.length > 0 && !hasSavedLocal) {
-          decideScanModelAndCoefficients(internalTests, cubePoints, cores, true);
-        }
-      })
-      .catch(() => {});
-
-    // 4. Query active project strength curve
+    // 3. Query active project strength curve and auto-populate inputs
     setIsLoadingCurve(true);
     getActiveCurve(projectId)
       .then((res) => {
         if (cancelled || !res) return;
         setActiveCurveInfo(res);
-        const curve = res.curve;
-        if (curve && !hasSavedLocal) {
-          if (curve.curve_type) setCurveType(curve.curve_type);
-          const p = curve.formula_params || {};
-          if (curve.curve_type === "exponential") {
-            const aVal = p.a != null ? Number(p.a) : 1.39;
-            let bVal = p.b != null ? Number(p.b) : 0.78;
-            if (bVal > 0 && bVal < 0.01) bVal = Number((bVal * 1000).toFixed(4));
-            const cVal = p.c != null ? Number(p.c) : 0.0;
-            setParamA(aVal);
-            setParamB(bVal);
-            setParamC(cVal);
-          }
+        if (res.curve) {
+          applyActiveCurve(res.curve);
         }
       })
       .catch(() => {})
@@ -473,7 +433,7 @@ export default function PunditCalibrationModal({
     return () => {
       cancelled = true;
     };
-  }, [projectId, isOpen, tests, decideScanModelAndCoefficients]);
+  }, [projectId, isOpen, tests, decideScanModelAndCoefficients, applyActiveCurve]);
 
   // Function to calculate f_cu based on current parameters
   const calculateStrength = (velocityMs: number, type: CurveType): number | null => {
@@ -735,7 +695,7 @@ export default function PunditCalibrationModal({
                     setParamC(0.0);
                   } else if (scanDecision?.source === "preset_jones" || scanDecision?.a === 2.8) {
                     setParamA(2.80);
-                    setParamB(0.53);
+                    setParamB(0.58);
                     setParamC(0.0);
                   } else {
                     setParamA(1.20);
@@ -1003,13 +963,17 @@ export default function PunditCalibrationModal({
             )}
 
             {activeCurveInfo?.curve && (
-              <div className="flex items-center justify-between text-[11px] bg-sky-50 border border-sky-100 px-3 py-1.5 rounded-xl">
-                <span className="text-slate-600 flex items-center gap-1.5 font-medium">
-                  <Sparkles size={13} className="text-sky-500" />
-                  <span>Active Strength Curve:</span>
-                  <strong className="text-slate-800">{activeCurveInfo.curve.name}</strong>
+              <div
+                onClick={() => applyActiveCurve(activeCurveInfo.curve)}
+                className="flex flex-wrap items-center justify-between text-[11px] bg-sky-50/90 border border-sky-200 px-3.5 py-2 rounded-xl cursor-pointer hover:bg-sky-100 transition-all shadow-2xs group"
+                title="Click to automatically apply active curve parameters (a, b, c) into the input fields"
+              >
+                <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                  <Sparkles size={13} className="text-sky-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-slate-700 font-semibold">Active Strength Curve:</span>
+                  <strong className="text-slate-900">{activeCurveInfo.curve.name}</strong>
                   {activeCurveInfo.source === "project_setting" ? (
-                    <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[10px] border border-emerald-200">
                       Project Curve
                     </span>
                   ) : (
@@ -1017,12 +981,17 @@ export default function PunditCalibrationModal({
                       Platform Baseline
                     </span>
                   )}
-                </span>
-                {activeCurveInfo.curve.standard && (
-                  <span className="text-slate-400 text-[10px] font-mono">
-                    {activeCurveInfo.curve.standard}
+                </div>
+                <div className="flex items-center gap-2">
+                  {activeCurveInfo.curve.standard && (
+                    <span className="text-slate-500 text-[10px] font-mono">
+                      {activeCurveInfo.curve.standard}
+                    </span>
+                  )}
+                  <span className="bg-[#022C4F] text-white font-bold text-[10px] px-2.5 py-1 rounded-lg group-hover:bg-[#033c6c] transition-colors shadow-2xs">
+                    Apply Active Parameters
                   </span>
-                )}
+                </div>
               </div>
             )}
 
@@ -1158,17 +1127,21 @@ export default function PunditCalibrationModal({
 
           {/* Optional Project Cube Correlation Points */}
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/90 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-bold text-slate-800">
-                    4. Site Laboratory Cube Crush Calibration Pairs (Ground Truth)
+                    4. Route 1: Site Laboratory Cube Crush Calibration Pairs (Ground Truth)
                   </h4>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase tracking-wide">
-                    Optional
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                    cubePoints.length > 0
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-slate-200 text-slate-700"
+                  }`}>
+                    {cubePoints.length > 0 ? `${cubePoints.length} Pairs (Route 1 Active)` : "Route 2 Empirical Baseline"}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Destructive cube test pairs from this project ground the curve empirically. <strong>Not required</strong> — if skipped, the system uses the scan batch velocity to calibrate the optimal model automatically.
+                  Destructive cube/core test pairs ground the curve empirically (Route 1). If empty, the system operates in Route 2 (Empirical Baseline), safely omitting correlation Table 3.0 from the final report.
                 </p>
             </div>
 
