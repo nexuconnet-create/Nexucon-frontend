@@ -376,6 +376,81 @@ export default function PunditCalibrationModal({
     }
   }, []);
 
+  const fitExponentialFromPairs = useCallback((
+    pairs: Array<{ velocity_ms: number; cube_strength_mpa: number; rebound?: number }>
+  ) => {
+    if (pairs.length < 2) return null;
+
+    const N = pairs.length;
+    const vKm = pairs.map((p) => p.velocity_ms / 1000.0);
+    const fVals = pairs.map((p) => p.cube_strength_mpa);
+    const meanF = fVals.reduce((acc, val) => acc + val, 0) / N;
+    const ssTot = fVals.reduce((sum, f) => sum + (f - meanF) ** 2, 0);
+
+    let sumV = 0,
+      sumY = 0,
+      sumVY = 0,
+      sumV2 = 0;
+    for (let i = 0; i < N; i++) {
+      const vi = vKm[i];
+      const yi = Math.log(Math.max(fVals[i], 0.1));
+      sumV += vi;
+      sumY += yi;
+      sumVY += vi * yi;
+      sumV2 += vi * vi;
+    }
+    const denom = N * sumV2 - sumV * sumV;
+    if (Math.abs(denom) < 1e-6) return null;
+
+    const b = (N * sumVY - sumV * sumY) / denom;
+    const lnA = (sumY - b * sumV) / N;
+    const a = Math.exp(lnA);
+
+    let ssRes = 0;
+    for (let i = 0; i < N; i++) {
+      const pred = a * Math.exp(b * vKm[i]);
+      ssRes += (fVals[i] - pred) ** 2;
+    }
+    const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0.98;
+    const s = N > 2 ? Math.sqrt(ssRes / (N - 2)) : 0.5;
+
+    const fittedA = Number(a.toFixed(2));
+    const fittedB = Number(b.toFixed(2));
+    const fittedC = 0.0;
+    const r2Val = Number(r2.toFixed(4));
+    const sVal = Number(s.toFixed(2));
+
+    setCurveType("exponential");
+    setParamA(fittedA);
+    setParamB(fittedB);
+    setParamC(fittedC);
+    setFitStats({ r2: r2Val, s: sVal, n: N });
+
+    const notes = `Route 1 (Project-Specific Calibration): Exponential non-linear regression fitted across ${N} laboratory cube crush pairs: f_cu = ${fittedA} · exp(${fittedB} · V_km/s) (R² = ${r2Val}, s = ${sVal} MPa). Full Table 3.0 correlation pairs will be rendered in official NDT reports.`;
+    setCalibrationNotes(notes);
+
+    const vMin = Math.min(...pairs.map((p) => p.velocity_ms));
+    const vMax = Math.max(...pairs.map((p) => p.velocity_ms));
+    const vMean = Math.round(pairs.reduce((acc, p) => acc + p.velocity_ms, 0) / N);
+
+    setScanDecision({
+      model: "exponential",
+      modelName: `Exponential (Route 1: ${N} Site Laboratory Pairs)`,
+      a: fittedA,
+      b: fittedB,
+      c: fittedC,
+      r2: r2Val,
+      rationale: notes,
+      vMean,
+      vMin,
+      vMax,
+      nElements: N,
+      source: "lab_regression",
+    });
+
+    return { a: fittedA, b: fittedB, r2: r2Val, s: sVal, n: N };
+  }, []);
+
   const applyActiveCurve = useCallback((curve: any) => {
     if (!curve) return;
     if (curve.curve_type) setCurveType(curve.curve_type);
@@ -551,81 +626,6 @@ export default function PunditCalibrationModal({
       };
     });
   }, [paramA, paramB, paramC, curveType, designStrengthMpa]);
-
-  const fitExponentialFromPairs = (
-    pairs: Array<{ velocity_ms: number; cube_strength_mpa: number; rebound?: number }>
-  ) => {
-    if (pairs.length < 2) return null;
-
-    const N = pairs.length;
-    const vKm = pairs.map((p) => p.velocity_ms / 1000.0);
-    const fVals = pairs.map((p) => p.cube_strength_mpa);
-    const meanF = fVals.reduce((acc, val) => acc + val, 0) / N;
-    const ssTot = fVals.reduce((sum, f) => sum + (f - meanF) ** 2, 0);
-
-    let sumV = 0,
-      sumY = 0,
-      sumVY = 0,
-      sumV2 = 0;
-    for (let i = 0; i < N; i++) {
-      const vi = vKm[i];
-      const yi = Math.log(Math.max(fVals[i], 0.1));
-      sumV += vi;
-      sumY += yi;
-      sumVY += vi * yi;
-      sumV2 += vi * vi;
-    }
-    const denom = N * sumV2 - sumV * sumV;
-    if (Math.abs(denom) < 1e-6) return null;
-
-    const b = (N * sumVY - sumV * sumY) / denom;
-    const lnA = (sumY - b * sumV) / N;
-    const a = Math.exp(lnA);
-
-    let ssRes = 0;
-    for (let i = 0; i < N; i++) {
-      const pred = a * Math.exp(b * vKm[i]);
-      ssRes += (fVals[i] - pred) ** 2;
-    }
-    const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0.98;
-    const s = N > 2 ? Math.sqrt(ssRes / (N - 2)) : 0.5;
-
-    const fittedA = Number(a.toFixed(2));
-    const fittedB = Number(b.toFixed(2));
-    const fittedC = 0.0;
-    const r2Val = Number(r2.toFixed(4));
-    const sVal = Number(s.toFixed(2));
-
-    setCurveType("exponential");
-    setParamA(fittedA);
-    setParamB(fittedB);
-    setParamC(fittedC);
-    setFitStats({ r2: r2Val, s: sVal, n: N });
-
-    const notes = `Route 1 (Project-Specific Calibration): Exponential non-linear regression fitted across ${N} laboratory cube crush pairs: f_cu = ${fittedA} · exp(${fittedB} · V_km/s) (R² = ${r2Val}, s = ${sVal} MPa). Full Table 3.0 correlation pairs will be rendered in official NDT reports.`;
-    setCalibrationNotes(notes);
-
-    const vMin = Math.min(...pairs.map((p) => p.velocity_ms));
-    const vMax = Math.max(...pairs.map((p) => p.velocity_ms));
-    const vMean = Math.round(pairs.reduce((acc, p) => acc + p.velocity_ms, 0) / N);
-
-    setScanDecision({
-      model: "exponential",
-      modelName: `Exponential (Route 1: ${N} Site Laboratory Pairs)`,
-      a: fittedA,
-      b: fittedB,
-      c: fittedC,
-      r2: r2Val,
-      rationale: notes,
-      vMean,
-      vMin,
-      vMax,
-      nElements: N,
-      source: "lab_regression",
-    });
-
-    return { a: fittedA, b: fittedB, r2: r2Val, s: sVal, n: N };
-  };
 
   const handleAddCubePoint = () => {
     const v = Number(newVel);
