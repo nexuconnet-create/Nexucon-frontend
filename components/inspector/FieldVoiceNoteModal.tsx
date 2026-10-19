@@ -25,6 +25,10 @@ import {
   X,
   Radio,
   FolderCheck,
+  Camera,
+  Image as ImageIcon,
+  Paperclip,
+  Trash2,
 } from "lucide-react";
 import { uploadInspectorEvidence, getAssignableProjects } from "@/services/inspector";
 
@@ -146,6 +150,28 @@ export default function FieldVoiceNoteModal({
   const [category, setCategory] = useState<string>(defaultCategory);
   const [severity, setSeverity] = useState<string>("MEDIUM");
   const [description, setDescription] = useState<string>("");
+  const [gridAxis, setGridAxis] = useState<string>("");
+  const [floorLevel, setFloorLevel] = useState<string>("");
+
+  // Attached Photo Evidence linked directly to this voice note
+  const [attachedPhoto, setAttachedPhoto] = useState<File | null>(null);
+  const [attachedPhotoPreview, setAttachedPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAttachedPhoto(file);
+    const url = URL.createObjectURL(file);
+    setAttachedPhotoPreview(url);
+  };
+
+  const handleRemovePhoto = () => {
+    if (attachedPhotoPreview) URL.revokeObjectURL(attachedPhotoPreview);
+    setAttachedPhoto(null);
+    setAttachedPhotoPreview(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
 
   // GPS Coordinates
   const [coordinates, setCoordinates] = useState<{
@@ -226,6 +252,13 @@ export default function FieldVoiceNoteModal({
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
+    if (attachedPhotoPreview) {
+      URL.revokeObjectURL(attachedPhotoPreview);
+    }
+    setAttachedPhoto(null);
+    setAttachedPhotoPreview(null);
+    setGridAxis("");
+    setFloorLevel("");
     setAudioBlob(null);
     setAudioUrl(null);
     setTranscript("");
@@ -521,6 +554,7 @@ export default function FieldVoiceNoteModal({
         type: mimeType,
       });
 
+      const timestampIso = new Date().toISOString();
       const effectiveTranscript = transcript.trim() || description.trim() || "Field voice note recorded.";
       const finalTranslations = {
         en: translations.en || effectiveTranscript,
@@ -528,6 +562,15 @@ export default function FieldVoiceNoteModal({
         ha: translations.ha || (await translateVoiceText(effectiveTranscript, "ha")),
         ig: translations.ig || (await translateVoiceText(effectiveTranscript, "ig")),
       };
+
+      const locTags = [
+        gridAxis.trim() ? `[Grid Axis: ${gridAxis.trim()}]` : "",
+        floorLevel.trim() ? `[Floor Level: ${floorLevel.trim()}]` : "",
+        coordinates ? `[GPS: ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}]` : "",
+        attachedPhoto ? `[Linked Photo: ${attachedPhoto.name}]` : "",
+      ].filter(Boolean).join(" ");
+
+      const fullVoiceDescription = [description.trim(), locTags, `[Transcript: ${effectiveTranscript}]`].filter(Boolean).join(" ");
 
       const result = await uploadInspectorEvidence(
         {
@@ -538,12 +581,12 @@ export default function FieldVoiceNoteModal({
           structuralElementId: isGeneralRemark ? "GENERAL (ALL MEMBERS)" : structuralElement.trim(),
           category,
           severity,
-          description: description.trim() || effectiveTranscript,
+          description: fullVoiceDescription,
           transcript: effectiveTranscript,
           translations: finalTranslations,
           duration_seconds: recordingSeconds || audioDuration,
           sha256: sha256Digest || undefined,
-          capturedAt: new Date().toISOString(),
+          capturedAt: timestampIso,
           coordinates: coordinates
             ? {
                 latitude: coordinates.latitude,
@@ -553,9 +596,43 @@ export default function FieldVoiceNoteModal({
             : null,
         },
         (progress) => {
-          setUploadProgress(Math.max(0.1, progress));
+          setUploadProgress(Math.max(0.1, progress * (attachedPhoto ? 0.6 : 1.0)));
         }
       );
+
+      // If photo evidence was captured, upload and link it directly to this voice note
+      if (attachedPhoto) {
+        const photoDesc = [
+          `[Linked to Voice Note Evidence ${result.evidence_reference || sha256Digest}]`,
+          gridAxis.trim() ? `[Grid Axis: ${gridAxis.trim()}]` : "",
+          floorLevel.trim() ? `[Floor Level: ${floorLevel.trim()}]` : "",
+          effectiveTranscript,
+        ].filter(Boolean).join(" ");
+
+        await uploadInspectorEvidence(
+          {
+            project: selectedProjectId,
+            file: attachedPhoto,
+            source_type: "photo",
+            batchId: batchId || undefined,
+            structuralElementId: isGeneralRemark ? "GENERAL (ALL MEMBERS)" : structuralElement.trim(),
+            category,
+            severity,
+            description: photoDesc,
+            capturedAt: timestampIso,
+            coordinates: coordinates
+              ? {
+                  latitude: coordinates.latitude,
+                  longitude: coordinates.longitude,
+                  accuracy: coordinates.accuracy || 10,
+                }
+              : null,
+          },
+          (progress) => {
+            setUploadProgress(0.6 + progress * 0.4);
+          }
+        );
+      }
 
       setSuccessRecord(result);
       if (onEvidenceCreated) {
@@ -633,6 +710,11 @@ export default function FieldVoiceNoteModal({
                 <p className="text-xs text-emerald-700 mt-0.5">
                   Audio checksum SHA-256 and multilingual transcripts committed to state registry.
                 </p>
+                {attachedPhoto && (
+                  <p className="text-xs text-cyan-800 font-semibold bg-cyan-50 border border-cyan-200 rounded-lg p-2 mt-1">
+                    ✓ Linked Photo Evidence ({attachedPhoto.name}) registered and linked to this voice note record.
+                  </p>
+                )}
               </div>
 
               {/* SHA-256 Verification pill */}
@@ -1052,6 +1134,101 @@ export default function FieldVoiceNoteModal({
                   placeholder="e.g. Observed during 3rd floor slab inspection before concrete pour..."
                   className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
+              </div>
+
+              {/* Architectural Grid Axis & Floor Level */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Architectural Grid Axis / Line
+                  </label>
+                  <input
+                    type="text"
+                    value={gridAxis}
+                    onChange={(e) => setGridAxis(e.target.value)}
+                    placeholder="e.g. Axis A1, Intersection 4-B, Line C-3"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Structural grid coordinate (distinct from floor elevation)
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Floor Level / Pour Elevation
+                  </label>
+                  <input
+                    type="text"
+                    value={floorLevel}
+                    onChange={(e) => setFloorLevel(e.target.value)}
+                    placeholder="e.g. Ground Floor, 1st Floor Pour, Roof Deck"
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* Linked Photo Evidence Attachment (Unified Site Observation) */}
+              <div className="p-3.5 rounded-2xl bg-cyan-50/50 border border-cyan-200/80 text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera size={15} className="text-cyan-800" />
+                    <span className="font-bold text-[#022C4F]">
+                      Link Photo Evidence to this Voice Note
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-cyan-800 bg-cyan-100/90 px-2 py-0.5 rounded-full border border-cyan-200">
+                    Unified Observation
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Attach or capture a site photo directly on your phone/tablet to commit with this voice note in a single statutory record.
+                </p>
+
+                {attachedPhotoPreview ? (
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-cyan-200">
+                    <img
+                      src={attachedPhotoPreview}
+                      alt="Attached evidence preview"
+                      className="w-14 h-14 object-cover rounded-lg border border-slate-200 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">
+                        {attachedPhoto?.name}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        {((attachedPhoto?.size || 0) / 1024).toFixed(1)} KB · Image Evidence Linked
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+                      title="Remove attached photo"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                      id="voice-note-photo-input"
+                    />
+                    <label
+                      htmlFor="voice-note-photo-input"
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-cyan-100/70 text-cyan-900 border border-cyan-300 font-bold text-xs cursor-pointer transition-colors shadow-2xs"
+                    >
+                      <Camera size={14} className="text-cyan-700" />
+                      <span>Take Photo or Pick from Device</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Live Geofencing & SHA-256 Tamper Seal */}

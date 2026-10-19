@@ -1932,7 +1932,7 @@ function mapPunditAnalysis(row: any): PunditAIAnalysis {
       : (typeof row.recommendations === 'string' && row.recommendations ? [row.recommendations] : []),
     reasoning_log: Array.isArray(row.reasoning_log)
       ? row.reasoning_log
-      : (typeof row.reasoning_log === 'string' && row.reasoning_log ? [row.reasoning_log] : []),
+      : (typeof row.reasoning_log === 'string' && row.reasoning_log ? row.reasoning_log.split('\n') : []),
     model_provider: row.model_provider ?? '',
     model_version: row.model_version ?? '',
     created_at: row.created_at ?? '',
@@ -3925,11 +3925,21 @@ export const createSiteAttendanceRecord = async (
 export const calibratePunditBatchModel = async (
   payload: BatchCalibrationPayload
 ): Promise<BatchCalibrationResult> => {
+  const body = {
+    ...payload,
+    project: payload.project_id,
+    project_id: payload.project_id,
+  };
   try {
-    const res = await api.post('/digital-eye/pundit-batches/calibrate/', payload);
+    const res = await api.post('/digital-eye/pundit-batches/calibrate/', body);
     const result = unwrap<BatchCalibrationResult | null>(res, null);
     if (result) return result;
-  } catch {}
+  } catch (err: any) {
+    console.warn("Backend calibration error:", err?.response?.data || err?.message);
+    if (err?.response?.data?.detail) {
+      throw new Error(err.response.data.detail);
+    }
+  }
 
   // Return formatted calibration confirmation
   return {

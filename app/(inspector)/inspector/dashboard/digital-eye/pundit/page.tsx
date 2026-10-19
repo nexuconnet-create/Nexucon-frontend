@@ -678,9 +678,14 @@ function PunditWorkspaceInner() {
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
           <span>{dateOr(t.test_date || t.created_at)}</span>
-          <span className="font-mono font-bold text-slate-700">
-            {formatVelocityMs(t.pulse_velocity_ms)} m/s
-          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="font-mono font-bold text-slate-700">
+              {formatVelocityMs(t.pulse_velocity_ms)} m/s
+            </span>
+            <span className="text-[10px] font-mono text-slate-400">
+              mean f_cu: <strong className={t.estimated_compressive_strength_mpa != null ? "text-slate-700 font-bold" : "text-slate-400 font-semibold"}>{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa} MPa` : "—"}</strong>
+            </span>
+          </div>
         </div>
       </div>
     );

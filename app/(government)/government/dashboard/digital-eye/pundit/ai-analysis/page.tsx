@@ -888,6 +888,7 @@ export default function PunditAIAnalysisPage() {
         batchId={selectedBatch?.id}
         batchName={selectedBatch?.folder_name || "Primary Grid Scan"}
         elementCount={tests.length > 0 ? tests.length : (selectedBatch?.element_count || 20)}
+        tests={tests}
         onConfirmCalibrationAndAnalyze={handleConfirmCalibrationAndAnalyze}
         isSubmitting={isRunningAnalysis}
       />

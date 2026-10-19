@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Activity, ShieldCheck, AlertTriangle, Info, TrendingUp } from "lucide-react";
+import { Activity, ShieldCheck, AlertTriangle, Info, TrendingUp, Download, Columns } from "lucide-react";
 import { PunditTest, formatVelocityMs } from "@/services/digitalEye";
 
 interface PunditElementVelocityBarChartProps {
@@ -17,14 +17,31 @@ export default function PunditElementVelocityBarChart({
   onSelectTest,
   className = "",
 }: PunditElementVelocityBarChartProps) {
-  const [metricMode, setMetricMode] = useState<"velocity" | "strength">("velocity");
+  const [metricMode, setMetricMode] = useState<"velocity" | "strength" | "combined">("combined");
   const [sortBy, setSortBy] = useState<"element" | "velocity_asc" | "velocity_desc" | "strength_asc">("element");
   const [hoveredStationId, setHoveredStationId] = useState<string | null>(null);
 
-  // Filter & sort tests using natural numeric order or selected sort criteria
+  // Filter, deduplicate, & sort tests using natural numeric order or selected sort criteria
   const sortedTests = useMemo(() => {
     const valid = tests.filter((t) => t.pulse_velocity_ms > 0);
-    return [...valid].sort((a, b) => {
+    // Deduplicate stations by structural element identifier so repeat batch imports collapse to unique elements
+    const elementMap = new Map<string, PunditTest>();
+    for (const t of valid) {
+      const rawName = (t.structural_element_name || (t as any).structural_element || t.test_location || t.test_reference || "").trim();
+      const normKey = rawName.toUpperCase();
+      const existing = elementMap.get(normKey);
+      if (!existing) {
+        elementMap.set(normKey, t);
+      } else {
+        const tScore = ((t as any).readings?.length || 0) + (t.estimated_compressive_strength_mpa ? 10 : 0);
+        const exScore = ((existing as any).readings?.length || 0) + (existing.estimated_compressive_strength_mpa ? 10 : 0);
+        if (tScore >= exScore) {
+          elementMap.set(normKey, t);
+        }
+      }
+    }
+    const deduped = Array.from(elementMap.values());
+    return deduped.sort((a, b) => {
       if (sortBy === "velocity_asc") {
         return a.pulse_velocity_ms - b.pulse_velocity_ms;
       }
@@ -54,6 +71,52 @@ export default function PunditElementVelocityBarChart({
     const lowCount = vList.filter((v) => v < 3500).length;
     return { meanV, minV, maxV, goodCount, lowCount };
   }, [sortedTests]);
+
+  const exportCSV = () => {
+    if (sortedTests.length === 0) return;
+    const headers = [
+      "Station / Element ID",
+      "Structural Element Name",
+      "Test Location / Grid",
+      "Pulse Velocity (m/s)",
+      "Transit Time (us)",
+      "Path Length (mm)",
+      "Estimated fcu (MPa)",
+      "BS 1881-203 Quality Band",
+      "Transmission Mode",
+      "Test Date",
+    ];
+
+    const rows = sortedTests.map((t, idx) => {
+      const elemName = t.structural_element_name || (t as any).structural_element || `S${idx + 1}`;
+      const quality = t.pulse_velocity_ms > 5000 ? "REBAR (>5000)" :
+        t.pulse_velocity_ms >= 4500 ? "EXCELLENT (4500-5000)" :
+        t.pulse_velocity_ms >= 3500 ? "GOOD (3500-4500)" :
+        t.pulse_velocity_ms >= 3000 ? "FAIR (3000-3500)" : "DOUBTFUL / POOR (<3000)";
+
+      return [
+        `"S${idx + 1}"`,
+        `"${elemName.replace(/"/g, '""')}"`,
+        `"${(t.test_location || "").replace(/"/g, '""')}"`,
+        t.pulse_velocity_ms,
+        t.transit_time_us || "",
+        t.path_length_mm || "",
+        t.estimated_compressive_strength_mpa ?? "Pending Govt Calibration",
+        `"${quality}"`,
+        `"${t.transducer_type || (t as any).transmission_mode || "DIRECT"}"`,
+        `"${(t as any).test_date || ""}"`,
+      ].join(",");
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `PUNDIT_Observations_Raw_Data_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getVelocityBarColor = (v: number) => {
     if (v > 5000) return "bg-purple-600 border-purple-400";
@@ -100,8 +163,18 @@ export default function PunditElementVelocityBarChart({
           </p>
         </div>
 
-        {/* Controls: Metric Toggle & Sort Order */}
+        {/* Controls: Metric Toggle, Sort Order & CSV Export */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Download Raw CSV */}
+          <button
+            onClick={exportCSV}
+            className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors"
+            title="Download complete raw observation data and velocity parameters as CSV"
+          >
+            <Download size={13} className="text-teal-600" />
+            <span>Download CSV</span>
+          </button>
+
           {/* Sort By Dropdown */}
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700">
             <span className="text-[11px] text-slate-500 pl-2">Sort:</span>
@@ -117,8 +190,20 @@ export default function PunditElementVelocityBarChart({
             </select>
           </div>
 
-          {/* Metric Selector Toggle */}
+          {/* Metric Selector Toggle (includes Side-by-Side Combined View) */}
           <div className="flex rounded-xl border border-slate-200 overflow-hidden text-xs font-bold p-0.5 bg-slate-100">
+            <button
+              onClick={() => setMetricMode("combined")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                metricMode === "combined"
+                  ? "bg-[#022C4F] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Side-by-side combined view of Pulse Velocity and Compressive Strength"
+            >
+              <Columns size={12} />
+              <span>Side-by-Side (V &amp; f_cu)</span>
+            </button>
             <button
               onClick={() => setMetricMode("velocity")}
               className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
@@ -137,7 +222,7 @@ export default function PunditElementVelocityBarChart({
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Comp. Strength (f_cu MPa)
+              Comp. Strength (f_cu)
             </button>
           </div>
         </div>
@@ -199,7 +284,11 @@ export default function PunditElementVelocityBarChart({
               </div>
               <span className="font-bold text-teal-800 flex items-center gap-1">
                 <span className="w-3 h-0.5 border-b-2 border-dashed border-teal-900 inline-block" />
-                {metricMode === "velocity" ? "Cutoff Threshold: 3,500 m/s (BS 1881-203)" : `Cutoff Target: ${targetDesignStrengthMpa} MPa`}
+                {metricMode === "combined"
+                  ? `Cutoffs: V \u2265 3,500 m/s & f_cu \u2265 ${targetDesignStrengthMpa} MPa`
+                  : metricMode === "velocity"
+                  ? "Cutoff Threshold: 3,500 m/s (BS 1881-203)"
+                  : `Cutoff Target: ${targetDesignStrengthMpa} MPa`}
               </span>
             </div>
 
@@ -214,12 +303,17 @@ export default function PunditElementVelocityBarChart({
 
                 const isVelPass = vel >= 3500;
                 const isFcuPass = fcu != null && fcu >= targetDesignStrengthMpa;
-                const isCompliant = metricMode === "velocity" ? isVelPass : isFcuPass;
+                const isCompliant = metricMode === "combined"
+                  ? isVelPass && (fcu == null || isFcuPass)
+                  : metricMode === "velocity"
+                  ? isVelPass
+                  : isFcuPass;
 
                 // Percentages for bar width (max velocity 5500 m/s, max strength 60 MPa)
                 const velPercent = Math.min(100, Math.max(5, (vel / 5500) * 100));
                 const fcuPercent = fcu != null ? Math.min(100, Math.max(5, (fcu / 60) * 100)) : 0;
-                const thresholdPercent = metricMode === "velocity" ? (3500 / 5500) * 100 : (targetDesignStrengthMpa / 60) * 100;
+                const velThresholdPercent = (3500 / 5500) * 100;
+                const fcuThresholdPercent = (targetDesignStrengthMpa / 60) * 100;
 
                 return (
                   <div
@@ -253,27 +347,73 @@ export default function PunditElementVelocityBarChart({
                         </span>
                       </div>
 
-                      {/* Bar Track Container with Threshold Line */}
-                      <div className="flex-1 relative h-6 bg-slate-200/80 rounded-lg overflow-hidden border border-slate-300/60">
-                        {/* Cutoff Threshold Line */}
-                        <div
-                          className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-slate-900 z-10 opacity-75"
-                          style={{ left: `${thresholdPercent}%` }}
-                        />
+                      {/* Bar Track Container */}
+                      {metricMode === "combined" ? (
+                        <div className="flex-1 space-y-1.5">
+                          {/* Top: Velocity Track */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-slate-500 w-12 shrink-0">V (m/s):</span>
+                            <div className="flex-1 relative h-4 bg-slate-200/80 rounded overflow-hidden border border-slate-300/60">
+                              <div
+                                className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-slate-900 z-10 opacity-75"
+                                style={{ left: `${velThresholdPercent}%` }}
+                                title="3,500 m/s Threshold"
+                              />
+                              <div
+                                className={`h-full transition-all duration-500 rounded-r flex items-center justify-end pr-1.5 font-mono text-[9px] font-bold text-white ${getVelocityBarColor(vel)}`}
+                                style={{ width: `${velPercent}%` }}
+                              >
+                                {formatVelocityMs(vel)} m/s
+                              </div>
+                            </div>
+                          </div>
 
-                        {/* Animated Bar Fill */}
-                        <div
-                          className={`h-full transition-all duration-500 rounded-r-md flex items-center justify-end pr-2 font-mono text-[11px] font-bold text-white shadow-2xs ${
-                            metricMode === "velocity" ? getVelocityBarColor(vel) : getStrengthBarColor(fcu)
-                          }`}
-                          style={{ width: `${metricMode === "velocity" ? velPercent : fcuPercent}%` }}
-                        >
-                          {metricMode === "velocity" ? `${formatVelocityMs(vel)} m/s` : fcu != null ? `${fcu} MPa` : "Pending"}
+                          {/* Bottom: Compressive Strength Track */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-slate-500 w-12 shrink-0">f_cu (MPa):</span>
+                            <div className="flex-1 relative h-4 bg-slate-200/80 rounded overflow-hidden border border-slate-300/60">
+                              <div
+                                className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-teal-900 z-10 opacity-75"
+                                style={{ left: `${fcuThresholdPercent}%` }}
+                                title={`${targetDesignStrengthMpa} MPa Cutoff`}
+                              />
+                              {fcu != null ? (
+                                <div
+                                  className={`h-full transition-all duration-500 rounded-r flex items-center justify-end pr-1.5 font-mono text-[9px] font-bold text-white ${getStrengthBarColor(fcu)}`}
+                                  style={{ width: `${fcuPercent}%` }}
+                                >
+                                  {fcu} MPa
+                                </div>
+                              ) : (
+                                <div className="h-full bg-slate-100 flex items-center px-2 text-[9px] font-mono font-medium text-slate-500 italic">
+                                  — (Awaiting Government Calibration)
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="flex-1 relative h-6 bg-slate-200/80 rounded-lg overflow-hidden border border-slate-300/60">
+                          {/* Cutoff Threshold Line */}
+                          <div
+                            className="absolute top-0 bottom-0 w-0.5 border-r-2 border-dashed border-slate-900 z-10 opacity-75"
+                            style={{ left: `${metricMode === "velocity" ? velThresholdPercent : fcuThresholdPercent}%` }}
+                          />
+
+                          {/* Animated Bar Fill */}
+                          <div
+                            className={`h-full transition-all duration-500 rounded-r-md flex items-center justify-end pr-2 font-mono text-[11px] font-bold text-white shadow-2xs ${
+                              metricMode === "velocity" ? getVelocityBarColor(vel) : getStrengthBarColor(fcu)
+                            }`}
+                            style={{ width: `${metricMode === "velocity" ? velPercent : fcuPercent}%` }}
+                          >
+                            {metricMode === "velocity" ? `${formatVelocityMs(vel)} m/s` : fcu != null ? `${fcu} MPa` : "—"}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Numerical Summary Value & Compliance Badge */}
-                      <div className="w-36 shrink-0 text-right flex items-center justify-end gap-2 font-mono text-xs font-bold">
+                      <div className="w-40 shrink-0 text-right flex items-center justify-end gap-2 font-mono text-xs font-bold">
                         <span
                           className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
                             isCompliant
@@ -285,13 +425,22 @@ export default function PunditElementVelocityBarChart({
                           {isCompliant ? "PASS" : "FAIL"}
                         </span>
 
-                        {metricMode === "velocity" ? (
+                        {metricMode === "combined" ? (
+                          <div className="text-right">
+                            <div className={vel >= 3500 ? "text-slate-800 text-[11px]" : "text-rose-600 font-black text-[11px]"}>
+                              {formatVelocityMs(vel)} m/s
+                            </div>
+                            <div className="text-[10px] text-teal-700 font-bold">
+                              {fcu != null ? `${fcu} MPa` : "—"}
+                            </div>
+                          </div>
+                        ) : metricMode === "velocity" ? (
                           <span className={vel >= 3500 ? "text-teal-700" : "text-rose-600 font-black"}>
                             {formatVelocityMs(vel)} m/s
                           </span>
                         ) : (
-                          <span className={fcu != null && fcu >= targetDesignStrengthMpa ? "text-teal-700" : "text-rose-600 font-black"}>
-                            {fcu != null ? `${fcu} MPa` : "N/A"}
+                          <span className={fcu != null && fcu >= targetDesignStrengthMpa ? "text-teal-700" : "text-slate-600 font-bold"}>
+                            {fcu != null ? `${fcu} MPa` : "—"}
                           </span>
                         )}
                       </div>

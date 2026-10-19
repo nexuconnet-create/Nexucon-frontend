@@ -43,9 +43,13 @@ export interface ModelBounds {
   center: [number, number, number];
   /** Scene scale applied to the whole model. */
   scale: number;
+  /** Whether the model coordinates use IFC Z-up convention. */
+  isZUp?: boolean;
 }
 
-/** Whole-model bounding box over every element's vertices. */
+/** Whole-model bounding box over every element's vertices.
+ *  Aligns IFC Z-up coordinates with Three.js Y-up so floor slabs and laydown areas
+ *  lie horizontally on the foundation ground plane with authentic 3D depth. */
 export function computeBounds(elements: BIMModelGeometryElement[]): ModelBounds | null {
   const min: [number, number, number] = [Infinity, Infinity, Infinity];
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
@@ -65,22 +69,46 @@ export function computeBounds(elements: BIMModelGeometryElement[]): ModelBounds 
     }
   }
   if (seen === 0) return null;
-  const size = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+  const spanX = max[0] - min[0];
+  const spanY = max[1] - min[1];
+  const spanZ = max[2] - min[2];
+  const size = Math.max(spanX, spanY, spanZ);
   if (!Number.isFinite(size) || size <= 0) return null;
+
+  // In IFC / Revit world coordinates, +Z is vertical elevation, X is East/West, Y is North/South.
+  // In Three.js, +Y is vertical elevation, X is Right, +Z is Depth.
+  // Standard building & infrastructure IFCs have Z as elevation (e.g. 200mm slab thickness).
+  const isZUp = true;
+
+  const center: [number, number, number] = isZUp
+    ? [(min[0] + max[0]) / 2, (min[2] + max[2]) / 2, -((min[1] + max[1]) / 2)]
+    : [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+
+  const boundsMin: [number, number, number] = isZUp
+    ? [min[0], min[2], -max[1]]
+    : min;
+  const boundsMax: [number, number, number] = isZUp
+    ? [max[0], max[2], -min[1]]
+    : max;
+
   return {
-    min,
-    max,
-    center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
+    min: boundsMin,
+    max: boundsMax,
+    center,
     scale: FIT_SIZE / size,
+    isZUp,
   };
 }
 
 /** Raw-IFC → normalised scene coordinate for a point. */
 export function toScene(p: [number, number, number], b: ModelBounds): [number, number, number] {
+  const pThree: [number, number, number] = b.isZUp
+    ? [p[0], p[2], -p[1]]
+    : p;
   return [
-    (p[0] - b.center[0]) * b.scale,
-    (p[1] - b.center[1]) * b.scale,
-    (p[2] - b.center[2]) * b.scale,
+    (pThree[0] - b.center[0]) * b.scale,
+    (pThree[1] - b.center[1]) * b.scale,
+    (pThree[2] - b.center[2]) * b.scale,
   ];
 }
 
@@ -90,40 +118,53 @@ function ElementMesh({
   onSelect,
   opacity,
   wireframe,
+  bounds,
 }: {
   el: BIMModelGeometryElement;
   isSelected: boolean;
   onSelect?: (guid: string) => void;
-  /** Base opacity of unselected elements — 0.22 ghosts the model behind the
-   *  amber selection; scan-to-BIM passes the operator's overlay slider. */
+  /** Base opacity of unselected elements. */
   opacity: number;
   /** Render every element as a wireframe (Trimble viewer mode). */
   wireframe: boolean;
+  bounds: ModelBounds;
 }) {
+  const [hovered, setHovered] = React.useState(false);
+
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(el.verts, 3));
+    const v = el.verts || [];
+    const count = v.length;
+    const positions = new Float32Array(count);
+    if (bounds.isZUp) {
+      // Map IFC (X, Y, Z) to Three.js (X, Z, -Y):
+      for (let i = 0; i < count; i += 3) {
+        positions[i] = v[i];
+        positions[i + 1] = v[i + 2];
+        positions[i + 2] = -v[i + 1];
+      }
+    } else {
+      positions.set(v);
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     if (el.faces && el.faces.length > 0) {
       g.setIndex(el.faces);
     }
     g.computeVertexNormals();
     return g;
-  }, [el]);
+  }, [el, bounds.isZUp]);
 
-  // Bright edge outline for the selected element — makes the selection
-  // change unmistakable even when the mesh is thin or buried.
-  const edges = useMemo(
-    () => (isSelected ? new THREE.EdgesGeometry(geometry, 20) : null),
-    [geometry, isSelected],
-  );
+  // Clean edge outline for all elements: subtle construction joints for unselected,
+  // vivid amber for the selected target element.
+  const edges = useMemo(() => new THREE.EdgesGeometry(geometry, 25), [geometry]);
 
   // Release the GPU buffers when the element unmounts or the mesh changes.
   useEffect(() => () => {
     geometry.dispose();
-    edges?.dispose();
+    edges.dispose();
   }, [geometry, edges]);
 
-  const color = isSelected ? SELECTED_COLOR : (TYPE_COLORS[el.type] || DEFAULT_COLOR);
+  const color = isSelected ? SELECTED_COLOR : (hovered ? '#cbd5e1' : (TYPE_COLORS[el.type] || DEFAULT_COLOR));
 
   return (
     <>
@@ -133,25 +174,35 @@ function ElementMesh({
           e.stopPropagation();
           onSelect(el.guid);
         } : undefined}
-        onPointerOver={onSelect ? () => {
+        onPointerOver={onSelect ? (e) => {
+          e.stopPropagation();
+          setHovered(true);
           document.body.style.cursor = 'pointer';
         } : undefined}
         onPointerOut={() => {
+          setHovered(false);
           document.body.style.cursor = 'auto';
         }}
       >
         <meshStandardMaterial
           color={color}
-          transparent
-          opacity={isSelected ? 1 : opacity}
+          roughness={0.42}
+          metalness={0.12}
+          transparent={opacity < 0.98}
+          opacity={isSelected ? 1.0 : (hovered ? 1.0 : opacity)}
           wireframe={wireframe}
           side={THREE.DoubleSide}
-          emissive={isSelected ? '#7c3f00' : '#000000'}
+          emissive={isSelected ? '#b45309' : (hovered ? '#1e293b' : '#000000')}
         />
       </mesh>
-      {edges && !wireframe && (
+      {!wireframe && (
         <lineSegments geometry={edges}>
-          <lineBasicMaterial color={SELECTED_EDGE} />
+          <lineBasicMaterial
+            color={isSelected ? SELECTED_EDGE : '#334155'}
+            transparent
+            opacity={isSelected ? 1.0 : 0.45}
+            linewidth={isSelected ? 2 : 1}
+          />
         </lineSegments>
       )}
     </>
@@ -165,7 +216,7 @@ export function BIMModelScene({
   bounds,
   selectedGuid,
   onSelect,
-  opacity = 0.22,
+  opacity = 0.92,
   wireframe = false,
 }: {
   elements: BIMModelGeometryElement[];
@@ -175,9 +226,6 @@ export function BIMModelScene({
   opacity?: number;
   wireframe?: boolean;
 }) {
-  // Scale the model to FIT_SIZE scene units and translate its bounding-box
-  // centre to the origin, so a fixed camera distance fits every model
-  // regardless of the IFC's unit system or world coordinates.
   const groupProps = {
     scale: bounds.scale,
     position: [
@@ -194,8 +242,9 @@ export function BIMModelScene({
           el={el}
           isSelected={!!el.guid && el.guid === selectedGuid}
           onSelect={onSelect}
-          opacity={opacity}
+          opacity={selectedGuid ? (el.guid === selectedGuid ? 1.0 : 0.65) : opacity}
           wireframe={wireframe}
+          bounds={bounds}
         />
       ))}
     </group>
@@ -217,8 +266,6 @@ export function CameraRig({
   selectedGuid?: string | null;
 }) {
   const { camera, controls } = useThree();
-  // On mount, the camera already frames the whole model — remember the
-  // selection so the zoom only fires on an actual change.
   const lastGuid = useRef<string | null>(selectedGuid ?? null);
 
   useEffect(() => {
@@ -248,7 +295,7 @@ export function CameraRig({
       0.8,
     );
 
-    camera.position.set(c[0] + radius * 2.4, c[1] + radius * 1.8, c[2] + radius * 2.4);
+    camera.position.set(c[0] + radius * 2.2, c[1] + radius * 1.6, c[2] + radius * 2.2);
     camera.updateProjectionMatrix();
     const ctr = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null;
     if (ctr?.target) {
@@ -286,9 +333,10 @@ export default function BIMGeometryCanvas({
   bounds,
   selectedGuid,
   onSelect,
-  opacity = 0.22,
+  opacity = 0.92,
   wireframe = false,
   autoRotate = false,
+  showGrid = true,
   onSceneReady,
 }: {
   elements: BIMModelGeometryElement[];
@@ -298,21 +346,25 @@ export default function BIMGeometryCanvas({
   opacity?: number;
   wireframe?: boolean;
   autoRotate?: boolean;
+  showGrid?: boolean;
   onSceneReady?: (ctx: {
     gl: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.Camera;
   }) => void;
 }) {
+  const modelBottomY = (bounds.min[1] - bounds.center[1]) * bounds.scale - 0.05;
+
   return (
     <Canvas
-      camera={{ position: [44, 33, 44], fov: 50, near: 0.1, far: 2000 }}
-      gl={{ preserveDrawingBuffer: !!onSceneReady }}
+      camera={{ position: [32, 22, 32], fov: 45, near: 0.1, far: 2000 }}
+      gl={{ preserveDrawingBuffer: true, antialias: true }}
     >
-      <color attach="background" args={['#0f172a']} />
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[20, 30, 10]} intensity={1.1} />
-      <directionalLight position={[-20, 10, -15]} intensity={0.4} />
+      <color attach="background" args={['#090d16']} />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[25, 40, 18]} intensity={1.2} />
+      <directionalLight position={[-25, 20, -18]} intensity={0.5} />
+      <directionalLight position={[0, -20, 0]} intensity={0.2} />
       <BIMModelScene
         elements={elements}
         bounds={bounds}
@@ -330,7 +382,19 @@ export default function BIMGeometryCanvas({
         autoRotate={autoRotate}
         autoRotateSpeed={0.8}
       />
-      <Grid infiniteGrid fadeDistance={120} fadeStrength={1.5} sectionColor="#1e293b" cellColor="#334155" />
+      {showGrid && (
+        <Grid
+          infiniteGrid
+          position={[0, modelBottomY, 0]}
+          fadeDistance={140}
+          fadeStrength={1.4}
+          sectionColor="#334155"
+          cellColor="#1e293b"
+          sectionSize={3}
+          cellSize={1}
+          raycast={() => null}
+        />
+      )}
     </Canvas>
   );
 }

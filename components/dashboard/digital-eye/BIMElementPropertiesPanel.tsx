@@ -137,6 +137,37 @@ export default function BIMElementPropertiesPanel({
         <p className="text-[10px] font-mono text-gray-400 mt-0.5 break-all">{geometryElement.guid}</p>
       </div>
 
+      {/* 3D Element Visual Specimen Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-3.5 rounded-xl border border-slate-700/80 text-white shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <Box size={12} />
+            <span>3D Element Specimen</span>
+          </span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            {geometryElement.type}
+          </span>
+        </div>
+        {bounds ? (
+          <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] pt-1 border-t border-slate-700/60">
+            <div className="bg-slate-800/80 rounded p-1.5 border border-slate-700/40">
+              <span className="text-slate-400 block text-[9px]">SPAN X</span>
+              <span className="text-amber-300 font-bold">{fmtCoord(bounds.size[0])}m</span>
+            </div>
+            <div className="bg-slate-800/80 rounded p-1.5 border border-slate-700/40">
+              <span className="text-slate-400 block text-[9px]">DEPTH Y</span>
+              <span className="text-emerald-300 font-bold">{fmtCoord(bounds.size[1])}m</span>
+            </div>
+            <div className="bg-slate-800/80 rounded p-1.5 border border-slate-700/40">
+              <span className="text-slate-400 block text-[9px]">THICK Z</span>
+              <span className="text-cyan-300 font-bold">{fmtCoord(bounds.size[2])}m</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[10px] text-slate-400 font-mono">Tessellated IFC boundary active</p>
+        )}
+      </div>
+
       {/* IFC identity from the tessellated geometry + the mapping record */}
       <div className="space-y-1">
         <SectionTitle icon={<Tag size={12} className="text-gray-400" />} title="Element identity" />

@@ -26,6 +26,8 @@ function splitTableRow(line: string): string[] {
     .map((cell) => cell.trim());
 }
 
+const ELEMENT_SENTENCE_REGEX = /([A-Za-z0-9_-]+)(?:\s*\(([^)]+)\))?:\s*mean velocity\s*(\d+(?:\.\d+)?)\s*m\/s(?:,\s*(?:compressive strength|f_cu)\s*([\d.]+)\s*MPa)?,?\s*(?:grade\s*'([^']+)'|([^.]+))?/gi;
+
 export function parseObservationBlocks(text: string): ObservationBlock[] {
   const blocks: ObservationBlock[] = [];
   let textLines: string[] = [];
@@ -34,7 +36,38 @@ export function parseObservationBlocks(text: string): ObservationBlock[] {
   const flushText = () => {
     const body = textLines.join("\n").trim();
     textLines = [];
-    if (body) blocks.push({ kind: "text", body });
+    if (!body) return;
+
+    // Check if body contains multiple element data records
+    const matches = Array.from(body.matchAll(ELEMENT_SENTENCE_REGEX));
+    if (matches.length >= 2) {
+      // Find where element data starts and ends
+      const firstIdx = matches[0].index ?? 0;
+      const lastMatch = matches[matches.length - 1];
+      const endIdx = (lastMatch.index ?? 0) + lastMatch[0].length;
+
+      const preText = body.slice(0, firstIdx).trim();
+      if (preText) blocks.push({ kind: "text", body: preText });
+
+      const headers = ["Structural Element", "Level / Zone", "Pulse Velocity (V)", "Comp. Strength (f_cu)", "BS 1881 Grade", "Status"];
+      const rows: string[][] = matches.map((m) => {
+        const elem = m[1];
+        const floor = m[2] || "Ground Floor";
+        const vel = parseFloat(m[3]);
+        const fcu = m[4] ? `${parseFloat(m[4]).toFixed(2)} MPa` : "—";
+        const grade = (m[5] || m[6] || (vel >= 3500 ? "GOOD" : "DOUBTFUL")).toUpperCase();
+        const status = (vel >= 3500 && (!m[4] || parseFloat(m[4]) >= 25.0)) ? "PASS (≥25 MPa)" : "FAIL (<25 MPa)";
+        return [elem, floor, `${vel.toFixed(0)} m/s`, fcu, grade, status];
+      });
+
+      blocks.push({ kind: "table", headers, rows });
+
+      const postText = body.slice(endIdx).trim();
+      if (postText) blocks.push({ kind: "text", body: postText });
+      return;
+    }
+
+    blocks.push({ kind: "text", body });
   };
 
   const flushTable = () => {

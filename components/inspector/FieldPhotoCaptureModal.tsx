@@ -62,7 +62,8 @@ export default function FieldPhotoCaptureModal({
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId || "");
   const [structuralElement, setStructuralElement] = useState<string>(initialElementId);
-  const [gridLocation, setGridLocation] = useState<string>("");
+  const [gridAxis, setGridAxis] = useState<string>("");
+  const [floorLevel, setFloorLevel] = useState<string>("");
   const [category, setCategory] = useState<string>(defaultCategory);
   const [severity, setSeverity] = useState<string>("MEDIUM");
   const [description, setDescription] = useState<string>("");
@@ -333,9 +334,13 @@ export default function FieldPhotoCaptureModal({
         type: capturedBlob.type || "image/jpeg",
       });
 
+      const timestampIso = new Date().toISOString();
       const fullDescription = [
         description.trim(),
-        gridLocation.trim() ? `[Location: ${gridLocation.trim()}]` : "",
+        gridAxis.trim() ? `[Grid Axis: ${gridAxis.trim()}]` : "",
+        floorLevel.trim() ? `[Floor Level: ${floorLevel.trim()}]` : "",
+        coordinates ? `[GPS: ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}]` : "",
+        `[Timestamp: ${timestampIso}]`,
         `[Defect: ${category.toUpperCase()} | Severity: ${severity}]`,
       ]
         .filter(Boolean)
@@ -352,7 +357,7 @@ export default function FieldPhotoCaptureModal({
           severity,
           batchId: batchId || undefined,
           sha256: sha256Digest || undefined,
-          capturedAt: new Date().toISOString(),
+          capturedAt: timestampIso,
           coordinates: coordinates || null,
         },
         (fraction) => {
@@ -692,33 +697,51 @@ export default function FieldPhotoCaptureModal({
                 </div>
               </div>
 
-              {/* Grid Location & Remarks */}
-              <div className="space-y-2 text-xs">
+              {/* Distinct Architectural Grid Axis & Floor Level */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Grid Location / Floor Axis
+                    Architectural Grid Axis / Line *
                   </label>
                   <input
                     type="text"
-                    value={gridLocation}
-                    onChange={(e) => setGridLocation(e.target.value)}
-                    placeholder="e.g. Axis 4-D, 2nd Floor Pour Level"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-indigo-500"
+                    required
+                    value={gridAxis}
+                    onChange={(e) => setGridAxis(e.target.value)}
+                    placeholder="e.g. Axis A1, Intersection 4-B, Line C-3"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-indigo-500 font-mono"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Structural drawings grid identifier (distinct from floor)
+                  </span>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Field Remarks & Defect Dimensions
+                    Floor Level / Pour Elevation
                   </label>
-                  <textarea
-                    rows={2}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Note defect width, surface depth, acoustic sounding response, or correlation with UPV velocity readings..."
+                  <input
+                    type="text"
+                    value={floorLevel}
+                    onChange={(e) => setFloorLevel(e.target.value)}
+                    placeholder="e.g. Ground Floor, 1st Floor Pour, Roof Deck"
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              {/* Remarks */}
+              <div className="text-xs">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Field Remarks & Defect Dimensions
+                </label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Note defect width, surface depth, acoustic sounding response, or correlation with UPV velocity readings..."
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-indigo-500"
+                />
               </div>
 
               {/* Georeference & Cryptographic Hash Strip */}

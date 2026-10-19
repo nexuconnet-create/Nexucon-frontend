@@ -34,9 +34,52 @@ export default function PunditWaveformsPage() {
 
   const selectedElement = elements.find(el => el.id === selectedElementId) || null;
 
+  const [tabFilter, setTabFilter] = useState<'all' | 'raw_basket'>('all');
+
+  const rawBasketTests = tests.filter(t => t.estimated_compressive_strength_mpa == null);
+  const displayedTests = tabFilter === 'raw_basket' ? rawBasketTests : tests;
+
   // Same folder structure as the UPV Test Registry: Floor folder -> Station
   // sub-menu -> this station's oscillogram cards, with per-station means.
-  const folders = useFloorStationFolders(tests, punditFloorOf, punditStationOf);
+  const folders = useFloorStationFolders(displayedTests, punditFloorOf, punditStationOf);
+
+  const handleDownloadCSV = () => {
+    if (displayedTests.length === 0) return;
+    const headers = [
+      "Test Reference",
+      "Structural Element Name",
+      "Test Location / Grid Axis",
+      "Pulse Velocity (m/s)",
+      "Transit Time (us)",
+      "Path Length (mm)",
+      "Estimated Compressive Strength (fcu)",
+      "Concrete Quality Rating",
+      "Transmission Mode",
+      "Test Date",
+    ];
+
+    const rows = displayedTests.map(t => [
+      `"${t.test_reference}"`,
+      `"${(t.structural_element_name || "").replace(/"/g, '""')}"`,
+      `"${(t.test_location || "").replace(/"/g, '""')}"`,
+      t.pulse_velocity_ms || "",
+      t.transit_time_us || "",
+      t.path_length_mm || "",
+      t.estimated_compressive_strength_mpa != null ? t.estimated_compressive_strength_mpa : "Pending Govt Calibration",
+      `"${t.concrete_quality_rating || ""}"`,
+      `"${t.transducer_type || (t as any).transmission_mode || "DIRECT"}"`,
+      `"${(t as any).test_date || ""}"`,
+    ].join(","));
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `PUNDIT_Waveforms_${tabFilter === 'raw_basket' ? 'Raw_Basket_' : ''}${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const refresh = async () => {
     setIsLoading(true);
@@ -102,14 +145,49 @@ export default function PunditWaveformsPage() {
       {/* Test Station Grid — same Floor -> Station folder structure as the
           UPV Test Registry, with a Folders / Flat list toggle. */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
-            <Sparkles size={18} className="text-amber-500" />
-            Ultrasonic Pulse Velocity Test Stations
-          </h3>
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <div>
+            <h3 className="font-bold text-[#022C4F] text-base flex items-center gap-2">
+              <Sparkles size={18} className="text-amber-500" />
+              Ultrasonic Pulse Velocity Test Stations
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Raw inspector velocity submissions are held intact prior to government calibration pass.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Folder / Submissions Basket Filter */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTabFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${tabFilter === 'all' ? 'bg-white text-[#022C4F] shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                All Stations ({tests.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTabFilter('raw_basket')}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${tabFilter === 'raw_basket' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-amber-800'}`}
+                title="Inspect raw submissions pending government curve calibration"
+              >
+                <span>Raw Submissions Basket ({rawBasketTests.length})</span>
+              </button>
+            </div>
+
+            {/* CSV Download */}
+            <button
+              type="button"
+              onClick={handleDownloadCSV}
+              className="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              title="Download raw waveform telemetry observations as CSV"
+            >
+              <Download size={13} className="text-teal-600" />
+              <span>Download CSV</span>
+            </button>
+
             <FolderViewToggle viewMode={folders.viewMode} onChange={folders.setViewMode} />
-            <span className="text-xs text-gray-500 font-mono">{tests.length} Station Record{tests.length === 1 ? '' : 's'}</span>
           </div>
         </div>
 
@@ -124,13 +202,15 @@ export default function PunditWaveformsPage() {
               Retry
             </button>
           </div>
-        ) : tests.length === 0 ? (
+        ) : displayedTests.length === 0 ? (
           <div className="py-12 text-center text-xs text-gray-500">
-            No PUNDIT test stations recorded{selectedElement ? ` for ${selectedElement.name}` : ' for this project'} yet.
+            {tabFilter === 'raw_basket'
+              ? 'No raw inspector submissions currently pending calibration in this basket.'
+              : `No PUNDIT test stations recorded${selectedElement ? ` for ${selectedElement.name}` : ' for this project'} yet.`}
           </div>
         ) : folders.viewMode === 'flat' ? (
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tests.map((t) => (
+            {displayedTests.map((t) => (
               <StationCard key={t.id} t={t} isActive={activeTest?.id === t.id} onSelect={setActiveTest} />
             ))}
           </div>
@@ -196,9 +276,11 @@ function StationCard({
         </span>
       </div>
       <p className="text-xs font-semibold text-gray-700">{t.structural_element_name || t.test_location || '—'}</p>
-      <div className="flex justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-200/60 font-mono">
+      <div className="flex justify-between items-center text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-200/60 font-mono">
         <span>Velocity: <strong className="text-amber-700">{t.pulse_velocity_ms ? `${formatVelocityMs(t.pulse_velocity_ms)} m/s` : 'Pending'}</strong></span>
-        <span>fcu: <strong className="text-gray-800">{t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : '—'}</strong></span>
+        <span>fcu: <strong className={t.estimated_compressive_strength_mpa != null ? "text-gray-800" : "text-slate-500 font-medium italic"}>
+          {t.estimated_compressive_strength_mpa != null ? `${t.estimated_compressive_strength_mpa.toFixed(1)} MPa` : 'Pending Govt Calibration'}
+        </strong></span>
       </div>
     </div>
   );
