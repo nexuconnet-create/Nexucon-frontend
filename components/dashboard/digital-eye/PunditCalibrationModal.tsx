@@ -782,13 +782,25 @@ export default function PunditCalibrationModal({
 
                 <button
                   type="button"
-                  onClick={() => decideScanModelAndCoefficients(internalTests, cubePoints, coreSamples, true)}
+                  onClick={() => {
+                    if (cubePoints.length >= 2) {
+                      handleAutoFitFromCubes();
+                    } else {
+                      decideScanModelAndCoefficients(internalTests, cubePoints, coreSamples, true);
+                    }
+                  }}
                   disabled={isDeciding}
                   className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                   title="Recalculate and auto-populate best model and (a, b, c) into inputs"
                 >
                   <Calculator size={13} />
-                  <span>{isDeciding ? "Calculating..." : "⚡ Scan AI Auto-Calibrate (a, b, c)"}</span>
+                  <span>
+                    {isDeciding
+                      ? "Calculating..."
+                      : cubePoints.length >= 2
+                      ? `⚡ Scan AI Auto-Calibrate (${cubePoints.length} Cube Pairs)`
+                      : "⚡ Scan AI Auto-Calibrate (Empirical Baseline)"}
+                  </span>
                 </button>
               </div>
 

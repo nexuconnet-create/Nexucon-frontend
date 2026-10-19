@@ -118,7 +118,8 @@ export default function PunditAIAnalysisPage() {
             design_strength_mpa: parsed.design_strength_mpa || 25,
             notes: parsed.notes || "",
             timestamp: new Date().toISOString(),
-          });
+            cube_correlation_points: parsed.cube_correlation_points || [],
+          } as any);
         } else {
           setCalibratedProfile(null);
         }
@@ -378,7 +379,7 @@ export default function PunditAIAnalysisPage() {
           </div>
           <span className="text-xs font-bold text-gray-500 uppercase">Model Calibration</span>
           <p className="text-sm font-bold text-purple-700 font-mono mt-2 truncate">
-            {calibratedProfile ? calibratedProfile.curve_type.toUpperCase() : "EXPONENTIAL"}
+            {calibratedProfile?.curve_type ? calibratedProfile.curve_type.toUpperCase() : "EXPONENTIAL"}
           </p>
           <span className="text-[11px] text-purple-700 font-medium mt-0.5 block">
             Target f_cu: {calibratedProfile?.design_strength_mpa || 25} MPa
@@ -577,8 +578,8 @@ export default function PunditAIAnalysisPage() {
                           : "Empirical Baseline Model (Route 2 · 0 Lab Pairs):"}
                       </span>
                       <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded border border-white/20">
-                        {calibratedProfile
-                          ? `Exponential: f_cu = ${calibratedProfile.params.a}·e^(${calibratedProfile.params.b}·V) + ${calibratedProfile.params.c}`
+                        {calibratedProfile && calibratedProfile.params
+                          ? `${(calibratedProfile.curve_type || "exponential").toUpperCase()}: f_cu = ${calibratedProfile.params.a}·e^(${calibratedProfile.params.b}·V) + ${calibratedProfile.params.c}`
                           : "Exponential Model (BS 1881-203 / Empirical Baseline)"}
                       </span>
                     </div>
