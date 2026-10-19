@@ -207,6 +207,7 @@ export default function PunditAIAnalysisPage() {
         curve_type: calPayload.curve_type,
         params: calPayload.params,
         design_strength_mpa: calPayload.design_strength_mpa,
+        cube_correlation_points: calPayload.cube_correlation_points,
       });
 
       setFreshRun(result);

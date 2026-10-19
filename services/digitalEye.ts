@@ -1724,6 +1724,7 @@ export const analyzePunditProject = async (
     curve_type?: CurveType;
     params?: Record<string, any>;
     design_strength_mpa?: number;
+    cube_correlation_points?: any[];
   }
 ): Promise<PunditProjectAnalysis> => {
   const payload: any = { project: projectId };
@@ -1732,6 +1733,7 @@ export const analyzePunditProject = async (
   if (options?.curve_type) payload.curve_type = options.curve_type;
   if (options?.params) payload.params = options.params;
   if (options?.design_strength_mpa != null) payload.design_strength_mpa = options.design_strength_mpa;
+  if (options?.cube_correlation_points) payload.cube_correlation_points = options.cube_correlation_points;
 
   const res = await api.post('/digital-eye/pundit-tests/analyze_project/', payload);
   return unwrap<PunditProjectAnalysis>(res, {} as PunditProjectAnalysis);
