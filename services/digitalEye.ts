@@ -2229,6 +2229,7 @@ export interface ReportCmsSection {
 
 export interface ReportCmsSectionsResponse {
   project: string | null;
+  agency?: string | null;
   password_set: boolean;
   sections: ReportCmsSection[];
 }
@@ -2292,10 +2293,11 @@ export const revertReportCmsSection = async (
   return reverted;
 };
 
-/** Set (first time) or change (current password required) the CMS password. */
+/** Set (first time), change (current password required) or reset (Director) the CMS password. */
 export const setReportCmsPassword = async (payload: {
   new_password: string;
   current_password?: string;
+  reset?: boolean;
 }): Promise<void> => {
   await api.post('/reports/cms/password/', payload);
 };

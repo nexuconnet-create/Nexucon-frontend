@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Check,
+  Copy,
   Eye,
   FileEdit,
   GripVertical,
@@ -11,6 +13,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import {
@@ -92,6 +95,284 @@ const SYSTEM_GENERATED_NOTICE = (
   </>
 );
 
+function sourceBadge(source: ReportCmsSectionSource) {
+  if (source === "project_override") {
+    return "bg-amber-100 text-amber-900";
+  }
+  if (source === "platform_override") {
+    return "bg-blue-100 text-blue-900";
+  }
+  if (source === "computed") {
+    return "bg-emerald-100 text-emerald-900";
+  }
+  if (source === "unavailable") {
+    return "bg-gray-100 text-gray-500";
+  }
+  return "bg-slate-100 text-slate-600";
+}
+
+interface CmsSectionEditorProps {
+  section: ReportCmsSection;
+  draft: string;
+  onChange: (val: string) => void;
+  onSave: (section: ReportCmsSection) => void;
+  onRevert: (section: ReportCmsSection) => void;
+  busy: boolean;
+  projectId?: string | null;
+}
+
+const CmsSectionEditor = React.memo(function CmsSectionEditor({
+  section,
+  draft,
+  onChange,
+  onSave,
+  onRevert,
+  busy,
+  projectId,
+}: CmsSectionEditorProps) {
+  const locked =
+    section.source === "unavailable" ||
+    (section.computed === true && !projectId);
+  const max = section.max_length ?? null;
+  return (
+    <div className="p-4 rounded-xl border border-gray-100 bg-white">
+      <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-gray-900">
+            {section.label}
+          </span>
+          <span
+            className={`px-2 py-0.5 rounded text-[10px] font-bold ${sourceBadge(section.source)}`}
+          >
+            {section.source.replace(/_/g, " ")}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onSave(section)}
+            disabled={busy || locked}
+            className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+          >
+            <Save size={12} />
+            <span>{busy ? "Saving…" : "Save"}</span>
+          </button>
+          <button
+            onClick={() => onRevert(section)}
+            disabled={
+              busy ||
+              locked ||
+              section.source === "default" ||
+              section.source === "computed"
+            }
+            className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 rounded-lg text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
+            title="Delete the override and fall back to the wider scope / default text"
+          >
+            <RotateCcw size={12} />
+            <span>Revert</span>
+          </button>
+        </div>
+      </div>
+      <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
+        {section.help}
+        {section.kind === "list"
+          ? " One item per line."
+          : section.kind === "line"
+            ? " One line only."
+            : " Blank lines separate paragraphs."}
+      </p>
+      {locked && (
+        <p className="mb-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-[11px] text-gray-500 leading-relaxed">
+          {section.source === "unavailable" ? (
+            <>
+              <strong>Not editable yet.</strong> No recorded data backs
+              this section (no test results, observations or rebar
+              survey recorded for the project), so the report prints
+              its honest fixed wording. Record the underlying data
+              first, then the generated wording becomes editable.
+            </>
+          ) : (
+            <>
+              <strong>Select a project to edit this section.</strong>{" "}
+              Generated content is computed from one project&apos;s
+              recorded data, so its wording exists only per project.
+            </>
+          )}
+        </p>
+      )}
+      <textarea
+        rows={section.kind === "list" ? 5 : section.kind === "line" ? 2 : 4}
+        value={draft}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={locked}
+        placeholder={
+          locked
+            ? "No recorded wording — nothing to edit yet."
+            : undefined
+        }
+        className="w-full p-3 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 outline-none focus:border-blue-400 resize-y font-medium leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
+      />
+      <p className="text-[10px] text-gray-400 mt-1.5 font-semibold tabular-nums">
+        Character Count: {draft.length}
+        {max ? `/${max}` : ""}
+        {max && draft.length > max
+          ? " — over the advised length; the report will still print it."
+          : max
+            ? " (advised maximum)"
+            : ""}
+      </p>
+    </div>
+  );
+});
+
+interface SortableSectionRowProps {
+  entry: ReportStructureEntry;
+  selected: boolean;
+  onSelect: (key: string) => void;
+  onToggle: (entry: ReportStructureEntry, checked: boolean) => void;
+}
+
+const SortableSectionRow = React.memo(function SortableSectionRow({
+  entry,
+  selected,
+  onSelect,
+  onToggle,
+}: SortableSectionRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: entry.key });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-colors ${
+        isDragging
+          ? "border-blue-300 bg-blue-50 shadow-sm z-10"
+          : selected
+            ? "border-[#022C4F]/30 bg-slate-100"
+            : "border-transparent bg-white hover:bg-slate-50"
+      } ${entry.is_enabled ? "" : "opacity-55"}`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="p-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
+        title="Drag to reorder"
+        aria-label={`Reorder ${entry.label}`}
+      >
+        <GripVertical size={14} />
+      </button>
+      <input
+        type="checkbox"
+        checked={entry.is_enabled}
+        onChange={(e) => onToggle(entry, e.target.checked)}
+        className="cursor-pointer shrink-0"
+        title={
+          entry.is_enabled
+            ? "Included in the report — uncheck to exclude"
+            : "Excluded from the report — check to include"
+        }
+        aria-label={`${entry.is_enabled ? "Exclude" : "Include"} ${entry.label}`}
+      />
+      <button
+        type="button"
+        onClick={() => onSelect(entry.key)}
+        className={`flex-1 text-left truncate font-semibold cursor-pointer ${
+          selected ? "text-[#022C4F]" : "text-gray-700"
+        }`}
+        title={entry.label}
+      >
+        {entry.label}
+        {entry.is_custom && (
+          <span className="ml-1.5 px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 text-[9px] font-bold uppercase">
+            custom
+          </span>
+        )}
+      </button>
+    </li>
+  );
+});
+
+interface CustomSectionEditorProps {
+  draft: { title: string; body: string } | null;
+  onTitleChange: (title: string) => void;
+  onBodyChange: (body: string) => void;
+  onSave: () => void;
+  onDelete: (entry: ReportStructureEntry) => void;
+  selectedEntry: ReportStructureEntry;
+  busy: boolean;
+}
+
+const CustomSectionEditor = React.memo(function CustomSectionEditor({
+  draft,
+  onTitleChange,
+  onBodyChange,
+  onSave,
+  onDelete,
+  selectedEntry,
+  busy,
+}: CustomSectionEditorProps) {
+  return (
+    <div className="p-4 rounded-xl border border-gray-100 bg-white">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <span className="text-xs font-bold text-gray-900">
+          SECTION CONTENT — custom section
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onSave}
+            disabled={busy || !draft || !draft.title.trim()}
+            className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+          >
+            <Save size={12} />
+            <span>{busy ? "Saving…" : "Save Section"}</span>
+          </button>
+          <button
+            onClick={() => onDelete(selectedEntry)}
+            disabled={busy}
+            className="px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+          >
+            <Trash2 size={12} />
+            <span>Remove</span>
+          </button>
+        </div>
+      </div>
+      <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
+        Section title
+      </label>
+      <input
+        value={draft?.title ?? ""}
+        onChange={(e) => onTitleChange(e.target.value)}
+        maxLength={200}
+        className="w-full mb-3 p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400"
+      />
+      <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
+        Section body (blank lines separate paragraphs; **bold** supported)
+      </label>
+      <textarea
+        rows={8}
+        value={draft?.body ?? ""}
+        onChange={(e) => onBodyChange(e.target.value)}
+        placeholder="The wording this custom section prints in the report."
+        className="w-full p-3 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 outline-none focus:border-blue-400 resize-y font-medium leading-relaxed"
+      />
+      <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+        Custom sections print in the report at the position they hold in
+        the list on the left — drag to move them.
+      </p>
+    </div>
+  );
+});
+
 export default function ReportCmsPanel({
   projectId,
   onPreview,
@@ -101,6 +382,9 @@ export default function ReportCmsPanel({
 }) {
   const [sections, setSections] = useState<ReportCmsSection[]>([]);
   const [passwordSet, setPasswordSet] = useState(false);
+  const [agencyName, setAgencyName] = useState<string | null>(null);
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [copiedPw, setCopiedPw] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   // One password field for saves/reverts (never stored beyond the field).
@@ -113,6 +397,38 @@ export default function ReportCmsPanel({
   const [pwOpen, setPwOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
+
+  const handleDraftChange = useCallback((key: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleCustomTitleChange = useCallback((title: string) => {
+    setCustomDraft((prev) => (prev ? { ...prev, title } : prev));
+  }, []);
+
+  const handleCustomBodyChange = useCallback((body: string) => {
+    setCustomDraft((prev) => (prev ? { ...prev, body } : prev));
+  }, []);
+
+  const handleGeneratePassword = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*";
+    let gen = "";
+    const randVals = new Uint32Array(12);
+    window.crypto.getRandomValues(randVals);
+    for (let i = 0; i < 12; i++) {
+      gen += chars[randVals[i] % chars.length];
+    }
+    setNewPassword(gen);
+    toast("Generated a secure 12-character password. Make sure to note it down!", "info");
+  };
+
+  const handleCopyPassword = () => {
+    if (!newPassword) return;
+    navigator.clipboard.writeText(newPassword);
+    setCopiedPw(true);
+    setTimeout(() => setCopiedPw(false), 2000);
+    toast("Password copied to clipboard.", "info");
+  };
 
   // §2.5 structure state (only meaningful with a project selected).
   const [structure, setStructure] = useState<ReportStructureEntry[]>([]);
@@ -146,6 +462,7 @@ export default function ReportCmsPanel({
       const data = await getReportCmsSections(projectId || undefined);
       setSections(data.sections);
       setPasswordSet(data.password_set);
+      if (data.agency) setAgencyName(data.agency);
       setDrafts(Object.fromEntries(
         data.sections.map((s) => [s.key, s.body ?? ""]),
       ));
@@ -272,11 +589,18 @@ export default function ReportCmsPanel({
     try {
       await setReportCmsPassword({
         new_password: newPassword,
-        ...(passwordSet ? { current_password: currentPassword } : {}),
+        ...(passwordSet && !isResetMode ? { current_password: currentPassword } : {}),
+        ...(isResetMode ? { reset: true } : {}),
       });
-      toast("Report-CMS password saved.", "success");
+      toast(
+        isResetMode
+          ? "Report-CMS password reset successfully."
+          : "Report-CMS password saved.",
+        "success",
+      );
       setNewPassword("");
       setCurrentPassword("");
+      setIsResetMode(false);
       setPwOpen(false);
       setPasswordSet(true);
     } catch (err: any) {
@@ -435,177 +759,6 @@ export default function ReportCmsPanel({
     }
   };
 
-  const sourceBadge = (source: ReportCmsSectionSource) => {
-    if (source === "project_override") {
-      return "bg-amber-100 text-amber-900";
-    }
-    if (source === "platform_override") {
-      return "bg-blue-100 text-blue-900";
-    }
-    if (source === "computed") {
-      return "bg-emerald-100 text-emerald-900";
-    }
-    if (source === "unavailable") {
-      return "bg-gray-100 text-gray-500";
-    }
-    return "bg-slate-100 text-slate-600";
-  };
-
-  /** One CMS wording editor (label, badge, help, textarea, count, actions). */
-  const CmsSectionEditor = ({ section }: { section: ReportCmsSection }) => {
-    const locked = section.source === "unavailable"
-      || (section.computed === true && !projectId);
-    const draft = drafts[section.key] ?? "";
-    const max = section.max_length ?? null;
-    return (
-      <div className="p-4 rounded-xl border border-gray-100 bg-white">
-        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-gray-900">
-              {section.label}
-            </span>
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold ${sourceBadge(section.source)}`}
-            >
-              {section.source.replace(/_/g, " ")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleSave(section)}
-              disabled={busyKey === section.key || locked}
-              className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-            >
-              <Save size={12} />
-              <span>{busyKey === section.key ? "Saving…" : "Save"}</span>
-            </button>
-            <button
-              onClick={() => handleRevert(section)}
-              disabled={busyKey === section.key || locked
-                || section.source === "default"
-                || section.source === "computed"}
-              className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 rounded-lg text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
-              title="Delete the override and fall back to the wider scope / default text"
-            >
-              <RotateCcw size={12} />
-              <span>Revert</span>
-            </button>
-          </div>
-        </div>
-        <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
-          {section.help}
-          {section.kind === "list"
-            ? " One item per line."
-            : section.kind === "line"
-              ? " One line only."
-              : " Blank lines separate paragraphs."}
-        </p>
-        {locked && (
-          <p className="mb-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-[11px] text-gray-500 leading-relaxed">
-            {section.source === "unavailable" ? (
-              <>
-                <strong>Not editable yet.</strong> No recorded data backs
-                this section (no test results, observations or rebar
-                survey recorded for the project), so the report prints
-                its honest fixed wording. Record the underlying data
-                first, then the generated wording becomes editable.
-              </>
-            ) : (
-              <>
-                <strong>Select a project to edit this section.</strong>{" "}
-                Generated content is computed from one project&apos;s
-                recorded data, so its wording exists only per project.
-              </>
-            )}
-          </p>
-        )}
-        <textarea
-          rows={section.kind === "list" ? 5 : section.kind === "line" ? 2 : 4}
-          value={draft}
-          onChange={(e) =>
-            setDrafts((prev) => ({ ...prev, [section.key]: e.target.value }))
-          }
-          disabled={locked}
-          placeholder={locked
-            ? "No recorded wording — nothing to edit yet."
-            : undefined}
-          className="w-full p-3 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 outline-none focus:border-blue-400 resize-y font-medium leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
-        />
-        <p className="text-[10px] text-gray-400 mt-1.5 font-semibold tabular-nums">
-          Character Count: {draft.length}{max ? `/${max}` : ""}
-          {max && draft.length > max
-            ? " — over the advised length; the report will still print it."
-            : max ? " (advised maximum)" : ""}
-        </p>
-      </div>
-    );
-  };
-
-  /** One draggable row of the SECTIONS list. */
-  const SortableSectionRow = ({ entry }: { entry: ReportStructureEntry }) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: entry.key });
-    const selected = selectedKey === entry.key;
-    return (
-      <li
-        ref={setNodeRef}
-        style={{
-          transform: CSS.Transform.toString(transform),
-          transition,
-        }}
-        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-colors ${
-          isDragging
-            ? "border-blue-300 bg-blue-50 shadow-sm z-10"
-            : selected
-              ? "border-[#022C4F]/30 bg-slate-100"
-              : "border-transparent bg-white hover:bg-slate-50"
-        } ${entry.is_enabled ? "" : "opacity-55"}`}
-      >
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="p-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none shrink-0"
-          title="Drag to reorder"
-          aria-label={`Reorder ${entry.label}`}
-        >
-          <GripVertical size={14} />
-        </button>
-        <input
-          type="checkbox"
-          checked={entry.is_enabled}
-          onChange={(e) => handleToggle(entry, e.target.checked)}
-          className="cursor-pointer shrink-0"
-          title={entry.is_enabled
-            ? "Included in the report — uncheck to exclude"
-            : "Excluded from the report — check to include"}
-          aria-label={`${entry.is_enabled ? "Exclude" : "Include"} ${entry.label}`}
-        />
-        <button
-          type="button"
-          onClick={() => setSelectedKey(entry.key)}
-          className={`flex-1 text-left truncate font-semibold cursor-pointer ${
-            selected ? "text-[#022C4F]" : "text-gray-700"
-          }`}
-          title={entry.label}
-        >
-          {entry.label}
-          {entry.is_custom && (
-            <span className="ml-1.5 px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 text-[9px] font-bold uppercase">
-              custom
-            </span>
-          )}
-        </button>
-      </li>
-    );
-  };
-
   const selectedEntry = structure.find((s) => s.key === selectedKey) ?? null;
 
   /** The right pane for the selected section. */
@@ -613,57 +766,15 @@ export default function ReportCmsPanel({
     if (!selectedEntry) return null;
     if (selectedEntry.is_custom) {
       return (
-        <div className="p-4 rounded-xl border border-gray-100 bg-white">
-          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-            <span className="text-xs font-bold text-gray-900">
-              SECTION CONTENT — custom section
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSaveCustom}
-                disabled={structureBusy || !customDraft
-                  || !customDraft.title.trim()}
-                className="px-3 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                <Save size={12} />
-                <span>{structureBusy ? "Saving…" : "Save Section"}</span>
-              </button>
-              <button
-                onClick={() => handleDeleteCustom(selectedEntry)}
-                disabled={structureBusy}
-                className="px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                <Trash2 size={12} />
-                <span>Remove</span>
-              </button>
-            </div>
-          </div>
-          <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
-            Section title
-          </label>
-          <input
-            value={customDraft?.title ?? ""}
-            onChange={(e) => setCustomDraft((prev) =>
-              prev ? { ...prev, title: e.target.value } : prev)}
-            maxLength={200}
-            className="w-full mb-3 p-2.5 bg-slate-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400"
-          />
-          <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
-            Section body (blank lines separate paragraphs; **bold** supported)
-          </label>
-          <textarea
-            rows={8}
-            value={customDraft?.body ?? ""}
-            onChange={(e) => setCustomDraft((prev) =>
-              prev ? { ...prev, body: e.target.value } : prev)}
-            placeholder="The wording this custom section prints in the report."
-            className="w-full p-3 bg-slate-50 border border-gray-200 rounded-xl text-xs text-gray-800 outline-none focus:border-blue-400 resize-y font-medium leading-relaxed"
-          />
-          <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-            Custom sections print in the report at the position they hold in
-            the list on the left — drag to move them.
-          </p>
-        </div>
+        <CustomSectionEditor
+          draft={customDraft}
+          onTitleChange={handleCustomTitleChange}
+          onBodyChange={handleCustomBodyChange}
+          onSave={handleSaveCustom}
+          onDelete={() => handleDeleteCustom(selectedEntry)}
+          selectedEntry={selectedEntry}
+          busy={structureBusy}
+        />
       );
     }
     const cmsKeys = SECTION_CMS_KEYS[selectedEntry.key] ?? [];
@@ -685,9 +796,18 @@ export default function ReportCmsPanel({
           SECTION CONTENT — {selectedEntry.label}
         </span>
         {cmsKeys.map((key) =>
-          cmsByKey[key]
-            ? <CmsSectionEditor key={key} section={cmsByKey[key]} />
-            : null,
+          cmsByKey[key] ? (
+            <CmsSectionEditor
+              key={key}
+              section={cmsByKey[key]}
+              draft={drafts[key] ?? ""}
+              onChange={(val) => handleDraftChange(key, val)}
+              onSave={handleSave}
+              onRevert={handleRevert}
+              busy={busyKey === key}
+              projectId={projectId}
+            />
+          ) : null,
         )}
       </div>
     );
@@ -744,41 +864,100 @@ export default function ReportCmsPanel({
 
       {/* Password management (Director). First-time set has no current field. */}
       {pwOpen && (
-        <form
-          onSubmit={handleSetPassword}
-          className="p-4 bg-slate-50 border-b border-gray-100 flex flex-col sm:flex-row sm:items-end gap-3"
-        >
-          {passwordSet && (
+        <div className="p-4 bg-slate-50 border-b border-gray-100 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-gray-900">
+                {passwordSet
+                  ? isResetMode
+                    ? "Reset CMS Password (Director)"
+                    : "Change CMS Password"
+                  : "Set CMS Password"}
+              </span>
+              {agencyName && (
+                <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-bold">
+                  {agencyName}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                title="Generate a strong 12-character random password"
+              >
+                <Sparkles size={12} />
+                <span>Generate Password</span>
+              </button>
+              {passwordSet && (
+                <button
+                  type="button"
+                  onClick={() => setIsResetMode((v) => !v)}
+                  className="text-[11px] font-semibold text-gray-500 hover:text-gray-800 underline cursor-pointer"
+                >
+                  {isResetMode ? "Back to Change Password" : "Forgot Password? / Reset"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isResetMode && (
+            <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              <strong>Director Reset Mode:</strong> As an authenticated Director or Agency Head, you can reset your government agency&apos;s CMS password directly without entering the previous password.
+            </p>
+          )}
+
+          <form
+            onSubmit={handleSetPassword}
+            className="flex flex-col sm:flex-row sm:items-end gap-3"
+          >
+            {passwordSet && !isResetMode && (
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
+                  Current password
+                </label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400"
+                />
+              </div>
+            )}
             <div className="flex-1">
               <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
-                Current password
+                New password (min 8 characters)
               </label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter or generate new password"
+                  className="w-full p-2.5 pr-8 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400 font-mono"
+                />
+                {newPassword && (
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+                    title="Copy password"
+                  >
+                    {copiedPw ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-          <div className="flex-1">
-            <label className="text-[10px] font-bold uppercase text-gray-500 block mb-1">
-              New password (min 8 characters)
-            </label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-blue-400"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer"
-          >
-            Save Password
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="px-4 py-2.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              {isResetMode ? "Reset Password" : passwordSet ? "Save Password" : "Set Password"}
+            </button>
+          </form>
+        </div>
       )}
 
       {!passwordSet && !pwOpen && (
@@ -814,11 +993,13 @@ export default function ReportCmsPanel({
               onChange={(e) => setPlatformScope(e.target.checked)}
               className="cursor-pointer"
             />
-            Apply wording to ALL projects
+            Apply wording to ALL projects {agencyName ? `(${agencyName})` : ""}
           </label>
         ) : (
           <span className="text-[11px] text-gray-400 leading-snug">
-            No project selected — wording edits apply platform-wide.
+            {agencyName
+              ? `No project selected — wording edits apply to all ${agencyName} projects.`
+              : "No project selected — wording edits apply platform-wide."}
           </span>
         )}
       </div>
@@ -865,7 +1046,13 @@ export default function ReportCmsPanel({
                 >
                   <ul className="space-y-1">
                     {structure.map((entry) => (
-                      <SortableSectionRow key={entry.key} entry={entry} />
+                      <SortableSectionRow
+                        key={entry.key}
+                        entry={entry}
+                        selected={selectedKey === entry.key}
+                        onSelect={setSelectedKey}
+                        onToggle={handleToggle}
+                      />
                     ))}
                   </ul>
                 </SortableContext>
@@ -928,11 +1115,20 @@ export default function ReportCmsPanel({
         <div className="p-4 space-y-3">
           <p className="px-3 py-2.5 rounded-lg bg-slate-50 border border-gray-100 text-[11px] text-gray-500 leading-relaxed">
             <strong>No project selected.</strong> Wording editors below apply
-            platform-wide. Select a project above to arrange its sections —
+            {agencyName ? ` across all ${agencyName} projects.` : " platform-wide."} Select a project above to arrange its sections —
             order, inclusions and custom sections are configured per project.
           </p>
           {sections.map((section) => (
-            <CmsSectionEditor key={section.key} section={section} />
+            <CmsSectionEditor
+              key={section.key}
+              section={section}
+              draft={drafts[section.key] ?? ""}
+              onChange={(val) => handleDraftChange(section.key, val)}
+              onSave={handleSave}
+              onRevert={handleRevert}
+              busy={busyKey === section.key}
+              projectId={projectId}
+            />
           ))}
         </div>
       )}
