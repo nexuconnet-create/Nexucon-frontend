@@ -161,7 +161,7 @@ export default function PunditCalibrationModal({
         const ssTot = fVals.reduce((sum, f) => sum + (f - meanF) ** 2, 0);
 
         // Exponential fit: ln(f) = ln(a) + b * V_km
-        let expA = 1.39, expB = 0.78, expC = 0.0, expR2 = 0.0;
+        let expA = 1.39, expB = 0.78, expC = 0.0, expR2 = 0.0, ssResExp = 0;
         let sumV = 0, sumY = 0, sumVY = 0, sumV2 = 0;
         for (let i = 0; i < N_pts; i++) {
           const vi = vKm[i];
@@ -176,7 +176,7 @@ export default function PunditCalibrationModal({
           if (a > 0 && b > 0) {
             expA = Number(a.toFixed(2));
             expB = Number(b.toFixed(2));
-            let ssResExp = 0;
+            ssResExp = 0;
             for (let i = 0; i < N_pts; i++) {
               const pred = a * Math.exp(b * vKm[i]);
               ssResExp += (fVals[i] - pred) ** 2;
@@ -186,7 +186,7 @@ export default function PunditCalibrationModal({
         }
 
         // Polynomial (2nd Deg) fit: f = a + b * V_km + c * (V_km)^2
-        let polyA = -12.5, polyB = 4.2, polyC = 1.8, polyR2 = 0.0;
+        let polyA = -12.5, polyB = 4.2, polyC = 1.8, polyR2 = 0.0, ssResPoly = 0;
         let s0 = N_pts, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
         let t0 = 0, t1 = 0, t2 = 0;
         for (let i = 0; i < N_pts; i++) {
@@ -215,7 +215,7 @@ export default function PunditCalibrationModal({
           polyA = Number((detA / det).toFixed(2));
           polyB = Number((detB / det).toFixed(2));
           polyC = Number((detC / det).toFixed(2));
-          let ssResPoly = 0;
+          ssResPoly = 0;
           for (let i = 0; i < N_pts; i++) {
             const pred = polyA + polyB * vKm[i] + polyC * (vKm[i] ** 2);
             ssResPoly += (fVals[i] - pred) ** 2;
