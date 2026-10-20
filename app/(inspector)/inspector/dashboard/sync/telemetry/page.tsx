@@ -691,12 +691,15 @@ export default function InspectorTelemetryPage() {
   const [editLongitude, setEditLongitude] = useState("");
   const [editReplacementFile, setEditReplacementFile] = useState<File | null>(null);
   const [editPhotoAttachments, setEditPhotoAttachments] = useState<PhotoAttachment[]>([]);
+  const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
+  const [photosToDelete, setPhotosToDelete] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [isGettingEditLocation, setIsGettingEditLocation] = useState(false);
 
   const openEditModal = (session: TelemetrySession) => {
     const cfg = (session.session_config || {}) as Record<string, any>;
+    const rawPhotos = Array.isArray(cfg.photos) ? (cfg.photos as string[]) : [];
     setEditingSession(session);
     setEditFolderName(session.session_reference || cfg.folder_name || "");
     setEditProject(session.project || "");
@@ -715,7 +718,14 @@ export default function InspectorTelemetryPage() {
     setEditLongitude(cfg.longitude != null ? String(cfg.longitude) : "");
     setEditReplacementFile(null);
     setEditPhotoAttachments([]);
+    setExistingPhotos(rawPhotos);
+    setPhotosToDelete([]);
     setEditError(null);
+  };
+
+  const removeExistingPhoto = (photoUrl: string) => {
+    setExistingPhotos((prev) => prev.filter((u) => u !== photoUrl));
+    setPhotosToDelete((prev) => (prev.includes(photoUrl) ? prev : [...prev, photoUrl]));
   };
 
   const handleEditPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -790,10 +800,17 @@ export default function InspectorTelemetryPage() {
         form.append("photos", photo.file);
       }
 
+      for (const delPhoto of photosToDelete) {
+        form.append("delete_photos", delPhoto);
+      }
+      form.append("remaining_photos", JSON.stringify(existingPhotos));
+
       const updated = await updateTelemetrySession(editingSession.id, form);
 
       editPhotoAttachments.forEach((p) => URL.revokeObjectURL(p.previewUrl));
       setEditPhotoAttachments([]);
+      setExistingPhotos([]);
+      setPhotosToDelete([]);
       setEditingSession(null);
 
       setNotice(
@@ -3110,14 +3127,25 @@ export default function InspectorTelemetryPage() {
               </div>
 
               {/* SECTION: Photos */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Attach Site Observation Photos
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Site Observation Photos
+                  </label>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    {existingPhotos.length + editPhotoAttachments.length} total photo{existingPhotos.length + editPhotoAttachments.length === 1 ? "" : "s"}
+                    {photosToDelete.length > 0 && (
+                      <span className="ml-1.5 text-rose-600 font-semibold">
+                        ({photosToDelete.length} removed)
+                      </span>
+                    )}
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-3">
-                  <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 cursor-pointer shadow-xs flex items-center gap-1.5 transition-colors">
-                    <ImageIcon size={13} className="text-slate-500" />
-                    <span>Add Photos</span>
+                  <label className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 cursor-pointer shadow-xs flex items-center gap-2 transition-colors">
+                    <ImageIcon size={14} className="text-slate-500" />
+                    <span>Add More Photos</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -3126,34 +3154,104 @@ export default function InspectorTelemetryPage() {
                       onChange={handleEditPhotoSelect}
                     />
                   </label>
-                  {editPhotoAttachments.length > 0 && (
-                    <span className="text-[11px] text-slate-500">
-                      {editPhotoAttachments.length} photo{editPhotoAttachments.length === 1 ? "" : "s"} queued
-                    </span>
+                  {photosToDelete.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Restore all photos marked for deletion
+                        setExistingPhotos((prev) => [...prev, ...photosToDelete]);
+                        setPhotosToDelete([]);
+                      }}
+                      className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline cursor-pointer"
+                    >
+                      Undo all {photosToDelete.length} removed photo{photosToDelete.length === 1 ? "" : "s"}
+                    </button>
                   )}
                 </div>
 
+                {/* Existing Session Photos */}
+                {existingPhotos.length > 0 && (
+                  <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+                      <span>Current Saved Photos ({existingPhotos.length})</span>
+                      <span className="text-[10px] text-slate-500">Click red trash icon to remove</span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
+                      {existingPhotos.map((photoUrl, pIdx) => {
+                        const fullUrl = photoUrl.startsWith("http")
+                          ? photoUrl
+                          : `${process.env.NEXT_PUBLIC_API_URL || "https://api.nexucon.net"}${photoUrl}`;
+                        return (
+                          <div
+                            key={photoUrl + pIdx}
+                            className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white shadow-xs"
+                          >
+                            <img
+                              src={fullUrl}
+                              alt={`Photo ${pIdx + 1}`}
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                              onError={(e) => {
+                                // fallback if thumbnail fails
+                                (e.target as HTMLElement).style.opacity = "0.5";
+                              }}
+                            />
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 pointer-events-none">
+                              <span className="text-[9px] text-white font-medium block truncate">
+                                Photo {pIdx + 1}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeExistingPhoto(photoUrl)}
+                              title="Delete this photo from session"
+                              className="absolute top-1 right-1 p-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all cursor-pointer opacity-90 group-hover:opacity-100 hover:scale-110"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Newly Queued Photos */}
                 {editPhotoAttachments.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2.5">
-                    {editPhotoAttachments.map((p, idx) => (
-                      <div
-                        key={idx}
-                        className="relative group w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100"
-                      >
-                        <img
-                          src={p.previewUrl}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeEditPhotoAttachment(idx)}
-                          className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors cursor-pointer"
+                  <div className="space-y-1.5 p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/80">
+                    <div className="text-[11px] font-semibold text-emerald-800">
+                      Newly Selected Photos ({editPhotoAttachments.length}) — will be uploaded on save:
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                      {editPhotoAttachments.map((p, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group w-18 h-18 rounded-lg overflow-hidden border border-emerald-300 bg-white shadow-xs"
                         >
-                          <X size={10} />
-                        </button>
-                      </div>
-                    ))}
+                          <img
+                            src={p.previewUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeEditPhotoAttachment(idx)}
+                            title="Remove queued photo"
+                            className="absolute top-1 right-1 p-1 rounded-full bg-black/70 hover:bg-rose-600 text-white transition-colors cursor-pointer"
+                          >
+                            <X size={10} />
+                          </button>
+                          <div className="absolute inset-x-0 bottom-0 bg-emerald-900/70 text-[8px] text-white text-center py-0.5 truncate px-1 font-semibold">
+                            New
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {existingPhotos.length === 0 && editPhotoAttachments.length === 0 && (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                    No observation photos currently attached to this telemetry session.
                   </div>
                 )}
               </div>
