@@ -474,7 +474,7 @@ export default function PunditAIReasoningPage() {
       ? new Date(activeAnalysis.created_at).toLocaleString()
       : new Date().toLocaleString();
     const model = activeAnalysis?.model_provider || "DeepSeek Active Engine";
-    const projectName = (activeAnalysis as any)?.project_name || (activeAnalysis as any)?.project?.name || "Reinforce Concrete Floor Slab on Laydown Area (Phase 2)";
+    const projectName = (activeAnalysis as any)?.project_name || (activeAnalysis as any)?.project?.name || "Reinforce Concrete Floor Slab on Laydown Area (Scope 01)";
     
     let content = `================================================================================\n`;
     content += `AI CONSENSUS OBSERVATIONS REPORT\n`;

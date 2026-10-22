@@ -282,7 +282,7 @@ function VerifyReportContent() {
             Official Report Verification
           </h1>
           <p className="mt-2 text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-            Cryptographic document authenticity validation for Lagos State Materials Testing Laboratory (LSMTL) statutory integrity dossiers.
+            Cryptographic document authenticity validation for Nexucon statutory integrity dossiers.
           </p>
         </div>
 
@@ -424,7 +424,7 @@ function VerifyReportContent() {
                         </span>
                       </h3>
                       <p className="text-xs text-amber-900/90 mt-1 leading-relaxed">
-                        Your request has been forwarded to the <strong>Lagos State Materials Testing Laboratory</strong> and supervising Government Agency dashboard.
+                        Your request has been forwarded to <strong>Nexucon</strong> and supervising Government Agency dashboard.
                       </p>
                       <div className="mt-2 text-xs text-amber-800 font-mono bg-amber-100/60 p-2 rounded-lg">
                         Reference: #{submissionSuccess.id?.slice(0, 8).toUpperCase()} • Requester: {submissionSuccess.requester_name}
@@ -661,13 +661,13 @@ function VerifyReportContent() {
               </div>
             </div>
             <div className="px-6 py-5 text-xs sm:text-sm text-slate-600 leading-relaxed">
-              The document may have been altered after generation, or it was never produced by this platform. If you believe this is an error, contact the Lagos State Materials Testing Laboratory.
+              The document may have been altered after generation, or it was never produced by this platform. If you believe this is an error, contact Nexucon.
             </div>
           </div>
         )}
 
         <p className="text-center text-xs text-slate-400">
-          Statutory Verification Service • Lagos State Materials Testing Laboratory & Nexucon Integrity Network
+          Statutory Verification Service • Nexucon Integrity Network
         </p>
       </div>
     </main>
