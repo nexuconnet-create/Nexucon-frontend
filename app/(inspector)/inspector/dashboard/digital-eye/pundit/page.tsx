@@ -1391,9 +1391,11 @@ function PunditWorkspaceInner() {
                 <ProjectFloorStationTreeBody
                   groups={testFolders.groups}
                   openProjects={testFolders.openProjects}
+                  openBuildings={testFolders.openBuildings}
                   openFloors={testFolders.openFloors}
                   openStations={testFolders.openStations}
                   toggleProject={testFolders.toggleProject}
+                  toggleBuilding={testFolders.toggleBuilding}
                   toggleFloor={testFolders.toggleFloor}
                   toggleStation={testFolders.toggleStation}
                   stationSummary={punditStationSummary}
