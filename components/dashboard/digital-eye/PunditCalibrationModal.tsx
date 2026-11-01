@@ -477,32 +477,10 @@ export default function PunditCalibrationModal({
       setParamC(Number(p.c ?? 0.35));
     }
 
-    // Restore calibration data points if saved on curve
-    if (curve.data_points && Array.isArray(curve.data_points) && curve.data_points.length > 0) {
-      const mapped = curve.data_points
-        .map((pt: any) => ({
-          velocity_ms: Number(pt.v || pt.velocity || pt.velocity_ms || 0),
-          cube_strength_mpa: Number(pt.f || pt.strength || pt.cube_strength_mpa || pt.f_cu || 0),
-          rebound: pt.r != null || pt.rebound != null ? Number(pt.r ?? pt.rebound) : undefined,
-        }))
-        .filter((pt: any) => pt.velocity_ms > 0 && pt.cube_strength_mpa > 0);
-
-      if (mapped.length > 0) {
-        setCubePoints(mapped);
-        const r2Val = curve.r2_score != null ? Number(curve.r2_score.toFixed(4)) : 0.9927;
-        const sVal = curve.standard_error != null ? Number(curve.standard_error.toFixed(2)) : 0.47;
-        setFitStats({
-          r2: r2Val,
-          s: sVal,
-          n: mapped.length,
-        });
-        const aVal = p.a != null ? Number(p.a) : 1.20;
-        const bVal = p.b != null ? Number(p.b) : 0.85;
-        setCalibrationNotes(
-          `Route 1 (Project-Specific Calibration): Exponential regression fitted across ${mapped.length} laboratory cube crush pairs: f_cu = ${aVal} · exp(${bVal} · V_km/s) (R² = ${r2Val}, s = ${sVal} MPa). Full Table 3.0 correlation pairs will be rendered in official NDT reports.`
-        );
-      }
-    }
+    // Active curve parameters applied to inputs.
+    // NOTE: Per engineering specifications, sample calibration data is NEVER auto-populated
+    // into cubePoints. cubePoints remains empty (Route 2 Empirical Baseline) until the user
+    // explicitly clicks "Load 10 Sample Pairs" or enters site pairs.
   }, []);
 
   // Load project data, scan tests, and auto-evaluate calibration
@@ -511,7 +489,7 @@ export default function PunditCalibrationModal({
 
     let cancelled = false;
 
-    // 1. First restore previous calibration from localStorage if available (survives reloads and logouts)
+    // 1. Restore previous parameters from localStorage if available
     if (typeof window !== "undefined") {
       try {
         const savedRaw = localStorage.getItem(`pundit_cal_${projectId}`);
@@ -525,10 +503,6 @@ export default function PunditCalibrationModal({
           }
           if (saved.design_strength_mpa != null) setDesignStrengthMpa(Number(saved.design_strength_mpa));
           if (saved.notes) setCalibrationNotes(saved.notes);
-          if (Array.isArray(saved.cube_correlation_points) && saved.cube_correlation_points.length > 0) {
-            setCubePoints(saved.cube_correlation_points);
-            fitExponentialFromPairs(saved.cube_correlation_points);
-          }
         }
       } catch (e) {
         // ignore
@@ -705,6 +679,13 @@ export default function PunditCalibrationModal({
     setParamC(0.0);
     setDesignStrengthMpa(25.0);
     setCalibrationNotes("Standard mix baseline: f_cu = 1.20 · exp(0.85 · V_km/s). General civil concrete benchmark.");
+    if (projectId && typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(`pundit_cal_${projectId}`);
+      } catch (e) {
+        // ignore
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -986,7 +967,9 @@ export default function PunditCalibrationModal({
                     setParamA(1.39);
                     setParamB(0.78);
                     setParamC(0.0);
+                    setCubePoints([]);
                     setFitStats(null);
+                    setAutoFitNotice(null);
                     setCalibrationNotes("High-Volume Aggregate Mix: f_cu = 1.39 · exp(0.78 · V_km/s). Dense crushed stone/granite aggregate (Scan Recommended for Laydown Slab).");
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${paramA === 1.39 && paramB === 0.78 ? "bg-emerald-600 text-white shadow-xs" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"}`}
@@ -1000,7 +983,9 @@ export default function PunditCalibrationModal({
                     setParamA(2.80);
                     setParamB(0.53);
                     setParamC(0.0);
+                    setCubePoints([]);
                     setFitStats(null);
+                    setAutoFitNotice(null);
                     setCalibrationNotes("Jones Equation (1962): f_cu = 2.80 · exp(0.53 · V_km/s). Classical literature benchmark (BS 1881 / RILEM up to ~27.2 MPa).");
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${paramA === 2.8 && paramB === 0.53 ? "bg-emerald-600 text-white shadow-xs" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"}`}
@@ -1014,7 +999,9 @@ export default function PunditCalibrationModal({
                     setParamA(1.20);
                     setParamB(0.85);
                     setParamC(0.0);
+                    setCubePoints([]);
                     setFitStats(null);
+                    setAutoFitNotice(null);
                     setCalibrationNotes("Standard Mix Baseline: f_cu = 1.20 · exp(0.85 · V_km/s). General civil concrete baseline.");
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${paramA === 1.2 && paramB === 0.85 ? "bg-emerald-600 text-white shadow-xs" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"}`}
@@ -1037,6 +1024,9 @@ export default function PunditCalibrationModal({
                     setParamA(-327.88);
                     setParamB(141.27);
                     setParamC(-13.41);
+                    setCubePoints([]);
+                    setFitStats(null);
+                    setAutoFitNotice(null);
                     setCalibrationNotes("Curvature fit for Laydown Slab scan batch (a=-327.88, b=141.27, c=-13.41).");
                   }}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
@@ -1049,6 +1039,9 @@ export default function PunditCalibrationModal({
                     setParamA(-12.5);
                     setParamB(4.2);
                     setParamC(1.8);
+                    setCubePoints([]);
+                    setFitStats(null);
+                    setAutoFitNotice(null);
                     setCalibrationNotes("Standard quadratic curvature baseline: f_cu = -12.5 + 4.2·V + 1.8·V².");
                   }}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
