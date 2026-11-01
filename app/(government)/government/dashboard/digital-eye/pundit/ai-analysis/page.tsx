@@ -200,8 +200,8 @@ export default function PunditAIAnalysisPage() {
       // Ensure selectedBatch belongs to the currently active project
       const isBatchForActiveProject = Boolean(
         selectedBatch &&
-        ((selectedBatch.project as any) === selectedProjectId ||
-         (selectedBatch as any).project_id === selectedProjectId)
+        (selectedBatch.project_id === selectedProjectId ||
+         (selectedBatch as any).project === selectedProjectId)
       );
       const effectiveBatchId = isBatchForActiveProject ? selectedBatch?.id : undefined;
 
