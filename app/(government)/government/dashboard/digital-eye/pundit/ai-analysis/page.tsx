@@ -197,13 +197,24 @@ export default function PunditAIAnalysisPage() {
   const handleConfirmCalibrationAndAnalyze = async (calPayload: BatchCalibrationPayload) => {
     setIsRunningAnalysis(true);
     try {
+      // Ensure selectedBatch belongs to the currently active project
+      const isBatchForActiveProject = Boolean(
+        selectedBatch &&
+        ((selectedBatch.project as any) === selectedProjectId ||
+         (selectedBatch as any).project_id === selectedProjectId)
+      );
+      const effectiveBatchId = isBatchForActiveProject ? selectedBatch?.id : undefined;
+
       // 1. Persist model calibration
-      const calResult = await calibratePunditBatchModel(calPayload);
+      const calResult = await calibratePunditBatchModel({
+        ...calPayload,
+        batch_id: effectiveBatchId,
+      });
       setCalibratedProfile(calResult);
 
       // 2. Execute analysis for this specific isolated batch & calibration profile
       const result = await analyzePunditProject(selectedProjectId, {
-        batch_id: selectedBatch?.id,
+        batch_id: effectiveBatchId,
         curve_type: calPayload.curve_type,
         params: calPayload.params,
         design_strength_mpa: calPayload.design_strength_mpa,
@@ -300,7 +311,10 @@ export default function PunditAIAnalysisPage() {
       <DigitalEyeHeader
         activePillar="PUNDIT: AI Acoustic Tomography & Pulse Velocity Inversion"
         selectedProjectId={selectedProjectId}
-        onProjectChange={setSelectedProjectId}
+        onProjectChange={(pId) => {
+          setSelectedProjectId(pId);
+          setSelectedBatch(null);
+        }}
         selectedElementId={selectedElementId}
         onElementChange={setSelectedElementId}
         onNewFindingClick={() => setIsCreateOpen(true)}

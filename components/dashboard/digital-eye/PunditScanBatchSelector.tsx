@@ -59,11 +59,14 @@ export default function PunditScanBatchSelector({
       setBatches(rows || []);
       if (onBatchesLoaded) onBatchesLoaded(rows || []);
 
-      // Auto-select initial batch if none selected
-      if (!selectedBatchId && rows && rows.length > 0) {
-        onSelectBatch(rows[0]);
-      } else if (!rows || rows.length === 0) {
-        onSelectBatch(null);
+      // Auto-select initial batch if none selected OR if currently selected batch does not belong to this project
+      const hasValidSelection = Boolean(selectedBatchId && rows && rows.some((b) => b.id === selectedBatchId));
+      if (!hasValidSelection) {
+        if (rows && rows.length > 0) {
+          onSelectBatch(rows[0]);
+        } else {
+          onSelectBatch(null);
+        }
       }
     } catch {
       setBatches([]);
