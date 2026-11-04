@@ -2162,22 +2162,57 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
   return report;
 };
 
+export interface NdtBuildingSummary {
+  building: string;
+  scan_count: number;
+  element_count: number;
+  good_count: number;
+  poor_count: number;
+  compliance_rate: number;
+  mean_strength: number | null;
+  benchmark: number;
+  floors: string[];
+}
+
+export interface NdtBuildingsResponse {
+  total_scans: number;
+  total_buildings: number;
+  has_multiple_buildings: boolean;
+  buildings: NdtBuildingSummary[];
+}
+
+/**
+ * Fetch distinct buildings and statistics identified across field scans for a project.
+ */
+export const getProjectNdtBuildings = async (projectId: string): Promise<NdtBuildingsResponse> => {
+  const res: any = await api.get(`/reports/projects/${projectId}/ndt-buildings/`);
+  return res as NdtBuildingsResponse;
+};
+
 /**
  * Download the official MTL-style NDT report (BS 1881-203 PUNDIT dossier)
  * streamed by GET /reports/projects/<id>/ndt-report/ — real database rows only.
+ * Supports single building or estate-wide (all buildings) reports.
  */
-export const downloadNdtReport = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+export const downloadNdtReport = async (
+  projectId: string,
+  operator?: string,
+  elementId?: string,
+  building?: string,
+): Promise<string> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report/`, {
     params,
     responseType: 'blob',
   });
   const blob = new Blob([res as any], { type: 'application/pdf' });
+  const safeBld = building && building.trim().toLowerCase() !== 'all' ? `_${building.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeEl = elementId ? `_${elementId}` : '';
-  const filename = `ndt_report_${projectId}${safeOp}${safeEl}.pdf`;
+  const filename = `ndt_report_${projectId}${safeBld}${safeOp}${safeEl}.pdf`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2307,10 +2342,16 @@ export const setReportCmsPassword = async (payload: {
  * sections, CMS overrides and server-computed figures as the PDF, streamed by
  * GET /reports/projects/<id>/ndt-report-word/.
  */
-export const downloadNdtReportWord = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+export const downloadNdtReportWord = async (
+  projectId: string,
+  operator?: string,
+  elementId?: string,
+  building?: string,
+): Promise<string> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report-word/`, {
     params,
     responseType: 'blob',
@@ -2318,8 +2359,9 @@ export const downloadNdtReportWord = async (projectId: string, operator?: string
   const blob = new Blob([res as any], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
+  const safeBld = building && building.trim().toLowerCase() !== 'all' ? `_${building.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-  const filename = `ndt_report_${projectId}${safeOp}.docx`;
+  const filename = `ndt_report_${projectId}${safeBld}${safeOp}.docx`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -3356,10 +3398,12 @@ export const fetchNdtReportPreviewBundle = async (
   projectId: string,
   operator?: string,
   elementId?: string,
+  building?: string,
 ): Promise<NdtReportPreviewBundle> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res: any = await api.get(
     `/reports/projects/${projectId}/ndt-report-preview/sections/`,
     { params }
@@ -3401,6 +3445,7 @@ export const reviewNdtReportPageQA = async (
   modelProvider?: 'anthropic' | 'deepseek' | 'auto',
   operator?: string,
   elementId?: string,
+  building?: string,
 ): Promise<NdtReportPageQAResponse> => {
   const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/`, {
     page_number: pageNumber,
@@ -3408,6 +3453,7 @@ export const reviewNdtReportPageQA = async (
     model_provider: modelProvider || 'anthropic',
     operator,
     elementId,
+    building: building && building.trim().toLowerCase() !== 'all' ? building : undefined,
   });
   return res;
 };

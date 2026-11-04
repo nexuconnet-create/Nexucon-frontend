@@ -22,6 +22,9 @@ import {
   Search,
   CheckCircle,
   FileSpreadsheet,
+  Building2,
+  Layers,
+  Building,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { TargetJump } from "./ContinuousPdfViewer";
@@ -41,6 +44,7 @@ import {
   notifyProjectNdtInspectors,
   reviewNdtReportPageQA,
   type NdtReportPageQAResponse,
+  type NdtBuildingSummary,
 } from "@/services/digitalEye";
 
 /**
@@ -63,6 +67,9 @@ export default function NdtReportPreviewView({
   projectId,
   operator,
   elementId,
+  building,
+  availableBuildings,
+  onBuildingChange,
   onBackToEdit,
   onGenerated,
   onEditInCms,
@@ -70,12 +77,21 @@ export default function NdtReportPreviewView({
   projectId: string;
   operator?: string;
   elementId?: string;
+  building?: string;
+  availableBuildings?: NdtBuildingSummary[];
+  onBuildingChange?: (bld: string) => void;
   /** Returns to the editing page exactly as it was left — nothing committed. */
   onBackToEdit: () => void;
   onGenerated?: () => void;
   /** Exits the preview and scrolls to the report-CMS panel. */
   onEditInCms?: () => void;
 }) {
+  const [currentBuilding, setCurrentBuilding] = useState<string>(building || "");
+
+  useEffect(() => {
+    setCurrentBuilding(building || "");
+  }, [building]);
+
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [sections, setSections] = useState<NdtPreviewSection[]>([]);
   const [pageCount, setPageCount] = useState(0);
@@ -111,13 +127,13 @@ export default function NdtReportPreviewView({
     }
   }, [currentPage, sections, activeKey]);
 
-  // Fetch the bundle fresh each time the view mounts
+  // Fetch the bundle fresh each time the view mounts or building changes
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    fetchNdtReportPreviewBundle(projectId, operator, elementId)
+    fetchNdtReportPreviewBundle(projectId, operator, elementId, currentBuilding || undefined)
       .then(({ blob, sections: secs, pageCount: total }) => {
         if (cancelled) return;
         objectUrl = window.URL.createObjectURL(blob);
@@ -148,7 +164,7 @@ export default function NdtReportPreviewView({
       cancelled = true;
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
-  }, [projectId, operator, elementId]);
+  }, [projectId, operator, elementId, currentBuilding]);
 
   const toast = (message: string, type: "success" | "error" | "info") => {
     window.dispatchEvent(
@@ -181,7 +197,7 @@ export default function NdtReportPreviewView({
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await downloadNdtReport(projectId, operator, elementId);
+      await downloadNdtReport(projectId, operator, elementId, currentBuilding || undefined);
       onGenerated?.();
     } catch (err: any) {
       toast(
@@ -262,7 +278,8 @@ export default function NdtReportPreviewView({
         queryToSend || undefined,
         qaModelProvider,
         operator,
-        elementId
+        elementId,
+        currentBuilding || undefined
       );
       setQaResponse(res);
       toast(`✅ Page ${currentPage} audited by ${res.provider_used} (${res.model_used}).`, "success");
@@ -297,25 +314,34 @@ export default function NdtReportPreviewView({
           <div className="flex items-center gap-2 min-w-0">
             <Eye className="w-5 h-5 text-[#0A3D2E] shrink-0" />
             <div className="min-w-0">
-              <h2 className="font-semibold text-[#0F181F] text-sm truncate">
-                Report Preview &amp; QA Verification
+              <h2 className="font-semibold text-[#0F181F] text-sm truncate flex items-center gap-2">
+                <span>Report Preview &amp; QA Verification</span>
+                {currentBuilding && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    {currentBuilding}
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-[#6B7A85] truncate">
-                Certified document viewer with embedded page-by-page AI QA Assistant.
+                {currentBuilding
+                  ? `Certified document viewer for ${currentBuilding} with embedded page-by-page AI QA Assistant.`
+                  : availableBuildings && availableBuildings.length > 1
+                  ? `Certified document viewer for Combined Estate Report (${availableBuildings.length} Buildings) with embedded AI QA Assistant.`
+                  : "Certified document viewer with embedded page-by-page AI QA Assistant."}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onBackToEdit}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-[#0F181F] hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-[#0F181F] hover:bg-slate-50 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Edit
           </button>
         </div>
 
-        {/* Toolbar — Page Navigation & Stepper | View Mode | Zoom | AI QA Assistant | Download | Generate */}
+        {/* Toolbar — Page Navigation & Stepper | Building Switcher | View Mode | Zoom | AI QA Assistant | Download | Generate */}
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
           {/* Interactive Page Stepper */}
           <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-2xs">
@@ -361,6 +387,31 @@ export default function NdtReportPreviewView({
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* In-Preview Building Selector */}
+          {availableBuildings && availableBuildings.length > 1 && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 shadow-2xs">
+              <Building2 className="w-3.5 h-3.5 text-[#022C4F]" />
+              <span className="text-[11px] font-semibold text-slate-600">Scope:</span>
+              <select
+                value={currentBuilding}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCurrentBuilding(val);
+                  onBuildingChange?.(val);
+                }}
+                className="bg-transparent text-xs font-bold text-[#022C4F] focus:outline-none cursor-pointer"
+                aria-label="Switch preview building"
+              >
+                <option value="">All Buildings (Combined Estate)</option>
+                {availableBuildings.map((b) => (
+                  <option key={b.building} value={b.building}>
+                    {b.building} ({b.scan_count} tests - {b.compliance_rate}% pass)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Mode Switcher: Continuous Scroll vs Native Plugin */}
           <div className="hidden sm:inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs text-xs">
@@ -436,8 +487,8 @@ export default function NdtReportPreviewView({
             {blobUrl && (
               <a
                 href={blobUrl}
-                download={`ndt_report_PREVIEW_${projectId}.pdf`}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50"
+                download={`ndt_report_PREVIEW_${projectId}${currentBuilding ? '_' + currentBuilding.replace(/[^a-zA-Z0-9_-]/g, '_') : ''}.pdf`}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50 cursor-pointer"
                 title="Download this preview — nothing is archived"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -462,14 +513,22 @@ export default function NdtReportPreviewView({
               type="button"
               onClick={handleGenerate}
               disabled={generating || loading || !!loadError}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#0A3D2E] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#0A3D2E]/90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0A3D2E] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#0A3D2E]/90 disabled:opacity-50 cursor-pointer"
             >
               {generating ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5" />
               )}
-              {generating ? "Archiving…" : "Generate & Archive"}
+              <span>
+                {generating
+                  ? "Archiving…"
+                  : currentBuilding
+                  ? `Generate (${currentBuilding})`
+                  : availableBuildings && availableBuildings.length > 1
+                  ? "Generate (Estate)"
+                  : "Generate & Archive"}
+              </span>
             </button>
           </div>
         </div>

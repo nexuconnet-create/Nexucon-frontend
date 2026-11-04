@@ -27,7 +27,10 @@ import {
   QrCode,
   Mail,
   Send,
-  Check
+  Check,
+  Eye,
+  Layers,
+  Building
 } from "lucide-react";
 import {
   DeviceReportRecord,
@@ -44,7 +47,8 @@ import {
   notifyInspectorsAboutNdtReport,
   notifyProjectNdtInspectors,
   getProjectNdtInspectors,
-  type ProjectInspectorRecipient
+  type ProjectInspectorRecipient,
+  type NdtBuildingSummary
 } from "@/services/digitalEye";
 import { useAuth } from "@/context/AuthContext";
 
@@ -54,10 +58,13 @@ interface DeviceReportingSectionProps {
   subtitle?: string;
   projectId?: string;
   elementId?: string;
+  selectedBuilding?: string;
+  availableBuildings?: NdtBuildingSummary[];
+  onBuildingChange?: (building: string) => void;
   onReportGenerated?: (report: DeviceReportRecord) => void;
   /** PUNDIT: preview-first flow — opens the exact-PDF preview modal
       instead of generating/archiving directly. */
-  onPreviewNdt?: (operator?: string) => void;
+  onPreviewNdt?: (operator?: string, building?: string) => void;
 }
 
 export default function DeviceReportingSection({
@@ -66,6 +73,9 @@ export default function DeviceReportingSection({
   subtitle,
   projectId = "",
   elementId,
+  selectedBuilding = "",
+  availableBuildings = [],
+  onBuildingChange,
   onReportGenerated,
   onPreviewNdt
 }: DeviceReportingSectionProps) {
@@ -238,20 +248,21 @@ export default function DeviceReportingSection({
   // PUNDIT official deliverable — preview-first (11 Sep client flow): the
   // Generate actions open the exact-PDF preview modal; the certified dossier
   // is only created when the operator confirms "Generate & Archive" there.
-  const openNdtPreview = () => {
+  const openNdtPreview = (targetOp?: string, targetBld?: string) => {
     if (!projectId) {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
       }));
       return;
     }
-    const targetOp = selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : undefined);
+    const bld = targetBld !== undefined ? targetBld : selectedBuilding;
+    const target = targetOp || selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : undefined);
     if (onPreviewNdt) {
-      onPreviewNdt(targetOp);
+      onPreviewNdt(target, bld);
       return;
     }
     // No preview handler wired (other host pages): fall back to the direct flow.
-    handleDownloadNdtReport();
+    handleDownloadNdtReport(target, bld);
   };
 
   const handleGenerateClick = () => {
@@ -263,19 +274,21 @@ export default function DeviceReportingSection({
   };
 
   // PUNDIT official deliverable — real backend-generated BS 1881-203 PDF
-  const handleDownloadNdtReport = (operatorParam?: string) => {
+  const handleDownloadNdtReport = (operatorParam?: string, buildingParam?: string) => {
     if (!projectId) {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: '⚠️ Select a project to generate its official NDT report.', type: "error" }
       }));
       return;
     }
+    const bld = buildingParam !== undefined ? buildingParam : selectedBuilding;
     const op = operatorParam !== undefined ? operatorParam : (selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : ''));
     const opMsg = op ? ` for Inspector: ${op}` : '';
+    const bldMsg = bld ? ` [${bld}]` : ' [Combined Estate Report]';
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: `Generating official BS 1881-203 NDT report PDF${opMsg}…`, type: "info" }
+      detail: { message: `Generating official BS 1881-203 NDT report PDF${bldMsg}${opMsg}…`, type: "info" }
     }));
-    downloadNdtReport(projectId, op || undefined)
+    downloadNdtReport(projectId, op || undefined, undefined, bld || undefined)
       .then((filename) => {
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Downloaded ${filename} (MTL-style NDT dossier, real registry data).`, type: "success" }
@@ -296,7 +309,7 @@ export default function DeviceReportingSection({
     }));
     for (const op of punditOperators) {
       try {
-        await downloadNdtReport(projectId, op);
+        await downloadNdtReport(projectId, op, undefined, selectedBuilding || undefined);
       } catch (err: any) {
         console.error(`Failed to download report for ${op}`, err);
       }
@@ -306,19 +319,21 @@ export default function DeviceReportingSection({
 
   // PUNDIT editable Word edition (8 Sep meeting H7): the same sections,
   // CMS overrides and server-computed figures as the PDF, as a .docx.
-  const handleDownloadWordReport = (operatorParam?: string) => {
+  const handleDownloadWordReport = (operatorParam?: string, buildingParam?: string) => {
     if (!projectId) {
       window.dispatchEvent(new CustomEvent('show-toast', {
         detail: { message: '⚠️ Select a project to export its NDT report to Word.', type: "error" }
       }));
       return;
     }
+    const bld = buildingParam !== undefined ? buildingParam : selectedBuilding;
     const op = operatorParam !== undefined ? operatorParam : (selectedOperator || (punditOperators.length > 0 ? punditOperators[0] : ''));
     const opMsg = op ? ` for Inspector: ${op}` : '';
+    const bldMsg = bld ? ` [${bld}]` : ' [Combined Estate Report]';
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: `Building the editable Word edition of the NDT report${opMsg}…`, type: "info" }
+      detail: { message: `Building editable Word edition${bldMsg}${opMsg}…`, type: "info" }
     }));
-    downloadNdtReportWord(projectId, op || undefined)
+    downloadNdtReportWord(projectId, op || undefined, undefined, bld || undefined)
       .then((filename) => {
         window.dispatchEvent(new CustomEvent('show-toast', {
           detail: { message: `Downloaded ${filename} (editable working copy; the certified record remains the archived PDF).`, type: "success" }
@@ -535,7 +550,15 @@ export default function DeviceReportingSection({
                 title="Download official BS 1881-203 NDT report (PDF)"
               >
                 <Download size={14} />
-                <span>{selectedOperator ? `NDT PDF (${selectedOperator})` : "Download NDT PDF"}</span>
+                <span>
+                  {selectedBuilding
+                    ? `Download PDF (${selectedBuilding})`
+                    : availableBuildings.length > 1
+                    ? "Download Combined Estate PDF"
+                    : selectedOperator
+                    ? `NDT PDF (${selectedOperator})`
+                    : "Download NDT PDF"}
+                </span>
               </button>
             )}
 
@@ -546,7 +569,9 @@ export default function DeviceReportingSection({
                 title="Editable .docx working copy of the official NDT report (same sections and figures as the PDF)"
               >
                 <FileText size={14} />
-                <span>Export to Word</span>
+                <span>
+                  {selectedBuilding ? `Word (${selectedBuilding})` : "Export to Word"}
+                </span>
               </button>
             )}
 
@@ -580,7 +605,17 @@ export default function DeviceReportingSection({
                 : undefined}
             >
               <Plus size={14} />
-              <span>{deviceType === "pundit" && selectedOperator ? `Generate (${selectedOperator})` : "Generate Official Dossier"}</span>
+              <span>
+                {deviceType === "pundit"
+                  ? selectedBuilding
+                    ? `Generate (${selectedBuilding})`
+                    : availableBuildings.length > 1
+                    ? `Generate Estate Report`
+                    : selectedOperator
+                    ? `Generate (${selectedOperator})`
+                    : "Generate Official Dossier"
+                  : "Generate Official Dossier"}
+              </span>
             </button>
           </div>
         </div>
@@ -654,6 +689,161 @@ export default function DeviceReportingSection({
           </div>
         ))}
       </div>
+
+      {/* ESTATE MULTI-BUILDING DELIVERABLES GRID */}
+      {deviceType === "pundit" && availableBuildings && availableBuildings.length > 1 && (
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#022C4F]" />
+                <h3 className="text-sm font-bold text-[#022C4F] tracking-tight">
+                  Estate Multi-Building Report Generation Matrix
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                  {availableBuildings.length} Buildings In Scan
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Generate dedicated certified PDF dossiers for individual buildings or one comprehensive combined report covering the entire estate.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {/* Master Card: Combined Estate Report */}
+            <div className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
+              !selectedBuilding
+                ? "border-[#022C4F] bg-slate-50/80 ring-2 ring-[#022C4F]/10 shadow-sm"
+                : "border-slate-200 bg-white hover:border-slate-300"
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#022C4F] bg-blue-100/60 px-2 py-0.5 rounded">
+                    Entire Estate Scope
+                  </span>
+                  <Layers className="w-4 h-4 text-[#022C4F]" />
+                </div>
+                <h4 className="font-bold text-xs text-gray-900">
+                  Combined Estate Report
+                </h4>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  All {availableBuildings.length} buildings ({availableBuildings.map(b => b.building).join(", ")}) in one comprehensive report.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-medium text-gray-600">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 font-mono">
+                    {availableBuildings.reduce((sum, b) => sum + b.scan_count, 0)} Total Tests
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-semibold">
+                    Master Defect Matrix
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openNdtPreview(undefined, "")}
+                  className="flex-1 px-2.5 py-1.5 bg-[#022C4F] hover:bg-[#033c6c] text-white rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  title="Preview combined estate report"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadNdtReport(undefined, "")}
+                  className="p-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer"
+                  title="Download Combined Estate PDF"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-700" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadWordReport(undefined, "")}
+                  className="p-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer"
+                  title="Export Combined Estate Word (.docx)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-700" />
+                </button>
+              </div>
+            </div>
+
+            {/* Individual Building Cards */}
+            {availableBuildings.map((bld) => {
+              const isSelected = selectedBuilding.toLowerCase() === bld.building.toLowerCase();
+              return (
+                <div
+                  key={bld.building}
+                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? "border-emerald-600 bg-emerald-50/30 ring-2 ring-emerald-600/20 shadow-sm"
+                      : "border-gray-200 bg-white hover:border-emerald-300"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/60 px-2 py-0.5 rounded">
+                        Individual Building
+                      </span>
+                      <Building className="w-4 h-4 text-emerald-700" />
+                    </div>
+                    <h4 className="font-bold text-xs text-gray-900 flex items-center justify-between">
+                      <span>{bld.building}</span>
+                      <span className={`text-[11px] font-mono font-bold ${
+                        bld.compliance_rate >= 90 ? "text-emerald-700" : "text-amber-700"
+                      }`}>
+                        {bld.compliance_rate}% pass
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-1">
+                      {bld.scan_count} elements tested ({bld.good_count} Good, {bld.poor_count} Sub-benchmark)
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1 text-[10px] text-gray-600">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono">
+                        {bld.floors.join(", ") || "All Floors"}
+                      </span>
+                      {bld.mean_strength && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono">
+                          Avg: {bld.mean_strength} MPa
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openNdtPreview(undefined, bld.building)}
+                      className="flex-1 px-2.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title={`Preview ${bld.building} report`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadNdtReport(undefined, bld.building)}
+                      className="p-1.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 rounded-lg text-[11px] font-semibold cursor-pointer"
+                      title={`Download ${bld.building} PDF Report`}
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-800" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadWordReport(undefined, bld.building)}
+                      className="p-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 rounded-lg text-[11px] font-semibold cursor-pointer"
+                      title={`Export ${bld.building} Word (.docx)`}
+                    >
+                      <FileText className="w-3.5 h-3.5 text-amber-700" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* CERTIFIED REPORT REGISTRY TABLE */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
