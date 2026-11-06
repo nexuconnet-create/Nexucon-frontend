@@ -26,6 +26,8 @@ import {
   Table,
   ArrowUpDown,
   SlidersHorizontal,
+  Building2,
+  Building,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditAiNav from "@/components/dashboard/digital-eye/PunditAiNav";
@@ -39,6 +41,8 @@ import {
   PunditProjectAnalysis,
   PunditTest,
   getPunditTests,
+  getProjectNdtBuildings,
+  NdtBuildingSummary,
 } from "@/services/digitalEye";
 
 export default function PunditAIReasoningPage() {
@@ -57,8 +61,12 @@ export default function PunditAIReasoningPage() {
   // Tabular View vs Console Shell State
   const [viewMode, setViewMode] = useState<"table" | "terminal" | "split">("table");
   const [tableSearchQuery, setTableSearchQuery] = useState<string>("");
-  const [tableSortBy, setTableSortBy] = useState<"id" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("id");
+  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("id");
   const [complianceFilter, setComplianceFilter] = useState<"ALL" | "PASS" | "FAIL">("ALL");
+
+  // Estate Building Classification Scope
+  const [selectedBuilding, setSelectedBuilding] = useState<string>("");
+  const [serverBuildings, setServerBuildings] = useState<NdtBuildingSummary[]>([]);
 
   // Chat Interaction State
   const [chatInput, setChatInput] = useState<string>("");
@@ -115,18 +123,23 @@ export default function PunditAIReasoningPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [analysesData, testsData] = await Promise.all([
+      const [analysesData, testsData, bldData] = await Promise.all([
         getPunditAIAnalyses({ project: selectedProjectId }),
         getPunditTests({ project: selectedProjectId }),
+        getProjectNdtBuildings(selectedProjectId).catch(() => null),
       ]);
       setAnalyses(Array.isArray(analysesData) ? analysesData : []);
       setTests(Array.isArray(testsData) ? testsData : []);
+      if (bldData && Array.isArray((bldData as any).buildings)) {
+        setServerBuildings((bldData as any).buildings);
+      }
       if (analysesData && analysesData.length > 0 && !selectedAnalysisId) {
         setSelectedAnalysisId(analysesData[0].id);
       }
     } catch (err: any) {
       setAnalyses([]);
       setTests([]);
+      setServerBuildings([]);
       setError(
         err?.response?.data?.detail ||
           err?.message ||
@@ -139,6 +152,7 @@ export default function PunditAIReasoningPage() {
 
   useEffect(() => {
     if (selectedProjectId) {
+      setSelectedBuilding("");
       loadData();
     }
   }, [selectedProjectId]);
@@ -312,6 +326,34 @@ export default function PunditAIReasoningPage() {
     return processedLines;
   }, [activeAnalysis, tests]);
 
+  const inferBuildingFromElement = (elementName: string, floorName?: string): string => {
+    if (!elementName) return "Main Building";
+    const clean = elementName.trim();
+    const mFull = clean.match(/(?:BUILDING|BLOCK|TOWER|WING)\s*([A-Za-z0-9]+)/i);
+    if (mFull) {
+      const raw = mFull[0].toLowerCase();
+      const tok = mFull[1].toUpperCase();
+      if (raw.includes("block")) return `Block ${tok}`;
+      if (raw.includes("tower")) return `Tower ${tok}`;
+      if (raw.includes("wing")) return `Wing ${tok}`;
+      return `Building ${tok}`;
+    }
+    const mBld = clean.match(/^([A-Za-z0-9]+)-+/);
+    if (mBld) {
+      const p = mBld[1].toUpperCase();
+      if (/^[A-Z]$/.test(p)) {
+        return `Building ${p}`;
+      }
+      const bldM = p.match(/^(?:BLD|BLDG|BUILDING)([A-Z0-9]+)$/);
+      if (bldM) return `Building ${bldM[1]}`;
+      const blkM = p.match(/^(?:BLK|BLOCK)([A-Z0-9]+)$/);
+      if (blkM) return `Block ${blkM[1]}`;
+      const numM = p.match(/^(\d+)$/);
+      if (numM) return `Building ${numM[1]}`;
+    }
+    return "Main Building";
+  };
+
   const elementLineRegex = useMemo(
     () =>
       /^([A-Za-z0-9_-]+)(?:\s*\(([^)]+)\))?:\s*mean velocity\s*(\d+(?:\.\d+)?)\s*m\/s(?:,\s*(?:compressive strength|f_cu)\s*([\d.]+)\s*MPa)?,?\s*(?:grade\s*'([^']+)'|([^.]+))?/i,
@@ -322,6 +364,7 @@ export default function PunditAIReasoningPage() {
     const list: Array<{
       index: number;
       element: string;
+      building: string;
       floor: string;
       velocity: number;
       compressiveStrength: number | null;
@@ -350,10 +393,12 @@ export default function PunditAIReasoningPage() {
             : "DOUBTFUL / POOR";
         const isPass = fcuVal != null ? (velVal >= 3500 && fcuVal >= 25.0) : (velVal >= 3500);
         const deltaTargetPct = fcuVal != null ? Number((((fcuVal - 25.0) / 25.0) * 100).toFixed(1)) : null;
+        const building = inferBuildingFromElement(elemName, floorStr);
 
         list.push({
           index: count++,
           element: elemName,
+          building,
           floor: floorStr,
           velocity: velVal,
           compressiveStrength: fcuVal,
@@ -367,48 +412,108 @@ export default function PunditAIReasoningPage() {
     return list;
   }, [parsedLogLines, elementLineRegex]);
 
+  const detectedBuildings = useMemo(() => {
+    const bMap = new Map<string, {
+      building: string;
+      count: number;
+      velocities: number[];
+      strengths: number[];
+      passCount: number;
+    }>();
+
+    for (const r of parsedElementRows) {
+      const b = r.building || "Main Building";
+      if (!bMap.has(b)) {
+        bMap.set(b, {
+          building: b,
+          count: 0,
+          velocities: [],
+          strengths: [],
+          passCount: 0,
+        });
+      }
+      const entry = bMap.get(b)!;
+      entry.count += 1;
+      entry.velocities.push(r.velocity);
+      if (r.compressiveStrength != null) {
+        entry.strengths.push(r.compressiveStrength);
+      }
+      if (r.isPass) {
+        entry.passCount += 1;
+      }
+    }
+
+    return Array.from(bMap.values()).map(entry => {
+      const avgVel = Math.round(entry.velocities.reduce((a, b) => a + b, 0) / entry.count);
+      const avgFcu = entry.strengths.length > 0
+        ? Number((entry.strengths.reduce((a, b) => a + b, 0) / entry.strengths.length).toFixed(2))
+        : null;
+      const passRate = Math.round((entry.passCount / entry.count) * 100);
+      return {
+        building: entry.building,
+        count: entry.count,
+        avgVel,
+        avgFcu,
+        passCount: entry.passCount,
+        passRate,
+      };
+    }).sort((a, b) => a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [parsedElementRows]);
+
+  const scopedElementRows = useMemo(() => {
+    if (!selectedBuilding) return parsedElementRows;
+    return parsedElementRows.filter(
+      (r) => r.building.toLowerCase() === selectedBuilding.toLowerCase()
+    );
+  }, [parsedElementRows, selectedBuilding]);
+
   const elementStats = useMemo(() => {
-    if (parsedElementRows.length === 0) return null;
-    const n = parsedElementRows.length;
-    const avgVel = Math.round(parsedElementRows.reduce((acc, r) => acc + r.velocity, 0) / n);
-    const validFcuRows = parsedElementRows.filter((r) => r.compressiveStrength != null);
+    if (scopedElementRows.length === 0) return null;
+    const n = scopedElementRows.length;
+    const avgVel = Math.round(scopedElementRows.reduce((acc, r) => acc + r.velocity, 0) / n);
+    const validFcuRows = scopedElementRows.filter((r) => r.compressiveStrength != null);
     const avgFcu = validFcuRows.length > 0
       ? Number((validFcuRows.reduce((acc, r) => acc + (r.compressiveStrength as number), 0) / validFcuRows.length).toFixed(2))
       : null;
-    const passCount = parsedElementRows.filter((r) => r.isPass).length;
+    const passCount = scopedElementRows.filter((r) => r.isPass).length;
     const passRate = Math.round((passCount / n) * 100);
     return { n, avgVel, avgFcu, passCount, passRate };
-  }, [parsedElementRows]);
+  }, [scopedElementRows]);
 
   const filteredElementRows = useMemo(() => {
-    return parsedElementRows
+    return scopedElementRows
       .filter((row) => {
         if (complianceFilter === "PASS" && !row.isPass) return false;
         if (complianceFilter === "FAIL" && row.isPass) return false;
         if (tableSearchQuery.trim()) {
           const q = tableSearchQuery.toLowerCase();
-          return row.element.toLowerCase().includes(q) || row.floor.toLowerCase().includes(q);
+          return (
+            row.element.toLowerCase().includes(q) ||
+            row.floor.toLowerCase().includes(q) ||
+            row.building.toLowerCase().includes(q)
+          );
         }
         return true;
       })
       .sort((a, b) => {
+        if (tableSortBy === "bld") return a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }) || a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
         if (tableSortBy === "vel_desc") return b.velocity - a.velocity;
         if (tableSortBy === "vel_asc") return a.velocity - b.velocity;
         if (tableSortBy === "fcu_desc") return (b.compressiveStrength ?? -1) - (a.compressiveStrength ?? -1);
         if (tableSortBy === "fcu_asc") return (a.compressiveStrength ?? 999) - (b.compressiveStrength ?? 999);
         return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
       });
-  }, [parsedElementRows, tableSearchQuery, tableSortBy, complianceFilter]);
+  }, [scopedElementRows, tableSearchQuery, tableSortBy, complianceFilter]);
 
   const systemTraces = useMemo(() => {
     return parsedLogLines.filter((l) => !elementLineRegex.test(l));
   }, [parsedLogLines, elementLineRegex]);
 
   const copyTableToClipboard = () => {
-    if (parsedElementRows.length === 0) return;
-    const tsvHeaders = "Element\tLevel/Floor\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
-    const tsvRows = parsedElementRows.map(r => 
-      `${r.element}\t${r.floor}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
+    if (filteredElementRows.length === 0) return;
+    const tsvHeaders = "Building\tElement\tLevel/Floor\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
+    const tsvRows = filteredElementRows.map(r => 
+      `${r.building}\t${r.element}\t${r.floor}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
     ).join("\n");
     navigator.clipboard.writeText(tsvHeaders + tsvRows);
     setCopiedTable(true);
@@ -416,16 +521,17 @@ export default function PunditAIReasoningPage() {
   };
 
   const exportElementsCSV = () => {
-    if (parsedElementRows.length === 0) return;
-    const headers = "Index,Structural Element,Location/Level,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
-    const rows = parsedElementRows.map(r =>
-      `${r.index},"${r.element}","${r.floor}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
+    if (filteredElementRows.length === 0) return;
+    const headers = "Index,Building,Structural Element,Location/Level,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
+    const rows = filteredElementRows.map(r =>
+      `${r.index},"${r.building}","${r.element}","${r.floor}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `pundit_calibrated_elements_${activeAnalysis?.analysis_reference || "table"}.csv`;
+    const bldTag = selectedBuilding ? `_${selectedBuilding.replace(/\s+/g, '_')}` : "";
+    link.download = `pundit_calibrated_elements${bldTag}_${activeAnalysis?.analysis_reference || "table"}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -834,12 +940,127 @@ export default function PunditAIReasoningPage() {
             {/* TABULAR VIEW */}
             {(viewMode === "table" || viewMode === "split") && (
               <div className="p-4 space-y-4 bg-slate-950">
+                {/* ESTATE BUILDING CLASSIFICATION & SCOPE SELECTOR */}
+                {detectedBuildings.length > 0 && (
+                  <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={16} className="text-amber-400" />
+                        <span className="text-xs font-mono font-bold text-slate-100 uppercase tracking-wider">
+                          Estate Building Classification &amp; Scope
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          ({detectedBuildings.length} {detectedBuildings.length === 1 ? "Building" : "Buildings"} Detected in Dataset)
+                        </span>
+                      </div>
+                      {selectedBuilding && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBuilding("")}
+                          className="text-[11px] font-mono font-semibold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>Reset to All Buildings ({parsedElementRows.length} Elements)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Building Selector Pills */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBuilding("")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                          !selectedBuilding
+                            ? "bg-amber-500 text-slate-950 shadow-sm ring-2 ring-amber-400/30"
+                            : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                        }`}
+                      >
+                        <Layers size={13} />
+                        <span>All Buildings (Combined Portfolio)</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          !selectedBuilding ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                        }`}>
+                          {parsedElementRows.length} Elements
+                        </span>
+                      </button>
+
+                      {detectedBuildings.map((bld) => {
+                        const isSelected = selectedBuilding.toLowerCase() === bld.building.toLowerCase();
+                        return (
+                          <button
+                            key={bld.building}
+                            type="button"
+                            onClick={() => setSelectedBuilding(bld.building)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                                : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                            }`}
+                          >
+                            <Building size={13} className={isSelected ? "text-slate-950" : "text-amber-400"} />
+                            <span>{bld.building}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              isSelected ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {bld.count} tests
+                            </span>
+                            <span className={`text-[10px] font-mono ${
+                              isSelected ? "text-slate-950 font-black" : bld.passRate > 0 ? "text-emerald-400 font-bold" : "text-slate-500"
+                            }`}>
+                              {bld.passRate}% pass
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* MULTI-BUILDING PORTFOLIO BREAKDOWN CARDS (Visible when All Buildings is selected) */}
+                    {!selectedBuilding && detectedBuildings.length > 1 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/80">
+                        {detectedBuildings.map((bld) => (
+                          <div
+                            key={bld.building}
+                            onClick={() => setSelectedBuilding(bld.building)}
+                            className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 hover:border-amber-500/40 hover:bg-slate-900 transition-all cursor-pointer group flex flex-col justify-between"
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                              <span className="font-mono text-xs font-bold text-amber-300 group-hover:text-amber-200 flex items-center gap-1.5">
+                                <Building size={12} className="text-amber-400" />
+                                {bld.building}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                                {bld.count} Elements ({Math.round((bld.count / parsedElementRows.length) * 100)}%)
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 text-[10px] font-mono pt-1 border-t border-slate-800/60">
+                              <div>
+                                <span className="text-slate-500 block text-[9px]">Mean Velocity</span>
+                                <span className="text-slate-200 font-bold">{bld.avgVel} m/s</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9px]">Mean f_cu</span>
+                                <span className="text-slate-200 font-bold">{bld.avgFcu != null ? `${bld.avgFcu} MPa` : "—"}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-slate-500 block text-[9px]">Pass Rate</span>
+                                <span className={`font-bold ${bld.passRate > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {bld.passCount}/{bld.count} ({bld.passRate}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Summary Metrics Ribbon */}
                 {elementStats && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
                       <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
-                        Verified Elements
+                        Verified Elements {selectedBuilding ? `(${selectedBuilding})` : "(Combined)"}
                       </span>
                       <p className="text-lg font-mono font-bold text-slate-100 mt-0.5">
                         {elementStats.n} Elements
@@ -854,7 +1075,9 @@ export default function PunditAIReasoningPage() {
                       <p className="text-lg font-mono font-bold text-amber-400 mt-0.5">
                         {elementStats.avgVel.toLocaleString()} m/s
                       </p>
-                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">BS 1881-203 GOOD</span>
+                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                        {elementStats.avgVel >= 4500 ? "BS 1881 EXCELLENT" : elementStats.avgVel >= 3500 ? "BS 1881-203 GOOD" : "BS 1881 DOUBTFUL"}
+                      </span>
                     </div>
 
                     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
@@ -866,7 +1089,7 @@ export default function PunditAIReasoningPage() {
                       </p>
                       <span className="text-[10px] text-slate-400 font-mono">
                         {elementStats.avgFcu != null
-                          ? `+${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
+                          ? `${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1)) >= 0 ? "+" : ""}${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
                           : "Awaiting Govt Calibration"}
                       </span>
                     </div>
@@ -878,7 +1101,9 @@ export default function PunditAIReasoningPage() {
                       <p className="text-lg font-mono font-bold text-emerald-400 mt-0.5">
                         {elementStats.passCount} / {elementStats.n} ({elementStats.passRate}%)
                       </p>
-                      <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase">All Elements Pass</span>
+                      <span className={`text-[10px] font-mono font-bold uppercase ${elementStats.passRate >= 90 ? "text-emerald-400" : "text-amber-400"}`}>
+                        {elementStats.passRate >= 90 ? "Benchmark Met" : `${elementStats.passCount} Passed · ${elementStats.n - elementStats.passCount} Below Spec`}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -890,12 +1115,33 @@ export default function PunditAIReasoningPage() {
                       <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                       <input
                         type="text"
-                        placeholder="Search element (S1, S2, Floor)..."
+                        placeholder="Search element (A-FFB1, Floor, Building)..."
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
                         className="pl-7 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 outline-none w-48 sm:w-60 focus:border-amber-500/50"
                       />
                     </div>
+
+                    {/* Filter by Building dropdown */}
+                    {detectedBuildings.length > 1 && (
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+                        <Building size={12} className="text-amber-400" />
+                        <select
+                          value={selectedBuilding}
+                          onChange={(e) => setSelectedBuilding(e.target.value)}
+                          className="bg-transparent text-slate-200 text-xs outline-none font-mono cursor-pointer"
+                        >
+                          <option value="" className="bg-slate-950 text-slate-200">
+                            All Buildings ({parsedElementRows.length})
+                          </option>
+                          {detectedBuildings.map((b) => (
+                            <option key={b.building} value={b.building} className="bg-slate-950 text-slate-200">
+                              {b.building} ({b.count})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     {/* Filter by Compliance */}
                     <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono">
@@ -910,7 +1156,7 @@ export default function PunditAIReasoningPage() {
                               : "text-slate-400 hover:text-slate-200"
                           }`}
                         >
-                          {filter === "ALL" ? `All (${parsedElementRows.length})` : filter}
+                          {filter === "ALL" ? `All (${scopedElementRows.length})` : filter}
                         </button>
                       ))}
                     </div>
@@ -926,6 +1172,7 @@ export default function PunditAIReasoningPage() {
                       className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono cursor-pointer focus:border-amber-500/50"
                     >
                       <option value="id">Element ID (S1, S2...)</option>
+                      <option value="bld">Building (A-Z)</option>
                       <option value="vel_desc">Velocity (Highest first)</option>
                       <option value="vel_asc">Velocity (Lowest first)</option>
                       <option value="fcu_desc">Strength f_cu (Highest first)</option>
@@ -940,6 +1187,7 @@ export default function PunditAIReasoningPage() {
                     <thead className="bg-slate-900 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10">
                       <tr>
                         <th className="py-2.5 px-3 w-10 text-center text-slate-500">#</th>
+                        <th className="py-2.5 px-3">Building</th>
                         <th className="py-2.5 px-3">Structural Element</th>
                         <th className="py-2.5 px-3">Location / Level</th>
                         <th className="py-2.5 px-3">Pulse Velocity (V)</th>
@@ -952,7 +1200,7 @@ export default function PunditAIReasoningPage() {
                     <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
                       {filteredElementRows.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500 italic">
+                          <td colSpan={9} className="py-8 text-center text-slate-500 italic">
                             No elements matched your search filter.
                           </td>
                         </tr>
@@ -966,6 +1214,24 @@ export default function PunditAIReasoningPage() {
                           >
                             <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
                               {row.index}
+                            </td>
+                            <td className="py-2 px-3">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedBuilding(row.building)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                                  row.building.toLowerCase().includes('a')
+                                    ? "bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25"
+                                    : row.building.toLowerCase().includes('b')
+                                    ? "bg-purple-500/15 text-purple-300 border-purple-500/30 hover:bg-purple-500/25"
+                                    : row.building.toLowerCase().includes('c')
+                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
+                                    : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                                }`}
+                                title={`Click to filter ${row.building}`}
+                              >
+                                {row.building}
+                              </button>
                             </td>
                             <td className="py-2 px-3">
                               <span
@@ -1121,14 +1387,19 @@ export default function PunditAIReasoningPage() {
                                 <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 flex items-center justify-between">
                                   <span className="text-rose-400 flex items-center gap-1">
                                     <Table size={12} className="text-rose-500" />
-                                    <span>Verified Scan Batch Elements ({parsedElementRows.length})</span>
+                                    <span>
+                                      Verified Scan Batch Elements ({selectedBuilding ? `${selectedBuilding}: ${filteredElementRows.length}` : `All Buildings: ${parsedElementRows.length}`})
+                                    </span>
                                   </span>
-                                  <span className="text-[9px] text-slate-500 font-mono">Calibrated Strength Formula Active</span>
+                                  <span className="text-[9px] text-slate-500 font-mono">
+                                    {selectedBuilding ? `${selectedBuilding} Scope Active` : "Calibrated Strength Formula Active"}
+                                  </span>
                                 </div>
                                 <table className="w-full text-left text-[11px] font-mono">
                                   <thead>
                                     <tr className="border-b border-slate-800 text-slate-400 text-[10px]">
                                       <th className="py-1 px-2">#</th>
+                                      <th className="py-1 px-2">Building</th>
                                       <th className="py-1 px-2">Element</th>
                                       <th className="py-1 px-2">Location</th>
                                       <th className="py-1 px-2">Mean Velocity</th>
@@ -1138,7 +1409,7 @@ export default function PunditAIReasoningPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {parsedElementRows.map((r) => (
+                                    {filteredElementRows.map((r) => (
                                       <tr
                                         key={r.element}
                                         className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
@@ -1146,6 +1417,11 @@ export default function PunditAIReasoningPage() {
                                         }`}
                                       >
                                         <td className="py-1 px-2 text-slate-600 text-[10px]">{r.index}</td>
+                                        <td className="py-1 px-2">
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
+                                            {r.building}
+                                          </span>
+                                        </td>
                                         <td className="py-1 px-2">
                                           <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
                                             !r.isPass ? "text-rose-300 bg-rose-500/10 border border-rose-500/30" : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
