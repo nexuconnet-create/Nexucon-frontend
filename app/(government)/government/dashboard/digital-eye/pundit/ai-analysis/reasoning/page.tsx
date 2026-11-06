@@ -28,6 +28,9 @@ import {
   SlidersHorizontal,
   Building2,
   Building,
+  UserCheck,
+  User,
+  Users,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditAiNav from "@/components/dashboard/digital-eye/PunditAiNav";
@@ -61,11 +64,12 @@ export default function PunditAIReasoningPage() {
   // Tabular View vs Console Shell State
   const [viewMode, setViewMode] = useState<"table" | "terminal" | "split">("table");
   const [tableSearchQuery, setTableSearchQuery] = useState<string>("");
-  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("bld");
+  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "ins" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("bld");
   const [complianceFilter, setComplianceFilter] = useState<"ALL" | "PASS" | "FAIL">("ALL");
 
   // Estate Building Classification Scope & Grouping
   const [selectedBuilding, setSelectedBuilding] = useState<string>("");
+  const [selectedInspector, setSelectedInspector] = useState<string>("");
   const [serverBuildings, setServerBuildings] = useState<NdtBuildingSummary[]>([]);
   const [groupByBuilding, setGroupByBuilding] = useState<boolean>(true);
 
@@ -154,6 +158,7 @@ export default function PunditAIReasoningPage() {
   useEffect(() => {
     if (selectedProjectId) {
       setSelectedBuilding("");
+      setSelectedInspector("");
       loadData();
     }
   }, [selectedProjectId]);
@@ -389,6 +394,15 @@ export default function PunditAIReasoningPage() {
     return processedLines;
   }, [activeAnalysis, tests]);
 
+  const availableInspectors = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tests || []) {
+      const op = (t.operator_name || "").trim();
+      if (op) set.add(op);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tests]);
+
   const elementLineRegex = useMemo(
     () =>
       /^([A-Za-z0-9_-]+)(?:\s*\(([^)]+)\))?:\s*mean velocity\s*(\d+(?:\.\d+)?)\s*m\/s(?:,\s*(?:compressive strength|f_cu)\s*([\d.]+)\s*MPa)?,?\s*(?:grade\s*'([^']+)'|([^.]+))?/i,
@@ -401,6 +415,7 @@ export default function PunditAIReasoningPage() {
       element: string;
       building: string;
       floor: string;
+      inspector: string;
       velocity: number;
       compressiveStrength: number | null;
       grade: string;
@@ -409,11 +424,22 @@ export default function PunditAIReasoningPage() {
       deltaTargetPct: number | null;
     }> = [];
 
+    // Map operator from recorded tests to structural element names
+    const testInspectorMap = new Map<string, string>();
+    for (const t of tests || []) {
+      const elem = (t.structural_element_name || (t as any).structural_element || "").trim().toUpperCase();
+      const op = (t.operator_name || "").trim();
+      if (elem && op) {
+        testInspectorMap.set(elem, op);
+      }
+    }
+
     let count = 1;
     for (const line of parsedLogLines) {
       const match = line.match(elementLineRegex);
       if (match) {
         const elemName = match[1];
+        const normElem = elemName.toUpperCase();
         const floorStr = inferFloorFromElement(elemName, match[2]);
         const velVal = parseFloat(match[3]);
         const fcuVal = match[4] ? parseFloat(match[4]) : null;
@@ -430,11 +456,28 @@ export default function PunditAIReasoningPage() {
         const deltaTargetPct = fcuVal != null ? Number((((fcuVal - 25.0) / 25.0) * 100).toFixed(1)) : null;
         const building = inferBuildingFromElement(elemName, floorStr);
 
+        let inspector = testInspectorMap.get(normElem);
+        if (!inspector) {
+          for (const [k, op] of testInspectorMap.entries()) {
+            if (normElem.startsWith(k) || k.startsWith(normElem) || normElem.includes(k) || k.includes(normElem)) {
+              inspector = op;
+              break;
+            }
+          }
+        }
+        if (!inspector && availableInspectors.length === 1) {
+          inspector = availableInspectors[0];
+        }
+        if (!inspector) {
+          inspector = "Field Inspector";
+        }
+
         list.push({
           index: count++,
           element: elemName,
           building,
           floor: floorStr,
+          inspector,
           velocity: velVal,
           compressiveStrength: fcuVal,
           grade: gradeStr,
@@ -445,7 +488,7 @@ export default function PunditAIReasoningPage() {
       }
     }
     return list;
-  }, [parsedLogLines, elementLineRegex]);
+  }, [parsedLogLines, elementLineRegex, tests, availableInspectors]);
 
   const detectedBuildings = useMemo(() => {
     const bMap = new Map<string, {
@@ -457,7 +500,11 @@ export default function PunditAIReasoningPage() {
       floors: Set<string>;
     }>();
 
-    for (const r of parsedElementRows) {
+    const rowsToGroup = selectedInspector
+      ? parsedElementRows.filter(r => r.inspector.toLowerCase() === selectedInspector.toLowerCase())
+      : parsedElementRows;
+
+    for (const r of rowsToGroup) {
       const b = r.building || "Main Building";
       if (!bMap.has(b)) {
         bMap.set(b, {
@@ -499,14 +546,87 @@ export default function PunditAIReasoningPage() {
         floors: Array.from(entry.floors),
       };
     }).sort((a, b) => a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [parsedElementRows]);
+  }, [parsedElementRows, selectedInspector]);
+
+  const detectedInspectors = useMemo(() => {
+    const iMap = new Map<string, {
+      name: string;
+      count: number;
+      velocities: number[];
+      strengths: number[];
+      passCount: number;
+      buildings: Set<string>;
+    }>();
+
+    for (const r of parsedElementRows) {
+      const ins = r.inspector || "Field Inspector";
+      if (!iMap.has(ins)) {
+        iMap.set(ins, {
+          name: ins,
+          count: 0,
+          velocities: [],
+          strengths: [],
+          passCount: 0,
+          buildings: new Set<string>(),
+        });
+      }
+      const entry = iMap.get(ins)!;
+      entry.count += 1;
+      entry.velocities.push(r.velocity);
+      if (r.compressiveStrength != null) {
+        entry.strengths.push(r.compressiveStrength);
+      }
+      if (r.isPass) {
+        entry.passCount += 1;
+      }
+      if (r.building) {
+        entry.buildings.add(r.building);
+      }
+    }
+
+    for (const op of availableInspectors) {
+      if (!iMap.has(op)) {
+        const opTests = tests.filter(t => (t.operator_name || "").trim() === op);
+        iMap.set(op, {
+          name: op,
+          count: opTests.length,
+          velocities: opTests.map(t => t.pulse_velocity_ms).filter(v => v > 0),
+          strengths: opTests.map(t => t.estimated_compressive_strength_mpa).filter((s): s is number => s != null && s > 0),
+          passCount: opTests.filter(t => t.pulse_velocity_ms >= 3500).length,
+          buildings: new Set<string>(opTests.map(t => inferBuildingFromElement(t.structural_element_name || ""))),
+        });
+      }
+    }
+
+    return Array.from(iMap.values()).map(entry => {
+      const avgVel = entry.velocities.length > 0 ? Math.round(entry.velocities.reduce((a, b) => a + b, 0) / entry.velocities.length) : 0;
+      const avgFcu = entry.strengths.length > 0
+        ? Number((entry.strengths.reduce((a, b) => a + b, 0) / entry.strengths.length).toFixed(2))
+        : null;
+      const passRate = entry.count > 0 ? Math.round((entry.passCount / entry.count) * 100) : 0;
+      return {
+        name: entry.name,
+        count: entry.count,
+        avgVel,
+        avgFcu,
+        passCount: entry.passCount,
+        passRate,
+        buildings: Array.from(entry.buildings),
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [parsedElementRows, availableInspectors, tests]);
 
   const scopedElementRows = useMemo(() => {
-    if (!selectedBuilding) return parsedElementRows;
-    return parsedElementRows.filter(
-      (r) => r.building.toLowerCase() === selectedBuilding.toLowerCase()
-    );
-  }, [parsedElementRows, selectedBuilding]);
+    return parsedElementRows.filter((r) => {
+      if (selectedBuilding && r.building.toLowerCase() !== selectedBuilding.toLowerCase()) {
+        return false;
+      }
+      if (selectedInspector && r.inspector.toLowerCase() !== selectedInspector.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+  }, [parsedElementRows, selectedBuilding, selectedInspector]);
 
   const elementStats = useMemo(() => {
     if (scopedElementRows.length === 0) return null;
@@ -531,7 +651,8 @@ export default function PunditAIReasoningPage() {
           return (
             row.element.toLowerCase().includes(q) ||
             row.floor.toLowerCase().includes(q) ||
-            row.building.toLowerCase().includes(q)
+            row.building.toLowerCase().includes(q) ||
+            row.inspector.toLowerCase().includes(q)
           );
         }
         return true;
@@ -542,6 +663,11 @@ export default function PunditAIReasoningPage() {
           if (bCmp !== 0) return bCmp;
           const fCmp = a.floor.localeCompare(b.floor, undefined, { numeric: true, sensitivity: 'base' });
           if (fCmp !== 0) return fCmp;
+          return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        if (tableSortBy === "ins") {
+          const iCmp = a.inspector.localeCompare(b.inspector, undefined, { numeric: true, sensitivity: 'base' });
+          if (iCmp !== 0) return iCmp;
           return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
         }
         if (tableSortBy === "vel_desc") return b.velocity - a.velocity;
@@ -565,9 +691,9 @@ export default function PunditAIReasoningPage() {
 
   const copyTableToClipboard = () => {
     if (filteredElementRows.length === 0) return;
-    const tsvHeaders = "Building\tElement\tLevel/Floor\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
+    const tsvHeaders = "Building\tElement\tLevel/Floor\tField Inspector\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
     const tsvRows = filteredElementRows.map(r => 
-      `${r.building}\t${r.element}\t${r.floor}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
+      `${r.building}\t${r.element}\t${r.floor}\t${r.inspector}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
     ).join("\n");
     navigator.clipboard.writeText(tsvHeaders + tsvRows);
     setCopiedTable(true);
@@ -576,16 +702,17 @@ export default function PunditAIReasoningPage() {
 
   const exportElementsCSV = () => {
     if (filteredElementRows.length === 0) return;
-    const headers = "Index,Building,Structural Element,Location/Level,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
+    const headers = "Index,Building,Structural Element,Location/Level,Field Inspector,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
     const rows = filteredElementRows.map(r =>
-      `${r.index},"${r.building}","${r.element}","${r.floor}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
+      `${r.index},"${r.building}","${r.element}","${r.floor}","${r.inspector}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     const bldTag = selectedBuilding ? `_${selectedBuilding.replace(/\s+/g, '_')}` : "";
-    link.download = `pundit_calibrated_elements${bldTag}_${activeAnalysis?.analysis_reference || "table"}.csv`;
+    const insTag = selectedInspector ? `_${selectedInspector.replace(/\s+/g, '_')}` : "";
+    link.download = `pundit_calibrated_elements${bldTag}${insTag}_${activeAnalysis?.analysis_reference || "table"}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1109,6 +1236,82 @@ export default function PunditAIReasoningPage() {
                   </div>
                 )}
 
+                {/* FIELD INSPECTOR CLASSIFICATION & SCOPE SELECTOR */}
+                {detectedInspectors.length > 0 && (
+                  <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <UserCheck size={16} className="text-emerald-400" />
+                        <span className="text-xs font-mono font-bold text-slate-100 uppercase tracking-wider">
+                          Field Inspector Selection &amp; Scope
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          ({detectedInspectors.length} {detectedInspectors.length === 1 ? "Field Inspector" : "Field Inspectors"} Recorded)
+                        </span>
+                      </div>
+                      {selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInspector("")}
+                          className="text-[11px] font-mono font-semibold text-emerald-400 hover:text-emerald-300 underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>Reset to All Field Inspectors ({parsedElementRows.length} Elements)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Inspector Selector Pills */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInspector("")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                          !selectedInspector
+                            ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                            : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                        }`}
+                      >
+                        <Users size={13} />
+                        <span>All Field Inspectors</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          !selectedInspector ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                        }`}>
+                          {parsedElementRows.length} Elements
+                        </span>
+                      </button>
+
+                      {detectedInspectors.map((ins) => {
+                        const isSelected = selectedInspector.toLowerCase() === ins.name.toLowerCase();
+                        return (
+                          <button
+                            key={ins.name}
+                            type="button"
+                            onClick={() => setSelectedInspector(ins.name)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                                : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                            }`}
+                          >
+                            <UserCheck size={13} className={isSelected ? "text-slate-950" : "text-emerald-400"} />
+                            <span>Inspector: {ins.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              isSelected ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {ins.count} tests
+                            </span>
+                            <span className={`text-[10px] font-mono ${
+                              isSelected ? "text-slate-950 font-black" : ins.passRate > 0 ? "text-emerald-400 font-bold" : "text-slate-500"
+                            }`}>
+                              {ins.passRate}% pass
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary Metrics Ribbon */}
                 {elementStats && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -1197,6 +1400,28 @@ export default function PunditAIReasoningPage() {
                       </div>
                     )}
 
+                    {/* Filter by Inspector dropdown */}
+                    {detectedInspectors.length > 0 && (
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+                        <UserCheck size={12} className="text-emerald-400" />
+                        <select
+                          value={selectedInspector}
+                          onChange={(e) => setSelectedInspector(e.target.value)}
+                          aria-label="Filter by inspector"
+                          className="bg-transparent text-slate-200 text-xs outline-none font-mono cursor-pointer"
+                        >
+                          <option value="" className="bg-slate-950 text-slate-200">
+                            All Field Inspectors ({parsedElementRows.length})
+                          </option>
+                          {detectedInspectors.map((ins) => (
+                            <option key={ins.name} value={ins.name} className="bg-slate-950 text-slate-200">
+                              Inspector: {ins.name} ({ins.count})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {/* View Mode Toggle: Grouped by Building vs Flat List */}
                     {detectedBuildings.length > 1 && !selectedBuilding && (
                       <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono">
@@ -1258,6 +1483,7 @@ export default function PunditAIReasoningPage() {
                       className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono cursor-pointer focus:border-amber-500/50"
                     >
                       <option value="bld">Building &amp; Element (Report Order)</option>
+                      <option value="ins">Field Inspector (A-Z)</option>
                       <option value="id">Element ID (S1, S2...)</option>
                       <option value="vel_desc">Velocity (Highest first)</option>
                       <option value="vel_asc">Velocity (Lowest first)</option>
@@ -1267,26 +1493,59 @@ export default function PunditAIReasoningPage() {
                   </div>
                 </div>
 
-                {/* Scope Active Notice (when an individual building is selected) */}
-                {selectedBuilding && (
+                {/* Scope Active Notice (when an individual building or inspector is selected) */}
+                {(selectedBuilding || selectedInspector) && (
                   <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
                     <div className="flex items-center gap-2 text-amber-200">
                       <Building size={14} className="text-amber-400" />
                       <span>
                         <strong>Scope Active:</strong> Displaying exclusively{" "}
-                        <span className="font-bold text-amber-300 underline">{selectedBuilding}</span> (
-                        {elementStats?.n} Elements across{" "}
-                        {detectedBuildings.find((b) => b.building.toLowerCase() === selectedBuilding.toLowerCase())?.floors.join(", ") || "All Floors"}
-                        ).
+                        {selectedBuilding && (
+                          <>
+                            building <span className="font-bold text-amber-300 underline">{selectedBuilding}</span>
+                          </>
+                        )}
+                        {selectedBuilding && selectedInspector && " · "}
+                        {selectedInspector && (
+                          <>
+                            inspector <span className="font-bold text-emerald-300 underline">{selectedInspector}</span>
+                          </>
+                        )}{" "}
+                        ({elementStats?.n} Elements).
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBuilding("")}
-                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                    >
-                      Reset to All Buildings ({parsedElementRows.length} Elements)
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {selectedBuilding && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBuilding("")}
+                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                        >
+                          Clear Building
+                        </button>
+                      )}
+                      {selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInspector("")}
+                          className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+                        >
+                          Clear Inspector
+                        </button>
+                      )}
+                      {selectedBuilding && selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBuilding("");
+                            setSelectedInspector("");
+                          }}
+                          className="text-[11px] font-bold text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                        >
+                          Reset All
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1403,6 +1662,7 @@ export default function PunditAIReasoningPage() {
                                   <th className="py-2 px-3 w-10 text-center text-slate-500">#</th>
                                   <th className="py-2 px-3">Structural Element</th>
                                   <th className="py-2 px-3">Location / Level</th>
+                                  <th className="py-2 px-3">Field Inspector</th>
                                   <th className="py-2 px-3">Pulse Velocity (V)</th>
                                   <th className="py-2 px-3">BS 1881-203 Classification</th>
                                   <th className="py-2 px-3">Comp. Strength (f_cu)</th>
@@ -1434,6 +1694,17 @@ export default function PunditAIReasoningPage() {
                                     </td>
                                     <td className="py-2 px-3 text-slate-400 text-[11px]">
                                       {row.floor}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedInspector(row.inspector)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-slate-300 hover:text-emerald-300 hover:border-emerald-600/40 transition-colors cursor-pointer"
+                                        title={`Filter by inspector: ${row.inspector}`}
+                                      >
+                                        <UserCheck size={10} className="text-emerald-400" />
+                                        <span>{row.inspector}</span>
+                                      </button>
                                     </td>
                                     <td className="py-2 px-3">
                                       <div className="flex items-center gap-2">
@@ -1537,7 +1808,7 @@ export default function PunditAIReasoningPage() {
                               {/* Building Subtotal Footer */}
                               <tfoot className="bg-slate-900/95 border-t border-slate-800 text-[11px] font-bold">
                                 <tr>
-                                  <td colSpan={3} className="py-2 px-3 text-slate-200">
+                                  <td colSpan={4} className="py-2 px-3 text-slate-200">
                                     <span className={bldTheme.text}>{bld.building} Subtotal:</span> {bldRows.length} elements across {bld.floors.join(", ")}
                                   </td>
                                   <td className="py-2 px-3 text-amber-400">
@@ -1583,6 +1854,7 @@ export default function PunditAIReasoningPage() {
                           <th className="py-2.5 px-3">Building</th>
                           <th className="py-2.5 px-3">Structural Element</th>
                           <th className="py-2.5 px-3">Location / Level</th>
+                          <th className="py-2.5 px-3">Field Inspector</th>
                           <th className="py-2.5 px-3">Pulse Velocity (V)</th>
                           <th className="py-2.5 px-3">BS 1881-203 Classification</th>
                           <th className="py-2.5 px-3">Comp. Strength (f_cu)</th>
@@ -1593,7 +1865,7 @@ export default function PunditAIReasoningPage() {
                       <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
                         {filteredElementRows.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="py-8 text-center text-slate-500 italic">
+                            <td colSpan={10} className="py-8 text-center text-slate-500 italic">
                               No elements matched your search filter.
                             </td>
                           </tr>
@@ -1639,6 +1911,17 @@ export default function PunditAIReasoningPage() {
                               </td>
                               <td className="py-2 px-3 text-slate-400 text-[11px]">
                                 {row.floor}
+                              </td>
+                              <td className="py-2 px-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInspector(row.inspector)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-slate-300 hover:text-emerald-300 hover:border-emerald-600/40 transition-colors cursor-pointer"
+                                  title={`Filter by inspector: ${row.inspector}`}
+                                >
+                                  <UserCheck size={10} className="text-emerald-400" />
+                                  <span>{row.inspector}</span>
+                                </button>
                               </td>
                               <td className="py-2 px-3">
                                 <div className="flex items-center gap-2">
