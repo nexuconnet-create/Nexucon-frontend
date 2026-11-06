@@ -61,12 +61,13 @@ export default function PunditAIReasoningPage() {
   // Tabular View vs Console Shell State
   const [viewMode, setViewMode] = useState<"table" | "terminal" | "split">("table");
   const [tableSearchQuery, setTableSearchQuery] = useState<string>("");
-  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("id");
+  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("bld");
   const [complianceFilter, setComplianceFilter] = useState<"ALL" | "PASS" | "FAIL">("ALL");
 
-  // Estate Building Classification Scope
+  // Estate Building Classification Scope & Grouping
   const [selectedBuilding, setSelectedBuilding] = useState<string>("");
   const [serverBuildings, setServerBuildings] = useState<NdtBuildingSummary[]>([]);
+  const [groupByBuilding, setGroupByBuilding] = useState<boolean>(true);
 
   // Chat Interaction State
   const [chatInput, setChatInput] = useState<string>("");
@@ -220,6 +221,48 @@ export default function PunditAIReasoningPage() {
     }
   };
 
+  const inferBuildingFromElement = (elementName: string, floorName?: string): string => {
+    if (!elementName) return "Main Building";
+    const clean = elementName.trim();
+    const mFull = clean.match(/(?:BUILDING|BLOCK|TOWER|WING)\s*([A-Za-z0-9]+)/i);
+    if (mFull) {
+      const raw = mFull[0].toLowerCase();
+      const tok = mFull[1].toUpperCase();
+      if (raw.includes("block")) return `Block ${tok}`;
+      if (raw.includes("tower")) return `Tower ${tok}`;
+      if (raw.includes("wing")) return `Wing ${tok}`;
+      return `Building ${tok}`;
+    }
+    const mBld = clean.match(/^([A-Za-z0-9]+)-+/);
+    if (mBld) {
+      const p = mBld[1].toUpperCase();
+      if (/^[A-Z]$/.test(p)) {
+        return `Building ${p}`;
+      }
+      const bldM = p.match(/^(?:BLD|BLDG|BUILDING)([A-Z0-9]+)$/);
+      if (bldM) return `Building ${bldM[1]}`;
+      const blkM = p.match(/^(?:BLK|BLOCK)([A-Z0-9]+)$/);
+      if (blkM) return `Block ${blkM[1]}`;
+      const numM = p.match(/^(\d+)$/);
+      if (numM) return `Building ${numM[1]}`;
+    }
+    return "Main Building";
+  };
+
+  const inferFloorFromElement = (elementName: string, existingFloor?: string): string => {
+    if (existingFloor && existingFloor.trim() && existingFloor.toLowerCase() !== "floor not recorded") {
+      return existingFloor.trim();
+    }
+    const norm = (elementName || "").toUpperCase();
+    if (norm.includes("-FF") || norm.startsWith("FF") || norm.includes("FIRST")) return "First Floor";
+    if (norm.includes("-GCF") || norm.includes("-GFC") || norm.includes("-GF") || norm.startsWith("GF") || norm.includes("GROUND")) return "Ground Floor";
+    if (norm.includes("-SF") || norm.startsWith("SF") || norm.includes("SECOND")) return "Second Floor";
+    if (norm.includes("-TF") || norm.startsWith("TF") || norm.includes("THIRD")) return "Third Floor";
+    if (norm.includes("-RF") || norm.startsWith("RF") || norm.includes("ROOF")) return "Roof Floor";
+    if (norm.includes("-BS") || norm.startsWith("BS") || norm.includes("BASEMENT")) return "Basement";
+    return existingFloor || "Ground Floor";
+  };
+
   const parsedLogLines = useMemo(() => {
     if (!activeAnalysis) return [];
     const raw = activeAnalysis.reasoning_log;
@@ -259,10 +302,14 @@ export default function PunditAIReasoningPage() {
 
     // Build lookup from tests (which holds the newly calibrated f_cu derived from the curve formula)
     const testMap = new Map<string, number>();
+    const testFloorMap = new Map<string, string>();
     for (const t of tests || []) {
       const elem = (t.structural_element_name || (t as any).structural_element || "").trim().toUpperCase();
       if (elem && t.estimated_compressive_strength_mpa != null && t.estimated_compressive_strength_mpa > 0) {
         testMap.set(elem, t.estimated_compressive_strength_mpa);
+      }
+      if (elem && t.floor) {
+        testFloorMap.set(elem, t.floor);
       }
     }
 
@@ -289,11 +336,13 @@ export default function PunditAIReasoningPage() {
         // Process each extracted element individually into tabular row format
         for (const match of matches) {
           const elemName = match[1];
-          const floorStr = match[2] ? ` (${match[2]})` : "";
+          const normElem = elemName.toUpperCase();
+          const rawFloor = match[2] || testFloorMap.get(normElem);
+          const resolvedFloor = inferFloorFromElement(elemName, rawFloor);
+          const floorStr = resolvedFloor ? ` (${resolvedFloor})` : "";
           const velVal = parseFloat(match[3]);
           let existingFcu = match[4];
           const gradeStr = match[5] || match[6] || (velVal >= 3500 ? "good" : "doubtful");
-          const normElem = elemName.toUpperCase();
 
           if (seenElementKeys.has(normElem)) {
             continue;
@@ -321,38 +370,24 @@ export default function PunditAIReasoningPage() {
       if (rollupMatch && parseInt(rollupMatch[1]) > seenElementKeys.size) {
         processedLines[0] = `Project PUNDIT roll-up over ${seenElementKeys.size} verified element(s)${rollupMatch[2] || "."}`;
       }
+
+      // Add estate building classification audit line
+      const bldCounts = new Map<string, number>();
+      for (const k of seenElementKeys) {
+        const b = inferBuildingFromElement(k);
+        bldCounts.set(b, (bldCounts.get(b) || 0) + 1);
+      }
+      if (bldCounts.size > 1) {
+        const bldBreakdownStr = Array.from(bldCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([b, c]) => `${b}: ${c} elements`)
+          .join(", ");
+        processedLines.splice(1, 0, `[ESTATE AUDIT] Multi-Building Physical Segregation (${bldCounts.size} Buildings): ${bldBreakdownStr}.`);
+      }
     }
 
     return processedLines;
   }, [activeAnalysis, tests]);
-
-  const inferBuildingFromElement = (elementName: string, floorName?: string): string => {
-    if (!elementName) return "Main Building";
-    const clean = elementName.trim();
-    const mFull = clean.match(/(?:BUILDING|BLOCK|TOWER|WING)\s*([A-Za-z0-9]+)/i);
-    if (mFull) {
-      const raw = mFull[0].toLowerCase();
-      const tok = mFull[1].toUpperCase();
-      if (raw.includes("block")) return `Block ${tok}`;
-      if (raw.includes("tower")) return `Tower ${tok}`;
-      if (raw.includes("wing")) return `Wing ${tok}`;
-      return `Building ${tok}`;
-    }
-    const mBld = clean.match(/^([A-Za-z0-9]+)-+/);
-    if (mBld) {
-      const p = mBld[1].toUpperCase();
-      if (/^[A-Z]$/.test(p)) {
-        return `Building ${p}`;
-      }
-      const bldM = p.match(/^(?:BLD|BLDG|BUILDING)([A-Z0-9]+)$/);
-      if (bldM) return `Building ${bldM[1]}`;
-      const blkM = p.match(/^(?:BLK|BLOCK)([A-Z0-9]+)$/);
-      if (blkM) return `Block ${blkM[1]}`;
-      const numM = p.match(/^(\d+)$/);
-      if (numM) return `Building ${numM[1]}`;
-    }
-    return "Main Building";
-  };
 
   const elementLineRegex = useMemo(
     () =>
@@ -379,7 +414,7 @@ export default function PunditAIReasoningPage() {
       const match = line.match(elementLineRegex);
       if (match) {
         const elemName = match[1];
-        const floorStr = match[2] || "Ground Floor";
+        const floorStr = inferFloorFromElement(elemName, match[2]);
         const velVal = parseFloat(match[3]);
         const fcuVal = match[4] ? parseFloat(match[4]) : null;
         const gradeStr = (match[5] || match[6] || (velVal >= 3500 ? "good" : "doubtful")).trim();
@@ -419,6 +454,7 @@ export default function PunditAIReasoningPage() {
       velocities: number[];
       strengths: number[];
       passCount: number;
+      floors: Set<string>;
     }>();
 
     for (const r of parsedElementRows) {
@@ -430,6 +466,7 @@ export default function PunditAIReasoningPage() {
           velocities: [],
           strengths: [],
           passCount: 0,
+          floors: new Set<string>(),
         });
       }
       const entry = bMap.get(b)!;
@@ -440,6 +477,9 @@ export default function PunditAIReasoningPage() {
       }
       if (r.isPass) {
         entry.passCount += 1;
+      }
+      if (r.floor) {
+        entry.floors.add(r.floor);
       }
     }
 
@@ -456,6 +496,7 @@ export default function PunditAIReasoningPage() {
         avgFcu,
         passCount: entry.passCount,
         passRate,
+        floors: Array.from(entry.floors),
       };
     }).sort((a, b) => a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }));
   }, [parsedElementRows]);
@@ -496,14 +537,27 @@ export default function PunditAIReasoningPage() {
         return true;
       })
       .sort((a, b) => {
-        if (tableSortBy === "bld") return a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }) || a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
+        if (tableSortBy === "bld") {
+          const bCmp = a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' });
+          if (bCmp !== 0) return bCmp;
+          const fCmp = a.floor.localeCompare(b.floor, undefined, { numeric: true, sensitivity: 'base' });
+          if (fCmp !== 0) return fCmp;
+          return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
+        }
         if (tableSortBy === "vel_desc") return b.velocity - a.velocity;
         if (tableSortBy === "vel_asc") return a.velocity - b.velocity;
         if (tableSortBy === "fcu_desc") return (b.compressiveStrength ?? -1) - (a.compressiveStrength ?? -1);
         if (tableSortBy === "fcu_asc") return (a.compressiveStrength ?? 999) - (b.compressiveStrength ?? 999);
+        // Default 'id': Sort by building first if not scoped so elements in Building A, B, C are grouped
+        if (!selectedBuilding) {
+          const bCmp = a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' });
+          if (bCmp !== 0) return bCmp;
+          const fCmp = a.floor.localeCompare(b.floor, undefined, { numeric: true, sensitivity: 'base' });
+          if (fCmp !== 0) return fCmp;
+        }
         return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
       });
-  }, [scopedElementRows, tableSearchQuery, tableSortBy, complianceFilter]);
+  }, [scopedElementRows, tableSearchQuery, tableSortBy, complianceFilter, selectedBuilding]);
 
   const systemTraces = useMemo(() => {
     return parsedLogLines.filter((l) => !elementLineRegex.test(l));
@@ -1118,7 +1172,7 @@ export default function PunditAIReasoningPage() {
                         placeholder="Search element (A-FFB1, Floor, Building)..."
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
-                        className="pl-7 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 outline-none w-48 sm:w-60 focus:border-amber-500/50"
+                        className="pl-7 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 outline-none w-48 sm:w-56 focus:border-amber-500/50"
                       />
                     </div>
 
@@ -1140,6 +1194,38 @@ export default function PunditAIReasoningPage() {
                             </option>
                           ))}
                         </select>
+                      </div>
+                    )}
+
+                    {/* View Mode Toggle: Grouped by Building vs Flat List */}
+                    {detectedBuildings.length > 1 && !selectedBuilding && (
+                      <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setGroupByBuilding(true)}
+                          className={`px-2.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                            groupByBuilding
+                              ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          title="Group elements by building with separate section tables (NDT Report Section 5.0 Style)"
+                        >
+                          <Building2 size={11} />
+                          <span>Grouped by Building</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGroupByBuilding(false)}
+                          className={`px-2.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                            !groupByBuilding
+                              ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          title="Show unified flat list of elements"
+                        >
+                          <Table size={11} />
+                          <span>Flat List</span>
+                        </button>
                       </div>
                     )}
 
@@ -1171,8 +1257,8 @@ export default function PunditAIReasoningPage() {
                       onChange={(e) => setTableSortBy(e.target.value as any)}
                       className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono cursor-pointer focus:border-amber-500/50"
                     >
+                      <option value="bld">Building &amp; Element (Report Order)</option>
                       <option value="id">Element ID (S1, S2...)</option>
-                      <option value="bld">Building (A-Z)</option>
                       <option value="vel_desc">Velocity (Highest first)</option>
                       <option value="vel_asc">Velocity (Lowest first)</option>
                       <option value="fcu_desc">Strength f_cu (Highest first)</option>
@@ -1181,165 +1267,482 @@ export default function PunditAIReasoningPage() {
                   </div>
                 </div>
 
-                {/* THE ELEMENT DATA TABLE */}
-                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[420px] overflow-y-auto">
-                  <table className="w-full text-left text-xs font-mono border-collapse">
-                    <thead className="bg-slate-900 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10">
-                      <tr>
-                        <th className="py-2.5 px-3 w-10 text-center text-slate-500">#</th>
-                        <th className="py-2.5 px-3">Building</th>
-                        <th className="py-2.5 px-3">Structural Element</th>
-                        <th className="py-2.5 px-3">Location / Level</th>
-                        <th className="py-2.5 px-3">Pulse Velocity (V)</th>
-                        <th className="py-2.5 px-3">BS 1881-203 Classification</th>
-                        <th className="py-2.5 px-3">Comp. Strength (f_cu)</th>
-                        <th className="py-2.5 px-3">Delta vs 25 MPa</th>
-                        <th className="py-2.5 px-3 text-right">Compliance Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
-                      {filteredElementRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="py-8 text-center text-slate-500 italic">
-                            No elements matched your search filter.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredElementRows.map((row) => (
-                          <tr
-                            key={row.element}
-                            className={`transition-colors group ${
-                              !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
-                            }`}
+                {/* Scope Active Notice (when an individual building is selected) */}
+                {selectedBuilding && (
+                  <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                    <div className="flex items-center gap-2 text-amber-200">
+                      <Building size={14} className="text-amber-400" />
+                      <span>
+                        <strong>Scope Active:</strong> Displaying exclusively{" "}
+                        <span className="font-bold text-amber-300 underline">{selectedBuilding}</span> (
+                        {elementStats?.n} Elements across{" "}
+                        {detectedBuildings.find((b) => b.building.toLowerCase() === selectedBuilding.toLowerCase())?.floors.join(", ") || "All Floors"}
+                        ).
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBuilding("")}
+                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                    >
+                      Reset to All Buildings ({parsedElementRows.length} Elements)
+                    </button>
+                  </div>
+                )}
+
+                {/* THE ELEMENT DATA TABLE: GROUPED BY BUILDING (REPORT STYLE) OR UNIFIED */}
+                {groupByBuilding && !selectedBuilding && detectedBuildings.length > 1 ? (
+                  <div className="space-y-4">
+                    {detectedBuildings.map((bld, bldIdx) => {
+                      const bldRows = filteredElementRows.filter(
+                        (r) => r.building.toLowerCase() === bld.building.toLowerCase()
+                      );
+                      if (bldRows.length === 0) return null;
+
+                      const bldVel = Math.round(bldRows.reduce((a, b) => a + b.velocity, 0) / bldRows.length);
+                      const validFcu = bldRows.filter((r) => r.compressiveStrength != null);
+                      const bldFcu =
+                        validFcu.length > 0
+                          ? Number(
+                              (
+                                validFcu.reduce((a, b) => a + (b.compressiveStrength as number), 0) /
+                                validFcu.length
+                              ).toFixed(2)
+                            )
+                          : null;
+                      const bldPass = bldRows.filter((r) => r.isPass).length;
+                      const bldPassRate = Math.round((bldPass / bldRows.length) * 100);
+
+                      const bldTheme = bld.building.toLowerCase().includes("a")
+                        ? {
+                            border: "border-sky-500/30",
+                            headerBg: "bg-gradient-to-r from-sky-950/70 via-slate-900 to-slate-900",
+                            text: "text-sky-300",
+                            badge: "bg-sky-500/20 text-sky-200 border-sky-500/40",
+                          }
+                        : bld.building.toLowerCase().includes("b")
+                        ? {
+                            border: "border-purple-500/30",
+                            headerBg: "bg-gradient-to-r from-purple-950/70 via-slate-900 to-slate-900",
+                            text: "text-purple-300",
+                            badge: "bg-purple-500/20 text-purple-200 border-purple-500/40",
+                          }
+                        : {
+                            border: "border-emerald-500/30",
+                            headerBg: "bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900",
+                            text: "text-emerald-300",
+                            badge: "bg-emerald-500/20 text-emerald-200 border-emerald-500/40",
+                          };
+
+                      const compLetter = String.fromCharCode(65 + bldIdx);
+
+                      return (
+                        <div
+                          key={bld.building}
+                          className={`rounded-xl border ${bldTheme.border} bg-slate-950 overflow-hidden shadow-sm`}
+                        >
+                          {/* Building Section Header */}
+                          <div
+                            className={`p-3 ${bldTheme.headerBg} border-b ${bldTheme.border} flex flex-wrap items-center justify-between gap-2.5`}
                           >
-                            <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
-                              {row.index}
-                            </td>
-                            <td className="py-2 px-3">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedBuilding(row.building)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-all cursor-pointer ${
-                                  row.building.toLowerCase().includes('a')
-                                    ? "bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25"
-                                    : row.building.toLowerCase().includes('b')
-                                    ? "bg-purple-500/15 text-purple-300 border-purple-500/30 hover:bg-purple-500/25"
-                                    : row.building.toLowerCase().includes('c')
-                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
-                                    : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-                                }`}
-                                title={`Click to filter ${row.building}`}
-                              >
-                                {row.building}
-                              </button>
-                            </td>
-                            <td className="py-2 px-3">
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
-                                  !row.isPass
-                                    ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
-                                    : "text-amber-300 bg-amber-500/10 border-amber-500/20"
-                                }`}
-                              >
-                                {row.element}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-slate-400 text-[11px]">
-                              {row.floor}
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-bold ${row.velocity < 3500 ? "text-rose-400" : "text-slate-200"}`}>
-                                  {row.velocity.toFixed(0)} m/s
-                                </span>
-                                <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      row.velocity >= 4500
-                                        ? "bg-emerald-400"
-                                        : row.velocity >= 3500
-                                        ? "bg-amber-400"
-                                        : "bg-rose-500"
-                                    }`}
-                                    style={{
-                                      width: `${Math.min(100, Math.max(10, ((row.velocity - 2000) / 3000) * 100))}%`,
-                                    }}
-                                  />
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-1.5 rounded-lg bg-slate-950 border ${bldTheme.border}`}>
+                                <Building2 size={16} className={bldTheme.text} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-mono font-bold tracking-wide ${bldTheme.text}`}>
+                                    Table 5.1{compLetter}: {bld.building}
+                                  </span>
+                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${bldTheme.badge}`}>
+                                    {bldRows.length} Elements ({Math.round((bldRows.length / parsedElementRows.length) * 100)}% of Complex)
+                                  </span>
+                                  <span className="text-[11px] font-mono text-slate-400">
+                                    · {bld.floors.join(", ")}
+                                  </span>
                                 </div>
                               </div>
-                            </td>
-                            <td className="py-2 px-3">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  row.band === "EXCELLENT"
-                                    ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
-                                    : row.band === "GOOD"
-                                    ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
-                                    : row.band === "MEDIUM (FAIR)"
-                                    ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
-                                    : "bg-rose-950/80 text-rose-300 border-rose-700/60"
-                                }`}
+                            </div>
+
+                            {/* Sub-metrics Ribbon */}
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Mean V:</span>
+                                <span className="text-amber-400 font-bold">{bldVel.toLocaleString()} m/s</span>
+                                <span className="text-[9px] text-emerald-400 font-semibold ml-1">
+                                  ({bldVel >= 4500 ? "EXCELLENT" : bldVel >= 3500 ? "GOOD" : "DOUBTFUL"})
+                                </span>
+                              </div>
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Mean f_cu:</span>
+                                <span className="text-emerald-400 font-bold">
+                                  {bldFcu != null ? `${bldFcu} MPa` : "—"}
+                                </span>
+                              </div>
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Compliance:</span>
+                                <span className={`font-bold ${bldPassRate > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {bldPass} / {bldRows.length} ({bldPassRate}%)
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedBuilding(bld.building)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono font-bold transition-all cursor-pointer border border-slate-700 hover:border-slate-600"
                               >
-                                {row.band}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3">
-                              {row.compressiveStrength != null ? (
-                                <span
-                                  className={`font-bold text-xs ${
-                                    row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
-                                  }`}
-                                >
-                                  {row.compressiveStrength.toFixed(2)} MPa
-                                </span>
-                              ) : (
-                                <span className="font-mono text-slate-400 text-xs font-semibold">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-[11px]">
-                              {row.compressiveStrength != null && row.deltaTargetPct != null ? (
-                                <span
-                                  className={`font-mono ${
-                                    row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
-                                  }`}
-                                >
-                                  {row.deltaTargetPct >= 0 ? `+` : ""}{(row.compressiveStrength - 25.0).toFixed(2)} MPa ({row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
-                                </span>
-                              ) : (
-                                <span className="text-rose-400/80 font-mono italic">
-                                  Awaiting Govt Calibration
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <span
-                                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                                  row.isPass
-                                    ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
-                                    : "bg-rose-950 text-rose-300 border-rose-700/80"
-                                }`}
-                              >
-                                {row.isPass ? (
-                                  <>
-                                    <CheckCircle2 size={11} className="text-emerald-400" />
-                                    <span>MEETS SPEC (PASS)</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <AlertTriangle size={11} className="text-rose-400" />
-                                    <span>BELOW TARGET (FAIL)</span>
-                                  </>
-                                )}
-                              </span>
+                                Scope to {bld.building} →
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Table for this building */}
+                          <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                            <table className="w-full text-left text-xs font-mono border-collapse">
+                              <thead className="bg-slate-900/95 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10 text-[11px]">
+                                <tr>
+                                  <th className="py-2 px-3 w-10 text-center text-slate-500">#</th>
+                                  <th className="py-2 px-3">Structural Element</th>
+                                  <th className="py-2 px-3">Location / Level</th>
+                                  <th className="py-2 px-3">Pulse Velocity (V)</th>
+                                  <th className="py-2 px-3">BS 1881-203 Classification</th>
+                                  <th className="py-2 px-3">Comp. Strength (f_cu)</th>
+                                  <th className="py-2 px-3">Delta vs 25 MPa</th>
+                                  <th className="py-2 px-3 text-right">Compliance Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800/60 bg-slate-950 text-slate-300">
+                                {bldRows.map((row, rIdx) => (
+                                  <tr
+                                    key={row.element}
+                                    className={`transition-colors group ${
+                                      !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
+                                    }`}
+                                  >
+                                    <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
+                                      {rIdx + 1}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <span
+                                        className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
+                                          !row.isPass
+                                            ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
+                                            : "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                                        }`}
+                                      >
+                                        {row.element}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3 text-slate-400 text-[11px]">
+                                      {row.floor}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`font-bold ${
+                                            row.velocity < 3500 ? "text-rose-400" : "text-slate-200"
+                                          }`}
+                                        >
+                                          {row.velocity.toFixed(0)} m/s
+                                        </span>
+                                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                          <div
+                                            className={`h-full rounded-full ${
+                                              row.velocity >= 4500
+                                                ? "bg-emerald-400"
+                                                : row.velocity >= 3500
+                                                ? "bg-amber-400"
+                                                : "bg-rose-500"
+                                            }`}
+                                            style={{
+                                              width: `${Math.min(
+                                                100,
+                                                Math.max(10, ((row.velocity - 2000) / 3000) * 100)
+                                              )}%`,
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <span
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                          row.band === "EXCELLENT"
+                                            ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                                            : row.band === "GOOD"
+                                            ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                                            : row.band === "MEDIUM (FAIR)"
+                                            ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
+                                            : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                                        }`}
+                                      >
+                                        {row.band}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      {row.compressiveStrength != null ? (
+                                        <span
+                                          className={`font-bold text-xs ${
+                                            row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                          }`}
+                                        >
+                                          {row.compressiveStrength.toFixed(2)} MPa
+                                        </span>
+                                      ) : (
+                                        <span className="font-mono text-slate-400 text-xs font-semibold">
+                                          —
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-[11px]">
+                                      {row.compressiveStrength != null && row.deltaTargetPct != null ? (
+                                        <span
+                                          className={`font-mono ${
+                                            row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
+                                          }`}
+                                        >
+                                          {row.deltaTargetPct >= 0 ? `+` : ""}
+                                          {(row.compressiveStrength - 25.0).toFixed(2)} MPa (
+                                          {row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
+                                        </span>
+                                      ) : (
+                                        <span className="text-rose-400/80 font-mono italic">
+                                          Awaiting Govt Calibration
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-right">
+                                      <span
+                                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                          row.isPass
+                                            ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
+                                            : "bg-rose-950 text-rose-300 border-rose-700/80"
+                                        }`}
+                                      >
+                                        {row.isPass ? (
+                                          <>
+                                            <CheckCircle2 size={11} className="text-emerald-400" />
+                                            <span>MEETS SPEC (PASS)</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <AlertTriangle size={11} className="text-rose-400" />
+                                            <span>BELOW TARGET (FAIL)</span>
+                                          </>
+                                        )}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {/* Building Subtotal Footer */}
+                              <tfoot className="bg-slate-900/95 border-t border-slate-800 text-[11px] font-bold">
+                                <tr>
+                                  <td colSpan={3} className="py-2 px-3 text-slate-200">
+                                    <span className={bldTheme.text}>{bld.building} Subtotal:</span> {bldRows.length} elements across {bld.floors.join(", ")}
+                                  </td>
+                                  <td className="py-2 px-3 text-amber-400">
+                                    Mean V: {bldVel.toLocaleString()} m/s
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-400">
+                                    {bldVel >= 3500 ? "BS 1881 GOOD" : "BS 1881 DOUBTFUL"}
+                                  </td>
+                                  <td className="py-2 px-3 text-emerald-400">
+                                    Mean: {bldFcu != null ? `${bldFcu} MPa` : "—"}
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-400">
+                                    {bldFcu != null
+                                      ? `${Number((((bldFcu - 25.0) / 25.0) * 100).toFixed(1)) >= 0 ? "+" : ""}${Number((((bldFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        bldPassRate > 0
+                                          ? "text-emerald-300 bg-emerald-950/80 border border-emerald-800"
+                                          : "text-rose-300 bg-rose-950/80 border border-rose-800"
+                                      }`}
+                                    >
+                                      {bldPass} Meets Spec ({bldPassRate}%) · {bldRows.length - bldPass} Below Target
+                                    </span>
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Unified Flat Table View or Single Building Isolated View */
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[440px] overflow-y-auto">
+                    <table className="w-full text-left text-xs font-mono border-collapse">
+                      <thead className="bg-slate-900 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="py-2.5 px-3 w-10 text-center text-slate-500">#</th>
+                          <th className="py-2.5 px-3">Building</th>
+                          <th className="py-2.5 px-3">Structural Element</th>
+                          <th className="py-2.5 px-3">Location / Level</th>
+                          <th className="py-2.5 px-3">Pulse Velocity (V)</th>
+                          <th className="py-2.5 px-3">BS 1881-203 Classification</th>
+                          <th className="py-2.5 px-3">Comp. Strength (f_cu)</th>
+                          <th className="py-2.5 px-3">Delta vs 25 MPa</th>
+                          <th className="py-2.5 px-3 text-right">Compliance Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
+                        {filteredElementRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-8 text-center text-slate-500 italic">
+                              No elements matched your search filter.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ) : (
+                          filteredElementRows.map((row) => (
+                            <tr
+                              key={row.element}
+                              className={`transition-colors group ${
+                                !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
+                              }`}
+                            >
+                              <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
+                                {row.index}
+                              </td>
+                              <td className="py-2 px-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedBuilding(row.building)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                                    row.building.toLowerCase().includes("a")
+                                      ? "bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25"
+                                      : row.building.toLowerCase().includes("b")
+                                      ? "bg-purple-500/15 text-purple-300 border-purple-500/30 hover:bg-purple-500/25"
+                                      : row.building.toLowerCase().includes("c")
+                                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
+                                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                                  }`}
+                                  title={`Click to filter ${row.building}`}
+                                >
+                                  {row.building}
+                                </button>
+                              </td>
+                              <td className="py-2 px-3">
+                                <span
+                                  className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
+                                    !row.isPass
+                                      ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
+                                      : "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                                  }`}
+                                >
+                                  {row.element}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-slate-400 text-[11px]">
+                                {row.floor}
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`font-bold ${
+                                      row.velocity < 3500 ? "text-rose-400" : "text-slate-200"
+                                    }`}
+                                  >
+                                    {row.velocity.toFixed(0)} m/s
+                                  </span>
+                                  <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        row.velocity >= 4500
+                                          ? "bg-emerald-400"
+                                          : row.velocity >= 3500
+                                          ? "bg-amber-400"
+                                          : "bg-rose-500"
+                                      }`}
+                                      style={{
+                                        width: `${Math.min(
+                                          100,
+                                          Math.max(10, ((row.velocity - 2000) / 3000) * 100)
+                                        )}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    row.band === "EXCELLENT"
+                                      ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                                      : row.band === "GOOD"
+                                      ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                                      : row.band === "MEDIUM (FAIR)"
+                                      ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
+                                      : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                                  }`}
+                                >
+                                  {row.band}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3">
+                                {row.compressiveStrength != null ? (
+                                  <span
+                                    className={`font-bold text-xs ${
+                                      row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                    }`}
+                                  >
+                                    {row.compressiveStrength.toFixed(2)} MPa
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-slate-400 text-xs font-semibold">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-[11px]">
+                                {row.compressiveStrength != null && row.deltaTargetPct != null ? (
+                                  <span
+                                    className={`font-mono ${
+                                      row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
+                                    }`}
+                                  >
+                                    {row.deltaTargetPct >= 0 ? `+` : ""}
+                                    {(row.compressiveStrength - 25.0).toFixed(2)} MPa (
+                                    {row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-400/80 font-mono italic">
+                                    Awaiting Govt Calibration
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <span
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                    row.isPass
+                                      ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
+                                      : "bg-rose-950 text-rose-300 border-rose-700/80"
+                                  }`}
+                                >
+                                  {row.isPass ? (
+                                    <>
+                                      <CheckCircle2 size={11} className="text-emerald-400" />
+                                      <span>MEETS SPEC (PASS)</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertTriangle size={11} className="text-rose-400" />
+                                      <span>BELOW TARGET (FAIL)</span>
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Analytical Inference & Multi-Model Consensus Card */}
                 {systemTraces.length > 0 && (
@@ -1381,6 +1784,42 @@ export default function PunditAIReasoningPage() {
                               <span className="break-words font-medium">{trace}</span>
                             </div>
 
+                            {/* Render Multi-Building Summary Cards right under roll-up trace */}
+                            {isRollup && detectedBuildings.length > 1 && (
+                              <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                {detectedBuildings.map((b) => (
+                                  <div
+                                    key={b.building}
+                                    onClick={() => setSelectedBuilding(b.building)}
+                                    className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 transition-colors cursor-pointer flex flex-col gap-1"
+                                  >
+                                    <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                                      <span className="flex items-center gap-1">
+                                        <Building size={11} className="text-amber-400" />
+                                        {b.building}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        {b.count} Elements
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+                                      <span>
+                                        Mean V: <strong className="text-slate-200">{b.avgVel} m/s</strong>
+                                      </span>
+                                      <span>
+                                        f_cu: <strong className="text-slate-200">{b.avgFcu != null ? `${b.avgFcu} MPa` : "—"}</strong>
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-right font-mono">
+                                      <span className={b.passRate > 0 ? "text-emerald-400" : "text-rose-400"}>
+                                        Pass: {b.passCount}/{b.count} ({b.passRate}%)
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             {/* Render Tabular Form for any roll-up or embedded element telemetry */}
                             {(isRollup || hasEmbeddedTelemetry) && parsedElementRows.length > 0 && (
                               <div className="mt-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-2.5">
@@ -1409,53 +1848,161 @@ export default function PunditAIReasoningPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {filteredElementRows.map((r) => (
-                                      <tr
-                                        key={r.element}
-                                        className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
-                                          !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
-                                        }`}
-                                      >
-                                        <td className="py-1 px-2 text-slate-600 text-[10px]">{r.index}</td>
-                                        <td className="py-1 px-2">
-                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
-                                            {r.building}
-                                          </span>
-                                        </td>
-                                        <td className="py-1 px-2">
-                                          <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                                            !r.isPass ? "text-rose-300 bg-rose-500/10 border border-rose-500/30" : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
-                                          }`}>
-                                            {r.element}
-                                          </span>
-                                        </td>
-                                        <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
-                                        <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
-                                        <td className="py-1 px-2">
-                                          {r.compressiveStrength != null ? (
-                                            <span className={`font-bold ${r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"}`}>
-                                              {r.compressiveStrength.toFixed(2)} MPa
+                                    {detectedBuildings.length > 1 && !selectedBuilding ? (
+                                      detectedBuildings.map((bld) => {
+                                        const bldRows = filteredElementRows.filter(
+                                          (r) => r.building.toLowerCase() === bld.building.toLowerCase()
+                                        );
+                                        if (bldRows.length === 0) return null;
+                                        return (
+                                          <React.Fragment key={bld.building}>
+                                            <tr className="bg-slate-900 border-y border-slate-700/80">
+                                              <td colSpan={8} className="py-1.5 px-2 font-mono font-bold text-amber-300 text-[10px]">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="flex items-center gap-1.5">
+                                                    <Building size={12} className="text-amber-400" />
+                                                    <span className="text-slate-100">{bld.building}</span>
+                                                    <span className="text-slate-400 font-normal">
+                                                      ({bldRows.length} Elements · {bld.floors.join(", ")})
+                                                    </span>
+                                                  </span>
+                                                  <span className="text-slate-400 font-normal">
+                                                    Mean V: <strong className="text-slate-200">{bld.avgVel} m/s</strong> · Mean f_cu:{" "}
+                                                    <strong className="text-slate-200">{bld.avgFcu ?? "—"} MPa</strong> · Pass:{" "}
+                                                    <strong className={bld.passCount > 0 ? "text-emerald-400" : "text-rose-400"}>
+                                                      {bld.passCount}/{bldRows.length} ({bld.passRate}%)
+                                                    </strong>
+                                                  </span>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                            {bldRows.map((r, bIdx) => (
+                                              <tr
+                                                key={r.element}
+                                                className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
+                                                  !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
+                                                }`}
+                                              >
+                                                <td className="py-1 px-2 text-slate-600 text-[10px]">{bIdx + 1}</td>
+                                                <td className="py-1 px-2">
+                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
+                                                    {r.building}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2">
+                                                  <span
+                                                    className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                                      !r.isPass
+                                                        ? "text-rose-300 bg-rose-500/10 border border-rose-500/30"
+                                                        : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
+                                                    }`}
+                                                  >
+                                                    {r.element}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
+                                                <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
+                                                <td className="py-1 px-2">
+                                                  {r.compressiveStrength != null ? (
+                                                    <span
+                                                      className={`font-bold ${
+                                                        r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                                      }`}
+                                                    >
+                                                      {r.compressiveStrength.toFixed(2)} MPa
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-slate-500 italic">—</span>
+                                                  )}
+                                                </td>
+                                                <td className="py-1 px-2 text-[10px]">
+                                                  <span
+                                                    className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                                      r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
+                                                    }`}
+                                                  >
+                                                    {r.band}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2 text-right">
+                                                  <span
+                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
+                                                      r.isPass
+                                                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                                        : "bg-rose-950 text-rose-300 border border-rose-800"
+                                                    }`}
+                                                  >
+                                                    {r.isPass ? "PASS" : "FAIL"}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </React.Fragment>
+                                        );
+                                      })
+                                    ) : (
+                                      filteredElementRows.map((r) => (
+                                        <tr
+                                          key={r.element}
+                                          className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
+                                            !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
+                                          }`}
+                                        >
+                                          <td className="py-1 px-2 text-slate-600 text-[10px]">{r.index}</td>
+                                          <td className="py-1 px-2">
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
+                                              {r.building}
                                             </span>
-                                          ) : (
-                                            <span className="text-slate-500 italic">—</span>
-                                          )}
-                                        </td>
-                                        <td className="py-1 px-2 text-[10px]">
-                                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                            r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
-                                          }`}>
-                                            {r.band}
-                                          </span>
-                                        </td>
-                                        <td className="py-1 px-2 text-right">
-                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
-                                            r.isPass ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-rose-950 text-rose-300 border border-rose-800"
-                                          }`}>
-                                            {r.isPass ? "PASS" : "FAIL"}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
+                                          </td>
+                                          <td className="py-1 px-2">
+                                            <span
+                                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                                !r.isPass
+                                                  ? "text-rose-300 bg-rose-500/10 border border-rose-500/30"
+                                                  : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
+                                              }`}
+                                            >
+                                              {r.element}
+                                            </span>
+                                          </td>
+                                          <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
+                                          <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
+                                          <td className="py-1 px-2">
+                                            {r.compressiveStrength != null ? (
+                                              <span
+                                                className={`font-bold ${
+                                                  r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                                }`}
+                                              >
+                                                {r.compressiveStrength.toFixed(2)} MPa
+                                              </span>
+                                            ) : (
+                                              <span className="text-slate-500 italic">—</span>
+                                            )}
+                                          </td>
+                                          <td className="py-1 px-2 text-[10px]">
+                                            <span
+                                              className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                                r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
+                                              }`}
+                                            >
+                                              {r.band}
+                                            </span>
+                                          </td>
+                                          <td className="py-1 px-2 text-right">
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
+                                                r.isPass
+                                                  ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                                  : "bg-rose-950 text-rose-300 border border-rose-800"
+                                              }`}
+                                            >
+                                              {r.isPass ? "PASS" : "FAIL"}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))
+                                    )}
                                   </tbody>
                                 </table>
                               </div>
