@@ -2228,6 +2228,50 @@ export const downloadNdtReport = async (
   return filename;
 };
 
+/**
+ * Downloads the dedicated AI-Generated Acoustic Tomography & Inversion Dossier PDF (BS 1881-203).
+ * Contains Executive Summary, Key AI Observations, Velocity Bands, Peer Reviews, and Element Roll-Up.
+ */
+export const downloadPunditAiDossierPdf = async (
+  analysisId: string,
+  suggestedFilename?: string,
+): Promise<string> => {
+  const res = await api.get(`/digital-eye/pundit-analysis-review/${analysisId}/pdf/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const filename = suggestedFilename || `pundit_ai_dossier_${analysisId.slice(0, 8)}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
+export const downloadProjectAiDossierPdf = async (
+  projectId: string,
+  suggestedFilename?: string,
+): Promise<string> => {
+  const res = await api.get(`/reports/projects/${projectId}/ai-dossier/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const filename = suggestedFilename || `pundit_ai_dossier_${projectId.slice(0, 8)}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
 // ---- Report CMS + Word export (8 Sep meeting H7; 4 Sep register C4/C5) ----
 // The statutory NDT report's boilerplate prose sections are editable
 // template variables, password-protected and Director-only. The backend

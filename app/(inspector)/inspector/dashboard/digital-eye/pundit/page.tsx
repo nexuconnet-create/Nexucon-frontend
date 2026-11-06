@@ -52,6 +52,8 @@ import {
   getPunditAnalysisReview,
   PunditAnalysisReview,
   downloadNdtReport,
+  downloadPunditAiDossierPdf,
+  downloadProjectAiDossierPdf,
   submitInspectorPunditCollaboration,
   regenerateJointPunditAnalysis,
   fetchGoogleWeather,
@@ -235,9 +237,37 @@ function PunditWorkspaceInner() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>("");
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+  const [isDownloadingAiDossier, setIsDownloadingAiDossier] = useState(false);
+
+  const handleDownloadAiDossier = async () => {
+    const targetAnalysisId = activePunditReview?.analysis_id || (activePunditReview?.ai_analysis && activePunditReview.ai_analysis.id);
+    const targetProjId = activePunditReview?.project_id || activePunditTest?.project || activeWorkspaceProjectId || (punditTests && punditTests[0]?.project);
+    
+    if (!targetAnalysisId && !targetProjId) {
+      showToast("⚠️ Select a project or test with an AI analysis before exporting the dossier.");
+      return;
+    }
+    setIsDownloadingAiDossier(true);
+    try {
+      showToast("Generating AI Acoustic Tomography & Inversion Dossier PDF per BS 1881-203...");
+      const projName = activePunditReview?.project_name || "Project";
+      const safeName = `PUNDIT_AI_Dossier_${projName.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
+      if (targetAnalysisId) {
+        await downloadPunditAiDossierPdf(targetAnalysisId, safeName);
+      } else if (targetProjId) {
+        await downloadProjectAiDossierPdf(targetProjId, safeName);
+      }
+      showToast("✅ AI Analysis Dossier PDF downloaded successfully.");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Could not generate AI dossier PDF.";
+      showToast(`⚠️ Dossier download failed: ${detail}`);
+    } finally {
+      setIsDownloadingAiDossier(false);
+    }
+  };
 
   const handleDownloadOfficialDossier = async () => {
-    const targetProjId = activePunditReview?.project_id || activePunditTest?.project || activeWorkspaceProjectId;
+    const targetProjId = activePunditReview?.project_id || activePunditTest?.project || activeWorkspaceProjectId || (punditTests && punditTests[0]?.project);
     if (!targetProjId) {
       showToast("Select a project with UPV tests before exporting official dossier.");
       return;
@@ -245,7 +275,7 @@ function PunditWorkspaceInner() {
     setIsDownloadingReport(true);
     try {
       showToast("Generating official statutory dossier PDF per BS 1881-203...");
-      const opName = user ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email : undefined;
+      const opName = activePunditTest?.operator_name || (user ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email : undefined);
       await downloadNdtReport(targetProjId, opName);
       showToast("✅ Official NDT Dossier PDF downloaded successfully.");
     } catch (err: any) {
@@ -1047,35 +1077,57 @@ function PunditWorkspaceInner() {
                   {/* AI Generated Findings & Reasoning Box (Hidden until clicked, scrollable container) */}
                   {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary || (activePunditReview?.ai_observations && activePunditReview.ai_observations.length > 0) || activePunditReview?.ai_analysis?.observations?.length || activePunditReview?.ai_reasoning_log || activePunditReview?.ai_analysis?.reasoning_log) && (
                     <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowAiFindings(!showAiFindings)}
-                        className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-800/80 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer shadow-xs"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles size={13} className="text-cyan-400 animate-pulse" />
-                          <span>{showAiFindings ? "Hide AI Generated Analysis" : "View AI Generated Analysis & Findings"}</span>
-                        </div>
-                        <span className="text-[10px] font-mono font-semibold text-cyan-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
-                          {showAiFindings ? "Collapse ▲" : "Expand ▼"}
-                        </span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowAiFindings(!showAiFindings)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-200 border border-indigo-800/80 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer shadow-xs"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-cyan-400 animate-pulse" />
+                            <span>{showAiFindings ? "Hide AI Generated Analysis" : "View AI Generated Analysis & Findings"}</span>
+                          </div>
+                          <span className="text-[10px] font-mono font-semibold text-cyan-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                            {showAiFindings ? "Collapse ▲" : "Expand ▼"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isDownloadingAiDossier}
+                          onClick={handleDownloadAiDossier}
+                          className="py-2 px-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs disabled:opacity-50 shrink-0"
+                          title="Download AI Generated Scan Analysis & Findings as PDF"
+                        >
+                          {isDownloadingAiDossier ? (
+                            <Loader2 size={12} className="animate-spin text-white" />
+                          ) : (
+                            <Download size={12} className="text-white" />
+                          )}
+                          <span>PDF</span>
+                        </button>
+                      </div>
 
                       {showAiFindings && (
-                        <div className="bg-slate-900 text-white rounded-xl p-3.5 space-y-2.5 text-xs shadow-md border border-indigo-900 max-h-60 overflow-y-auto pr-1">
-                          <div className="flex items-center justify-between pb-1 border-b border-slate-800 sticky top-0 bg-slate-900 pt-0.5 z-10">
-                            <div className="flex items-center gap-1.5 font-bold text-indigo-300 text-[11px] uppercase tracking-wider">
+                        <div className="bg-slate-900 text-white rounded-xl p-3.5 space-y-2.5 text-xs shadow-md border border-indigo-900 max-h-72 overflow-y-auto pr-1">
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-800 sticky top-0 bg-slate-900 pt-0.5 z-10 gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-indigo-300 text-[11px] uppercase tracking-wider truncate">
                               <Sparkles size={13} className="text-cyan-400" />
                               <span>AI Generated Scan Analysis & Findings</span>
                             </div>
-                            <Link
-                              href="/government/dashboard/digital-eye/pundit/ai-analysis/reasoning"
-                              className="text-[10px] text-cyan-300 hover:text-cyan-100 underline font-semibold flex items-center gap-0.5 shrink-0"
-                              target="_blank"
+                            <button
+                              type="button"
+                              disabled={isDownloadingAiDossier}
+                              onClick={handleDownloadAiDossier}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                              title="Download complete AI Scan Analysis & Findings as official PDF"
                             >
-                              <span>Reasoning Chat</span>
-                              <ChevronRight size={10} />
-                            </Link>
+                              {isDownloadingAiDossier ? (
+                                <Loader2 size={11} className="animate-spin text-cyan-300" />
+                              ) : (
+                                <Download size={11} className="text-cyan-300" />
+                              )}
+                              <span>{isDownloadingAiDossier ? "Generating PDF…" : "Download as PDF"}</span>
+                            </button>
                           </div>
 
                           {(activePunditReview?.ai_summary || activePunditReview?.ai_analysis?.summary) && (
@@ -1111,6 +1163,23 @@ function PunditWorkspaceInner() {
                               </div>
                             </details>
                           )}
+
+                          <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 mt-2">
+                            <span className="text-[10px] text-cyan-300 font-mono">BS 1881-203 Statutory Dossier</span>
+                            <button
+                              type="button"
+                              disabled={isDownloadingAiDossier}
+                              onClick={handleDownloadAiDossier}
+                              className="py-1.5 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                            >
+                              {isDownloadingAiDossier ? (
+                                <Loader2 size={12} className="animate-spin text-white" />
+                              ) : (
+                                <Download size={12} className="text-white" />
+                              )}
+                              <span>{isDownloadingAiDossier ? "Generating AI Dossier PDF…" : "Download AI Findings Dossier (PDF)"}</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1233,7 +1302,7 @@ function PunditWorkspaceInner() {
                   {/* Export Official Statutory Dossier (PDF) Button */}
                   <button
                     type="button"
-                    disabled={isDownloadingReport || (!activePunditReview?.project_id && !activePunditTest?.project && !activeWorkspaceProjectId)}
+                    disabled={isDownloadingReport || (!activePunditReview?.project_id && !activePunditTest?.project && !activeWorkspaceProjectId && (!punditTests || punditTests.length === 0))}
                     onClick={handleDownloadOfficialDossier}
                     className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
@@ -1370,20 +1439,36 @@ function PunditWorkspaceInner() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!activePunditTest?.project) return;
-                      const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
-                      const inspectorLabel = activePunditTest.operator_name || userFullName || user?.email || undefined;
-                      showToast(`Generating official BS 1881-203 NDT Report PDF${inspectorLabel ? ` (${inspectorLabel})` : ""}…`);
-                      downloadNdtReport(activePunditTest.project, inspectorLabel)
-                        .then((filename) => showToast(`Downloaded ${filename}`))
-                        .catch((err: any) => showToast(`Download failed: ${err?.message || 'Error'}`));
+                    disabled={isDownloadingReport}
+                    onClick={async () => {
+                      const targetProj = activePunditTest?.project || activePunditReview?.project_id || activeWorkspaceProjectId || (punditTests && punditTests[0]?.project);
+                      if (!targetProj) {
+                        showToast("⚠️ Select a project or test first before downloading the NDT report.");
+                        return;
+                      }
+                      setIsDownloadingReport(true);
+                      try {
+                        const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+                        const inspectorLabel = activePunditTest?.operator_name || userFullName || user?.email || undefined;
+                        showToast(`Generating official BS 1881-203 NDT Report PDF${inspectorLabel ? ` (${inspectorLabel})` : ""}…`);
+                        const filename = await downloadNdtReport(targetProj, inspectorLabel);
+                        showToast(`✅ Downloaded ${filename}`);
+                      } catch (err: any) {
+                        const detail = err?.response?.data?.detail || err?.message || "Could not generate report PDF.";
+                        showToast(`⚠️ Report download failed: ${detail}`);
+                      } finally {
+                        setIsDownloadingReport(false);
+                      }
                     }}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                     title="Download the official BS 1881-203 NDT Report including Section 5.3 Joint Review and Section 5.4 Observations"
                   >
-                    <Download size={13} />
-                    <span>Download Official NDT Report (PDF)</span>
+                    {isDownloadingReport ? (
+                      <Loader2 size={13} className="animate-spin text-emerald-400" />
+                    ) : (
+                      <Download size={13} className="text-emerald-400" />
+                    )}
+                    <span>{isDownloadingReport ? "Generating Official NDT Report PDF…" : "Download Official NDT Report (PDF)"}</span>
                   </button>
                 </div>
               </>
