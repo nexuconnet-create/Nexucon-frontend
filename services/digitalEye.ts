@@ -3433,6 +3433,13 @@ export const fetchNdtReportPreviewBundle = async (
  * Embedded AI QA Assistant: Reviews the active PDF page against raw project test data,
  * deterministic mathematics, and international standards (BS 1881-203, BS EN 12504-4, ACI 228.2R).
  */
+export interface NdtReportQASectionOptions {
+  section_key?: string;
+  section_label?: string;
+  start_page?: number;
+  end_page?: number;
+}
+
 export interface NdtReportPageQAResponse {
   page_number: number;
   total_pages: number;
@@ -3443,10 +3450,18 @@ export interface NdtReportPageQAResponse {
     error: string;
     raw_payload_value: string;
     exact_replacement: string;
+    field_name?: string;
+    section_key?: string;
   }>;
   compliance_flags: string[];
   narrative_feedback: string;
   page_excerpt: string;
+  full_document?: boolean;
+  is_section?: boolean;
+  section_key?: string;
+  section_label?: string;
+  start_page?: number;
+  end_page?: number;
 }
 
 export const reviewNdtReportPageQA = async (
@@ -3458,6 +3473,7 @@ export const reviewNdtReportPageQA = async (
   elementId?: string,
   building?: string,
   fullDocument?: boolean,
+  sectionOptions?: NdtReportQASectionOptions,
 ): Promise<NdtReportPageQAResponse> => {
   const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/`, {
     page_number: pageNumber,
@@ -3467,6 +3483,10 @@ export const reviewNdtReportPageQA = async (
     elementId,
     building: building && building.trim().toLowerCase() !== 'all' ? building : undefined,
     full_document: Boolean(fullDocument),
+    section_key: sectionOptions?.section_key,
+    section_label: sectionOptions?.section_label,
+    start_page: sectionOptions?.start_page,
+    end_page: sectionOptions?.end_page,
   });
   return res;
 };
