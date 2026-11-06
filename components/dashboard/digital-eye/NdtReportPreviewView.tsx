@@ -25,6 +25,8 @@ import {
   Building2,
   Layers,
   Building,
+  Sparkles,
+  Wand2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { TargetJump } from "./ContinuousPdfViewer";
@@ -43,6 +45,7 @@ import {
   type NdtPreviewSection,
   notifyProjectNdtInspectors,
   reviewNdtReportPageQA,
+  applyNdtReportAmendment,
   type NdtReportPageQAResponse,
   type NdtBuildingSummary,
 } from "@/services/digitalEye";
@@ -115,6 +118,9 @@ export default function NdtReportPreviewView({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copiedNarrative, setCopiedNarrative] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "narrative">("cards");
+  const [applyingAmendmentIdx, setApplyingAmendmentIdx] = useState<number | null>(null);
+  const [appliedAmendments, setAppliedAmendments] = useState<Record<number, boolean>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Keep page input and activeKey in sync with currentPage
   useEffect(() => {
@@ -164,7 +170,7 @@ export default function NdtReportPreviewView({
       cancelled = true;
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
-  }, [projectId, operator, elementId, currentBuilding]);
+  }, [projectId, operator, elementId, currentBuilding, refreshKey]);
 
   const toast = (message: string, type: "success" | "error" | "info") => {
     window.dispatchEvent(
@@ -292,11 +298,77 @@ export default function NdtReportPreviewView({
     }
   };
 
-  const copyReplacement = (text: string, idx: number) => {
-    navigator.clipboard.writeText(text);
+  // Run AI Full Document QA Audit across all pages
+  const handleRunFullDocQA = async () => {
+    if (!projectId) return;
+    setQaLoading(true);
+    setQaError(null);
+    try {
+      const res = await reviewNdtReportPageQA(
+        projectId,
+        1,
+        "Perform comprehensive full-document engineering QA audit across all pages.",
+        qaModelProvider,
+        operator,
+        elementId,
+        currentBuilding || undefined,
+        true
+      );
+      setQaResponse(res);
+      toast(`✅ Full document audit completed by ${res.provider_used} (${res.model_used}).`, "success");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Full document QA audit failed.";
+      setQaError(String(detail));
+      toast(`⚠️ Full audit failed: ${detail}`, "error");
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
+  const handleApplyAmendment = async (
+    d: {
+      field_name?: string;
+      section_key?: string;
+      error: string;
+      raw_payload_value: string;
+      exact_replacement: string;
+    },
+    idx: number
+  ) => {
+    if (!projectId) return;
+    setApplyingAmendmentIdx(idx);
+    try {
+      const res = await applyNdtReportAmendment(projectId, {
+        page_number: qaResponse?.page_number,
+        section_key: d.section_key,
+        field_name: d.field_name,
+        error: d.error,
+        exact_replacement: d.exact_replacement,
+        raw_payload_value: d.raw_payload_value,
+      });
+      setAppliedAmendments((prev) => ({ ...prev, [idx]: true }));
+      toast(res?.message || "✅ Amendment applied to records.", "success");
+      setRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Failed to apply amendment.";
+      toast(`⚠️ Could not apply amendment: ${detail}`, "error");
+    } finally {
+      setApplyingAmendmentIdx(null);
+    }
+  };
+
+  const copyReplacement = async (text: string, idx: number, discrepancy?: any) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore clipboard error if unfocused
+    }
     setCopiedIndex(idx);
-    toast("📋 Replacement text copied to clipboard.", "info");
+    toast("📋 Replacement copied & applying amendment to records…", "info");
     setTimeout(() => setCopiedIndex(null), 2500);
+    if (discrepancy && !appliedAmendments[idx] && applyingAmendmentIdx !== idx) {
+      handleApplyAmendment(discrepancy, idx);
+    }
   };
 
   const copyNarrative = (text: string) => {
@@ -758,24 +830,36 @@ export default function NdtReportPreviewView({
                   </div>
                 </div>
 
-                {/* Audit Trigger Button */}
-                <button
-                  type="button"
-                  onClick={() => handleRunPageQA()}
-                  disabled={qaLoading || !projectId}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#022C4F] hover:bg-[#033E6E] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 transition-all cursor-pointer"
-                >
-                  {qaLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                  ) : (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  )}
-                  <span>
-                    {qaLoading
-                      ? `Auditing Page ${currentPage} via ${qaModelProvider === "anthropic" ? "Claude 3.5" : qaModelProvider === "deepseek" ? "DeepSeek" : "Forensic Engine"}…`
-                      : `Execute Forensic Audit (Page ${currentPage})`}
-                  </span>
-                </button>
+                {/* Audit Trigger Buttons */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRunPageQA()}
+                    disabled={qaLoading || !projectId}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#022C4F] hover:bg-[#033E6E] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {qaLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>
+                      {qaLoading
+                        ? `Auditing via ${qaModelProvider === "anthropic" ? "Claude 3.5" : qaModelProvider === "deepseek" ? "DeepSeek" : "Forensic Engine"}…`
+                        : `Audit Active Page (Page ${currentPage})`}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRunFullDocQA()}
+                    disabled={qaLoading || !projectId}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-sky-50/80 hover:bg-sky-100/80 px-3 py-2 text-xs font-bold text-[#022C4F] shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Audit Entire Report ({pageCount || "All"} Pages)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Inspecting Engineer Question / Custom Query */}
@@ -1028,28 +1112,58 @@ export default function NdtReportPreviewView({
                                   </span>
                                 </div>
                                 <div className="rounded bg-white border border-rose-200 p-2 space-y-1.5">
-                                  <div className="flex items-center justify-between">
+                                  <div className="flex items-center justify-between gap-2">
                                     <span className="text-rose-700 uppercase text-[9px] font-bold block">
                                       Proposed Report Amendment:
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => copyReplacement(d.exact_replacement, idx)}
-                                      className="inline-flex items-center gap-1 text-[10px] text-rose-700 hover:text-rose-900 font-semibold cursor-pointer"
-                                      title="Copy replacement string"
-                                    >
-                                      {copiedIndex === idx ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-600" />
-                                          <span className="text-emerald-700">Copied</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3 h-3" />
-                                          <span>Copy Amendment</span>
-                                        </>
-                                      )}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={applyingAmendmentIdx === idx || appliedAmendments[idx]}
+                                        onClick={() => handleApplyAmendment(d, idx)}
+                                        className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-semibold transition-all shadow-2xs cursor-pointer ${
+                                          appliedAmendments[idx]
+                                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                            : "bg-[#022C4F] text-white hover:bg-[#033E6E] disabled:opacity-50"
+                                        }`}
+                                        title="Apply amendment directly to database / report records"
+                                      >
+                                        {applyingAmendmentIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin text-white" />
+                                            <span>Applying…</span>
+                                          </>
+                                        ) : appliedAmendments[idx] ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-600" />
+                                            <span>Applied</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Wand2 className="w-3 h-3 text-amber-300" />
+                                            <span>Apply Amendment</span>
+                                          </>
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => copyReplacement(d.exact_replacement, idx, d)}
+                                        className="inline-flex items-center gap-1 text-[10px] text-rose-700 hover:text-rose-900 font-semibold cursor-pointer"
+                                        title="Copy replacement string"
+                                      >
+                                        {copiedIndex === idx ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-600" />
+                                            <span className="text-emerald-700">Copied</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-3 h-3" />
+                                            <span>Copy</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
                                   </div>
                                   <p className="font-mono text-[10px] text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 break-all">
                                     {d.exact_replacement}

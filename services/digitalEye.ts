@@ -1233,6 +1233,7 @@ export const setDeviceGateway = async (
 
 export const getPunditTests = async (params?: {
   project?: string;
+  batch?: string;
   element_name?: string;
   search?: string;
   test_type?: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
@@ -1247,6 +1248,7 @@ export const getPunditTests = async (params?: {
   const res = await api.get('/digital-eye/pundit-tests/', {
     params: {
       project: params?.project || undefined,
+      batch: params?.batch || undefined,
       search: params?.search || undefined,
       test_type: params?.test_type || undefined,
       quality_grade: params?.quality_grade || undefined,
@@ -1725,6 +1727,7 @@ export const analyzePunditProject = async (
     params?: Record<string, any>;
     design_strength_mpa?: number;
     cube_correlation_points?: any[];
+    velocity_correction_factor?: number;
   }
 ): Promise<PunditProjectAnalysis> => {
   const payload: any = { project: projectId };
@@ -1734,6 +1737,7 @@ export const analyzePunditProject = async (
   if (options?.params) payload.params = options.params;
   if (options?.design_strength_mpa != null) payload.design_strength_mpa = options.design_strength_mpa;
   if (options?.cube_correlation_points) payload.cube_correlation_points = options.cube_correlation_points;
+  if (options?.velocity_correction_factor != null) payload.velocity_correction_factor = options.velocity_correction_factor;
 
   const res = await api.post('/digital-eye/pundit-tests/analyze_project/', payload);
   return unwrap<PunditProjectAnalysis>(res, {} as PunditProjectAnalysis);
@@ -3308,6 +3312,10 @@ export const CURVE_PARAM_FIELDS: Record<CurveType, Array<{ key: string; label: s
  *  verdicts only. */
 export interface ReportVerification {
   verified: boolean;
+  security_key_status?: 'ACTIVE_AUTHENTIC' | 'DISABLED_DUE_TO_EXTERNAL_CONVERSION' | 'DISABLED_OR_INVALID' | string;
+  tampered?: boolean;
+  expected_sha256?: string;
+  submitted_sha256?: string;
   report_reference?: string;
   title?: string;
   content_digest?: string;
@@ -3322,15 +3330,18 @@ export interface ReportVerification {
 
 /**
  * PUBLIC verification of an archived NDT dossier — the destination encoded
- * in the report cover's QR code. GET /reports/verify/?ref=&digest=.
+ * in the report cover's QR code. GET /reports/verify/?ref=&digest=&checksum=.
  * Calls the backend directly (no credentials — the endpoint is public).
  */
 export const verifyArchivedReport = async (
   ref: string,
-  digest: string
+  digest: string,
+  checksum?: string
 ): Promise<ReportVerification> => {
+  const params: Record<string, string> = { ref, digest };
+  if (checksum) params.checksum = checksum;
   const res = await api.get('/reports/verify/', {
-    params: { ref, digest },
+    params,
   });
   const data = unwrap<ReportVerification | null>(res, null);
   if (!data) throw new Error('Report verification could not be loaded.');
@@ -3446,6 +3457,7 @@ export const reviewNdtReportPageQA = async (
   operator?: string,
   elementId?: string,
   building?: string,
+  fullDocument?: boolean,
 ): Promise<NdtReportPageQAResponse> => {
   const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/`, {
     page_number: pageNumber,
@@ -3454,8 +3466,27 @@ export const reviewNdtReportPageQA = async (
     operator,
     elementId,
     building: building && building.trim().toLowerCase() !== 'all' ? building : undefined,
+    full_document: Boolean(fullDocument),
   });
   return res;
+};
+
+export interface ApplyNdtReportAmendmentPayload {
+  page_number?: number;
+  section_key?: string;
+  error?: string;
+  exact_replacement: string;
+  field_name?: string;
+  raw_payload_value?: string;
+  notes?: string;
+}
+
+export const applyNdtReportAmendment = async (
+  projectId: string,
+  payload: ApplyNdtReportAmendmentPayload,
+): Promise<{ success: boolean; message: string; amendment?: any }> => {
+  const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/apply-amendment/`, payload);
+  return res?.data !== undefined ? res.data : res;
 };
 
 /**
@@ -3731,11 +3762,13 @@ export interface BatchCalibrationPayload {
     a: number; // Scaling coefficient
     b: number; // Exponent factor
     c: number; // Intercept / offset
+    velocity_correction_factor?: number;
     [key: string]: any;
   };
   design_strength_mpa: number; // e.g. 25.0 MPa
   notes?: string;
   cube_correlation_points?: Array<{ velocity_ms: number; cube_strength_mpa: number }>;
+  velocity_correction_factor?: number;
 }
 
 export interface BatchCalibrationResult {

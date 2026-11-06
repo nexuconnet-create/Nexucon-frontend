@@ -197,13 +197,13 @@ export default function PunditAIAnalysisPage() {
   const handleConfirmCalibrationAndAnalyze = async (calPayload: BatchCalibrationPayload) => {
     setIsRunningAnalysis(true);
     try {
-      // Ensure selectedBatch belongs to the currently active project
+      // Prefer batch_id explicitly chosen in the modal or fallback to active project's batch
       const isBatchForActiveProject = Boolean(
         selectedBatch &&
         (selectedBatch.project_id === selectedProjectId ||
          (selectedBatch as any).project === selectedProjectId)
       );
-      const effectiveBatchId = isBatchForActiveProject ? selectedBatch?.id : undefined;
+      const effectiveBatchId = calPayload.batch_id || (isBatchForActiveProject ? selectedBatch?.id : undefined);
 
       // 1. Persist model calibration
       const calResult = await calibratePunditBatchModel({
@@ -219,6 +219,7 @@ export default function PunditAIAnalysisPage() {
         params: calPayload.params,
         design_strength_mpa: calPayload.design_strength_mpa,
         cube_correlation_points: calPayload.cube_correlation_points,
+        velocity_correction_factor: calPayload.velocity_correction_factor,
       });
 
       setFreshRun(result);

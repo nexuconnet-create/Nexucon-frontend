@@ -402,13 +402,17 @@ export default function EditGovernmentProjectModal({
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-[#022C4F] outline-none cursor-pointer"
                     >
                       <option value="Commercial">Commercial</option>
-                      <option value="Residential">Residential</option>
+                      <option value="Industrial Layout">Industrial Layout / Warehouse</option>
                       <option value="Industrial">Industrial</option>
-                      <option value="Infrastructure">Infrastructure</option>
-                      <option value="Mixed-Use">Mixed-Use</option>
-                      <option value="Institutional">Institutional</option>
-                      <option value="Renovation">Renovation</option>
-                      <option value="Other">Other</option>
+                      <option value="Hospital">Hospital / Medical Facility</option>
+                      <option value="Car Park">Car Park / Multi-Story Parking</option>
+                      <option value="Residential">Residential</option>
+                      <option value="Institutional">Institutional / Educational</option>
+                      <option value="Civic">Civic / Public Infrastructure</option>
+                      <option value="Infrastructure">Infrastructure / Laydown Area</option>
+                      <option value="Mixed-Use">Mixed-Use Development</option>
+                      <option value="Renovation">Structural Renovation / Retrofit</option>
+                      <option value="Other">Other Structure</option>
                     </select>
                   </div>
                   <div>

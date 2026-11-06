@@ -30,6 +30,8 @@ import {
   CoreSample,
   getCoreSamples,
   getPunditTests,
+  getPunditScanBatches,
+  PunditScanBatch,
 } from "@/services/digitalEye";
 
 interface PunditCalibrationModalProps {
@@ -64,14 +66,21 @@ export default function PunditCalibrationModal({
   // exponential: f_cu = a * exp(b * V_km/s) + c
   // polynomial: f_cu = a + b * V_km/s + c * (V_km/s)^2
   // sonreb: f_cu = a * (V_m/s)^b * (R)^c
-  const [paramA, setParamA] = useState<number>(1.39);
-  const [paramB, setParamB] = useState<number>(0.78); // exponent per km/s
+  const [paramA, setParamA] = useState<number>(2.80); // Default to Jones Equation
+  const [paramB, setParamB] = useState<number>(0.53); // exponent per km/s
   const [paramC, setParamC] = useState<number>(0.0); // intercept offset MPa
+
+  // Velocity correction factor (1.00 dry baseline up to 1.05 max saturated per BS 1881-203)
+  const [velocityCorrectionFactor, setVelocityCorrectionFactor] = useState<number>(1.00);
+
+  // Available batches/folders for transparent selection
+  const [availableBatches, setAvailableBatches] = useState<PunditScanBatch[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(batchId || "");
 
   // Target concrete design strength (e.g. C25/30 -> 25 N/mm2)
   const [designStrengthMpa, setDesignStrengthMpa] = useState<number>(25.0);
   const [calibrationNotes, setCalibrationNotes] = useState<string>(
-    "Scan Decision: High-Density Aggregate Mix Exponential model (a=1.39, b=0.78, c=0.0). Calibrated for Laydown Area Floor Slab."
+    "Jones Equation (1962) empirical baseline: f_cu = 2.80 · exp(0.53 · V_km/s). Calibrated for structural concrete testing."
   );
 
   // Active strength curve metadata resolved from server
@@ -456,8 +465,8 @@ export default function PunditCalibrationModal({
     if (curve.curve_type) setCurveType(curve.curve_type);
     const p = curve.formula_params || {};
     if (curve.curve_type === "exponential" || !curve.curve_type) {
-      const aVal = p.a != null ? Number(p.a) : 1.20;
-      let bVal = p.b != null ? Number(p.b) : 0.85;
+      const aVal = p.a != null ? Number(p.a) : 2.80;
+      let bVal = p.b != null ? Number(p.b) : 0.53;
       if (bVal > 0 && bVal < 0.01) bVal = Number((bVal * 1000).toFixed(4));
       const cVal = p.c != null ? Number(p.c) : 0.0;
       setParamA(aVal);
@@ -509,7 +518,7 @@ export default function PunditCalibrationModal({
       }
     }
 
-    // 2. Fetch project core samples from database
+    // 2. Fetch project core samples and scan batches from database
     getCoreSamples(projectId)
       .then((cores) => {
         if (cancelled) return;
@@ -517,17 +526,40 @@ export default function PunditCalibrationModal({
       })
       .catch(() => {});
 
-    // 3. Keep internal scan tests on record
-    const currentTests = tests && tests.length > 0 ? tests : [];
-    if (currentTests.length > 0) {
-      setInternalTests(currentTests);
-    } else {
-      getPunditTests({ project: projectId })
+    getPunditScanBatches(projectId)
+      .then((bList) => {
+        if (cancelled) return;
+        setAvailableBatches(bList || []);
+        if (bList && bList.length > 0 && !selectedBatchId) {
+          setSelectedBatchId(batchId || bList[0].id);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Keep internal scan tests on record (scoped to selectedBatchId if present)
+    if (selectedBatchId) {
+      getPunditTests({ project: projectId, batch: selectedBatchId })
         .then((ts) => {
           if (cancelled) return;
-          setInternalTests(ts);
+          if (ts && ts.length > 0) {
+            setInternalTests(ts);
+          } else if (tests && tests.length > 0) {
+            setInternalTests(tests);
+          }
         })
         .catch(() => {});
+    } else {
+      const currentTests = tests && tests.length > 0 ? tests : [];
+      if (currentTests.length > 0) {
+        setInternalTests(currentTests);
+      } else {
+        getPunditTests({ project: projectId })
+          .then((ts) => {
+            if (cancelled) return;
+            setInternalTests(ts);
+          })
+          .catch(() => {});
+      }
     }
 
     // 4. Query active project strength curve and synchronize parameters & calibration points
@@ -548,16 +580,17 @@ export default function PunditCalibrationModal({
     return () => {
       cancelled = true;
     };
-  }, [projectId, isOpen, tests, applyActiveCurve, fitExponentialFromPairs]);
+  }, [projectId, isOpen, tests, applyActiveCurve, fitExponentialFromPairs, batchId, selectedBatchId]);
 
-  // Function to calculate f_cu based on current parameters
+  // Function to calculate f_cu based on current parameters and environmental velocity factor
   const calculateStrength = (velocityMs: number, type: CurveType): number | null => {
     if (velocityMs < 2000 || velocityMs > 5000) return null;
-    const vKmS = velocityMs / 1000;
+    const effectiveVelMs = velocityMs * (velocityCorrectionFactor || 1.00);
+    const vKmS = effectiveVelMs / 1000;
 
     if (type === "exponential") {
-      const effA = paramA > 0 ? paramA : 1.2;
-      const effB = paramB > 0 ? paramB : 0.85;
+      const effA = paramA > 0 ? paramA : 2.80;
+      const effB = paramB > 0 ? paramB : 0.53;
       const effC = paramC || 0.0;
       const res = effA * Math.exp(effB * vKmS) + effC;
       return Number(res.toFixed(1));
@@ -599,7 +632,7 @@ export default function PunditCalibrationModal({
         isAboveDesign,
       };
     });
-  }, [paramA, paramB, paramC, curveType, designStrengthMpa]);
+  }, [paramA, paramB, paramC, curveType, designStrengthMpa, velocityCorrectionFactor]);
 
   const handleAddCubePoint = () => {
     const v = Number(newVel);
@@ -669,16 +702,17 @@ export default function PunditCalibrationModal({
   };
 
   const handleResetBaseline = () => {
-    // Reset ground truth pairs and reset inputs to Standard Mix Baseline (1.20, 0.85, 0.0)
+    // Reset ground truth pairs and reset inputs to Jones Equation Baseline (2.80, 0.53, 0.0) per Nov 4 executive review
     setCubePoints([]);
     setFitStats(null);
     setAutoFitNotice(null);
     setCurveType("exponential");
-    setParamA(1.20);
-    setParamB(0.85);
+    setParamA(2.80);
+    setParamB(0.53);
     setParamC(0.0);
+    setVelocityCorrectionFactor(1.00);
     setDesignStrengthMpa(25.0);
-    setCalibrationNotes("Standard mix baseline: f_cu = 1.20 · exp(0.85 · V_km/s). General civil concrete benchmark.");
+    setCalibrationNotes("Jones Equation (1962) baseline: f_cu = 2.80 · exp(0.53 · V_km/s). Safe empirical civil concrete benchmark.");
     if (projectId && typeof window !== "undefined") {
       try {
         localStorage.removeItem(`pundit_cal_${projectId}`);
@@ -695,6 +729,7 @@ export default function PunditCalibrationModal({
       a: Number(paramA),
       b: Number(paramB),
       c: Number(paramC),
+      velocity_correction_factor: Number(velocityCorrectionFactor),
     };
     if (curveType === "polynomial") {
       paramsPayload.coeffs = [Number(paramA), Number(paramB), Number(paramC)];
@@ -705,12 +740,13 @@ export default function PunditCalibrationModal({
 
     const payload: BatchCalibrationPayload = {
       project_id: projectId,
-      batch_id: batchId,
+      batch_id: selectedBatchId || batchId,
       curve_type: curveType,
       params: paramsPayload,
       design_strength_mpa: Number(designStrengthMpa),
       notes: calibrationNotes.trim(),
       cube_correlation_points: cubePoints,
+      velocity_correction_factor: Number(velocityCorrectionFactor),
     };
 
     if (projectId && typeof window !== "undefined") {
@@ -759,21 +795,45 @@ export default function PunditCalibrationModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Target Batch Info Badge */}
-          <div className="bg-sky-50/70 border border-sky-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <Layers size={18} className="text-[#0284C7]" />
-              <div>
-                <span className="font-bold text-[#022C4F]">Selected Scan Batch / Folder:</span>{" "}
-                <span className="text-slate-700">{batchName}</span>
-                <span className="ml-2 font-mono font-bold text-[#0284C7] bg-white px-2 py-0.5 rounded border border-sky-200">
-                  {elementCount} Elements Verified
-                </span>
+          {/* Target Batch Info & Transparent Folder Selection */}
+          <div className="bg-sky-50/70 border border-sky-200 rounded-2xl p-4 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Layers size={18} className="text-[#0284C7]" />
+                <div>
+                  <span className="font-bold text-[#022C4F]">Selected Scan Batch / Folder:</span>{" "}
+                  <span className="text-slate-800 font-semibold">
+                    {availableBatches.find((b) => b.id === selectedBatchId)?.folder_name || batchName}
+                  </span>
+                  <span className="ml-2 font-mono font-bold text-[#0284C7] bg-white px-2 py-0.5 rounded border border-sky-200">
+                    {availableBatches.find((b) => b.id === selectedBatchId)?.element_count || elementCount} Elements Verified
+                  </span>
+                </div>
               </div>
+              <span className="text-[11px] text-slate-500">
+                Transparent multi-folder selection ensures field scans are isolated without cross-inspector merging errors.
+              </span>
             </div>
-            <span className="text-[11px] text-slate-500">
-              Isolating this batch guarantees no data clashes or false element counts.
-            </span>
+
+            {availableBatches.length > 1 && (
+              <div className="pt-2 border-t border-sky-200/60 flex items-center gap-3">
+                <label className="text-[11px] font-bold text-[#022C4F] uppercase tracking-wider shrink-0 flex items-center gap-1.5">
+                  <Database size={13} className="text-[#0284C7]" />
+                  <span>Switch Target Scan Folder:</span>
+                </label>
+                <select
+                  value={selectedBatchId}
+                  onChange={(e) => setSelectedBatchId(e.target.value)}
+                  className="bg-white border border-sky-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-medium outline-none focus:ring-2 focus:ring-[#0284C7] cursor-pointer"
+                >
+                  {availableBatches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.folder_name} ({b.element_count} elements — {b.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Model Selection */}
@@ -796,8 +856,8 @@ export default function PunditCalibrationModal({
                 onClick={() => {
                   setCurveType("exponential");
                   if (paramA <= 0 || paramB <= 0) {
-                    setParamA(1.20);
-                    setParamB(0.85);
+                    setParamA(2.80);
+                    setParamB(0.53);
                     setParamC(0.0);
                   }
                 }}
@@ -1105,6 +1165,46 @@ export default function PunditCalibrationModal({
               </div>
             )}
 
+            {/* Environmental & Moisture Velocity Correction Factor (BS 1881-203 / Nov 4 Review) */}
+            <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-[11px] font-bold text-[#022C4F] flex items-center gap-1.5 uppercase tracking-wider">
+                  <Activity size={13} className="text-blue-600" />
+                  <span>Velocity Moisture Correction Factor (BS 1881-203)</span>
+                </label>
+                <span className="text-[10px] font-mono font-bold text-blue-900 bg-white px-2 py-0.5 rounded border border-blue-200">
+                  V_eff = V_raw × {velocityCorrectionFactor.toFixed(3)} (Applied to f_cu only)
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-600 leading-tight">
+                When concrete is damp, moist, or exposed to rain, water capillary filling accelerates acoustic wave velocity. Select an environmental moisture factor (1.00 dry baseline up to 1.05 max saturated) per BS 1881-203 to adjust strength calculation while preserving raw field transit times untouched in the database.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {[
+                  { factor: 1.00, label: "1.00 (Default / Dry)", title: "Standard dry reference condition (BS 1881-203)" },
+                  { factor: 1.01, label: "1.01 (+1%)", title: "Light humidity / mild dampness" },
+                  { factor: 1.015, label: "1.015 (+1.5%)", title: "Surface moisture" },
+                  { factor: 1.02, label: "1.02 (+2%)", title: "Wet surface / light rain" },
+                  { factor: 1.03, label: "1.03 (+3%)", title: "Moist / wet exterior exposure" },
+                  { factor: 1.05, label: "1.05 (+5% Max)", title: "Saturated concrete (BS 1881-203 max)" },
+                ].map(({ factor, label, title }) => (
+                  <button
+                    key={factor}
+                    type="button"
+                    onClick={() => setVelocityCorrectionFactor(factor)}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      velocityCorrectionFactor === factor
+                        ? "bg-[#022C4F] text-white shadow-xs ring-2 ring-[#022C4F]/20"
+                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                    title={title}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -1119,7 +1219,7 @@ export default function PunditCalibrationModal({
                   className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#0284C7]"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  {curveType === "exponential" ? "Baseline: 1.15 – 1.25" : curveType === "polynomial" ? "Baseline: -12.5" : curveType === "sonreb" ? "Baseline: 0.0286" : "Baseline: 8.961"}
+                  {curveType === "exponential" ? "Baseline: Jones Eq 2.80 (Standard: 1.20 - 2.80)" : curveType === "polynomial" ? "Baseline: -12.5" : curveType === "sonreb" ? "Baseline: 0.0286" : "Baseline: 8.961"}
                 </span>
               </div>
 
@@ -1136,7 +1236,7 @@ export default function PunditCalibrationModal({
                   className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-[#0284C7]"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  {curveType === "exponential" ? "Baseline: 0.80 – 0.90 per km/s" : curveType === "polynomial" ? "Baseline: 4.2" : curveType === "sonreb" ? "Baseline: 0.84" : "Default: 1.0"}
+                  {curveType === "exponential" ? "Baseline: Jones Eq 0.53 (Standard: 0.53 - 0.85)" : curveType === "polynomial" ? "Baseline: 4.2" : curveType === "sonreb" ? "Baseline: 0.84" : "Default: 1.0"}
                 </span>
               </div>
 
@@ -1255,6 +1355,40 @@ export default function PunditCalibrationModal({
                 </p>
             </div>
 
+            {/* Moisture condition selector in Section 4 */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-blue-50/60 rounded-xl border border-blue-200/80">
+              <span className="text-[11px] font-bold text-[#022C4F] flex items-center gap-1.5">
+                <Activity size={12} className="text-blue-600" />
+                <span>Moisture Factor (BS 1881-203):</span>
+                <span className="font-mono text-blue-900 bg-white px-1.5 py-0.5 rounded border border-blue-200 text-[10px]">
+                  ×{velocityCorrectionFactor.toFixed(3)}
+                </span>
+              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {[
+                  { factor: 1.00, label: "1.00 Dry" },
+                  { factor: 1.01, label: "1.01 (+1%)" },
+                  { factor: 1.015, label: "1.015 (+1.5%)" },
+                  { factor: 1.02, label: "1.02 (+2%)" },
+                  { factor: 1.03, label: "1.03 (+3%)" },
+                  { factor: 1.05, label: "1.05 (+5% Max)" },
+                ].map(({ factor, label }) => (
+                  <button
+                    key={factor}
+                    type="button"
+                    onClick={() => setVelocityCorrectionFactor(factor)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                      velocityCorrectionFactor === factor
+                        ? "bg-[#022C4F] text-white shadow-2xs"
+                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="number"
@@ -1334,7 +1468,7 @@ export default function PunditCalibrationModal({
                 type="button"
                 onClick={handleResetBaseline}
                 className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors cursor-pointer"
-                title="Reset to recommended standard baseline (a=1.20, b=0.85, f_cu=25 MPa)"
+                title="Reset to recommended standard baseline (Jones Eq A=2.80, B=0.53, f_cu=25 MPa)"
               >
                 Reset Standard Baseline
               </button>

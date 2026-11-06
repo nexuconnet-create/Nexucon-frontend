@@ -35,6 +35,7 @@ import {
   Users,
   Sun,
   Globe,
+  Loader2,
 } from "lucide-react";
 import {
   PunditTest,
@@ -155,11 +156,11 @@ function getConcreteQuality(velocityMs: number): {
   };
 }
 
-/** Non-linear exponential default model: f_cu = 1.20 * exp(0.85 * V_km/s) per review meeting */
+/** Jones Equation (1962) baseline: f_cu = 2.80 * exp(0.53 * V_km/s) per Nov 4 Engineering Review */
 function estimateCompressiveStrength(velocityMs: number): number | null {
   if (velocityMs < 2000 || velocityMs > 5000) return null;
   const vKmS = velocityMs / 1000;
-  const strength = 1.2 * Math.exp(0.85 * vKmS);
+  const strength = 2.80 * Math.exp(0.53 * vKmS);
   return Math.round(Math.min(75, Math.max(10, strength)) * 10) / 10;
 }
 
@@ -233,6 +234,27 @@ function PunditWorkspaceInner() {
   const [punditDevices, setPunditDevices] = useState<FieldDeviceRecord[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>("");
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
+
+  const handleDownloadOfficialDossier = async () => {
+    const targetProjId = activePunditReview?.project_id || activePunditTest?.project || activeWorkspaceProjectId;
+    if (!targetProjId) {
+      showToast("Select a project with UPV tests before exporting official dossier.");
+      return;
+    }
+    setIsDownloadingReport(true);
+    try {
+      showToast("Generating official statutory dossier PDF per BS 1881-203...");
+      const opName = user ? `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email : undefined;
+      await downloadNdtReport(targetProjId, opName);
+      showToast("✅ Official NDT Dossier PDF downloaded successfully.");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Could not generate dossier PDF.";
+      showToast(`⚠️ Dossier download failed: ${detail}`);
+    } finally {
+      setIsDownloadingReport(false);
+    }
+  };
 
   // Manual Form
   const [manualForm, setManualForm] = useState<{
@@ -976,7 +998,7 @@ function PunditWorkspaceInner() {
                 <div className="pt-4 border-t border-slate-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Principal Engineer Review & Collaboration
+                      Formal Statutory Review & Corroboration (BS 1881-203)
                     </span>
                     {isLoadingReview && (
                       <span className="text-[10px] text-slate-400 font-mono animate-pulse">Syncing…</span>
@@ -1094,6 +1116,25 @@ function PunditWorkspaceInner() {
                     </div>
                   )}
 
+                  {/* Statutory Engineering Review vs General Chat Distinction (BS 1881-203 / Executive Review) */}
+                  <div className="flex items-center justify-between p-2.5 bg-indigo-50/80 border border-indigo-200/90 rounded-xl text-xs mb-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-indigo-700 shrink-0" />
+                      <div>
+                        <strong className="text-indigo-950 font-semibold block text-[11px]">Formal Statutory Engineering Review (BS 1881-203)</strong>
+                        <span className="text-[10px] text-indigo-700">Audit trail legally bound to this report dossier. For casual messaging, use General Chat.</span>
+                      </div>
+                    </div>
+                    <Link
+                      href="/inspector/dashboard/messages"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-white hover:bg-indigo-100 border border-indigo-300 px-2 py-1 rounded-lg transition-colors shrink-0 shadow-2xs"
+                      title="Open General Stakeholder Chat"
+                    >
+                      <MessageSquare size={11} />
+                      <span>General Chat</span>
+                    </Link>
+                  </div>
+
                   {activePunditReview ? (
                     <div className={`p-3.5 rounded-xl border space-y-2 text-xs transition-all ${
                       activePunditReview.review_status === "corroborated"
@@ -1118,7 +1159,7 @@ function PunditWorkspaceInner() {
                             : "text-amber-800"
                         }`}>
                           {activePunditReview.review_status === "corroborated"
-                            ? "Corroborated by Engineer"
+                            ? "Engineer Corroborated / Active"
                             : activePunditReview.review_status === "returned"
                             ? "Returned for Revision"
                             : "Awaiting Engineer Review"}
@@ -1177,10 +1218,32 @@ function PunditWorkspaceInner() {
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-[11px] text-slate-500">
-                      No engineer review recorded for this project yet.
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Activity size={15} className="text-slate-400" />
+                        <span className="font-semibold text-slate-700">Status:</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 uppercase tracking-wider">
+                          Awaiting Field Analysis / Pre-Analysis
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">Scans ready for engineering review</span>
                     </div>
                   )}
+
+                  {/* Export Official Statutory Dossier (PDF) Button */}
+                  <button
+                    type="button"
+                    disabled={isDownloadingReport || (!activePunditReview?.project_id && !activePunditTest?.project && !activeWorkspaceProjectId)}
+                    onClick={handleDownloadOfficialDossier}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#022C4F] hover:bg-[#033E6E] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isDownloadingReport ? (
+                      <Loader2 size={14} className="animate-spin text-emerald-400" />
+                    ) : (
+                      <Download size={14} className="text-emerald-400" />
+                    )}
+                    <span>{isDownloadingReport ? "Generating Official Dossier PDF…" : "Export Official Dossier (PDF)"}</span>
+                  </button>
 
                   {/* Inspector Review Form & Joint AI Analysis */}
                   {activePunditReview?.analysis_id && (
@@ -1188,7 +1251,7 @@ function PunditWorkspaceInner() {
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                           <MessageSquare size={13} className="text-indigo-600" />
-                          Field Inspector Review
+                          Formal Inspector Response & Corroboration Verdict
                         </span>
                         <button
                           type="button"
