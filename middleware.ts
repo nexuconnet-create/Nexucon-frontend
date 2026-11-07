@@ -76,14 +76,14 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Rewrite root or relative paths under inspector domain to /inspector equivalents
+    // Redirect root or relative paths under inspector domain to /inspector equivalents
     if (pathname === '/') {
       url.pathname = '/inspector';
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
 
     url.pathname = `/inspector${pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.redirect(url);
   }
 
   if (isStakeholderHost) {
@@ -98,20 +98,20 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Rewrite root to /stakeholder/login so the first page that shows is the login page
+    // Redirect root to /stakeholder/login so the first page that shows is the login page
     if (pathname === '/') {
       url.pathname = '/stakeholder/login';
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
 
-    // Rewrite /dashboard to /stakeholder
+    // Redirect /dashboard to /stakeholder
     if (pathname === '/dashboard') {
       url.pathname = '/stakeholder';
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
 
     url.pathname = `/stakeholder${pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.redirect(url);
   }
 
   if (isGovernmentHost) {
@@ -126,16 +126,16 @@ export function middleware(request: NextRequest) {
 
     if (pathname === '/') {
       url.pathname = '/government/login';
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
 
     if (pathname === '/dashboard') {
       url.pathname = '/government/dashboard/command-center';
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
 
     url.pathname = `/government${pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.redirect(url);
   }
 
 function applySecurityHeaders(res: NextResponse): NextResponse {
