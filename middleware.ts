@@ -15,10 +15,54 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Cross-subdomain routing for Nexucon multi-tenant portals
   const isInspectorHost =
     hostname.startsWith('inspector.') ||
     hostname.includes('inspector.localhost') ||
     hostname.includes('inspector-');
+
+  const isStakeholderHost =
+    hostname.startsWith('stakeholder.') ||
+    hostname.includes('stakeholder.localhost') ||
+    hostname.includes('stakeholder-');
+
+  const isGovernmentHost =
+    hostname.startsWith('government.') ||
+    hostname.includes('government.localhost') ||
+    hostname.includes('government-');
+
+  const isPtpHost =
+    hostname.startsWith('ptp.') ||
+    hostname.includes('ptp.localhost') ||
+    hostname.includes('ptp-');
+
+  // If visiting apex domain (nexucon.net) or www with a portal-specific path, redirect to dedicated subdomain
+  if (!isInspectorHost && !isGovernmentHost && !isStakeholderHost && !isPtpHost) {
+    const isDev = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+    if (!isDev) {
+      if (pathname.startsWith('/inspector')) {
+        const targetUrl = new URL(request.url);
+        targetUrl.hostname = 'inspector.nexucon.net';
+        targetUrl.port = '';
+        targetUrl.protocol = 'https:';
+        return NextResponse.redirect(targetUrl);
+      }
+      if (pathname.startsWith('/government')) {
+        const targetUrl = new URL(request.url);
+        targetUrl.hostname = 'government.nexucon.net';
+        targetUrl.port = '';
+        targetUrl.protocol = 'https:';
+        return NextResponse.redirect(targetUrl);
+      }
+      if (pathname.startsWith('/stakeholder')) {
+        const targetUrl = new URL(request.url);
+        targetUrl.hostname = 'stakeholder.nexucon.net';
+        targetUrl.port = '';
+        targetUrl.protocol = 'https:';
+        return NextResponse.redirect(targetUrl);
+      }
+    }
+  }
 
   if (isInspectorHost) {
     // Safety fallback: if someone on inspector domain is directed to other logins, redirect to /inspector/login
@@ -41,11 +85,6 @@ export function middleware(request: NextRequest) {
     url.pathname = `/inspector${pathname}`;
     return NextResponse.rewrite(url);
   }
-
-  const isStakeholderHost =
-    hostname.startsWith('stakeholder.') ||
-    hostname.includes('stakeholder.localhost') ||
-    hostname.includes('stakeholder-');
 
   if (isStakeholderHost) {
     // Safety fallback: if someone on stakeholder domain is directed to other logins, redirect to /stakeholder/login
@@ -74,11 +113,6 @@ export function middleware(request: NextRequest) {
     url.pathname = `/stakeholder${pathname}`;
     return NextResponse.rewrite(url);
   }
-
-  const isGovernmentHost =
-    hostname.startsWith('government.') ||
-    hostname.includes('government.localhost') ||
-    hostname.includes('government-');
 
   if (isGovernmentHost) {
     if (pathname.startsWith('/inspector') || pathname.startsWith('/stakeholder') || pathname.startsWith('/client') || pathname.startsWith('/professional')) {
@@ -112,11 +146,6 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
   return res;
 }
-
-  const isPtpHost =
-    hostname.startsWith('ptp.') ||
-    hostname.includes('ptp.localhost') ||
-    hostname.includes('ptp-');
 
   if (isPtpHost) {
     // Safety fallback: prevent internal dashboard routes from leaking on public transparency domain
