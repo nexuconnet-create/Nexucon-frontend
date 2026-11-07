@@ -13,7 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useSearchParams, usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import api from "@/services/api";
 
 interface UsernameActivationModalProps {
@@ -26,7 +26,6 @@ export default function UsernameActivationModal({
   onClose,
 }: UsernameActivationModalProps) {
   const { user, refreshUser } = useAuth();
-  const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -57,14 +56,17 @@ export default function UsernameActivationModal({
 
     if (!user) return;
 
-    const queryRequested =
-      searchParams?.get("activate_username") === "true" ||
-      searchParams?.get("activate-username") === "true" ||
-      searchParams?.get("action") === "activate-username";
-
+    let queryRequested = false;
     let sessionRequested = false;
     let sessionDismissed = false;
+
     if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      queryRequested =
+        sp.get("activate_username") === "true" ||
+        sp.get("activate-username") === "true" ||
+        sp.get("action") === "activate-username";
+
       sessionRequested =
         sessionStorage.getItem("nexucon_activate_username") === "true";
       sessionDismissed =
@@ -81,7 +83,7 @@ export default function UsernameActivationModal({
     if (needsActivation && !sessionDismissed) {
       setIsOpen(true);
     }
-  }, [user, searchParams, forceOpen, isUsernameUnset]);
+  }, [user, forceOpen, isUsernameUnset, pathname]);
 
   // Listen to manual open triggers from custom events
   useEffect(() => {
@@ -154,12 +156,12 @@ export default function UsernameActivationModal({
   const cleanParamFromUrl = () => {
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("nexucon_activate_username");
-      if (searchParams?.get("activate_username") || searchParams?.get("activate-username")) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.delete("activate_username");
-        params.delete("activate-username");
-        params.delete("action");
-        const query = params.toString() ? `?${params.toString()}` : "";
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("activate_username") || sp.get("activate-username") || sp.get("action")) {
+        sp.delete("activate_username");
+        sp.delete("activate-username");
+        sp.delete("action");
+        const query = sp.toString() ? `?${sp.toString()}` : "";
         window.history.replaceState({}, "", `${pathname}${query}`);
       }
     }

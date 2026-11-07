@@ -167,7 +167,9 @@ export default function StakeholderLayout({
       </div>
 
       <Toast />
-      <UsernameActivationModal />
+      <React.Suspense fallback={null}>
+        <UsernameActivationModal />
+      </React.Suspense>
 
       {/* Floating Contextual Help Button */}
       <button 

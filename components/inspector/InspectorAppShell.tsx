@@ -69,7 +69,9 @@ export default function InspectorAppShell({ children }: InspectorAppShellProps) 
       <InspectorMobileNav />
 
       {/* Username Activation Popup Modal */}
-      <UsernameActivationModal />
+      <React.Suspense fallback={null}>
+        <UsernameActivationModal />
+      </React.Suspense>
     </div>
   );
 }
