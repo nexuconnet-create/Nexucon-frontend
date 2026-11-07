@@ -1233,6 +1233,7 @@ export const setDeviceGateway = async (
 
 export const getPunditTests = async (params?: {
   project?: string;
+  batch?: string;
   element_name?: string;
   search?: string;
   test_type?: 'pulse_velocity' | 'crack_depth' | 'surface_quality';
@@ -1247,6 +1248,7 @@ export const getPunditTests = async (params?: {
   const res = await api.get('/digital-eye/pundit-tests/', {
     params: {
       project: params?.project || undefined,
+      batch: params?.batch || undefined,
       search: params?.search || undefined,
       test_type: params?.test_type || undefined,
       quality_grade: params?.quality_grade || undefined,
@@ -1724,6 +1726,8 @@ export const analyzePunditProject = async (
     curve_type?: CurveType;
     params?: Record<string, any>;
     design_strength_mpa?: number;
+    cube_correlation_points?: any[];
+    velocity_correction_factor?: number;
   }
 ): Promise<PunditProjectAnalysis> => {
   const payload: any = { project: projectId };
@@ -1732,6 +1736,8 @@ export const analyzePunditProject = async (
   if (options?.curve_type) payload.curve_type = options.curve_type;
   if (options?.params) payload.params = options.params;
   if (options?.design_strength_mpa != null) payload.design_strength_mpa = options.design_strength_mpa;
+  if (options?.cube_correlation_points) payload.cube_correlation_points = options.cube_correlation_points;
+  if (options?.velocity_correction_factor != null) payload.velocity_correction_factor = options.velocity_correction_factor;
 
   const res = await api.post('/digital-eye/pundit-tests/analyze_project/', payload);
   return unwrap<PunditProjectAnalysis>(res, {} as PunditProjectAnalysis);
@@ -2160,22 +2166,101 @@ export const generateDeviceReport = async (payload: Partial<DeviceReportRecord>)
   return report;
 };
 
+export interface NdtBuildingSummary {
+  building: string;
+  scan_count: number;
+  element_count: number;
+  good_count: number;
+  poor_count: number;
+  compliance_rate: number;
+  mean_strength: number | null;
+  benchmark: number;
+  floors: string[];
+}
+
+export interface NdtBuildingsResponse {
+  total_scans: number;
+  total_buildings: number;
+  has_multiple_buildings: boolean;
+  buildings: NdtBuildingSummary[];
+}
+
+/**
+ * Fetch distinct buildings and statistics identified across field scans for a project.
+ */
+export const getProjectNdtBuildings = async (projectId: string): Promise<NdtBuildingsResponse> => {
+  const res: any = await api.get(`/reports/projects/${projectId}/ndt-buildings/`);
+  return res as NdtBuildingsResponse;
+};
+
 /**
  * Download the official MTL-style NDT report (BS 1881-203 PUNDIT dossier)
  * streamed by GET /reports/projects/<id>/ndt-report/ — real database rows only.
+ * Supports single building or estate-wide (all buildings) reports.
  */
-export const downloadNdtReport = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+export const downloadNdtReport = async (
+  projectId: string,
+  operator?: string,
+  elementId?: string,
+  building?: string,
+): Promise<string> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report/`, {
     params,
     responseType: 'blob',
   });
   const blob = new Blob([res as any], { type: 'application/pdf' });
+  const safeBld = building && building.trim().toLowerCase() !== 'all' ? `_${building.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeEl = elementId ? `_${elementId}` : '';
-  const filename = `ndt_report_${projectId}${safeOp}${safeEl}.pdf`;
+  const filename = `ndt_report_${projectId}${safeBld}${safeOp}${safeEl}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
+/**
+ * Downloads the dedicated AI-Generated Acoustic Tomography & Inversion Dossier PDF (BS 1881-203).
+ * Contains Executive Summary, Key AI Observations, Velocity Bands, Peer Reviews, and Element Roll-Up.
+ */
+export const downloadPunditAiDossierPdf = async (
+  analysisId: string,
+  suggestedFilename?: string,
+): Promise<string> => {
+  const res = await api.get(`/digital-eye/pundit-analysis-review/${analysisId}/pdf/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const filename = suggestedFilename || `pundit_ai_dossier_${analysisId.slice(0, 8)}.pdf`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
+export const downloadProjectAiDossierPdf = async (
+  projectId: string,
+  suggestedFilename?: string,
+): Promise<string> => {
+  const res = await api.get(`/reports/projects/${projectId}/ai-dossier/`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([res as any], { type: 'application/pdf' });
+  const filename = suggestedFilename || `pundit_ai_dossier_${projectId.slice(0, 8)}.pdf`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2227,6 +2312,7 @@ export interface ReportCmsSection {
 
 export interface ReportCmsSectionsResponse {
   project: string | null;
+  agency?: string | null;
   password_set: boolean;
   sections: ReportCmsSection[];
 }
@@ -2290,10 +2376,11 @@ export const revertReportCmsSection = async (
   return reverted;
 };
 
-/** Set (first time) or change (current password required) the CMS password. */
+/** Set (first time), change (current password required) or reset (Director) the CMS password. */
 export const setReportCmsPassword = async (payload: {
   new_password: string;
   current_password?: string;
+  reset?: boolean;
 }): Promise<void> => {
   await api.post('/reports/cms/password/', payload);
 };
@@ -2303,10 +2390,16 @@ export const setReportCmsPassword = async (payload: {
  * sections, CMS overrides and server-computed figures as the PDF, streamed by
  * GET /reports/projects/<id>/ndt-report-word/.
  */
-export const downloadNdtReportWord = async (projectId: string, operator?: string, elementId?: string): Promise<string> => {
+export const downloadNdtReportWord = async (
+  projectId: string,
+  operator?: string,
+  elementId?: string,
+  building?: string,
+): Promise<string> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res = await api.get(`/reports/projects/${projectId}/ndt-report-word/`, {
     params,
     responseType: 'blob',
@@ -2314,8 +2407,9 @@ export const downloadNdtReportWord = async (projectId: string, operator?: string
   const blob = new Blob([res as any], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
+  const safeBld = building && building.trim().toLowerCase() !== 'all' ? `_${building.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
   const safeOp = operator ? `_${operator.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-  const filename = `ndt_report_${projectId}${safeOp}.docx`;
+  const filename = `ndt_report_${projectId}${safeBld}${safeOp}.docx`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2671,6 +2765,7 @@ export interface CurveSnapshot {
   formula_params: Record<string, any>;
   valid_range_ms: [number, number] | null;
   r2_score?: number | null;
+  standard_error?: number | null;
   provenance_source?: string | null;
   temperature_correction_applied?: boolean;
   /** What the standard-error policy did to the figure this snapshot
@@ -3261,6 +3356,10 @@ export const CURVE_PARAM_FIELDS: Record<CurveType, Array<{ key: string; label: s
  *  verdicts only. */
 export interface ReportVerification {
   verified: boolean;
+  security_key_status?: 'ACTIVE_AUTHENTIC' | 'DISABLED_DUE_TO_EXTERNAL_CONVERSION' | 'DISABLED_OR_INVALID' | string;
+  tampered?: boolean;
+  expected_sha256?: string;
+  submitted_sha256?: string;
   report_reference?: string;
   title?: string;
   content_digest?: string;
@@ -3275,15 +3374,18 @@ export interface ReportVerification {
 
 /**
  * PUBLIC verification of an archived NDT dossier — the destination encoded
- * in the report cover's QR code. GET /reports/verify/?ref=&digest=.
+ * in the report cover's QR code. GET /reports/verify/?ref=&digest=&checksum=.
  * Calls the backend directly (no credentials — the endpoint is public).
  */
 export const verifyArchivedReport = async (
   ref: string,
-  digest: string
+  digest: string,
+  checksum?: string
 ): Promise<ReportVerification> => {
+  const params: Record<string, string> = { ref, digest };
+  if (checksum) params.checksum = checksum;
   const res = await api.get('/reports/verify/', {
-    params: { ref, digest },
+    params,
   });
   const data = unwrap<ReportVerification | null>(res, null);
   if (!data) throw new Error('Report verification could not be loaded.');
@@ -3351,10 +3453,12 @@ export const fetchNdtReportPreviewBundle = async (
   projectId: string,
   operator?: string,
   elementId?: string,
+  building?: string,
 ): Promise<NdtReportPreviewBundle> => {
   const params: Record<string, string> = {};
   if (operator) params.operator = operator;
   if (elementId) params.elementId = elementId;
+  if (building && building.trim().toLowerCase() !== 'all') params.building = building;
   const res: any = await api.get(
     `/reports/projects/${projectId}/ndt-report-preview/sections/`,
     { params }
@@ -3373,6 +3477,13 @@ export const fetchNdtReportPreviewBundle = async (
  * Embedded AI QA Assistant: Reviews the active PDF page against raw project test data,
  * deterministic mathematics, and international standards (BS 1881-203, BS EN 12504-4, ACI 228.2R).
  */
+export interface NdtReportQASectionOptions {
+  section_key?: string;
+  section_label?: string;
+  start_page?: number;
+  end_page?: number;
+}
+
 export interface NdtReportPageQAResponse {
   page_number: number;
   total_pages: number;
@@ -3383,10 +3494,18 @@ export interface NdtReportPageQAResponse {
     error: string;
     raw_payload_value: string;
     exact_replacement: string;
+    field_name?: string;
+    section_key?: string;
   }>;
   compliance_flags: string[];
   narrative_feedback: string;
   page_excerpt: string;
+  full_document?: boolean;
+  is_section?: boolean;
+  section_key?: string;
+  section_label?: string;
+  start_page?: number;
+  end_page?: number;
 }
 
 export const reviewNdtReportPageQA = async (
@@ -3396,6 +3515,9 @@ export const reviewNdtReportPageQA = async (
   modelProvider?: 'anthropic' | 'deepseek' | 'auto',
   operator?: string,
   elementId?: string,
+  building?: string,
+  fullDocument?: boolean,
+  sectionOptions?: NdtReportQASectionOptions,
 ): Promise<NdtReportPageQAResponse> => {
   const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/`, {
     page_number: pageNumber,
@@ -3403,8 +3525,32 @@ export const reviewNdtReportPageQA = async (
     model_provider: modelProvider || 'anthropic',
     operator,
     elementId,
+    building: building && building.trim().toLowerCase() !== 'all' ? building : undefined,
+    full_document: Boolean(fullDocument),
+    section_key: sectionOptions?.section_key,
+    section_label: sectionOptions?.section_label,
+    start_page: sectionOptions?.start_page,
+    end_page: sectionOptions?.end_page,
   });
   return res;
+};
+
+export interface ApplyNdtReportAmendmentPayload {
+  page_number?: number;
+  section_key?: string;
+  error?: string;
+  exact_replacement: string;
+  field_name?: string;
+  raw_payload_value?: string;
+  notes?: string;
+}
+
+export const applyNdtReportAmendment = async (
+  projectId: string,
+  payload: ApplyNdtReportAmendmentPayload,
+): Promise<{ success: boolean; message: string; amendment?: any }> => {
+  const res: any = await api.post(`/reports/projects/${projectId}/ndt-report-qa/apply-amendment/`, payload);
+  return res?.data !== undefined ? res.data : res;
 };
 
 /**
@@ -3424,6 +3570,7 @@ export interface ReportBrandingConfig {
   cover_logo_url?: string | null;
   cover_logo_hidden?: boolean;
   watermark_url?: string | null;
+  watermark_hidden?: boolean;
   watermark_opacity_pct?: number;
   watermark_position?: string;
   updated_at?: string;
@@ -3447,6 +3594,7 @@ export const updateReportBranding = async (
   fields: {
     logo?: File | '' | 'remove' | null;
     watermark?: File | '' | 'remove' | null;
+    watermark_hidden?: boolean;
     cover_logo?: File | '' | 'remove' | null;
     cover_logo_hidden?: boolean;
     logo_position?: string;
@@ -3678,11 +3826,13 @@ export interface BatchCalibrationPayload {
     a: number; // Scaling coefficient
     b: number; // Exponent factor
     c: number; // Intercept / offset
+    velocity_correction_factor?: number;
     [key: string]: any;
   };
   design_strength_mpa: number; // e.g. 25.0 MPa
   notes?: string;
   cube_correlation_points?: Array<{ velocity_ms: number; cube_strength_mpa: number }>;
+  velocity_correction_factor?: number;
 }
 
 export interface BatchCalibrationResult {

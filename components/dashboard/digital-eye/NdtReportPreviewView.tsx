@@ -22,6 +22,11 @@ import {
   Search,
   CheckCircle,
   FileSpreadsheet,
+  Building2,
+  Layers,
+  Building,
+  Sparkles,
+  Wand2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { TargetJump } from "./ContinuousPdfViewer";
@@ -40,7 +45,9 @@ import {
   type NdtPreviewSection,
   notifyProjectNdtInspectors,
   reviewNdtReportPageQA,
+  applyNdtReportAmendment,
   type NdtReportPageQAResponse,
+  type NdtBuildingSummary,
 } from "@/services/digitalEye";
 
 /**
@@ -63,6 +70,9 @@ export default function NdtReportPreviewView({
   projectId,
   operator,
   elementId,
+  building,
+  availableBuildings,
+  onBuildingChange,
   onBackToEdit,
   onGenerated,
   onEditInCms,
@@ -70,12 +80,21 @@ export default function NdtReportPreviewView({
   projectId: string;
   operator?: string;
   elementId?: string;
+  building?: string;
+  availableBuildings?: NdtBuildingSummary[];
+  onBuildingChange?: (bld: string) => void;
   /** Returns to the editing page exactly as it was left — nothing committed. */
   onBackToEdit: () => void;
   onGenerated?: () => void;
   /** Exits the preview and scrolls to the report-CMS panel. */
   onEditInCms?: () => void;
 }) {
+  const [currentBuilding, setCurrentBuilding] = useState<string>(building || "");
+
+  useEffect(() => {
+    setCurrentBuilding(building || "");
+  }, [building]);
+
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [sections, setSections] = useState<NdtPreviewSection[]>([]);
   const [pageCount, setPageCount] = useState(0);
@@ -92,6 +111,7 @@ export default function NdtReportPreviewView({
   // Embedded AI QA Assistant State
   const [qaOpen, setQaOpen] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
+  const [qaTargetType, setQaTargetType] = useState<"page" | "section" | "full">("page");
   const [qaResponse, setQaResponse] = useState<NdtReportPageQAResponse | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaUserQuery, setQaUserQuery] = useState("");
@@ -99,6 +119,9 @@ export default function NdtReportPreviewView({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copiedNarrative, setCopiedNarrative] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "narrative">("cards");
+  const [applyingAmendmentIdx, setApplyingAmendmentIdx] = useState<number | null>(null);
+  const [appliedAmendments, setAppliedAmendments] = useState<Record<number, boolean>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Keep page input and activeKey in sync with currentPage
   useEffect(() => {
@@ -111,13 +134,13 @@ export default function NdtReportPreviewView({
     }
   }, [currentPage, sections, activeKey]);
 
-  // Fetch the bundle fresh each time the view mounts
+  // Fetch the bundle fresh each time the view mounts or building changes
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    fetchNdtReportPreviewBundle(projectId, operator, elementId)
+    fetchNdtReportPreviewBundle(projectId, operator, elementId, currentBuilding || undefined)
       .then(({ blob, sections: secs, pageCount: total }) => {
         if (cancelled) return;
         objectUrl = window.URL.createObjectURL(blob);
@@ -148,7 +171,7 @@ export default function NdtReportPreviewView({
       cancelled = true;
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
-  }, [projectId, operator, elementId]);
+  }, [projectId, operator, elementId, currentBuilding, refreshKey]);
 
   const toast = (message: string, type: "success" | "error" | "info") => {
     window.dispatchEvent(
@@ -181,7 +204,7 @@ export default function NdtReportPreviewView({
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await downloadNdtReport(projectId, operator, elementId);
+      await downloadNdtReport(projectId, operator, elementId, currentBuilding || undefined);
       onGenerated?.();
     } catch (err: any) {
       toast(
@@ -249,10 +272,32 @@ export default function NdtReportPreviewView({
     return prior ? prior.label : `Page ${currentPage}`;
   }, [sections, currentPage]);
 
+  const activeTargetSection = useMemo(() => {
+    if (!sections || sections.length === 0) return null;
+    if (activeKey) {
+      const found = sections.find((s) => s.key === activeKey);
+      if (found) return found;
+    }
+    const prior = [...sections].reverse().find((s) => s.page <= currentPage);
+    return prior || sections[0] || null;
+  }, [sections, activeKey, currentPage]);
+
+  const activeSectionRange = useMemo(() => {
+    if (!activeTargetSection || !sections.length) {
+      return { start: currentPage, end: currentPage };
+    }
+    const sorted = [...sections].sort((a, b) => a.page - b.page);
+    const idx = sorted.findIndex((s) => s.key === activeTargetSection.key);
+    const start = activeTargetSection.page;
+    const end = idx < sorted.length - 1 ? Math.max(start, sorted[idx + 1].page - 1) : (pageCount || start);
+    return { start, end };
+  }, [activeTargetSection, sections, pageCount, currentPage]);
+
   // Run AI Page QA Audit
   const handleRunPageQA = async (customQuery?: string) => {
     if (!projectId) return;
     setQaLoading(true);
+    setQaTargetType("page");
     setQaError(null);
     try {
       const queryToSend = customQuery !== undefined ? customQuery : qaUserQuery;
@@ -262,7 +307,8 @@ export default function NdtReportPreviewView({
         queryToSend || undefined,
         qaModelProvider,
         operator,
-        elementId
+        elementId,
+        currentBuilding || undefined
       );
       setQaResponse(res);
       toast(`✅ Page ${currentPage} audited by ${res.provider_used} (${res.model_used}).`, "success");
@@ -275,11 +321,128 @@ export default function NdtReportPreviewView({
     }
   };
 
-  const copyReplacement = (text: string, idx: number) => {
-    navigator.clipboard.writeText(text);
+  // Run AI Section QA Audit across targeted section's page range
+  const handleRunSectionQA = async (targetSec?: NdtPreviewSection, customQuery?: string) => {
+    if (!projectId) return;
+    const sec = targetSec || activeTargetSection;
+    if (!sec) {
+      return handleRunPageQA(customQuery);
+    }
+    if (sec.page !== currentPage) {
+      jumpToSection(sec);
+    }
+    setQaOpen(true);
+    setQaLoading(true);
+    setQaTargetType("section");
+    setQaError(null);
+
+    const sorted = [...sections].sort((a, b) => a.page - b.page);
+    const idx = sorted.findIndex((s) => s.key === sec.key);
+    const start = sec.page;
+    const end = idx < sorted.length - 1 ? Math.max(start, sorted[idx + 1].page - 1) : (pageCount || start);
+
+    try {
+      const queryToSend = customQuery !== undefined ? customQuery : qaUserQuery;
+      const res = await reviewNdtReportPageQA(
+        projectId,
+        start,
+        queryToSend || `Perform section forensic QA audit on ${sec.label}`,
+        qaModelProvider,
+        operator,
+        elementId,
+        currentBuilding || undefined,
+        false,
+        {
+          section_key: sec.key,
+          section_label: sec.label,
+          start_page: start,
+          end_page: end,
+        }
+      );
+      setQaResponse(res);
+      const rangeText = start === end ? `p.${start}` : `p.${start}–${end}`;
+      toast(`✅ Section "${sec.label}" (${rangeText}) audited by ${res.provider_used} (${res.model_used}).`, "success");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Section QA audit failed.";
+      setQaError(String(detail));
+      toast(`⚠️ Section QA Audit failed: ${detail}`, "error");
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
+  // Run AI Full Document QA Audit across all pages
+  const handleRunFullDocQA = async () => {
+    if (!projectId) return;
+    setQaLoading(true);
+    setQaTargetType("full");
+    setQaError(null);
+    try {
+      const res = await reviewNdtReportPageQA(
+        projectId,
+        1,
+        "Perform comprehensive full-document engineering QA audit across all pages.",
+        qaModelProvider,
+        operator,
+        elementId,
+        currentBuilding || undefined,
+        true
+      );
+      setQaResponse(res);
+      toast(`✅ Full document audit completed by ${res.provider_used} (${res.model_used}).`, "success");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Full document QA audit failed.";
+      setQaError(String(detail));
+      toast(`⚠️ Full audit failed: ${detail}`, "error");
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
+  const handleApplyAmendment = async (
+    d: {
+      field_name?: string;
+      section_key?: string;
+      error: string;
+      raw_payload_value: string;
+      exact_replacement: string;
+    },
+    idx: number
+  ) => {
+    if (!projectId) return;
+    setApplyingAmendmentIdx(idx);
+    try {
+      const res = await applyNdtReportAmendment(projectId, {
+        page_number: qaResponse?.page_number,
+        section_key: d.section_key,
+        field_name: d.field_name,
+        error: d.error,
+        exact_replacement: d.exact_replacement,
+        raw_payload_value: d.raw_payload_value,
+      });
+      setAppliedAmendments((prev) => ({ ...prev, [idx]: true }));
+      toast(res?.message || "✅ Amendment applied to records.", "success");
+      setRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "Failed to apply amendment.";
+      toast(`⚠️ Could not apply amendment: ${detail}`, "error");
+    } finally {
+      setApplyingAmendmentIdx(null);
+    }
+  };
+
+  const copyReplacement = async (text: string, idx: number, discrepancy?: any) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore clipboard error if unfocused
+    }
     setCopiedIndex(idx);
-    toast("📋 Replacement text copied to clipboard.", "info");
+    toast("📋 Replacement copied & applying amendment to records…", "info");
     setTimeout(() => setCopiedIndex(null), 2500);
+    if (discrepancy && !appliedAmendments[idx] && applyingAmendmentIdx !== idx) {
+      handleApplyAmendment(discrepancy, idx);
+    }
   };
 
   const copyNarrative = (text: string) => {
@@ -297,25 +460,34 @@ export default function NdtReportPreviewView({
           <div className="flex items-center gap-2 min-w-0">
             <Eye className="w-5 h-5 text-[#0A3D2E] shrink-0" />
             <div className="min-w-0">
-              <h2 className="font-semibold text-[#0F181F] text-sm truncate">
-                Report Preview &amp; QA Verification
+              <h2 className="font-semibold text-[#0F181F] text-sm truncate flex items-center gap-2">
+                <span>Report Preview &amp; QA Verification</span>
+                {currentBuilding && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    {currentBuilding}
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-[#6B7A85] truncate">
-                Certified document viewer with embedded page-by-page AI QA Assistant.
+                {currentBuilding
+                  ? `Certified document viewer for ${currentBuilding} with embedded page-by-page AI QA Assistant.`
+                  : availableBuildings && availableBuildings.length > 1
+                  ? `Certified document viewer for Combined Estate Report (${availableBuildings.length} Buildings) with embedded AI QA Assistant.`
+                  : "Certified document viewer with embedded page-by-page AI QA Assistant."}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onBackToEdit}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-[#0F181F] hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-[#0F181F] hover:bg-slate-50 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Edit
           </button>
         </div>
 
-        {/* Toolbar — Page Navigation & Stepper | View Mode | Zoom | AI QA Assistant | Download | Generate */}
+        {/* Toolbar — Page Navigation & Stepper | Building Switcher | View Mode | Zoom | AI QA Assistant | Download | Generate */}
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
           {/* Interactive Page Stepper */}
           <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-2xs">
@@ -361,6 +533,31 @@ export default function NdtReportPreviewView({
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* In-Preview Building Selector */}
+          {availableBuildings && availableBuildings.length > 1 && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 shadow-2xs">
+              <Building2 className="w-3.5 h-3.5 text-[#022C4F]" />
+              <span className="text-[11px] font-semibold text-slate-600">Scope:</span>
+              <select
+                value={currentBuilding}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCurrentBuilding(val);
+                  onBuildingChange?.(val);
+                }}
+                className="bg-transparent text-xs font-bold text-[#022C4F] focus:outline-none cursor-pointer"
+                aria-label="Switch preview building"
+              >
+                <option value="">All Buildings (Combined Estate)</option>
+                {availableBuildings.map((b) => (
+                  <option key={b.building} value={b.building}>
+                    {b.building} ({b.scan_count} tests - {b.compliance_rate}% pass)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Mode Switcher: Continuous Scroll vs Native Plugin */}
           <div className="hidden sm:inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs text-xs">
@@ -436,8 +633,8 @@ export default function NdtReportPreviewView({
             {blobUrl && (
               <a
                 href={blobUrl}
-                download={`ndt_report_PREVIEW_${projectId}.pdf`}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50"
+                download={`ndt_report_PREVIEW_${projectId}${currentBuilding ? '_' + currentBuilding.replace(/[^a-zA-Z0-9_-]/g, '_') : ''}.pdf`}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-[#0F181F] hover:bg-slate-50 cursor-pointer"
                 title="Download this preview — nothing is archived"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -462,14 +659,22 @@ export default function NdtReportPreviewView({
               type="button"
               onClick={handleGenerate}
               disabled={generating || loading || !!loadError}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#0A3D2E] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#0A3D2E]/90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0A3D2E] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#0A3D2E]/90 disabled:opacity-50 cursor-pointer"
             >
               {generating ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5" />
               )}
-              {generating ? "Archiving…" : "Generate & Archive"}
+              <span>
+                {generating
+                  ? "Archiving…"
+                  : currentBuilding
+                  ? `Generate (${currentBuilding})`
+                  : availableBuildings && availableBuildings.length > 1
+                  ? "Generate (Estate)"
+                  : "Generate & Archive"}
+              </span>
             </button>
           </div>
         </div>
@@ -496,7 +701,7 @@ export default function NdtReportPreviewView({
                 sections.map((section, idx) => {
                   const active = section.key === activeKey;
                   return (
-                    <li key={`${section.key}-${section.page}-${idx}`} className="shrink-0 md:shrink">
+                    <li key={`${section.key}-${section.page}-${idx}`} className="shrink-0 md:shrink group relative">
                       <button
                         type="button"
                         onClick={() => jumpToSection(section)}
@@ -507,14 +712,29 @@ export default function NdtReportPreviewView({
                             : "text-[#0F181F] hover:bg-slate-100"
                         }`}
                       >
-                        <span className="truncate">{section.label}</span>
+                        <span className="truncate pr-5">{section.label}</span>
                         <span
                           className={`hidden md:inline text-[10px] tabular-nums ${
                             active ? "text-white/70" : "text-[#6B7A85]"
-                          }`}
+                          } group-hover:opacity-0 transition-opacity`}
                         >
                           p.{section.page}
                         </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRunSectionQA(section);
+                        }}
+                        title={`Audit section "${section.label}"`}
+                        className={`hidden md:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center justify-center rounded px-1.5 py-0.5 text-[9px] font-bold shadow-2xs cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity ${
+                          active
+                            ? "bg-emerald-300 text-slate-950 hover:bg-emerald-200"
+                            : "bg-[#022C4F] text-white hover:bg-[#033E6E]"
+                        }`}
+                      >
+                        Audit
                       </button>
                     </li>
                   );
@@ -643,21 +863,32 @@ export default function NdtReportPreviewView({
                 {/* Direct Section Target Selector */}
                 <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/60">
                   <span className="text-[11px] font-semibold text-slate-600 shrink-0">Section Target:</span>
-                  <select
-                    value={activeKey || ""}
-                    onChange={(e) => {
-                      const found = sections.find((s) => s.key === e.target.value);
-                      if (found) jumpToSection(found);
-                    }}
-                    className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 max-w-[210px] truncate shadow-2xs focus:border-[#022C4F] focus:outline-none"
-                    aria-label="Select report section to audit"
-                  >
-                    {sections.map((sec, idx) => (
-                      <option key={`${sec.key}-${sec.page}-${idx}`} value={sec.key}>
-                        p.{sec.page} — {sec.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <select
+                      value={activeTargetSection?.key || activeKey || ""}
+                      onChange={(e) => {
+                        const found = sections.find((s) => s.key === e.target.value);
+                        if (found) jumpToSection(found);
+                      }}
+                      className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 max-w-[170px] truncate shadow-2xs focus:border-[#022C4F] focus:outline-none"
+                      aria-label="Select report section to audit"
+                    >
+                      {sections.map((sec, idx) => (
+                        <option key={`${sec.key}-${sec.page}-${idx}`} value={sec.key}>
+                          p.{sec.page} — {sec.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleRunSectionQA()}
+                      disabled={qaLoading || !projectId}
+                      className="shrink-0 px-2 py-0.5 rounded border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold shadow-2xs disabled:opacity-40 transition-colors cursor-pointer"
+                      title={`Audit section "${activeTargetSection?.label || ''}" (p.${activeSectionRange.start}${activeSectionRange.end > activeSectionRange.start ? `–${activeSectionRange.end}` : ''})`}
+                    >
+                      Audit
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
@@ -699,24 +930,64 @@ export default function NdtReportPreviewView({
                   </div>
                 </div>
 
-                {/* Audit Trigger Button */}
-                <button
-                  type="button"
-                  onClick={() => handleRunPageQA()}
-                  disabled={qaLoading || !projectId}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#022C4F] hover:bg-[#033E6E] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 transition-all cursor-pointer"
-                >
-                  {qaLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                  ) : (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  )}
-                  <span>
-                    {qaLoading
-                      ? `Auditing Page ${currentPage} via ${qaModelProvider === "anthropic" ? "Claude 3.5" : qaModelProvider === "deepseek" ? "DeepSeek" : "Forensic Engine"}…`
-                      : `Execute Forensic Audit (Page ${currentPage})`}
-                  </span>
-                </button>
+                {/* Audit Trigger Buttons */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRunPageQA()}
+                    disabled={qaLoading || !projectId}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#022C4F] hover:bg-[#033E6E] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {qaLoading && qaTargetType === "page" ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>
+                      {qaLoading && qaTargetType === "page"
+                        ? `Auditing Page ${currentPage} via ${qaModelProvider === "anthropic" ? "Claude 3.5" : qaModelProvider === "deepseek" ? "DeepSeek" : "Forensic Engine"}…`
+                        : `Audit Active Page (Page ${currentPage})`}
+                    </span>
+                  </button>
+
+                  {/* Audit Target Section Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleRunSectionQA()}
+                    disabled={qaLoading || !projectId}
+                    className="w-full inline-flex items-center justify-between gap-2 rounded-lg border border-emerald-600/40 bg-emerald-50 hover:bg-emerald-100/90 px-3.5 py-2.5 text-xs font-bold text-emerald-950 shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {qaLoading && qaTargetType === "section" ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700 shrink-0" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {qaLoading && qaTargetType === "section"
+                          ? `Auditing Section: ${activeTargetSection?.label || "Target"}…`
+                          : `Audit Section: ${activeTargetSection?.label || "Cover Page"}`}
+                      </span>
+                    </div>
+                    <span className="rounded bg-emerald-200/80 text-emerald-900 px-1.5 py-0.5 text-[10px] font-mono shrink-0">
+                      p.{activeSectionRange.start}{activeSectionRange.end > activeSectionRange.start ? `–${activeSectionRange.end}` : ""}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRunFullDocQA()}
+                    disabled={qaLoading || !projectId}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-sky-50/80 hover:bg-sky-100/80 px-3 py-2 text-xs font-bold text-[#022C4F] shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {qaLoading && qaTargetType === "full" ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                    )}
+                    <span>Audit Entire Report ({pageCount || "All"} Pages)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Inspecting Engineer Question / Custom Query */}
@@ -737,6 +1008,17 @@ export default function NdtReportPreviewView({
                 />
                 {/* Forensic Quick Chips */}
                 <div className="flex flex-wrap gap-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const q = `Verify all clauses, tables, and standards in Section: ${activeTargetSection?.label || 'Target'}`;
+                      setQaUserQuery(q);
+                      handleRunSectionQA(activeTargetSection || undefined, q);
+                    }}
+                    className="rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 transition-colors"
+                  >
+                    Audit Active Section
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -839,11 +1121,18 @@ export default function NdtReportPreviewView({
 
                   {/* View Mode Toggle: Structured Findings vs Formal Memorandum */}
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      Page {qaResponse.page_number} Certified ({qaResponse.provider_used})
+                    <span className="text-[11px] font-medium text-slate-600 flex items-center gap-1 min-w-0">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate">
+                        {qaResponse.is_section
+                          ? `Section "${qaResponse.section_label || qaResponse.section_key}" (${qaResponse.start_page === qaResponse.end_page ? `Page ${qaResponse.start_page}` : `Pages ${qaResponse.start_page}–${qaResponse.end_page}`}) Certified`
+                          : qaResponse.full_document
+                          ? `Full Report (${qaResponse.total_pages} Pages) Certified`
+                          : `Page ${qaResponse.page_number} Certified`}
+                        {" "}({qaResponse.provider_used})
+                      </span>
                     </span>
-                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[10px]">
+                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[10px] shrink-0">
                       <button
                         type="button"
                         onClick={() => setViewMode("cards")}
@@ -874,7 +1163,11 @@ export default function NdtReportPreviewView({
                             Chartered Structural Review Memorandum
                           </h4>
                           <p className="text-[10px] text-slate-500">
-                            Filing Verification Record · Page {qaResponse.page_number}
+                            {qaResponse.is_section
+                              ? `Filing Verification Record · Section ${qaResponse.section_label || qaResponse.section_key} (p.${qaResponse.start_page}–${qaResponse.end_page})`
+                              : qaResponse.full_document
+                              ? `Filing Verification Record · Complete Dossier (${qaResponse.total_pages} Pages)`
+                              : `Filing Verification Record · Page ${qaResponse.page_number}`}
                           </p>
                         </div>
                         <button
@@ -891,7 +1184,13 @@ export default function NdtReportPreviewView({
                       </pre>
                       <div className="pt-1 text-[10px] text-slate-500 flex items-center justify-between">
                         <span>COREN Registered Engineer Review Engine</span>
-                        <span className="font-mono">Page {qaResponse.page_number} of {qaResponse.total_pages}</span>
+                        <span className="font-mono">
+                          {qaResponse.is_section
+                            ? `Section: ${qaResponse.section_label || qaResponse.section_key} (p.${qaResponse.start_page}–${qaResponse.end_page})`
+                            : qaResponse.full_document
+                            ? `All ${qaResponse.total_pages} Pages`
+                            : `Page ${qaResponse.page_number} of ${qaResponse.total_pages}`}
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -969,28 +1268,58 @@ export default function NdtReportPreviewView({
                                   </span>
                                 </div>
                                 <div className="rounded bg-white border border-rose-200 p-2 space-y-1.5">
-                                  <div className="flex items-center justify-between">
+                                  <div className="flex items-center justify-between gap-2">
                                     <span className="text-rose-700 uppercase text-[9px] font-bold block">
                                       Proposed Report Amendment:
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => copyReplacement(d.exact_replacement, idx)}
-                                      className="inline-flex items-center gap-1 text-[10px] text-rose-700 hover:text-rose-900 font-semibold cursor-pointer"
-                                      title="Copy replacement string"
-                                    >
-                                      {copiedIndex === idx ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-600" />
-                                          <span className="text-emerald-700">Copied</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3 h-3" />
-                                          <span>Copy Amendment</span>
-                                        </>
-                                      )}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={applyingAmendmentIdx === idx || appliedAmendments[idx]}
+                                        onClick={() => handleApplyAmendment(d, idx)}
+                                        className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-semibold transition-all shadow-2xs cursor-pointer ${
+                                          appliedAmendments[idx]
+                                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                            : "bg-[#022C4F] text-white hover:bg-[#033E6E] disabled:opacity-50"
+                                        }`}
+                                        title="Apply amendment directly to database / report records"
+                                      >
+                                        {applyingAmendmentIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin text-white" />
+                                            <span>Applying…</span>
+                                          </>
+                                        ) : appliedAmendments[idx] ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-600" />
+                                            <span>Applied</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Wand2 className="w-3 h-3 text-amber-300" />
+                                            <span>Apply Amendment</span>
+                                          </>
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => copyReplacement(d.exact_replacement, idx, d)}
+                                        className="inline-flex items-center gap-1 text-[10px] text-rose-700 hover:text-rose-900 font-semibold cursor-pointer"
+                                        title="Copy replacement string"
+                                      >
+                                        {copiedIndex === idx ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-600" />
+                                            <span className="text-emerald-700">Copied</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-3 h-3" />
+                                            <span>Copy</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
                                   </div>
                                   <p className="font-mono text-[10px] text-slate-900 bg-slate-50 p-1.5 rounded border border-slate-200 break-all">
                                     {d.exact_replacement}

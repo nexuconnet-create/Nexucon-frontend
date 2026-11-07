@@ -30,6 +30,7 @@ import {
   Sparkles,
   ExternalLink,
   Shield,
+  ShieldAlert,
   HelpCircle
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ function VerifyReportContent() {
   const params = useSearchParams();
   const ref = (params.get("ref") || "").trim();
   const digest = (params.get("digest") || "").trim();
+  const checksum = (params.get("checksum") || "").trim();
   const queryToken = (params.get("token") || "").trim();
 
   const [result, setResult] = useState<ReportVerification | null>(null);
@@ -92,7 +94,7 @@ function VerifyReportContent() {
       return;
     }
     try {
-      const data = await verifyArchivedReport(ref, digest);
+      const data = await verifyArchivedReport(ref, digest, checksum || undefined);
       setResult(data);
 
       // If query token was passed, check status immediately
@@ -113,16 +115,20 @@ function VerifyReportContent() {
         }
       }
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ||
-        (err as Error)?.message ||
-        "Verification could not be completed.";
-      setResult({ verified: false, detail });
+      const respData = (err as { response?: { data?: any } })?.response?.data;
+      if (respData && typeof respData === 'object' && ('verified' in respData || 'security_key_status' in respData)) {
+        setResult(respData as ReportVerification);
+      } else {
+        const detail =
+          respData?.detail ||
+          (err as Error)?.message ||
+          "Verification could not be completed.";
+        setResult({ verified: false, detail });
+      }
     } finally {
       setLoading(false);
     }
-  }, [ref, digest, queryToken]);
+  }, [ref, digest, checksum, queryToken]);
 
   useEffect(() => {
     run();
@@ -282,7 +288,7 @@ function VerifyReportContent() {
             Official Report Verification
           </h1>
           <p className="mt-2 text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-            Cryptographic document authenticity validation for Lagos State Materials Testing Laboratory (LSMTL) statutory integrity dossiers.
+            Cryptographic document authenticity validation for Nexucon statutory integrity dossiers.
           </p>
         </div>
 
@@ -424,7 +430,7 @@ function VerifyReportContent() {
                         </span>
                       </h3>
                       <p className="text-xs text-amber-900/90 mt-1 leading-relaxed">
-                        Your request has been forwarded to the <strong>Lagos State Materials Testing Laboratory</strong> and supervising Government Agency dashboard.
+                        Your request has been forwarded to <strong>Nexucon</strong> and supervising Government Agency dashboard.
                       </p>
                       <div className="mt-2 text-xs text-amber-800 font-mono bg-amber-100/60 p-2 rounded-lg">
                         Reference: #{submissionSuccess.id?.slice(0, 8).toUpperCase()} • Requester: {submissionSuccess.requester_name}
@@ -653,21 +659,87 @@ function VerifyReportContent() {
 
         {!loading && result && !result.verified && (
           <div className="rounded-2xl border border-red-200 bg-white overflow-hidden shadow-sm" role="alert">
-            <div className="bg-red-500 px-6 py-5 flex items-center gap-3 text-white">
-              <AlertTriangle size={24} />
-              <div>
-                <h2 className="font-black text-base">NOT VERIFIED</h2>
-                <p className="text-xs text-red-100">{result.detail || "No archived report matches this reference and digest."}</p>
-              </div>
-            </div>
-            <div className="px-6 py-5 text-xs sm:text-sm text-slate-600 leading-relaxed">
-              The document may have been altered after generation, or it was never produced by this platform. If you believe this is an error, contact the Lagos State Materials Testing Laboratory.
-            </div>
+            {result.security_key_status === 'DISABLED_DUE_TO_EXTERNAL_CONVERSION' || result.tampered ? (
+              <>
+                <div className="bg-gradient-to-r from-red-600 to-rose-700 px-6 py-5 flex items-start gap-3.5 text-white">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <ShieldAlert size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="font-black text-base tracking-wide">
+                        SECURITY VERIFICATION KEYS DISABLED
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-950 text-red-200 border border-red-400">
+                        CONVERSION / TAMPERING DETECTED
+                      </span>
+                    </div>
+                    <p className="text-xs text-red-100 mt-1 leading-relaxed">
+                      Statutory security verification keys have been automatically deactivated because this document was modified, altered, or externally converted between Word and PDF outside the certified Nexucon platform.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4 text-xs sm:text-sm">
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-900 leading-relaxed space-y-1">
+                    <p className="font-bold text-amber-950 flex items-center gap-1.5">
+                      <AlertTriangle size={15} className="text-amber-700 shrink-0" />
+                      BS 1881-203 / ASTM C597 Forensic Compliance Notice
+                    </p>
+                    <p>
+                      Converting an official NDT dossier to Microsoft Word and re-exporting to PDF alters embedded font tables, binary streams, and cryptographic byte layouts. To protect structural engineering records against undetectable edits, verification keys are voided on byte discrepancy.
+                    </p>
+                  </div>
+
+                  {result.report_reference && (
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Original Dossier Reference</span>
+                      <span className="font-mono font-bold text-slate-800">{result.report_reference}</span>
+                    </div>
+                  )}
+
+                  {result.expected_sha256 && (
+                    <div className="space-y-1 text-xs pb-2 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium">Archived Platform SHA-256 (Authentic Original)</span>
+                      <p className="font-mono text-[11px] text-emerald-800 bg-emerald-50 rounded-lg p-2 border border-emerald-200 break-all select-all">
+                        {result.expected_sha256}
+                      </p>
+                    </div>
+                  )}
+
+                  {result.submitted_sha256 && (
+                    <div className="space-y-1 text-xs">
+                      <span className="text-slate-500 font-medium">Submitted Document SHA-256 (Converted / Tampered File)</span>
+                      <p className="font-mono text-[11px] text-red-800 bg-red-50 rounded-lg p-2 border border-red-200 break-all select-all">
+                        {result.submitted_sha256}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="pt-2 text-slate-600 leading-relaxed text-xs">
+                    To obtain an uncorrupted, certified authentic original PDF sealed directly by Nexucon, submit an official access request below with reference <span className="font-mono font-semibold text-slate-800">{ref || result.report_reference}</span>.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-red-500 px-6 py-5 flex items-center gap-3 text-white">
+                  <AlertTriangle size={24} />
+                  <div>
+                    <h2 className="font-black text-base">NOT VERIFIED</h2>
+                    <p className="text-xs text-red-100">{result.detail || "No archived report matches this reference and digest."}</p>
+                  </div>
+                </div>
+                <div className="px-6 py-5 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  The document may have been altered after generation, or it was never produced by this platform. If you believe this is an error, contact Nexucon.
+                </div>
+              </>
+            )}
           </div>
         )}
 
         <p className="text-center text-xs text-slate-400">
-          Statutory Verification Service • Lagos State Materials Testing Laboratory & Nexucon Integrity Network
+          Statutory Verification Service • Nexucon Integrity Network
         </p>
       </div>
     </main>

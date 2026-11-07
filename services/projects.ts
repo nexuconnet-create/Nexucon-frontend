@@ -181,3 +181,12 @@ export const convertCoordinatesApi = async (payload: {
   const response: any = await api.post('/projects/convert-coordinates/', payload);
   return response;
 };
+
+export const getLatestProjectTagNumber = async (): Promise<{
+  last_project_number: string | null;
+  next_project_number: string;
+  year: number;
+}> => {
+  const response: any = await api.get('/projects/latest-tag-number/');
+  return response?.data !== undefined ? response.data : response;
+};

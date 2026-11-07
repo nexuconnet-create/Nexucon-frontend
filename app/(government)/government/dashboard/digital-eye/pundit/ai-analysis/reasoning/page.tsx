@@ -26,6 +26,11 @@ import {
   Table,
   ArrowUpDown,
   SlidersHorizontal,
+  Building2,
+  Building,
+  UserCheck,
+  User,
+  Users,
 } from "lucide-react";
 import DigitalEyeHeader from "@/components/dashboard/digital-eye/DigitalEyeHeader";
 import PunditAiNav from "@/components/dashboard/digital-eye/PunditAiNav";
@@ -39,6 +44,8 @@ import {
   PunditProjectAnalysis,
   PunditTest,
   getPunditTests,
+  getProjectNdtBuildings,
+  NdtBuildingSummary,
 } from "@/services/digitalEye";
 
 export default function PunditAIReasoningPage() {
@@ -57,8 +64,14 @@ export default function PunditAIReasoningPage() {
   // Tabular View vs Console Shell State
   const [viewMode, setViewMode] = useState<"table" | "terminal" | "split">("table");
   const [tableSearchQuery, setTableSearchQuery] = useState<string>("");
-  const [tableSortBy, setTableSortBy] = useState<"id" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("id");
+  const [tableSortBy, setTableSortBy] = useState<"id" | "bld" | "ins" | "vel_desc" | "vel_asc" | "fcu_desc" | "fcu_asc">("bld");
   const [complianceFilter, setComplianceFilter] = useState<"ALL" | "PASS" | "FAIL">("ALL");
+
+  // Estate Building Classification Scope & Grouping
+  const [selectedBuilding, setSelectedBuilding] = useState<string>("");
+  const [selectedInspector, setSelectedInspector] = useState<string>("");
+  const [serverBuildings, setServerBuildings] = useState<NdtBuildingSummary[]>([]);
+  const [groupByBuilding, setGroupByBuilding] = useState<boolean>(true);
 
   // Chat Interaction State
   const [chatInput, setChatInput] = useState<string>("");
@@ -115,18 +128,23 @@ export default function PunditAIReasoningPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [analysesData, testsData] = await Promise.all([
+      const [analysesData, testsData, bldData] = await Promise.all([
         getPunditAIAnalyses({ project: selectedProjectId }),
         getPunditTests({ project: selectedProjectId }),
+        getProjectNdtBuildings(selectedProjectId).catch(() => null),
       ]);
       setAnalyses(Array.isArray(analysesData) ? analysesData : []);
       setTests(Array.isArray(testsData) ? testsData : []);
+      if (bldData && Array.isArray((bldData as any).buildings)) {
+        setServerBuildings((bldData as any).buildings);
+      }
       if (analysesData && analysesData.length > 0 && !selectedAnalysisId) {
         setSelectedAnalysisId(analysesData[0].id);
       }
     } catch (err: any) {
       setAnalyses([]);
       setTests([]);
+      setServerBuildings([]);
       setError(
         err?.response?.data?.detail ||
           err?.message ||
@@ -139,6 +157,8 @@ export default function PunditAIReasoningPage() {
 
   useEffect(() => {
     if (selectedProjectId) {
+      setSelectedBuilding("");
+      setSelectedInspector("");
       loadData();
     }
   }, [selectedProjectId]);
@@ -206,6 +226,48 @@ export default function PunditAIReasoningPage() {
     }
   };
 
+  const inferBuildingFromElement = (elementName: string, floorName?: string): string => {
+    if (!elementName) return "Main Building";
+    const clean = elementName.trim();
+    const mFull = clean.match(/(?:BUILDING|BLOCK|TOWER|WING)\s*([A-Za-z0-9]+)/i);
+    if (mFull) {
+      const raw = mFull[0].toLowerCase();
+      const tok = mFull[1].toUpperCase();
+      if (raw.includes("block")) return `Block ${tok}`;
+      if (raw.includes("tower")) return `Tower ${tok}`;
+      if (raw.includes("wing")) return `Wing ${tok}`;
+      return `Building ${tok}`;
+    }
+    const mBld = clean.match(/^([A-Za-z0-9]+)-+/);
+    if (mBld) {
+      const p = mBld[1].toUpperCase();
+      if (/^[A-Z]$/.test(p)) {
+        return `Building ${p}`;
+      }
+      const bldM = p.match(/^(?:BLD|BLDG|BUILDING)([A-Z0-9]+)$/);
+      if (bldM) return `Building ${bldM[1]}`;
+      const blkM = p.match(/^(?:BLK|BLOCK)([A-Z0-9]+)$/);
+      if (blkM) return `Block ${blkM[1]}`;
+      const numM = p.match(/^(\d+)$/);
+      if (numM) return `Building ${numM[1]}`;
+    }
+    return "Main Building";
+  };
+
+  const inferFloorFromElement = (elementName: string, existingFloor?: string): string => {
+    if (existingFloor && existingFloor.trim() && existingFloor.toLowerCase() !== "floor not recorded") {
+      return existingFloor.trim();
+    }
+    const norm = (elementName || "").toUpperCase();
+    if (norm.includes("-FF") || norm.startsWith("FF") || norm.includes("FIRST")) return "First Floor";
+    if (norm.includes("-GCF") || norm.includes("-GFC") || norm.includes("-GF") || norm.startsWith("GF") || norm.includes("GROUND")) return "Ground Floor";
+    if (norm.includes("-SF") || norm.startsWith("SF") || norm.includes("SECOND")) return "Second Floor";
+    if (norm.includes("-TF") || norm.startsWith("TF") || norm.includes("THIRD")) return "Third Floor";
+    if (norm.includes("-RF") || norm.startsWith("RF") || norm.includes("ROOF")) return "Roof Floor";
+    if (norm.includes("-BS") || norm.startsWith("BS") || norm.includes("BASEMENT")) return "Basement";
+    return existingFloor || "Ground Floor";
+  };
+
   const parsedLogLines = useMemo(() => {
     if (!activeAnalysis) return [];
     const raw = activeAnalysis.reasoning_log;
@@ -245,10 +307,14 @@ export default function PunditAIReasoningPage() {
 
     // Build lookup from tests (which holds the newly calibrated f_cu derived from the curve formula)
     const testMap = new Map<string, number>();
+    const testFloorMap = new Map<string, string>();
     for (const t of tests || []) {
       const elem = (t.structural_element_name || (t as any).structural_element || "").trim().toUpperCase();
       if (elem && t.estimated_compressive_strength_mpa != null && t.estimated_compressive_strength_mpa > 0) {
         testMap.set(elem, t.estimated_compressive_strength_mpa);
+      }
+      if (elem && t.floor) {
+        testFloorMap.set(elem, t.floor);
       }
     }
 
@@ -275,11 +341,13 @@ export default function PunditAIReasoningPage() {
         // Process each extracted element individually into tabular row format
         for (const match of matches) {
           const elemName = match[1];
-          const floorStr = match[2] ? ` (${match[2]})` : "";
+          const normElem = elemName.toUpperCase();
+          const rawFloor = match[2] || testFloorMap.get(normElem);
+          const resolvedFloor = inferFloorFromElement(elemName, rawFloor);
+          const floorStr = resolvedFloor ? ` (${resolvedFloor})` : "";
           const velVal = parseFloat(match[3]);
           let existingFcu = match[4];
           const gradeStr = match[5] || match[6] || (velVal >= 3500 ? "good" : "doubtful");
-          const normElem = elemName.toUpperCase();
 
           if (seenElementKeys.has(normElem)) {
             continue;
@@ -307,10 +375,33 @@ export default function PunditAIReasoningPage() {
       if (rollupMatch && parseInt(rollupMatch[1]) > seenElementKeys.size) {
         processedLines[0] = `Project PUNDIT roll-up over ${seenElementKeys.size} verified element(s)${rollupMatch[2] || "."}`;
       }
+
+      // Add estate building classification audit line
+      const bldCounts = new Map<string, number>();
+      for (const k of seenElementKeys) {
+        const b = inferBuildingFromElement(k);
+        bldCounts.set(b, (bldCounts.get(b) || 0) + 1);
+      }
+      if (bldCounts.size > 1) {
+        const bldBreakdownStr = Array.from(bldCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([b, c]) => `${b}: ${c} elements`)
+          .join(", ");
+        processedLines.splice(1, 0, `[ESTATE AUDIT] Multi-Building Physical Segregation (${bldCounts.size} Buildings): ${bldBreakdownStr}.`);
+      }
     }
 
     return processedLines;
   }, [activeAnalysis, tests]);
+
+  const availableInspectors = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tests || []) {
+      const op = (t.operator_name || "").trim();
+      if (op) set.add(op);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tests]);
 
   const elementLineRegex = useMemo(
     () =>
@@ -322,7 +413,9 @@ export default function PunditAIReasoningPage() {
     const list: Array<{
       index: number;
       element: string;
+      building: string;
       floor: string;
+      inspector: string;
       velocity: number;
       compressiveStrength: number | null;
       grade: string;
@@ -331,12 +424,23 @@ export default function PunditAIReasoningPage() {
       deltaTargetPct: number | null;
     }> = [];
 
+    // Map operator from recorded tests to structural element names
+    const testInspectorMap = new Map<string, string>();
+    for (const t of tests || []) {
+      const elem = (t.structural_element_name || (t as any).structural_element || "").trim().toUpperCase();
+      const op = (t.operator_name || "").trim();
+      if (elem && op) {
+        testInspectorMap.set(elem, op);
+      }
+    }
+
     let count = 1;
     for (const line of parsedLogLines) {
       const match = line.match(elementLineRegex);
       if (match) {
         const elemName = match[1];
-        const floorStr = match[2] || "Ground Floor";
+        const normElem = elemName.toUpperCase();
+        const floorStr = inferFloorFromElement(elemName, match[2]);
         const velVal = parseFloat(match[3]);
         const fcuVal = match[4] ? parseFloat(match[4]) : null;
         const gradeStr = (match[5] || match[6] || (velVal >= 3500 ? "good" : "doubtful")).trim();
@@ -350,11 +454,30 @@ export default function PunditAIReasoningPage() {
             : "DOUBTFUL / POOR";
         const isPass = fcuVal != null ? (velVal >= 3500 && fcuVal >= 25.0) : (velVal >= 3500);
         const deltaTargetPct = fcuVal != null ? Number((((fcuVal - 25.0) / 25.0) * 100).toFixed(1)) : null;
+        const building = inferBuildingFromElement(elemName, floorStr);
+
+        let inspector = testInspectorMap.get(normElem);
+        if (!inspector) {
+          for (const [k, op] of testInspectorMap.entries()) {
+            if (normElem.startsWith(k) || k.startsWith(normElem) || normElem.includes(k) || k.includes(normElem)) {
+              inspector = op;
+              break;
+            }
+          }
+        }
+        if (!inspector && availableInspectors.length === 1) {
+          inspector = availableInspectors[0];
+        }
+        if (!inspector) {
+          inspector = "Field Inspector";
+        }
 
         list.push({
           index: count++,
           element: elemName,
+          building,
           floor: floorStr,
+          inspector,
           velocity: velVal,
           compressiveStrength: fcuVal,
           grade: gradeStr,
@@ -365,50 +488,212 @@ export default function PunditAIReasoningPage() {
       }
     }
     return list;
-  }, [parsedLogLines, elementLineRegex]);
+  }, [parsedLogLines, elementLineRegex, tests, availableInspectors]);
+
+  const detectedBuildings = useMemo(() => {
+    const bMap = new Map<string, {
+      building: string;
+      count: number;
+      velocities: number[];
+      strengths: number[];
+      passCount: number;
+      floors: Set<string>;
+    }>();
+
+    const rowsToGroup = selectedInspector
+      ? parsedElementRows.filter(r => r.inspector.toLowerCase() === selectedInspector.toLowerCase())
+      : parsedElementRows;
+
+    for (const r of rowsToGroup) {
+      const b = r.building || "Main Building";
+      if (!bMap.has(b)) {
+        bMap.set(b, {
+          building: b,
+          count: 0,
+          velocities: [],
+          strengths: [],
+          passCount: 0,
+          floors: new Set<string>(),
+        });
+      }
+      const entry = bMap.get(b)!;
+      entry.count += 1;
+      entry.velocities.push(r.velocity);
+      if (r.compressiveStrength != null) {
+        entry.strengths.push(r.compressiveStrength);
+      }
+      if (r.isPass) {
+        entry.passCount += 1;
+      }
+      if (r.floor) {
+        entry.floors.add(r.floor);
+      }
+    }
+
+    return Array.from(bMap.values()).map(entry => {
+      const avgVel = Math.round(entry.velocities.reduce((a, b) => a + b, 0) / entry.count);
+      const avgFcu = entry.strengths.length > 0
+        ? Number((entry.strengths.reduce((a, b) => a + b, 0) / entry.strengths.length).toFixed(2))
+        : null;
+      const passRate = Math.round((entry.passCount / entry.count) * 100);
+      return {
+        building: entry.building,
+        count: entry.count,
+        avgVel,
+        avgFcu,
+        passCount: entry.passCount,
+        passRate,
+        floors: Array.from(entry.floors),
+      };
+    }).sort((a, b) => a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [parsedElementRows, selectedInspector]);
+
+  const detectedInspectors = useMemo(() => {
+    const iMap = new Map<string, {
+      name: string;
+      count: number;
+      velocities: number[];
+      strengths: number[];
+      passCount: number;
+      buildings: Set<string>;
+    }>();
+
+    for (const r of parsedElementRows) {
+      const ins = r.inspector || "Field Inspector";
+      if (!iMap.has(ins)) {
+        iMap.set(ins, {
+          name: ins,
+          count: 0,
+          velocities: [],
+          strengths: [],
+          passCount: 0,
+          buildings: new Set<string>(),
+        });
+      }
+      const entry = iMap.get(ins)!;
+      entry.count += 1;
+      entry.velocities.push(r.velocity);
+      if (r.compressiveStrength != null) {
+        entry.strengths.push(r.compressiveStrength);
+      }
+      if (r.isPass) {
+        entry.passCount += 1;
+      }
+      if (r.building) {
+        entry.buildings.add(r.building);
+      }
+    }
+
+    for (const op of availableInspectors) {
+      if (!iMap.has(op)) {
+        const opTests = tests.filter(t => (t.operator_name || "").trim() === op);
+        iMap.set(op, {
+          name: op,
+          count: opTests.length,
+          velocities: opTests.map(t => t.pulse_velocity_ms).filter(v => v > 0),
+          strengths: opTests.map(t => t.estimated_compressive_strength_mpa).filter((s): s is number => s != null && s > 0),
+          passCount: opTests.filter(t => t.pulse_velocity_ms >= 3500).length,
+          buildings: new Set<string>(opTests.map(t => inferBuildingFromElement(t.structural_element_name || ""))),
+        });
+      }
+    }
+
+    return Array.from(iMap.values()).map(entry => {
+      const avgVel = entry.velocities.length > 0 ? Math.round(entry.velocities.reduce((a, b) => a + b, 0) / entry.velocities.length) : 0;
+      const avgFcu = entry.strengths.length > 0
+        ? Number((entry.strengths.reduce((a, b) => a + b, 0) / entry.strengths.length).toFixed(2))
+        : null;
+      const passRate = entry.count > 0 ? Math.round((entry.passCount / entry.count) * 100) : 0;
+      return {
+        name: entry.name,
+        count: entry.count,
+        avgVel,
+        avgFcu,
+        passCount: entry.passCount,
+        passRate,
+        buildings: Array.from(entry.buildings),
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [parsedElementRows, availableInspectors, tests]);
+
+  const scopedElementRows = useMemo(() => {
+    return parsedElementRows.filter((r) => {
+      if (selectedBuilding && r.building.toLowerCase() !== selectedBuilding.toLowerCase()) {
+        return false;
+      }
+      if (selectedInspector && r.inspector.toLowerCase() !== selectedInspector.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+  }, [parsedElementRows, selectedBuilding, selectedInspector]);
 
   const elementStats = useMemo(() => {
-    if (parsedElementRows.length === 0) return null;
-    const n = parsedElementRows.length;
-    const avgVel = Math.round(parsedElementRows.reduce((acc, r) => acc + r.velocity, 0) / n);
-    const validFcuRows = parsedElementRows.filter((r) => r.compressiveStrength != null);
+    if (scopedElementRows.length === 0) return null;
+    const n = scopedElementRows.length;
+    const avgVel = Math.round(scopedElementRows.reduce((acc, r) => acc + r.velocity, 0) / n);
+    const validFcuRows = scopedElementRows.filter((r) => r.compressiveStrength != null);
     const avgFcu = validFcuRows.length > 0
       ? Number((validFcuRows.reduce((acc, r) => acc + (r.compressiveStrength as number), 0) / validFcuRows.length).toFixed(2))
       : null;
-    const passCount = parsedElementRows.filter((r) => r.isPass).length;
+    const passCount = scopedElementRows.filter((r) => r.isPass).length;
     const passRate = Math.round((passCount / n) * 100);
     return { n, avgVel, avgFcu, passCount, passRate };
-  }, [parsedElementRows]);
+  }, [scopedElementRows]);
 
   const filteredElementRows = useMemo(() => {
-    return parsedElementRows
+    return scopedElementRows
       .filter((row) => {
         if (complianceFilter === "PASS" && !row.isPass) return false;
         if (complianceFilter === "FAIL" && row.isPass) return false;
         if (tableSearchQuery.trim()) {
           const q = tableSearchQuery.toLowerCase();
-          return row.element.toLowerCase().includes(q) || row.floor.toLowerCase().includes(q);
+          return (
+            row.element.toLowerCase().includes(q) ||
+            row.floor.toLowerCase().includes(q) ||
+            row.building.toLowerCase().includes(q) ||
+            row.inspector.toLowerCase().includes(q)
+          );
         }
         return true;
       })
       .sort((a, b) => {
+        if (tableSortBy === "bld") {
+          const bCmp = a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' });
+          if (bCmp !== 0) return bCmp;
+          const fCmp = a.floor.localeCompare(b.floor, undefined, { numeric: true, sensitivity: 'base' });
+          if (fCmp !== 0) return fCmp;
+          return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        if (tableSortBy === "ins") {
+          const iCmp = a.inspector.localeCompare(b.inspector, undefined, { numeric: true, sensitivity: 'base' });
+          if (iCmp !== 0) return iCmp;
+          return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
+        }
         if (tableSortBy === "vel_desc") return b.velocity - a.velocity;
         if (tableSortBy === "vel_asc") return a.velocity - b.velocity;
         if (tableSortBy === "fcu_desc") return (b.compressiveStrength ?? -1) - (a.compressiveStrength ?? -1);
         if (tableSortBy === "fcu_asc") return (a.compressiveStrength ?? 999) - (b.compressiveStrength ?? 999);
+        // Default 'id': Sort by building first if not scoped so elements in Building A, B, C are grouped
+        if (!selectedBuilding) {
+          const bCmp = a.building.localeCompare(b.building, undefined, { numeric: true, sensitivity: 'base' });
+          if (bCmp !== 0) return bCmp;
+          const fCmp = a.floor.localeCompare(b.floor, undefined, { numeric: true, sensitivity: 'base' });
+          if (fCmp !== 0) return fCmp;
+        }
         return a.element.localeCompare(b.element, undefined, { numeric: true, sensitivity: 'base' });
       });
-  }, [parsedElementRows, tableSearchQuery, tableSortBy, complianceFilter]);
+  }, [scopedElementRows, tableSearchQuery, tableSortBy, complianceFilter, selectedBuilding]);
 
   const systemTraces = useMemo(() => {
     return parsedLogLines.filter((l) => !elementLineRegex.test(l));
   }, [parsedLogLines, elementLineRegex]);
 
   const copyTableToClipboard = () => {
-    if (parsedElementRows.length === 0) return;
-    const tsvHeaders = "Element\tLevel/Floor\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
-    const tsvRows = parsedElementRows.map(r => 
-      `${r.element}\t${r.floor}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
+    if (filteredElementRows.length === 0) return;
+    const tsvHeaders = "Building\tElement\tLevel/Floor\tField Inspector\tPulse Velocity (m/s)\tBS 1881 Band\tCompressive Strength (MPa)\tCompliance\n";
+    const tsvRows = filteredElementRows.map(r => 
+      `${r.building}\t${r.element}\t${r.floor}\t${r.inspector}\t${r.velocity} m/s\t${r.band}\t${r.compressiveStrength != null ? `${r.compressiveStrength} MPa` : '—'}\t${r.isPass ? 'PASS' : 'FAIL'}`
     ).join("\n");
     navigator.clipboard.writeText(tsvHeaders + tsvRows);
     setCopiedTable(true);
@@ -416,16 +701,18 @@ export default function PunditAIReasoningPage() {
   };
 
   const exportElementsCSV = () => {
-    if (parsedElementRows.length === 0) return;
-    const headers = "Index,Structural Element,Location/Level,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
-    const rows = parsedElementRows.map(r =>
-      `${r.index},"${r.element}","${r.floor}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
+    if (filteredElementRows.length === 0) return;
+    const headers = "Index,Building,Structural Element,Location/Level,Field Inspector,Pulse Velocity (m/s),BS 1881-203 Band,Compressive Strength f_cu (MPa),Design Target (MPa),Compliance Status\n";
+    const rows = filteredElementRows.map(r =>
+      `${r.index},"${r.building}","${r.element}","${r.floor}","${r.inspector}",${r.velocity},"${r.band}",${r.compressiveStrength != null ? r.compressiveStrength : '—'},25.0,"${r.isPass ? 'MEETS SPEC (PASS)' : 'BELOW TARGET (FAIL)'}"`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `pundit_calibrated_elements_${activeAnalysis?.analysis_reference || "table"}.csv`;
+    const bldTag = selectedBuilding ? `_${selectedBuilding.replace(/\s+/g, '_')}` : "";
+    const insTag = selectedInspector ? `_${selectedInspector.replace(/\s+/g, '_')}` : "";
+    link.download = `pundit_calibrated_elements${bldTag}${insTag}_${activeAnalysis?.analysis_reference || "table"}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -474,7 +761,7 @@ export default function PunditAIReasoningPage() {
       ? new Date(activeAnalysis.created_at).toLocaleString()
       : new Date().toLocaleString();
     const model = activeAnalysis?.model_provider || "DeepSeek Active Engine";
-    const projectName = (activeAnalysis as any)?.project_name || (activeAnalysis as any)?.project?.name || "Reinforce Concrete Floor Slab on Laydown Area (Phase 2)";
+    const projectName = (activeAnalysis as any)?.project_name || (activeAnalysis as any)?.project?.name || "Reinforce Concrete Floor Slab on Laydown Area (Scope 01)";
     
     let content = `================================================================================\n`;
     content += `AI CONSENSUS OBSERVATIONS REPORT\n`;
@@ -834,12 +1121,203 @@ export default function PunditAIReasoningPage() {
             {/* TABULAR VIEW */}
             {(viewMode === "table" || viewMode === "split") && (
               <div className="p-4 space-y-4 bg-slate-950">
+                {/* ESTATE BUILDING CLASSIFICATION & SCOPE SELECTOR */}
+                {detectedBuildings.length > 0 && (
+                  <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={16} className="text-amber-400" />
+                        <span className="text-xs font-mono font-bold text-slate-100 uppercase tracking-wider">
+                          Estate Building Classification &amp; Scope
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          ({detectedBuildings.length} {detectedBuildings.length === 1 ? "Building" : "Buildings"} Detected in Dataset)
+                        </span>
+                      </div>
+                      {selectedBuilding && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBuilding("")}
+                          className="text-[11px] font-mono font-semibold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>Reset to All Buildings ({parsedElementRows.length} Elements)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Building Selector Pills */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBuilding("")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                          !selectedBuilding
+                            ? "bg-amber-500 text-slate-950 shadow-sm ring-2 ring-amber-400/30"
+                            : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                        }`}
+                      >
+                        <Layers size={13} />
+                        <span>All Buildings (Combined Portfolio)</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          !selectedBuilding ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                        }`}>
+                          {parsedElementRows.length} Elements
+                        </span>
+                      </button>
+
+                      {detectedBuildings.map((bld) => {
+                        const isSelected = selectedBuilding.toLowerCase() === bld.building.toLowerCase();
+                        return (
+                          <button
+                            key={bld.building}
+                            type="button"
+                            onClick={() => setSelectedBuilding(bld.building)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                                : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                            }`}
+                          >
+                            <Building size={13} className={isSelected ? "text-slate-950" : "text-amber-400"} />
+                            <span>{bld.building}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              isSelected ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {bld.count} tests
+                            </span>
+                            <span className={`text-[10px] font-mono ${
+                              isSelected ? "text-slate-950 font-black" : bld.passRate > 0 ? "text-emerald-400 font-bold" : "text-slate-500"
+                            }`}>
+                              {bld.passRate}% pass
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* MULTI-BUILDING PORTFOLIO BREAKDOWN CARDS (Visible when All Buildings is selected) */}
+                    {!selectedBuilding && detectedBuildings.length > 1 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/80">
+                        {detectedBuildings.map((bld) => (
+                          <div
+                            key={bld.building}
+                            onClick={() => setSelectedBuilding(bld.building)}
+                            className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/90 hover:border-amber-500/40 hover:bg-slate-900 transition-all cursor-pointer group flex flex-col justify-between"
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                              <span className="font-mono text-xs font-bold text-amber-300 group-hover:text-amber-200 flex items-center gap-1.5">
+                                <Building size={12} className="text-amber-400" />
+                                {bld.building}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                                {bld.count} Elements ({Math.round((bld.count / parsedElementRows.length) * 100)}%)
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 text-[10px] font-mono pt-1 border-t border-slate-800/60">
+                              <div>
+                                <span className="text-slate-500 block text-[9px]">Mean Velocity</span>
+                                <span className="text-slate-200 font-bold">{bld.avgVel} m/s</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9px]">Mean f_cu</span>
+                                <span className="text-slate-200 font-bold">{bld.avgFcu != null ? `${bld.avgFcu} MPa` : "—"}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-slate-500 block text-[9px]">Pass Rate</span>
+                                <span className={`font-bold ${bld.passRate > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {bld.passCount}/{bld.count} ({bld.passRate}%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* FIELD INSPECTOR CLASSIFICATION & SCOPE SELECTOR */}
+                {detectedInspectors.length > 0 && (
+                  <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 shadow-sm space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <UserCheck size={16} className="text-emerald-400" />
+                        <span className="text-xs font-mono font-bold text-slate-100 uppercase tracking-wider">
+                          Field Inspector Selection &amp; Scope
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          ({detectedInspectors.length} {detectedInspectors.length === 1 ? "Field Inspector" : "Field Inspectors"} Recorded)
+                        </span>
+                      </div>
+                      {selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInspector("")}
+                          className="text-[11px] font-mono font-semibold text-emerald-400 hover:text-emerald-300 underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>Reset to All Field Inspectors ({parsedElementRows.length} Elements)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Inspector Selector Pills */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInspector("")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                          !selectedInspector
+                            ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                            : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                        }`}
+                      >
+                        <Users size={13} />
+                        <span>All Field Inspectors</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          !selectedInspector ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                        }`}>
+                          {parsedElementRows.length} Elements
+                        </span>
+                      </button>
+
+                      {detectedInspectors.map((ins) => {
+                        const isSelected = selectedInspector.toLowerCase() === ins.name.toLowerCase();
+                        return (
+                          <button
+                            key={ins.name}
+                            type="button"
+                            onClick={() => setSelectedInspector(ins.name)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-emerald-500 text-slate-950 shadow-sm ring-2 ring-emerald-400/30"
+                                : "bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                            }`}
+                          >
+                            <UserCheck size={13} className={isSelected ? "text-slate-950" : "text-emerald-400"} />
+                            <span>Inspector: {ins.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              isSelected ? "bg-slate-950/20 text-slate-950 font-black" : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {ins.count} tests
+                            </span>
+                            <span className={`text-[10px] font-mono ${
+                              isSelected ? "text-slate-950 font-black" : ins.passRate > 0 ? "text-emerald-400 font-bold" : "text-slate-500"
+                            }`}>
+                              {ins.passRate}% pass
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary Metrics Ribbon */}
                 {elementStats && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
                       <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
-                        Verified Elements
+                        Verified Elements {selectedBuilding ? `(${selectedBuilding})` : "(Combined)"}
                       </span>
                       <p className="text-lg font-mono font-bold text-slate-100 mt-0.5">
                         {elementStats.n} Elements
@@ -854,7 +1332,9 @@ export default function PunditAIReasoningPage() {
                       <p className="text-lg font-mono font-bold text-amber-400 mt-0.5">
                         {elementStats.avgVel.toLocaleString()} m/s
                       </p>
-                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">BS 1881-203 GOOD</span>
+                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                        {elementStats.avgVel >= 4500 ? "BS 1881 EXCELLENT" : elementStats.avgVel >= 3500 ? "BS 1881-203 GOOD" : "BS 1881 DOUBTFUL"}
+                      </span>
                     </div>
 
                     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
@@ -866,7 +1346,7 @@ export default function PunditAIReasoningPage() {
                       </p>
                       <span className="text-[10px] text-slate-400 font-mono">
                         {elementStats.avgFcu != null
-                          ? `+${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
+                          ? `${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1)) >= 0 ? "+" : ""}${Number((((elementStats.avgFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
                           : "Awaiting Govt Calibration"}
                       </span>
                     </div>
@@ -878,7 +1358,9 @@ export default function PunditAIReasoningPage() {
                       <p className="text-lg font-mono font-bold text-emerald-400 mt-0.5">
                         {elementStats.passCount} / {elementStats.n} ({elementStats.passRate}%)
                       </p>
-                      <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase">All Elements Pass</span>
+                      <span className={`text-[10px] font-mono font-bold uppercase ${elementStats.passRate >= 90 ? "text-emerald-400" : "text-amber-400"}`}>
+                        {elementStats.passRate >= 90 ? "Benchmark Met" : `${elementStats.passCount} Passed · ${elementStats.n - elementStats.passCount} Below Spec`}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -890,12 +1372,87 @@ export default function PunditAIReasoningPage() {
                       <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                       <input
                         type="text"
-                        placeholder="Search element (S1, S2, Floor)..."
+                        placeholder="Search element (A-FFB1, Floor, Building)..."
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
-                        className="pl-7 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 outline-none w-48 sm:w-60 focus:border-amber-500/50"
+                        className="pl-7 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 outline-none w-48 sm:w-56 focus:border-amber-500/50"
                       />
                     </div>
+
+                    {/* Filter by Building dropdown */}
+                    {detectedBuildings.length > 1 && (
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+                        <Building size={12} className="text-amber-400" />
+                        <select
+                          value={selectedBuilding}
+                          onChange={(e) => setSelectedBuilding(e.target.value)}
+                          className="bg-transparent text-slate-200 text-xs outline-none font-mono cursor-pointer"
+                        >
+                          <option value="" className="bg-slate-950 text-slate-200">
+                            All Buildings ({parsedElementRows.length})
+                          </option>
+                          {detectedBuildings.map((b) => (
+                            <option key={b.building} value={b.building} className="bg-slate-950 text-slate-200">
+                              {b.building} ({b.count})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Filter by Inspector dropdown */}
+                    {detectedInspectors.length > 0 && (
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+                        <UserCheck size={12} className="text-emerald-400" />
+                        <select
+                          value={selectedInspector}
+                          onChange={(e) => setSelectedInspector(e.target.value)}
+                          aria-label="Filter by inspector"
+                          className="bg-transparent text-slate-200 text-xs outline-none font-mono cursor-pointer"
+                        >
+                          <option value="" className="bg-slate-950 text-slate-200">
+                            All Field Inspectors ({parsedElementRows.length})
+                          </option>
+                          {detectedInspectors.map((ins) => (
+                            <option key={ins.name} value={ins.name} className="bg-slate-950 text-slate-200">
+                              Inspector: {ins.name} ({ins.count})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* View Mode Toggle: Grouped by Building vs Flat List */}
+                    {detectedBuildings.length > 1 && !selectedBuilding && (
+                      <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setGroupByBuilding(true)}
+                          className={`px-2.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                            groupByBuilding
+                              ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          title="Group elements by building with separate section tables (NDT Report Section 5.0 Style)"
+                        >
+                          <Building2 size={11} />
+                          <span>Grouped by Building</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGroupByBuilding(false)}
+                          className={`px-2.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                            !groupByBuilding
+                              ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          title="Show unified flat list of elements"
+                        >
+                          <Table size={11} />
+                          <span>Flat List</span>
+                        </button>
+                      </div>
+                    )}
 
                     {/* Filter by Compliance */}
                     <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono">
@@ -910,7 +1467,7 @@ export default function PunditAIReasoningPage() {
                               : "text-slate-400 hover:text-slate-200"
                           }`}
                         >
-                          {filter === "ALL" ? `All (${parsedElementRows.length})` : filter}
+                          {filter === "ALL" ? `All (${scopedElementRows.length})` : filter}
                         </button>
                       ))}
                     </div>
@@ -925,6 +1482,8 @@ export default function PunditAIReasoningPage() {
                       onChange={(e) => setTableSortBy(e.target.value as any)}
                       className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none font-mono cursor-pointer focus:border-amber-500/50"
                     >
+                      <option value="bld">Building &amp; Element (Report Order)</option>
+                      <option value="ins">Field Inspector (A-Z)</option>
                       <option value="id">Element ID (S1, S2...)</option>
                       <option value="vel_desc">Velocity (Highest first)</option>
                       <option value="vel_asc">Velocity (Lowest first)</option>
@@ -934,146 +1493,539 @@ export default function PunditAIReasoningPage() {
                   </div>
                 </div>
 
-                {/* THE ELEMENT DATA TABLE */}
-                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[420px] overflow-y-auto">
-                  <table className="w-full text-left text-xs font-mono border-collapse">
-                    <thead className="bg-slate-900 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10">
-                      <tr>
-                        <th className="py-2.5 px-3 w-10 text-center text-slate-500">#</th>
-                        <th className="py-2.5 px-3">Structural Element</th>
-                        <th className="py-2.5 px-3">Location / Level</th>
-                        <th className="py-2.5 px-3">Pulse Velocity (V)</th>
-                        <th className="py-2.5 px-3">BS 1881-203 Classification</th>
-                        <th className="py-2.5 px-3">Comp. Strength (f_cu)</th>
-                        <th className="py-2.5 px-3">Delta vs 25 MPa</th>
-                        <th className="py-2.5 px-3 text-right">Compliance Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
-                      {filteredElementRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500 italic">
-                            No elements matched your search filter.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredElementRows.map((row) => (
-                          <tr
-                            key={row.element}
-                            className={`transition-colors group ${
-                              !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
-                            }`}
+                {/* Scope Active Notice (when an individual building or inspector is selected) */}
+                {(selectedBuilding || selectedInspector) && (
+                  <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                    <div className="flex items-center gap-2 text-amber-200">
+                      <Building size={14} className="text-amber-400" />
+                      <span>
+                        <strong>Scope Active:</strong> Displaying exclusively{" "}
+                        {selectedBuilding && (
+                          <>
+                            building <span className="font-bold text-amber-300 underline">{selectedBuilding}</span>
+                          </>
+                        )}
+                        {selectedBuilding && selectedInspector && " · "}
+                        {selectedInspector && (
+                          <>
+                            inspector <span className="font-bold text-emerald-300 underline">{selectedInspector}</span>
+                          </>
+                        )}{" "}
+                        ({elementStats?.n} Elements).
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {selectedBuilding && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBuilding("")}
+                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                        >
+                          Clear Building
+                        </button>
+                      )}
+                      {selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInspector("")}
+                          className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+                        >
+                          Clear Inspector
+                        </button>
+                      )}
+                      {selectedBuilding && selectedInspector && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBuilding("");
+                            setSelectedInspector("");
+                          }}
+                          className="text-[11px] font-bold text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                        >
+                          Reset All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* THE ELEMENT DATA TABLE: GROUPED BY BUILDING (REPORT STYLE) OR UNIFIED */}
+                {groupByBuilding && !selectedBuilding && detectedBuildings.length > 1 ? (
+                  <div className="space-y-4">
+                    {detectedBuildings.map((bld, bldIdx) => {
+                      const bldRows = filteredElementRows.filter(
+                        (r) => r.building.toLowerCase() === bld.building.toLowerCase()
+                      );
+                      if (bldRows.length === 0) return null;
+
+                      const bldVel = Math.round(bldRows.reduce((a, b) => a + b.velocity, 0) / bldRows.length);
+                      const validFcu = bldRows.filter((r) => r.compressiveStrength != null);
+                      const bldFcu =
+                        validFcu.length > 0
+                          ? Number(
+                              (
+                                validFcu.reduce((a, b) => a + (b.compressiveStrength as number), 0) /
+                                validFcu.length
+                              ).toFixed(2)
+                            )
+                          : null;
+                      const bldPass = bldRows.filter((r) => r.isPass).length;
+                      const bldPassRate = Math.round((bldPass / bldRows.length) * 100);
+
+                      const bldTheme = bld.building.toLowerCase().includes("a")
+                        ? {
+                            border: "border-sky-500/30",
+                            headerBg: "bg-gradient-to-r from-sky-950/70 via-slate-900 to-slate-900",
+                            text: "text-sky-300",
+                            badge: "bg-sky-500/20 text-sky-200 border-sky-500/40",
+                          }
+                        : bld.building.toLowerCase().includes("b")
+                        ? {
+                            border: "border-purple-500/30",
+                            headerBg: "bg-gradient-to-r from-purple-950/70 via-slate-900 to-slate-900",
+                            text: "text-purple-300",
+                            badge: "bg-purple-500/20 text-purple-200 border-purple-500/40",
+                          }
+                        : {
+                            border: "border-emerald-500/30",
+                            headerBg: "bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900",
+                            text: "text-emerald-300",
+                            badge: "bg-emerald-500/20 text-emerald-200 border-emerald-500/40",
+                          };
+
+                      const compLetter = String.fromCharCode(65 + bldIdx);
+
+                      return (
+                        <div
+                          key={bld.building}
+                          className={`rounded-xl border ${bldTheme.border} bg-slate-950 overflow-hidden shadow-sm`}
+                        >
+                          {/* Building Section Header */}
+                          <div
+                            className={`p-3 ${bldTheme.headerBg} border-b ${bldTheme.border} flex flex-wrap items-center justify-between gap-2.5`}
                           >
-                            <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
-                              {row.index}
-                            </td>
-                            <td className="py-2 px-3">
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
-                                  !row.isPass
-                                    ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
-                                    : "text-amber-300 bg-amber-500/10 border-amber-500/20"
-                                }`}
-                              >
-                                {row.element}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-slate-400 text-[11px]">
-                              {row.floor}
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-bold ${row.velocity < 3500 ? "text-rose-400" : "text-slate-200"}`}>
-                                  {row.velocity.toFixed(0)} m/s
-                                </span>
-                                <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      row.velocity >= 4500
-                                        ? "bg-emerald-400"
-                                        : row.velocity >= 3500
-                                        ? "bg-amber-400"
-                                        : "bg-rose-500"
-                                    }`}
-                                    style={{
-                                      width: `${Math.min(100, Math.max(10, ((row.velocity - 2000) / 3000) * 100))}%`,
-                                    }}
-                                  />
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-1.5 rounded-lg bg-slate-950 border ${bldTheme.border}`}>
+                                <Building2 size={16} className={bldTheme.text} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-mono font-bold tracking-wide ${bldTheme.text}`}>
+                                    Table 5.1{compLetter}: {bld.building}
+                                  </span>
+                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${bldTheme.badge}`}>
+                                    {bldRows.length} Elements ({Math.round((bldRows.length / parsedElementRows.length) * 100)}% of Complex)
+                                  </span>
+                                  <span className="text-[11px] font-mono text-slate-400">
+                                    · {bld.floors.join(", ")}
+                                  </span>
                                 </div>
                               </div>
-                            </td>
-                            <td className="py-2 px-3">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  row.band === "EXCELLENT"
-                                    ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
-                                    : row.band === "GOOD"
-                                    ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
-                                    : row.band === "MEDIUM (FAIR)"
-                                    ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
-                                    : "bg-rose-950/80 text-rose-300 border-rose-700/60"
-                                }`}
+                            </div>
+
+                            {/* Sub-metrics Ribbon */}
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Mean V:</span>
+                                <span className="text-amber-400 font-bold">{bldVel.toLocaleString()} m/s</span>
+                                <span className="text-[9px] text-emerald-400 font-semibold ml-1">
+                                  ({bldVel >= 4500 ? "EXCELLENT" : bldVel >= 3500 ? "GOOD" : "DOUBTFUL"})
+                                </span>
+                              </div>
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Mean f_cu:</span>
+                                <span className="text-emerald-400 font-bold">
+                                  {bldFcu != null ? `${bldFcu} MPa` : "—"}
+                                </span>
+                              </div>
+                              <div className="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px]">
+                                <span className="text-slate-400 mr-1.5">Compliance:</span>
+                                <span className={`font-bold ${bldPassRate > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {bldPass} / {bldRows.length} ({bldPassRate}%)
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedBuilding(bld.building)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono font-bold transition-all cursor-pointer border border-slate-700 hover:border-slate-600"
                               >
-                                {row.band}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3">
-                              {row.compressiveStrength != null ? (
-                                <span
-                                  className={`font-bold text-xs ${
-                                    row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
-                                  }`}
-                                >
-                                  {row.compressiveStrength.toFixed(2)} MPa
-                                </span>
-                              ) : (
-                                <span className="font-mono text-slate-400 text-xs font-semibold">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-[11px]">
-                              {row.compressiveStrength != null && row.deltaTargetPct != null ? (
-                                <span
-                                  className={`font-mono ${
-                                    row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
-                                  }`}
-                                >
-                                  {row.deltaTargetPct >= 0 ? `+` : ""}{(row.compressiveStrength - 25.0).toFixed(2)} MPa ({row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
-                                </span>
-                              ) : (
-                                <span className="text-rose-400/80 font-mono italic">
-                                  Awaiting Govt Calibration
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <span
-                                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                                  row.isPass
-                                    ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
-                                    : "bg-rose-950 text-rose-300 border-rose-700/80"
-                                }`}
-                              >
-                                {row.isPass ? (
-                                  <>
-                                    <CheckCircle2 size={11} className="text-emerald-400" />
-                                    <span>MEETS SPEC (PASS)</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <AlertTriangle size={11} className="text-rose-400" />
-                                    <span>BELOW TARGET (FAIL)</span>
-                                  </>
-                                )}
-                              </span>
+                                Scope to {bld.building} →
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Table for this building */}
+                          <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                            <table className="w-full text-left text-xs font-mono border-collapse">
+                              <thead className="bg-slate-900/95 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10 text-[11px]">
+                                <tr>
+                                  <th className="py-2 px-3 w-10 text-center text-slate-500">#</th>
+                                  <th className="py-2 px-3">Structural Element</th>
+                                  <th className="py-2 px-3">Location / Level</th>
+                                  <th className="py-2 px-3">Field Inspector</th>
+                                  <th className="py-2 px-3">Pulse Velocity (V)</th>
+                                  <th className="py-2 px-3">BS 1881-203 Classification</th>
+                                  <th className="py-2 px-3">Comp. Strength (f_cu)</th>
+                                  <th className="py-2 px-3">Delta vs 25 MPa</th>
+                                  <th className="py-2 px-3 text-right">Compliance Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800/60 bg-slate-950 text-slate-300">
+                                {bldRows.map((row, rIdx) => (
+                                  <tr
+                                    key={row.element}
+                                    className={`transition-colors group ${
+                                      !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
+                                    }`}
+                                  >
+                                    <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
+                                      {rIdx + 1}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <span
+                                        className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
+                                          !row.isPass
+                                            ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
+                                            : "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                                        }`}
+                                      >
+                                        {row.element}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3 text-slate-400 text-[11px]">
+                                      {row.floor}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedInspector(row.inspector)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-slate-300 hover:text-emerald-300 hover:border-emerald-600/40 transition-colors cursor-pointer"
+                                        title={`Filter by inspector: ${row.inspector}`}
+                                      >
+                                        <UserCheck size={10} className="text-emerald-400" />
+                                        <span>{row.inspector}</span>
+                                      </button>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`font-bold ${
+                                            row.velocity < 3500 ? "text-rose-400" : "text-slate-200"
+                                          }`}
+                                        >
+                                          {row.velocity.toFixed(0)} m/s
+                                        </span>
+                                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                          <div
+                                            className={`h-full rounded-full ${
+                                              row.velocity >= 4500
+                                                ? "bg-emerald-400"
+                                                : row.velocity >= 3500
+                                                ? "bg-amber-400"
+                                                : "bg-rose-500"
+                                            }`}
+                                            style={{
+                                              width: `${Math.min(
+                                                100,
+                                                Math.max(10, ((row.velocity - 2000) / 3000) * 100)
+                                              )}%`,
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <span
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                          row.band === "EXCELLENT"
+                                            ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                                            : row.band === "GOOD"
+                                            ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                                            : row.band === "MEDIUM (FAIR)"
+                                            ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
+                                            : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                                        }`}
+                                      >
+                                        {row.band}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      {row.compressiveStrength != null ? (
+                                        <span
+                                          className={`font-bold text-xs ${
+                                            row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                          }`}
+                                        >
+                                          {row.compressiveStrength.toFixed(2)} MPa
+                                        </span>
+                                      ) : (
+                                        <span className="font-mono text-slate-400 text-xs font-semibold">
+                                          —
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-[11px]">
+                                      {row.compressiveStrength != null && row.deltaTargetPct != null ? (
+                                        <span
+                                          className={`font-mono ${
+                                            row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
+                                          }`}
+                                        >
+                                          {row.deltaTargetPct >= 0 ? `+` : ""}
+                                          {(row.compressiveStrength - 25.0).toFixed(2)} MPa (
+                                          {row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
+                                        </span>
+                                      ) : (
+                                        <span className="text-rose-400/80 font-mono italic">
+                                          Awaiting Govt Calibration
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-right">
+                                      <span
+                                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                          row.isPass
+                                            ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
+                                            : "bg-rose-950 text-rose-300 border-rose-700/80"
+                                        }`}
+                                      >
+                                        {row.isPass ? (
+                                          <>
+                                            <CheckCircle2 size={11} className="text-emerald-400" />
+                                            <span>MEETS SPEC (PASS)</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <AlertTriangle size={11} className="text-rose-400" />
+                                            <span>BELOW TARGET (FAIL)</span>
+                                          </>
+                                        )}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {/* Building Subtotal Footer */}
+                              <tfoot className="bg-slate-900/95 border-t border-slate-800 text-[11px] font-bold">
+                                <tr>
+                                  <td colSpan={4} className="py-2 px-3 text-slate-200">
+                                    <span className={bldTheme.text}>{bld.building} Subtotal:</span> {bldRows.length} elements across {bld.floors.join(", ")}
+                                  </td>
+                                  <td className="py-2 px-3 text-amber-400">
+                                    Mean V: {bldVel.toLocaleString()} m/s
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-400">
+                                    {bldVel >= 3500 ? "BS 1881 GOOD" : "BS 1881 DOUBTFUL"}
+                                  </td>
+                                  <td className="py-2 px-3 text-emerald-400">
+                                    Mean: {bldFcu != null ? `${bldFcu} MPa` : "—"}
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-400">
+                                    {bldFcu != null
+                                      ? `${Number((((bldFcu - 25.0) / 25.0) * 100).toFixed(1)) >= 0 ? "+" : ""}${Number((((bldFcu - 25.0) / 25.0) * 100).toFixed(1))}% vs 25 MPa`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        bldPassRate > 0
+                                          ? "text-emerald-300 bg-emerald-950/80 border border-emerald-800"
+                                          : "text-rose-300 bg-rose-950/80 border border-rose-800"
+                                      }`}
+                                    >
+                                      {bldPass} Meets Spec ({bldPassRate}%) · {bldRows.length - bldPass} Below Target
+                                    </span>
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Unified Flat Table View or Single Building Isolated View */
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[440px] overflow-y-auto">
+                    <table className="w-full text-left text-xs font-mono border-collapse">
+                      <thead className="bg-slate-900 text-slate-300 font-bold border-b border-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="py-2.5 px-3 w-10 text-center text-slate-500">#</th>
+                          <th className="py-2.5 px-3">Building</th>
+                          <th className="py-2.5 px-3">Structural Element</th>
+                          <th className="py-2.5 px-3">Location / Level</th>
+                          <th className="py-2.5 px-3">Field Inspector</th>
+                          <th className="py-2.5 px-3">Pulse Velocity (V)</th>
+                          <th className="py-2.5 px-3">BS 1881-203 Classification</th>
+                          <th className="py-2.5 px-3">Comp. Strength (f_cu)</th>
+                          <th className="py-2.5 px-3">Delta vs 25 MPa</th>
+                          <th className="py-2.5 px-3 text-right">Compliance Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80 bg-slate-950 text-slate-300">
+                        {filteredElementRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={10} className="py-8 text-center text-slate-500 italic">
+                              No elements matched your search filter.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ) : (
+                          filteredElementRows.map((row) => (
+                            <tr
+                              key={row.element}
+                              className={`transition-colors group ${
+                                !row.isPass ? "bg-rose-950/20 hover:bg-rose-950/30" : "hover:bg-slate-900/60"
+                              }`}
+                            >
+                              <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
+                                {row.index}
+                              </td>
+                              <td className="py-2 px-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedBuilding(row.building)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                                    row.building.toLowerCase().includes("a")
+                                      ? "bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25"
+                                      : row.building.toLowerCase().includes("b")
+                                      ? "bg-purple-500/15 text-purple-300 border-purple-500/30 hover:bg-purple-500/25"
+                                      : row.building.toLowerCase().includes("c")
+                                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
+                                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                                  }`}
+                                  title={`Click to filter ${row.building}`}
+                                >
+                                  {row.building}
+                                </button>
+                              </td>
+                              <td className="py-2 px-3">
+                                <span
+                                  className={`font-bold px-2 py-0.5 rounded border text-xs inline-block ${
+                                    !row.isPass
+                                      ? "text-rose-300 bg-rose-500/10 border-rose-500/30"
+                                      : "text-amber-300 bg-amber-500/10 border-amber-500/20"
+                                  }`}
+                                >
+                                  {row.element}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-slate-400 text-[11px]">
+                                {row.floor}
+                              </td>
+                              <td className="py-2 px-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedInspector(row.inspector)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-slate-300 hover:text-emerald-300 hover:border-emerald-600/40 transition-colors cursor-pointer"
+                                  title={`Filter by inspector: ${row.inspector}`}
+                                >
+                                  <UserCheck size={10} className="text-emerald-400" />
+                                  <span>{row.inspector}</span>
+                                </button>
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`font-bold ${
+                                      row.velocity < 3500 ? "text-rose-400" : "text-slate-200"
+                                    }`}
+                                  >
+                                    {row.velocity.toFixed(0)} m/s
+                                  </span>
+                                  <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        row.velocity >= 4500
+                                          ? "bg-emerald-400"
+                                          : row.velocity >= 3500
+                                          ? "bg-amber-400"
+                                          : "bg-rose-500"
+                                      }`}
+                                      style={{
+                                        width: `${Math.min(
+                                          100,
+                                          Math.max(10, ((row.velocity - 2000) / 3000) * 100)
+                                        )}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    row.band === "EXCELLENT"
+                                      ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                                      : row.band === "GOOD"
+                                      ? "bg-amber-950/80 text-amber-300 border-amber-700/60"
+                                      : row.band === "MEDIUM (FAIR)"
+                                      ? "bg-yellow-950/80 text-yellow-300 border-yellow-700/60"
+                                      : "bg-rose-950/80 text-rose-300 border-rose-700/60"
+                                  }`}
+                                >
+                                  {row.band}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3">
+                                {row.compressiveStrength != null ? (
+                                  <span
+                                    className={`font-bold text-xs ${
+                                      row.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                    }`}
+                                  >
+                                    {row.compressiveStrength.toFixed(2)} MPa
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-slate-400 text-xs font-semibold">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-[11px]">
+                                {row.compressiveStrength != null && row.deltaTargetPct != null ? (
+                                  <span
+                                    className={`font-mono ${
+                                      row.compressiveStrength < 25.0 ? "text-rose-400 font-semibold" : "text-emerald-400/90"
+                                    }`}
+                                  >
+                                    {row.deltaTargetPct >= 0 ? `+` : ""}
+                                    {(row.compressiveStrength - 25.0).toFixed(2)} MPa (
+                                    {row.deltaTargetPct >= 0 ? `+${row.deltaTargetPct}%` : `${row.deltaTargetPct}%`})
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-400/80 font-mono italic">
+                                    Awaiting Govt Calibration
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <span
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                    row.isPass
+                                      ? "bg-emerald-950 text-emerald-300 border-emerald-700/80"
+                                      : "bg-rose-950 text-rose-300 border-rose-700/80"
+                                  }`}
+                                >
+                                  {row.isPass ? (
+                                    <>
+                                      <CheckCircle2 size={11} className="text-emerald-400" />
+                                      <span>MEETS SPEC (PASS)</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertTriangle size={11} className="text-rose-400" />
+                                      <span>BELOW TARGET (FAIL)</span>
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 {/* Analytical Inference & Multi-Model Consensus Card */}
                 {systemTraces.length > 0 && (
@@ -1115,20 +2067,61 @@ export default function PunditAIReasoningPage() {
                               <span className="break-words font-medium">{trace}</span>
                             </div>
 
+                            {/* Render Multi-Building Summary Cards right under roll-up trace */}
+                            {isRollup && detectedBuildings.length > 1 && (
+                              <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                {detectedBuildings.map((b) => (
+                                  <div
+                                    key={b.building}
+                                    onClick={() => setSelectedBuilding(b.building)}
+                                    className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/40 transition-colors cursor-pointer flex flex-col gap-1"
+                                  >
+                                    <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                                      <span className="flex items-center gap-1">
+                                        <Building size={11} className="text-amber-400" />
+                                        {b.building}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        {b.count} Elements
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
+                                      <span>
+                                        Mean V: <strong className="text-slate-200">{b.avgVel} m/s</strong>
+                                      </span>
+                                      <span>
+                                        f_cu: <strong className="text-slate-200">{b.avgFcu != null ? `${b.avgFcu} MPa` : "—"}</strong>
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-right font-mono">
+                                      <span className={b.passRate > 0 ? "text-emerald-400" : "text-rose-400"}>
+                                        Pass: {b.passCount}/{b.count} ({b.passRate}%)
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             {/* Render Tabular Form for any roll-up or embedded element telemetry */}
                             {(isRollup || hasEmbeddedTelemetry) && parsedElementRows.length > 0 && (
                               <div className="mt-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-2.5">
                                 <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 flex items-center justify-between">
                                   <span className="text-rose-400 flex items-center gap-1">
                                     <Table size={12} className="text-rose-500" />
-                                    <span>Verified Scan Batch Elements ({parsedElementRows.length})</span>
+                                    <span>
+                                      Verified Scan Batch Elements ({selectedBuilding ? `${selectedBuilding}: ${filteredElementRows.length}` : `All Buildings: ${parsedElementRows.length}`})
+                                    </span>
                                   </span>
-                                  <span className="text-[9px] text-slate-500 font-mono">Calibrated Strength Formula Active</span>
+                                  <span className="text-[9px] text-slate-500 font-mono">
+                                    {selectedBuilding ? `${selectedBuilding} Scope Active` : "Calibrated Strength Formula Active"}
+                                  </span>
                                 </div>
                                 <table className="w-full text-left text-[11px] font-mono">
                                   <thead>
                                     <tr className="border-b border-slate-800 text-slate-400 text-[10px]">
                                       <th className="py-1 px-2">#</th>
+                                      <th className="py-1 px-2">Building</th>
                                       <th className="py-1 px-2">Element</th>
                                       <th className="py-1 px-2">Location</th>
                                       <th className="py-1 px-2">Mean Velocity</th>
@@ -1138,48 +2131,161 @@ export default function PunditAIReasoningPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {parsedElementRows.map((r) => (
-                                      <tr
-                                        key={r.element}
-                                        className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
-                                          !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
-                                        }`}
-                                      >
-                                        <td className="py-1 px-2 text-slate-600 text-[10px]">{r.index}</td>
-                                        <td className="py-1 px-2">
-                                          <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                                            !r.isPass ? "text-rose-300 bg-rose-500/10 border border-rose-500/30" : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
-                                          }`}>
-                                            {r.element}
-                                          </span>
-                                        </td>
-                                        <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
-                                        <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
-                                        <td className="py-1 px-2">
-                                          {r.compressiveStrength != null ? (
-                                            <span className={`font-bold ${r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"}`}>
-                                              {r.compressiveStrength.toFixed(2)} MPa
+                                    {detectedBuildings.length > 1 && !selectedBuilding ? (
+                                      detectedBuildings.map((bld) => {
+                                        const bldRows = filteredElementRows.filter(
+                                          (r) => r.building.toLowerCase() === bld.building.toLowerCase()
+                                        );
+                                        if (bldRows.length === 0) return null;
+                                        return (
+                                          <React.Fragment key={bld.building}>
+                                            <tr className="bg-slate-900 border-y border-slate-700/80">
+                                              <td colSpan={8} className="py-1.5 px-2 font-mono font-bold text-amber-300 text-[10px]">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="flex items-center gap-1.5">
+                                                    <Building size={12} className="text-amber-400" />
+                                                    <span className="text-slate-100">{bld.building}</span>
+                                                    <span className="text-slate-400 font-normal">
+                                                      ({bldRows.length} Elements · {bld.floors.join(", ")})
+                                                    </span>
+                                                  </span>
+                                                  <span className="text-slate-400 font-normal">
+                                                    Mean V: <strong className="text-slate-200">{bld.avgVel} m/s</strong> · Mean f_cu:{" "}
+                                                    <strong className="text-slate-200">{bld.avgFcu ?? "—"} MPa</strong> · Pass:{" "}
+                                                    <strong className={bld.passCount > 0 ? "text-emerald-400" : "text-rose-400"}>
+                                                      {bld.passCount}/{bldRows.length} ({bld.passRate}%)
+                                                    </strong>
+                                                  </span>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                            {bldRows.map((r, bIdx) => (
+                                              <tr
+                                                key={r.element}
+                                                className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
+                                                  !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
+                                                }`}
+                                              >
+                                                <td className="py-1 px-2 text-slate-600 text-[10px]">{bIdx + 1}</td>
+                                                <td className="py-1 px-2">
+                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
+                                                    {r.building}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2">
+                                                  <span
+                                                    className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                                      !r.isPass
+                                                        ? "text-rose-300 bg-rose-500/10 border border-rose-500/30"
+                                                        : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
+                                                    }`}
+                                                  >
+                                                    {r.element}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
+                                                <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
+                                                <td className="py-1 px-2">
+                                                  {r.compressiveStrength != null ? (
+                                                    <span
+                                                      className={`font-bold ${
+                                                        r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                                      }`}
+                                                    >
+                                                      {r.compressiveStrength.toFixed(2)} MPa
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-slate-500 italic">—</span>
+                                                  )}
+                                                </td>
+                                                <td className="py-1 px-2 text-[10px]">
+                                                  <span
+                                                    className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                                      r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
+                                                    }`}
+                                                  >
+                                                    {r.band}
+                                                  </span>
+                                                </td>
+                                                <td className="py-1 px-2 text-right">
+                                                  <span
+                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
+                                                      r.isPass
+                                                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                                        : "bg-rose-950 text-rose-300 border border-rose-800"
+                                                    }`}
+                                                  >
+                                                    {r.isPass ? "PASS" : "FAIL"}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </React.Fragment>
+                                        );
+                                      })
+                                    ) : (
+                                      filteredElementRows.map((r) => (
+                                        <tr
+                                          key={r.element}
+                                          className={`border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors ${
+                                            !r.isPass ? "bg-rose-950/20 text-rose-300" : "text-slate-300"
+                                          }`}
+                                        >
+                                          <td className="py-1 px-2 text-slate-600 text-[10px]">{r.index}</td>
+                                          <td className="py-1 px-2">
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300">
+                                              {r.building}
                                             </span>
-                                          ) : (
-                                            <span className="text-slate-500 italic">—</span>
-                                          )}
-                                        </td>
-                                        <td className="py-1 px-2 text-[10px]">
-                                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                            r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
-                                          }`}>
-                                            {r.band}
-                                          </span>
-                                        </td>
-                                        <td className="py-1 px-2 text-right">
-                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
-                                            r.isPass ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-rose-950 text-rose-300 border border-rose-800"
-                                          }`}>
-                                            {r.isPass ? "PASS" : "FAIL"}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
+                                          </td>
+                                          <td className="py-1 px-2">
+                                            <span
+                                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                                !r.isPass
+                                                  ? "text-rose-300 bg-rose-500/10 border border-rose-500/30"
+                                                  : "text-amber-300 bg-amber-500/10 border border-amber-500/20"
+                                              }`}
+                                            >
+                                              {r.element}
+                                            </span>
+                                          </td>
+                                          <td className="py-1 px-2 text-slate-400 text-[10px]">{r.floor}</td>
+                                          <td className="py-1 px-2 font-bold">{r.velocity.toFixed(0)} m/s</td>
+                                          <td className="py-1 px-2">
+                                            {r.compressiveStrength != null ? (
+                                              <span
+                                                className={`font-bold ${
+                                                  r.compressiveStrength < 25.0 ? "text-rose-400" : "text-emerald-400"
+                                                }`}
+                                              >
+                                                {r.compressiveStrength.toFixed(2)} MPa
+                                              </span>
+                                            ) : (
+                                              <span className="text-slate-500 italic">—</span>
+                                            )}
+                                          </td>
+                                          <td className="py-1 px-2 text-[10px]">
+                                            <span
+                                              className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                                r.band === "DOUBTFUL / POOR" ? "text-rose-300 bg-rose-950" : "text-slate-300"
+                                              }`}
+                                            >
+                                              {r.band}
+                                            </span>
+                                          </td>
+                                          <td className="py-1 px-2 text-right">
+                                            <span
+                                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
+                                                r.isPass
+                                                  ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                                  : "bg-rose-950 text-rose-300 border border-rose-800"
+                                              }`}
+                                            >
+                                              {r.isPass ? "PASS" : "FAIL"}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))
+                                    )}
                                   </tbody>
                                 </table>
                               </div>

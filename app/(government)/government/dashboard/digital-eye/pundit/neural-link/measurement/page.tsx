@@ -399,8 +399,12 @@ export default function NeuralLinkMeasurementPage() {
         ) : folders.viewMode === "grouped" ? (
           <FloorStationTreeBody
             groups={folders.groups}
+            hasMultipleBuildings={folders.hasMultipleBuildings}
+            buildings={folders.buildings}
+            openBuildings={folders.openBuildings}
             openFloors={folders.openFloors}
             openStations={folders.openStations}
+            toggleBuilding={folders.toggleBuilding}
             toggleFloor={folders.toggleFloor}
             toggleStation={folders.toggleStation}
             stationSummary={punditStationSummary}

@@ -196,6 +196,7 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
   const [watermarkFile, setWatermarkFile] = useState<File | null>(null);
   const [coverLogoFile, setCoverLogoFile] = useState<File | null>(null);
   const [coverLogoHidden, setCoverLogoHidden] = useState(false);
+  const [watermarkHidden, setWatermarkHidden] = useState(false);
   const [logoPosition, setLogoPosition] = useState("top-right");
   const [logoSize, setLogoSize] = useState("medium");
   const [watermarkOpacity, setWatermarkOpacity] = useState(50);
@@ -228,6 +229,7 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
         setLogoPosition(data.logo_position || "top-right");
         setLogoSize(data.logo_size || "medium");
         setCoverLogoHidden(!!data.cover_logo_hidden);
+        setWatermarkHidden(!!data.watermark_hidden);
         setWatermarkOpacity(data.watermark_opacity_pct ?? 50);
         setWatermarkPosition(data.watermark_position || "center");
       }
@@ -258,6 +260,8 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
       if (logoSize !== config.logo_size) scalars.logo_size = logoSize;
       if (coverLogoHidden !== !!config.cover_logo_hidden)
         scalars.cover_logo_hidden = coverLogoHidden;
+      if (watermarkHidden !== !!config.watermark_hidden)
+        scalars.watermark_hidden = watermarkHidden;
       if (watermarkOpacity !== config.watermark_opacity_pct)
         scalars.watermark_opacity_pct = watermarkOpacity;
       if (watermarkPosition !== config.watermark_position)
@@ -270,6 +274,7 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
       // Only send the hide flag on a first save when the user actually
       // wants no cover logo (the default coat of arms otherwise stays).
       if (coverLogoHidden) scalars.cover_logo_hidden = true;
+      if (watermarkHidden) scalars.watermark_hidden = true;
     }
     if (
       !logoFile &&
@@ -309,18 +314,48 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
       const fields: Parameters<typeof updateReportBranding>[1] =
         field === "cover_logo"
           ? { cover_logo: "remove", cover_logo_hidden: false }
-          : { [field]: "remove" };
+          : field === "watermark"
+            ? { watermark: "remove", watermark_hidden: true }
+            : { [field]: "remove" };
       const data = await updateReportBranding(projectId, fields);
       setConfig(data);
+      if (field === "watermark") {
+        setWatermarkHidden(true);
+      }
       toast(
         field === "logo"
           ? "Logo removed."
           : field === "watermark"
-            ? "Watermark removed."
+            ? "Watermark removed — no watermark will appear on the report."
             : "Custom cover logo removed — the default coat of arms returns.",
         "success",
       );
     } catch (err: any) {
+      toast(`⚠️ ${errText(err)}`, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Show/hide the watermark immediately (hiding ensures no watermark
+   *  at all is drawn — neither custom nor default laboratory watermark). */
+  const handleToggleWatermark = async (hidden: boolean) => {
+    if (!projectId) return;
+    setWatermarkHidden(hidden);
+    setSaving(true);
+    try {
+      const data = await updateReportBranding(projectId, {
+        watermark_hidden: hidden,
+      });
+      setConfig(data);
+      toast(
+        hidden
+          ? "Watermark removed / hidden — the report will have no watermark."
+          : "Watermark restored — standard watermark will render.",
+        "success",
+      );
+    } catch (err: any) {
+      setWatermarkHidden(!hidden);
       toast(`⚠️ ${errText(err)}`, "error");
     } finally {
       setSaving(false);
@@ -540,6 +575,25 @@ export default function ReportBrandingPanel({ projectId }: { projectId?: string 
                 <option value="top-right">Top right</option>
               </select>
             </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <label className="flex items-start gap-2 text-xs text-[#4B5B66] cursor-pointer">
+              <input
+                id="watermark-hidden"
+                type="checkbox"
+                checked={watermarkHidden}
+                onChange={(e) => handleToggleWatermark(e.target.checked)}
+                disabled={saving}
+                className="mt-0.5 accent-[#0A3D2E]"
+              />
+              <span>
+                <span className="font-medium text-[#0F181F]">
+                  No watermark at all
+                </span>{" "}
+                — remove watermark entirely (neither custom nor default laboratory watermark is drawn). Uncheck to restore it.
+              </span>
+            </label>
           </div>
         </div>
       </div>

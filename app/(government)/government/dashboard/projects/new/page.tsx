@@ -20,6 +20,7 @@ import {
   createProject,
   uploadProjectDocument,
   convertCoordinatesApi,
+  getLatestProjectTagNumber,
   Project,
   ProjectProfessional
 } from '@/services/projects';
@@ -340,6 +341,29 @@ export default function RegisterProjectWizard() {
       })
       .catch((err) => {
         console.warn("Could not load accredited inspectors:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Sequential Tag Number (TAG-YYYY-NNNN)
+  const [latestTagInfo, setLatestTagInfo] = useState<{
+    last_project_number: string | null;
+    next_project_number: string;
+    year: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLatestProjectTagNumber()
+      .then((data) => {
+        if (!cancelled && data?.next_project_number) {
+          setLatestTagInfo(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load latest tag number:", err);
       });
     return () => {
       cancelled = true;
@@ -727,6 +751,32 @@ export default function RegisterProjectWizard() {
   // STEP 1: PROJECT INFO
   const renderStep1 = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+      {latestTagInfo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-[#022C4F] shrink-0" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+                  Registration Tag:
+                </span>
+                <span className="font-mono text-xs font-bold bg-[#022C4F] text-white px-2 py-0.5 rounded shadow-2xs">
+                  {latestTagInfo.next_project_number}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                Next sequential registration tag number in accordance with Ministry standards.
+              </p>
+            </div>
+          </div>
+          {latestTagInfo.last_project_number && (
+            <div className="text-[11px] text-slate-500 font-medium bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+              Last Registered: <span className="font-mono font-bold text-slate-800">{latestTagInfo.last_project_number}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {renderInput('Project Name', 'name', 'text', 'e.g. Marina Horizon Towers', true)}
 
@@ -736,12 +786,18 @@ export default function RegisterProjectWizard() {
             value={formData.project_type || ''}
             onChange={(val) => handleCustomSelectChange('project_type', val)}
             options={[
-              { value: 'Residential', label: 'Residential' },
               { value: 'Commercial', label: 'Commercial' },
+              { value: 'Industrial Layout', label: 'Industrial Layout / Warehouse' },
               { value: 'Industrial', label: 'Industrial' },
-              { value: 'Infrastructure', label: 'Infrastructure' },
-              { value: 'Mixed-Use', label: 'Mixed-Use' },
-              { value: 'Institutional', label: 'Institutional' },
+              { value: 'Hospital', label: 'Hospital / Medical Facility' },
+              { value: 'Car Park', label: 'Car Park / Multi-Story Parking' },
+              { value: 'Residential', label: 'Residential' },
+              { value: 'Institutional', label: 'Institutional / Educational' },
+              { value: 'Civic', label: 'Civic / Public Infrastructure' },
+              { value: 'Infrastructure', label: 'Infrastructure / Laydown Area' },
+              { value: 'Mixed-Use', label: 'Mixed-Use Development' },
+              { value: 'Renovation', label: 'Structural Renovation / Retrofit' },
+              { value: 'Other', label: 'Other Structure' },
             ]}
             placeholder="Select Project Type..."
             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"

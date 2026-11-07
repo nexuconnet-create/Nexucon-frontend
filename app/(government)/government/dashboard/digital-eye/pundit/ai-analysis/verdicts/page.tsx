@@ -68,6 +68,8 @@ export default function PunditAIVerdictsPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
+  const [selectedOperator, setSelectedOperator] = useState<string>("");
+
   const folders = useFloorStationFolders(tests, punditFloorOf, punditStationOf);
 
   const loadData = async () => {
@@ -98,8 +100,22 @@ export default function PunditAIVerdictsPage() {
   }, [selectedProjectId]);
 
   useEffect(() => {
+    setSelectedOperator("");
     setCurrentPage(1);
-  }, [selectedProjectId, ratingFilter, searchQuery]);
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [ratingFilter, searchQuery, selectedOperator]);
+
+  const operators = useMemo(() => {
+    const set = new Set<string>();
+    tests.forEach((t) => {
+      const op = (t.operator_name || "").trim();
+      if (op) set.add(op);
+    });
+    return Array.from(set).sort();
+  }, [tests]);
 
   // Transform tests to verdicts
   const verdicts: ElementVerdict[] = useMemo(() => {
@@ -139,6 +155,7 @@ export default function PunditAIVerdictsPage() {
   // Filtered verdicts
   const filteredVerdicts = useMemo(() => {
     return verdicts.filter((v) => {
+      if (selectedOperator && (v.test.operator_name || "").trim() !== selectedOperator) return false;
       if (ratingFilter !== "ALL" && v.grade !== ratingFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -150,7 +167,7 @@ export default function PunditAIVerdictsPage() {
       }
       return true;
     });
-  }, [verdicts, ratingFilter, searchQuery]);
+  }, [verdicts, selectedOperator, ratingFilter, searchQuery]);
 
   const paginatedVerdicts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -257,6 +274,24 @@ export default function PunditAIVerdictsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {operators.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500 font-semibold">Inspector:</span>
+                <select
+                  value={selectedOperator}
+                  onChange={(e) => setSelectedOperator(e.target.value)}
+                  aria-label="Filter verdicts by inspector"
+                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="">All Field Inspectors</option>
+                  {operators.map((op) => (
+                    <option key={op} value={op}>
+                      Inspector: {op}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <Filter size={13} className="text-slate-400" />
             <span className="text-xs text-slate-500 font-semibold">Quality Grade:</span>
             <select
@@ -294,8 +329,12 @@ export default function PunditAIVerdictsPage() {
         ) : folders.viewMode === "grouped" ? (
           <FloorStationTreeBody
             groups={folders.groups}
+            hasMultipleBuildings={folders.hasMultipleBuildings}
+            buildings={folders.buildings}
+            openBuildings={folders.openBuildings}
             openFloors={folders.openFloors}
             openStations={folders.openStations}
+            toggleBuilding={folders.toggleBuilding}
             toggleFloor={folders.toggleFloor}
             toggleStation={folders.toggleStation}
             stationSummary={punditStationSummary}

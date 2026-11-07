@@ -33,7 +33,8 @@ export default function PunditAnalysisReviewPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [notes, setNotes] = useState("");
+  const [panelMode, setPanelMode] = useState<"review" | "chat">("review");
+  const [formalDirectivesText, setFormalDirectivesText] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [regenerateWithAi, setRegenerateWithAi] = useState(true);
@@ -58,6 +59,9 @@ export default function PunditAnalysisReviewPanel({
       ]);
       setReview(revData);
       setComments(commentsData);
+      if (revData?.notes) {
+        setFormalDirectivesText(revData.notes);
+      }
     } catch (err: any) {
       setError(errText(err));
       setReview(null);
@@ -72,8 +76,9 @@ export default function PunditAnalysisReviewPanel({
   }, [load]);
 
   useEffect(() => {
-    // When switching to another analysis, drop any half-typed notes.
-    setNotes("");
+    // When switching to another analysis, drop any half-typed notes or comments.
+    setFormalDirectivesText("");
+    setNewCommentText("");
   }, [analysisId]);
 
   const toast = (message: string, type: "success" | "error" | "info") => {
@@ -85,21 +90,7 @@ export default function PunditAnalysisReviewPanel({
   const decide = async (decision: "corroborated" | "returned") => {
     setSaving(true);
     try {
-      let activeNotes = newCommentText.trim();
-      // If text is in chat input, post it to discussion stream as well
-      if (activeNotes) {
-        try {
-          const added = await addPunditAnalysisComment(analysisId, activeNotes);
-          setComments((prev) => [...prev, added]);
-          setNewCommentText("");
-        } catch {
-          // fallback to activeNotes
-        }
-      } else if (comments.length > 0) {
-        // Use latest comment as note if input field is empty
-        activeNotes = comments[comments.length - 1].comment;
-      }
-
+      const activeNotes = formalDirectivesText.trim();
       const data = await reviewPunditAnalysis(analysisId, {
         decision,
         notes: activeNotes,
@@ -292,144 +283,187 @@ export default function PunditAnalysisReviewPanel({
         </div>
       )}
 
-      {/* SINGLE COLLABORATIVE CHAT & DECISION INPUT SYSTEM */}
+      {/* DISTINCT SECTIONS: FORMAL ENGINEERING REVIEW vs TEAM CHAT STREAM (Client Spec / Nov 4 Review) */}
       <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 uppercase tracking-wider">
-            <MessageSquare size={14} className="text-indigo-600" />
-            <span>Government & Inspector Collaborative Chat ({comments.length})</span>
+        {/* Navigation Tabs */}
+        <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+          <div className="inline-flex rounded-xl bg-slate-100 p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setPanelMode("review")}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                panelMode === "review"
+                  ? "bg-white text-[#022C4F] shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <PenLine size={13} className="text-emerald-700" />
+              <span>Formal Engineering Review</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPanelMode("chat")}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                panelMode === "chat"
+                  ? "bg-white text-indigo-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <MessageSquare size={13} className="text-indigo-600" />
+              <span>General Chat &amp; Discussion ({comments.length})</span>
+            </button>
           </div>
-          <span className="text-[10px] text-slate-500 font-medium">
-            AI Joint Review Discussion Thread
+          <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">
+            {panelMode === "review" ? "Statutory Corroboration (BS 1881-203)" : "Casual Collaboration Stream"}
           </span>
         </div>
 
-        {comments.length === 0 ? (
-          <div className="bg-white/80 rounded-xl p-3 border border-slate-200/60 text-center text-xs text-slate-500 italic">
-            No chat comments posted yet. Government officials, engineers, and inspectors discuss here to build a collaborative opinion for AI synthesis.
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-            {comments.map((c) => (
-              <div key={c.id} className="bg-white/90 rounded-xl p-2.5 border border-slate-200/80 shadow-xs space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900">{c.author_name}</span>
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      {c.author_role}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {new Date(c.created_at).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                  {c.comment}
-                </p>
+        {/* SECTION A: FORMAL ENGINEERING REVIEW & CORROBORATION */}
+        {panelMode === "review" && (
+          <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Formal Engineering Directives &amp; Review Notes (Audit Bound)
+              </label>
+              <textarea
+                value={formalDirectivesText}
+                onChange={(e) => setFormalDirectivesText(e.target.value)}
+                placeholder="Enter formal engineering review directives, statutory corroboration remarks, or instructions for field inspector revision..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs outline-none focus:border-[#022C4F] shadow-xs resize-y"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={regenerateWithAi}
+                  onChange={(e) => setRegenerateWithAi(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium">Synthesize AI Joint Analysis with formal review directives</span>
+              </label>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => decide("corroborated")}
+                  disabled={saving || isRegenerating}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                  title="Corroborate AI analysis using formal engineering directives"
+                >
+                  <CheckCircle2 size={13} /> Corroborate Analysis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => decide("returned")}
+                  disabled={saving || isRegenerating}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
+                  title="Return analysis for revision with formal directives"
+                >
+                  <PenLine size={13} /> Return for Revision
+                </button>
               </div>
-            ))}
+            </div>
           </div>
         )}
 
-        {/* SINGLE INPUT FIELD */}
-        <div className="space-y-2.5 pt-1">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={newCommentText}
-              onChange={(e) => setNewCommentText(e.target.value)}
-              placeholder="Type your message / directive to discuss with inspectors & government..."
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 shadow-xs"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendComment();
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => handleSendComment()}
-              disabled={isPostingComment || !newCommentText.trim()}
-              className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
-              title="Post message to collaborative discussion"
-            >
-              <Send size={12} />
-              <span>Send Chat</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!newCommentText.trim()) return;
-                setIsPostingComment(true);
-                import("@/services/api").then(({ default: api }) => {
-                  api.post(`/digital-eye/pundit-analysis-review/${analysisId}/chat/`, {
-                      history: [],
-                      message: newCommentText.trim(),
-                  })
-                  .then(async (res: any) => {
-                    const userMsg = await addPunditAnalysisComment(analysisId, newCommentText.trim());
-                    const aiMsg = await addPunditAnalysisComment(analysisId, `🤖 AI Response: ${res?.text || "I have noted your input."}`);
-                    setComments((prev) => [...prev, userMsg, aiMsg]);
-                    setNewCommentText("");
-                    toast("AI has responded to your query.", "success");
-                  })
-                  .catch((err: any) => {
-                    toast(`⚠️ Failed to communicate with AI Engine.`, "error");
-                  })
-                  .finally(() => {
-                    setIsPostingComment(false);
-                    onReviewUpdated?.();
-                  });
-                });
-              }}
-              disabled={isPostingComment || !newCommentText.trim()}
-              className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
-              title="Ask AI a question directly"
-            >
-              <Sparkles size={12} />
-              <span>Ask AI</span>
-            </button>
-          </div>
+        {/* SECTION B: COLLABORATIVE CHAT & DISCUSSION STREAM */}
+        {panelMode === "chat" && (
+          <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+            {comments.length === 0 ? (
+              <div className="bg-white/80 rounded-xl p-3 border border-slate-200/60 text-center text-xs text-slate-500 italic">
+                No casual chat comments posted yet. Government officials, engineers, and inspectors discuss here without affecting formal corroboration.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {comments.map((c) => (
+                  <div key={c.id} className="bg-white/90 rounded-xl p-2.5 border border-slate-200/80 shadow-xs space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-900">{c.author_name}</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {c.author_role}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {new Date(c.created_at).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                      {c.comment}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+            <div className="flex items-center gap-2 pt-1">
               <input
-                type="checkbox"
-                checked={regenerateWithAi}
-                onChange={(e) => setRegenerateWithAi(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                type="text"
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
+                placeholder="Type your casual message or question to the team..."
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 shadow-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendComment();
+                  }
+                }}
               />
-              <span className="font-medium">Synthesize AI Joint Analysis with chat thread</span>
-            </label>
-
-            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => decide("corroborated")}
-                disabled={saving || isRegenerating}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
-                title="Corroborate AI analysis using current chat directives"
+                onClick={() => handleSendComment()}
+                disabled={isPostingComment || !newCommentText.trim()}
+                className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
+                title="Post message to collaborative discussion"
               >
-                <CheckCircle2 size={13} /> Corroborate
+                <Send size={12} />
+                <span>Send Chat</span>
               </button>
               <button
                 type="button"
-                onClick={() => decide("returned")}
-                disabled={saving || isRegenerating}
-                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs transition-colors"
-                title="Return analysis for revision with directives"
+                onClick={() => {
+                  if (!newCommentText.trim()) return;
+                  setIsPostingComment(true);
+                  import("@/services/api").then(({ default: api }) => {
+                    api.post(`/digital-eye/pundit-analysis-review/${analysisId}/chat/`, {
+                        history: [],
+                        message: newCommentText.trim(),
+                    })
+                    .then(async (res: any) => {
+                      const userMsg = await addPunditAnalysisComment(analysisId, newCommentText.trim());
+                      const aiMsg = await addPunditAnalysisComment(analysisId, `🤖 AI Response: ${res?.text || "I have noted your input."}`);
+                      setComments((prev) => [...prev, userMsg, aiMsg]);
+                      setNewCommentText("");
+                      toast("AI has responded to your query.", "success");
+                    })
+                    .catch((err: any) => {
+                      toast(`⚠️ Failed to communicate with AI Engine.`, "error");
+                    })
+                    .finally(() => {
+                      setIsPostingComment(false);
+                      onReviewUpdated?.();
+                    });
+                  });
+                }}
+                disabled={isPostingComment || !newCommentText.trim()}
+                className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors shadow-xs cursor-pointer shrink-0"
+                title="Ask AI a question directly"
               >
-                <PenLine size={13} /> Return for Revision
+                <Sparkles size={12} />
+                <span>Ask AI</span>
               </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
