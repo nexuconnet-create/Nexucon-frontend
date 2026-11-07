@@ -351,3 +351,11 @@ export const getNcrs = async (params?: {
   const res: any = await api.get('/inspections/ncrs/', { params });
   return Array.isArray(res) ? res : (res.results || res.data || []);
 };
+
+export const rescheduleInspection = async (
+  id: string,
+  payload: { scheduled_date: string; reason?: string }
+): Promise<Inspection> => {
+  const res: any = await api.post(`/inspections/${id}/reschedule/`, payload);
+  return res.data || res;
+};

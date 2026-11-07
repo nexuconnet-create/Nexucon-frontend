@@ -226,7 +226,7 @@ const OverviewTab = ({
               <div>
                 <h3 className="text-sm font-bold text-[#022C4F] flex items-center gap-2">
                   <Compass size={16} className="text-blue-600" />
-                  Site Location & 4-Corner Boundary Calibration
+                  Site Location &amp; Multi-Point Boundary Calibration
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Precise spatial coordinates registered for digital site mapping.
@@ -293,7 +293,7 @@ const OverviewTab = ({
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    4-Corner Boundary Survey Coordinates
+                    Multi-Point Boundary Survey Coordinates ({cornersData.corners.length} Points)
                   </h4>
                   {cornersData.footprintAreaSqm && (
                     <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
@@ -363,7 +363,9 @@ const OverviewTab = ({
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Number of Floors</p>
-                <p className="text-sm font-semibold text-slate-800">{project.number_of_floors ?? notRecorded}</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {project.floor_number_custom || (project.number_of_floors !== undefined && project.number_of_floors !== null ? `${project.number_of_floors} Storeys` : notRecorded)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Building Height</p>
@@ -388,7 +390,9 @@ const OverviewTab = ({
               <div>
                 <p className="text-xs text-slate-500 mb-1">Estimated Project Value</p>
                 <p className="text-sm font-bold text-slate-900">
-                  {project.estimated_project_value
+                  {project.is_estimated_value_na || project.estimated_project_value_display === 'Not Applicable'
+                    ? "Not Applicable (N/A)"
+                    : project.estimated_project_value
                     ? `₦${Number(project.estimated_project_value).toLocaleString()}`
                     : notRecorded}
                 </p>

@@ -25,8 +25,11 @@ export interface Project {
   description?: string;
   status: string;
   development_category?: string;
-  estimated_project_value?: string;
+  estimated_project_value?: string | number | null;
+  is_estimated_value_na?: boolean;
+  estimated_project_value_display?: string;
   number_of_floors?: number;
+  floor_number_custom?: string;
   location?: string;
   progress?: number;
   complianceScore?: number;

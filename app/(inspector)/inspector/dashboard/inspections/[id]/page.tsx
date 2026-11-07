@@ -47,6 +47,8 @@ import { isOffline } from "@/lib/syncEngine";
 import { dateTimeOr, orDash } from "@/lib/display";
 import VisualObservationsPanel from "@/components/dashboard/digital-eye/VisualObservationsPanel";
 import SiteAttendanceLogPanel from "@/components/dashboard/digital-eye/SiteAttendanceLogPanel";
+import AdjustInspectionScheduleModal from "@/components/inspector/AdjustInspectionScheduleModal";
+import { Clock } from "lucide-react";
 
 /** One checklist row: the template's item plus the inspector's own verdict. */
 interface ChecklistRow {
@@ -238,6 +240,7 @@ export default function InspectorInspectionDetailPage() {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
 
   const [checklistRows, setChecklistRows] = useState<ChecklistRow[]>([]);
   const [outcome, setOutcome] = useState<"PASSED" | "CONDITIONAL_PASS" | "FAILED">(
@@ -913,13 +916,30 @@ export default function InspectorInspectionDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-[#022C4F] px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200">
               {orDash(insp.inspection_type, "Type not recorded")}
             </span>
             <span className="text-xs font-semibold text-slate-600 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
               {orDash(insp.status, "Status unknown")}
             </span>
+            {insp.scheduled_date && (
+              <span className="text-xs font-medium text-blue-800 px-2.5 py-1.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-1">
+                <Clock size={12} className="text-blue-600" />
+                <span>{dateTimeOr(insp.scheduled_date)}</span>
+              </span>
+            )}
+            {insp.status !== 'COMPLETED' && (
+              <button
+                type="button"
+                onClick={() => setIsRescheduleOpen(true)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/60 text-[#022C4F] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Adjust inspection scheduled date & time"
+              >
+                <Clock size={12} className="text-[#022C4F]" />
+                <span>Adjust Schedule</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1756,6 +1776,26 @@ export default function InspectorInspectionDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Adjust Inspection Schedule Modal */}
+      {isRescheduleOpen && insp && (
+        <AdjustInspectionScheduleModal
+          isOpen={isRescheduleOpen}
+          onClose={() => setIsRescheduleOpen(false)}
+          inspection={{
+            id: insp.id,
+            inspection_reference: insp.inspection_reference,
+            project_name: insp.project_name,
+            project_location: insp.project_location,
+            inspection_type: insp.inspection_type,
+            scheduled_date: insp.scheduled_date,
+          }}
+          onScheduleUpdated={(updated) => {
+            setInspection(prev => prev ? { ...prev, scheduled_date: updated.scheduled_date } : prev);
+            setNotice(`Inspection rescheduled to ${new Date(updated.scheduled_date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.`);
+          }}
+        />
       )}
     </div>
   );

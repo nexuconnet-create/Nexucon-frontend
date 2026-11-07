@@ -28,12 +28,14 @@ import {
 import { getInspectorDashboard, InspectorDashboardData } from "@/services/inspector";
 import { getErrorMessage, notify } from "@/lib/api";
 import { ABSENT, countOr, orDash, timeOr, dateTimeOr } from "@/lib/display";
+import AdjustInspectionScheduleModal from "@/components/inspector/AdjustInspectionScheduleModal";
 
 export default function InspectorDashboardPage() {
   const [data, setData] = useState<InspectorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedInspectionForReschedule, setSelectedInspectionForReschedule] = useState<any | null>(null);
 
   const fetchData = async () => {
     try {
@@ -321,6 +323,15 @@ export default function InspectorDashboardPage() {
                       <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
                         {item.inspection_type}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInspectionForReschedule(item)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/60 text-[#022C4F] text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                        title="Adjust inspection scheduled date & time"
+                      >
+                        <Clock size={12} className="text-[#022C4F]" />
+                        <span>Adjust Time</span>
+                      </button>
                       <Link
                         href={`/inspector/dashboard/inspections/${item.id}`}
                         className="px-3 py-1.5 rounded-lg bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-bold transition-colors"
@@ -548,6 +559,18 @@ export default function InspectorDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Adjust Inspection Schedule Modal */}
+      {selectedInspectionForReschedule && (
+        <AdjustInspectionScheduleModal
+          isOpen={!!selectedInspectionForReschedule}
+          onClose={() => setSelectedInspectionForReschedule(null)}
+          inspection={selectedInspectionForReschedule}
+          onScheduleUpdated={() => {
+            fetchData();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Layers,
   ArrowRight,
+  Plus,
 } from "lucide-react";
 import { getInspectorProjects } from "@/services/inspector";
 import { orDash } from "@/lib/display";
@@ -34,9 +35,6 @@ export default function InspectorProjectsPage() {
       });
       setProjects(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      // Was a silent `setProjects([])`, which rendered "no projects match your
-      // filters" for a request that never completed — telling an inspector
-      // their jurisdiction is empty when the app is simply unreachable.
       setProjects([]);
       setLoadError(
         err?.response?.data?.detail ||
@@ -80,14 +78,24 @@ export default function InspectorProjectsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchProjects}
-          className="self-start md:self-auto p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#022C4F] transition-colors cursor-pointer shadow-sm"
-          title="Refresh projects"
-        >
-          <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          <Link
+            href="/inspector/dashboard/projects/new"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#022C4F] hover:bg-[#022C4F]/90 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-[#022C4F]/20 transition-all cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>Register New Site</span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={fetchProjects}
+            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#022C4F] transition-colors cursor-pointer shadow-sm"
+            title="Refresh projects"
+          >
+            <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar */}

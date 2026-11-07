@@ -22,9 +22,11 @@ import {
   Sparkles,
   Mic,
   Camera,
+  Compass,
 } from "lucide-react";
 import FieldPhotoCaptureModal from "@/components/inspector/FieldPhotoCaptureModal";
 import FieldVoiceNoteModal from "@/components/inspector/FieldVoiceNoteModal";
+import AdjustInspectionScheduleModal from "@/components/inspector/AdjustInspectionScheduleModal";
 import {
   getInspectorProjectById,
   getInspectorInspections,
@@ -79,6 +81,7 @@ export default function InspectorProjectDetailPage() {
   // Evidence Modals
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Inspection | null>(null);
 
   const refreshSiteEvidence = () => {
     if (!projectId) return;
@@ -281,9 +284,16 @@ export default function InspectorProjectDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-4">
-              <h2 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
-                Project Regulatory Details
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+                  Project Regulatory Details
+                </h2>
+                {proj.development_category && (
+                  <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
+                    {proj.development_category}
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <span className="text-slate-500 block text-[11px] font-medium uppercase">Building Permit #</span>
@@ -300,13 +310,90 @@ export default function InspectorProjectDetailPage() {
                 <div>
                   <span className="text-slate-500 block text-[11px] font-medium uppercase">Height &amp; Floors</span>
                   <span className="text-slate-800 font-semibold">
-                    {typeof proj.number_of_floors === "number"
+                    {proj.floor_number_custom || (typeof proj.number_of_floors === "number"
                       ? `${proj.number_of_floors} Storeys`
-                      : "Not recorded"}
+                      : "Not recorded")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Estimated Project Value</span>
+                  {proj.is_estimated_value_na || proj.estimated_project_value_display === "Not Applicable" ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 mt-0.5">
+                      Not Applicable (N/A)
+                    </span>
+                  ) : proj.estimated_project_value ? (
+                    <span className="text-slate-800 font-semibold">
+                      ₦{Number(proj.estimated_project_value).toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">Not recorded</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Operational Zone</span>
+                  <span className="text-slate-800 font-semibold">
+                    {proj.district_name || proj.district || "Unassigned"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Plot &amp; Block Reference</span>
+                  <span className="text-slate-800 font-medium">
+                    {[proj.plot_number ? `Plot ${proj.plot_number}` : null, proj.block_number ? `Block ${proj.block_number}` : null].filter(Boolean).join(", ") || (
+                      <span className="text-slate-400 italic">Optional / Not recorded</span>
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-medium uppercase">Site Area</span>
+                  <span className="text-slate-800 font-semibold">
+                    {proj.site_area ? `${Number(proj.site_area).toLocaleString()} sqm` : "Not recorded"}
                   </span>
                 </div>
               </div>
             </div>
+
+            {/* Multi-Point Boundary Coordinates Card */}
+            {proj.corner_coordinates && typeof proj.corner_coordinates === "object" && Array.isArray(proj.corner_coordinates.corners) && proj.corner_coordinates.corners.length > 0 && (
+              <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Compass size={16} className="text-blue-600" />
+                    <h3 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+                      Multi-Point Boundary Coordinates ({proj.corner_coordinates.corners.length} Points)
+                    </h3>
+                  </div>
+                  {proj.corner_coordinates.footprintAreaSqm && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      Footprint: {Number(proj.corner_coordinates.footprintAreaSqm).toLocaleString()} sqm
+                    </span>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <th className="py-2 px-3">Point</th>
+                        <th className="py-2 px-3">Easting / Lng</th>
+                        <th className="py-2 px-3">Northing / Lat</th>
+                        <th className="py-2 px-3">WGS84 Coordinates</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {proj.corner_coordinates.corners.map((c: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-3 font-sans font-bold text-slate-800">{c.label || `Point ${idx + 1}`}</td>
+                          <td className="py-2 px-3 text-slate-700">{c.easting || c.lng || "-"}</td>
+                          <td className="py-2 px-3 text-slate-700">{c.northing || c.lat || "-"}</td>
+                          <td className="py-2 px-3 text-blue-700 font-semibold">
+                            {c.lat && c.lng ? `${Number(c.lat).toFixed(6)}°N, ${Number(c.lng).toFixed(6)}°E` : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm">
               <h2 className="text-xs font-bold text-[#022C4F] uppercase tracking-wider mb-2">
@@ -331,12 +418,14 @@ export default function InspectorProjectDetailPage() {
                 ) : (
                   <>
                     {siteInspections.slice(0, 6).map((insp) => (
-                      <Link
+                      <div
                         key={insp.id}
-                        href={`/inspector/dashboard/inspections/${insp.id}`}
-                        className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs hover:border-slate-300 transition-colors"
+                        className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs hover:border-slate-300 transition-colors gap-3"
                       >
-                        <div className="min-w-0">
+                        <Link
+                          href={`/inspector/dashboard/inspections/${insp.id}`}
+                          className="min-w-0 flex-1 hover:text-[#022C4F] transition-colors"
+                        >
                           <div className="font-bold text-slate-800 truncate">
                             {orDash(insp.inspection_type, "Inspection type not recorded")}
                           </div>
@@ -344,17 +433,28 @@ export default function InspectorProjectDetailPage() {
                             {insp.scheduled_date
                               ? `Scheduled ${dateOr(insp.scheduled_date)}`
                               : "Not scheduled"}
-                            {insp.checkin_time ? ` â€¢ Checked in ${dateOr(insp.checkin_time)}` : ""}
+                            {insp.checkin_time ? ` • Checked in ${dateOr(insp.checkin_time)}` : ""}
                           </div>
+                        </Link>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              STATUS_STYLES[insp.status] || "text-slate-600 bg-slate-100 border-slate-200"
+                            }`}
+                          >
+                            {orDash(insp.status, "Unknown")}
+                          </span>
+                          {(insp.status === "SCHEDULED" || insp.status === "REQUESTED") && (
+                            <button
+                              type="button"
+                              onClick={() => setRescheduleTarget(insp)}
+                              className="px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] transition-colors cursor-pointer"
+                            >
+                              Adjust
+                            </button>
+                          )}
                         </div>
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
-                            STATUS_STYLES[insp.status] || "text-slate-600 bg-slate-100 border-slate-200"
-                          }`}
-                        >
-                          {orDash(insp.status, "Unknown")}
-                        </span>
-                      </Link>
+                      </div>
                     ))}
                     {siteEvidence && siteEvidence.filter((e: any) => e.source_type === "pundit" || e.source_type === "gpr").slice(0, 6).map((ev: any) => (
                       <div
@@ -709,6 +809,27 @@ export default function InspectorProjectDetailPage() {
         projectName={proj?.name}
         onEvidenceCreated={refreshSiteEvidence}
       />
+
+      {/* Adjust Inspection Schedule Modal */}
+      {rescheduleTarget && (
+        <AdjustInspectionScheduleModal
+          inspection={rescheduleTarget}
+          isOpen={Boolean(rescheduleTarget)}
+          onClose={() => setRescheduleTarget(null)}
+          onScheduleUpdated={(updated) => {
+            setSiteInspections((prev) =>
+              prev
+                ? prev.map((item) =>
+                    item.id === updated.id
+                      ? { ...item, scheduled_date: updated.scheduled_date }
+                      : item,
+                  )
+                : null,
+            );
+            setRescheduleTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

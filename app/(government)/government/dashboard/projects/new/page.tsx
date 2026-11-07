@@ -102,6 +102,27 @@ const COORDINATE_SYSTEM_OPTIONS = [
   { value: 'UTM_32N_MINNA', label: 'UTM Zone 32N - Minna Datum (Nigerian Survey)' },
 ];
 
+const DEVELOPMENT_CATEGORY_OPTIONS = [
+  { value: 'Highrise', label: 'Highrise (Category A - Multi-Storey Towers & High-Impact Developments)' },
+  { value: 'Medium Density', label: 'Medium Density (Category B - 3 to 10 Storeys & Commercial Blocks)' },
+  { value: 'Low Density', label: 'Low Density (Category C - Residential Estates, Villas & Bungalows)' },
+  { value: 'Special Engineering', label: 'Special Engineering (Bridges, Heavy Industrial, Maritime & Infrastructure)' },
+  { value: 'Others', label: 'Others (Custom Development Category / Specialization)' },
+];
+
+const FLOOR_NUMBER_OPTIONS = [
+  { value: '1', label: '1 Storey (Ground Floor / Bungalow)' },
+  { value: '2', label: '2 Storeys (Duplex / Low-Rise)' },
+  { value: '3', label: '3 Storeys' },
+  { value: '4', label: '4 Storeys' },
+  { value: '5', label: '5 Storeys' },
+  { value: '6-10', label: '6 - 10 Storeys (Mid-Rise)' },
+  { value: '11-20', label: '11 - 20 Storeys (High-Rise)' },
+  { value: '21-30', label: '21 - 30 Storeys (Major Tower)' },
+  { value: '31+', label: '31+ Storeys (Skyscraper)' },
+  { value: 'Others', label: 'Others (Custom Storey / Basement Specification)' },
+];
+
 interface ExtendedProfessional extends ProjectProfessional {
   selectedRoleType: string;
   customRole: string;
@@ -150,6 +171,33 @@ const SAMPLE_LAGOS_CORNERS: Record<CoordinateSystem, Partial<CornerInput>[]> = {
     { pointNumber: '2', label: 'Corner 2 (NE)', easting: '325480.00', northing: '711200.00' },
     { pointNumber: '3', label: 'Corner 3 (SE)', easting: '325480.00', northing: '711120.00' },
     { pointNumber: '4', label: 'Corner 4 (SW)', easting: '325400.00', northing: '711120.00' },
+  ],
+};
+
+const SAMPLE_PRESETS: Record<number, Partial<CornerInput>[]> = {
+  4: [
+    { pointNumber: '1', label: 'Corner 1 (NW)', lat: '6.424359', lng: '3.385914', easting: '542675.01', northing: '710130.59' },
+    { pointNumber: '2', label: 'Corner 2 (NE)', lat: '6.424398', lng: '3.386816', easting: '542774.75', northing: '710134.97' },
+    { pointNumber: '3', label: 'Corner 3 (SE)', lat: '6.423947', lng: '3.386836', easting: '542777.00', northing: '710085.12' },
+    { pointNumber: '4', label: 'Corner 4 (SW)', lat: '6.423908', lng: '3.385934', easting: '542677.26', northing: '710080.73' },
+  ],
+  6: [
+    { pointNumber: '1', label: 'Boundary Pt 1 (NW)', lat: '6.424359', lng: '3.385914', easting: '542675.01', northing: '710130.59' },
+    { pointNumber: '2', label: 'Boundary Pt 2 (N-Apex)', lat: '6.424650', lng: '3.386350', easting: '542723.40', northing: '710162.80' },
+    { pointNumber: '3', label: 'Boundary Pt 3 (NE)', lat: '6.424398', lng: '3.386816', easting: '542774.75', northing: '710134.97' },
+    { pointNumber: '4', label: 'Boundary Pt 4 (SE)', lat: '6.423947', lng: '3.386836', easting: '542777.00', northing: '710085.12' },
+    { pointNumber: '5', label: 'Boundary Pt 5 (S-Apex)', lat: '6.423750', lng: '3.386370', easting: '542725.60', northing: '710063.20' },
+    { pointNumber: '6', label: 'Boundary Pt 6 (SW)', lat: '6.423908', lng: '3.385934', easting: '542677.26', northing: '710080.73' },
+  ],
+  8: [
+    { pointNumber: '1', label: 'Pt 1 (NW)', lat: '6.424359', lng: '3.385914', easting: '542675.01', northing: '710130.59' },
+    { pointNumber: '2', label: 'Pt 2 (N1)', lat: '6.424550', lng: '3.386200', easting: '542706.70', northing: '710151.70' },
+    { pointNumber: '3', label: 'Pt 3 (N2)', lat: '6.424580', lng: '3.386550', easting: '542745.40', northing: '710155.10' },
+    { pointNumber: '4', label: 'Pt 4 (NE)', lat: '6.424398', lng: '3.386816', easting: '542774.75', northing: '710134.97' },
+    { pointNumber: '5', label: 'Pt 5 (SE)', lat: '6.423947', lng: '3.386836', easting: '542777.00', northing: '710085.12' },
+    { pointNumber: '6', label: 'Pt 6 (S1)', lat: '6.423800', lng: '3.386520', easting: '542742.10', northing: '710068.80' },
+    { pointNumber: '7', label: 'Pt 7 (S2)', lat: '6.423780', lng: '3.386150', easting: '542701.20', northing: '710066.50' },
+    { pointNumber: '8', label: 'Pt 8 (SW)', lat: '6.423908', lng: '3.385934', easting: '542677.26', northing: '710080.73' },
   ],
 };
 
@@ -240,7 +288,18 @@ export default function RegisterProjectWizard() {
   // Professionals state
   const [professionals, setProfessionals] = useState<ExtendedProfessional[]>([]);
 
-  // Coordinates & 4 Building Corners State
+  // Category Selection & Custom Category State
+  const [selectedCategoryType, setSelectedCategoryType] = useState<string>('Highrise');
+  const [customCategory, setCustomCategory] = useState<string>('');
+
+  // Estimated Value N/A Toggle State
+  const [isEstimatedValueNA, setIsEstimatedValueNA] = useState<boolean>(false);
+
+  // Floor Number Dropdown & Custom Storeys State
+  const [selectedFloorType, setSelectedFloorType] = useState<string>('1');
+  const [customFloorNote, setCustomFloorNote] = useState<string>('');
+
+  // Coordinates & Multi-Point Building Boundary State (Supports 4, 6, 8, 12, or more points)
   const [coordinateSystem, setCoordinateSystem] = useState<CoordinateSystem>('WGS84_DD');
   const [corners, setCorners] = useState<CornerInput[]>(DEFAULT_CORNERS);
   const [conversionResult, setConversionResult] = useState<ConversionResult | null>(null);
@@ -333,7 +392,7 @@ export default function RegisterProjectWizard() {
         {
           id: nextNum,
           pointNumber: String(nextNum),
-          label: `Corner ${nextNum}`,
+          label: `Boundary Pt ${nextNum}`,
           lat: '',
           lng: '',
           easting: '',
@@ -354,6 +413,61 @@ export default function RegisterProjectWizard() {
   const handleRemoveCorner = (index: number) => {
     if (corners.length <= 3) return; // Maintain minimum 3 points for closed polygon
     setCorners(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleApplyPresetPoints = (count: number) => {
+    const sampleSet = SAMPLE_PRESETS[count];
+    if (sampleSet && coordinateSystem === 'WGS84_DD') {
+      setCorners(sampleSet.map((s, idx) => ({
+        id: idx + 1,
+        pointNumber: s.pointNumber || String(idx + 1),
+        label: s.label || `Point ${idx + 1}`,
+        lat: s.lat || '',
+        lng: s.lng || '',
+        easting: s.easting || '',
+        northing: s.northing || '',
+        latDeg: '',
+        latMin: '',
+        latSec: '',
+        latDir: 'N',
+        lngDeg: '',
+        lngMin: '',
+        lngSec: '',
+        lngDir: 'E',
+      })));
+      setConversionResult(null);
+      setConversionFeedback(`Loaded ${count}-point boundary survey polygon preset.`);
+    } else {
+      // Build dynamic points array of count size
+      const newPoints: CornerInput[] = [];
+      for (let i = 1; i <= count; i++) {
+        const existing = corners[i - 1];
+        if (existing) {
+          newPoints.push(existing);
+        } else {
+          newPoints.push({
+            id: i,
+            pointNumber: String(i),
+            label: `Boundary Pt ${i}`,
+            lat: '',
+            lng: '',
+            easting: '',
+            northing: '',
+            latDeg: '',
+            latMin: '',
+            latSec: '',
+            latDir: 'N',
+            lngDeg: '',
+            lngMin: '',
+            lngSec: '',
+            lngDir: 'E',
+          });
+        }
+      }
+      setCorners(newPoints);
+      setConversionResult(null);
+      setConversionFeedback(`Configured ${count} allowable boundary survey points.`);
+    }
   };
 
   const handleApplySampleCorners = () => {
@@ -540,8 +654,19 @@ export default function RegisterProjectWizard() {
           license_number: p.license_number?.trim() || '',
         }));
 
+      const categoryToSubmit = selectedCategoryType === 'Others'
+        ? (customCategory.trim() || 'Others')
+        : (formData.development_category || selectedCategoryType);
+
       const payload = {
         ...formData,
+        development_category: categoryToSubmit,
+        is_estimated_value_na: isEstimatedValueNA,
+        estimated_project_value: isEstimatedValueNA ? null : formData.estimated_project_value,
+        number_of_floors: selectedFloorType === 'Others'
+          ? (parseInt(customFloorNote, 10) || undefined)
+          : (formData.number_of_floors || parseInt(selectedFloorType, 10) || undefined),
+        floor_number_custom: selectedFloorType === 'Others' ? (customFloorNote.trim() || 'Others') : undefined,
         status: statusOverride,
         coordinate_system: coordinateSystem,
         corner_coordinates: conversionResult || formData.corner_coordinates,
@@ -624,22 +749,133 @@ export default function RegisterProjectWizard() {
         </div>
 
         <div>
-          <label className="block text-sm font-bold text-[#022C4F] mb-1.5">Development Category</label>
+          <label className="block text-sm font-bold text-[#022C4F] mb-1.5">
+            Development Category <span className="text-red-500">*</span>
+          </label>
           <CustomSelect
-            value={formData.development_category || ''}
-            onChange={(val) => handleCustomSelectChange('development_category', val)}
-            options={[
-              { value: 'Category A (High Rise)', label: 'Category A (High Rise / Special Engineering)' },
-              { value: 'Category B (Medium Density)', label: 'Category B (Medium Density / Multi-Storey)' },
-              { value: 'Category C (Low Density)', label: 'Category C (Low Density / Residential)' },
-            ]}
+            value={selectedCategoryType}
+            onChange={(val) => {
+              setSelectedCategoryType(val);
+              if (val !== 'Others') {
+                handleCustomSelectChange('development_category', val);
+              } else {
+                handleCustomSelectChange('development_category', customCategory || 'Others');
+              }
+            }}
+            options={DEVELOPMENT_CATEGORY_OPTIONS}
             placeholder="Select Development Category..."
             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
           />
+          {selectedCategoryType === 'Others' && (
+            <div className="mt-2 animate-in fade-in">
+              <input
+                type="text"
+                value={customCategory}
+                onChange={(e) => {
+                  setCustomCategory(e.target.value);
+                  handleCustomSelectChange('development_category', e.target.value.trim() || 'Others');
+                }}
+                placeholder="Specify custom development category e.g. Special Engineering / Maritime Logistics Hub..."
+                className="w-full px-4 py-2 bg-blue-50/60 border border-blue-200 rounded-xl text-xs font-medium text-[#022C4F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
+              />
+            </div>
+          )}
         </div>
 
-        {renderInput('Estimated Value (₦)', 'estimated_project_value', 'number', 'e.g. 5000000000')}
-        {renderInput('Number of Floors/Structures', 'number_of_floors', 'number', 'e.g. 15')}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-bold text-[#022C4F]">
+              Estimated Project Value (₦)
+            </label>
+            <label className="flex items-center gap-1.5 text-xs font-bold text-blue-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isEstimatedValueNA}
+                onChange={(e) => {
+                  const na = e.target.checked;
+                  setIsEstimatedValueNA(na);
+                  if (na) {
+                    setFormData(prev => ({
+                      ...prev,
+                      estimated_project_value: '',
+                      is_estimated_value_na: true
+                    }));
+                  } else {
+                    setFormData(prev => ({
+                      ...prev,
+                      is_estimated_value_na: false
+                    }));
+                  }
+                }}
+                className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+              />
+              <span>Not Applicable (N/A)</span>
+            </label>
+          </div>
+          {isEstimatedValueNA ? (
+            <div className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-500 flex items-center justify-between">
+              <span>Not Applicable (N/A)</span>
+              <span className="text-[11px] px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">Exempt from numeric figure</span>
+            </div>
+          ) : (
+            <input
+              type="number"
+              name="estimated_project_value"
+              value={formData.estimated_project_value?.toString() || ''}
+              onChange={handleChange}
+              placeholder="e.g. 5000000000"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#022C4F] focus:border-transparent text-sm transition-all"
+            />
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-[#022C4F] mb-1.5">
+            Number of Floors / Levels
+          </label>
+          <CustomSelect
+            value={selectedFloorType}
+            onChange={(val) => {
+              setSelectedFloorType(val);
+              if (val === 'Others') {
+                setFormData(prev => ({
+                  ...prev,
+                  number_of_floors: parseInt(customFloorNote, 10) || undefined,
+                  floor_number_custom: customFloorNote || 'Others'
+                }));
+              } else {
+                const parsed = parseInt(val, 10);
+                setFormData(prev => ({
+                  ...prev,
+                  number_of_floors: isNaN(parsed) ? undefined : parsed,
+                  floor_number_custom: val
+                }));
+              }
+            }}
+            options={FLOOR_NUMBER_OPTIONS}
+            placeholder="Select number of floors..."
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+          />
+          {selectedFloorType === 'Others' && (
+            <div className="mt-2 animate-in fade-in">
+              <input
+                type="text"
+                value={customFloorNote}
+                onChange={(e) => {
+                  setCustomFloorNote(e.target.value);
+                  const parsed = parseInt(e.target.value, 10);
+                  setFormData(prev => ({
+                    ...prev,
+                    number_of_floors: isNaN(parsed) ? undefined : parsed,
+                    floor_number_custom: e.target.value
+                  }));
+                }}
+                placeholder="Specify custom floor count e.g. 3 Basements + 45 Storeys + Helipad"
+                className="w-full px-4 py-2 bg-blue-50/60 border border-blue-200 rounded-xl text-xs font-medium text-[#022C4F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <div>
@@ -800,31 +1036,53 @@ export default function RegisterProjectWizard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderInput('Plot Number', 'plot_number', 'text', 'e.g. Plot 12')}
-          {renderInput('Block / Cadastral Parcel', 'block_number', 'text', 'e.g. Block VII')}
-          {renderInput('Land Title Reference', 'land_title_reference', 'text', 'e.g. C of O No. 24/24/2019')}
+          {renderInput('Plot Number (Optional)', 'plot_number', 'text', 'e.g. Plot 12')}
+          {renderInput('Block / Cadastral Parcel (Optional)', 'block_number', 'text', 'e.g. Block VII')}
+          {renderInput('Land Title Reference (Optional)', 'land_title_reference', 'text', 'e.g. C of O No. 24/24/2019')}
         </div>
 
-        {/* 4-CORNER BUILDING LOCATION & COORDINATE CONVERSION ENGINE */}
+        {/* MULTI-POINT BOUNDARY SURVEY COORDINATES & CONVERSION ENGINE */}
         <div className="p-6 bg-gradient-to-br from-blue-50/80 via-slate-50 to-indigo-50/50 border border-blue-200 rounded-2xl shadow-sm mt-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-blue-200/60 mb-5">
             <div>
               <div className="flex items-center gap-2">
                 <Compass className="w-5 h-5 text-[#022C4F]" />
                 <h4 className="text-base font-bold text-[#022C4F]">
-                  4-Corner Building Boundary Coordinates & Conversion Engine
+                  Multi-Point Boundary Survey Coordinates & Conversion Engine
                 </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                  {corners.length} Survey Points
+                </span>
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                Enter the 4 building corner survey coordinates in your preferred system. The engine automatically converts them to standard WGS84 Latitude & Longitude, projects UTM metrics, and calculates the exact building footprint area.
+                Supports 4, 6, 8, 12, or any number of boundary survey coordinates beyond 4 points. The engine automatically converts coordinates to standard WGS84, calculates the centroid, and computes the exact site footprint area.
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 px-1.5 uppercase">Presets:</span>
+                {[4, 6, 8, 12].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleApplyPresetPoints(num)}
+                    className={`px-2 py-1 text-xs font-bold rounded-lg transition-all ${
+                      corners.length === num
+                        ? 'bg-[#022C4F] text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {num} Pts
+                  </button>
+                ))}
+              </div>
+
               <button
                 type="button"
                 onClick={handleApplySampleCorners}
-                className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
                 title="Fill sample Lagos Victoria Island coordinates"
               >
                 <Sparkles size={13} className="text-amber-500" />

@@ -17,6 +17,7 @@ import {
 import { getInspectorInspections } from "@/services/inspector";
 import { Inspection } from "@/services/inspections";
 import { orDash } from "@/lib/display";
+import AdjustInspectionScheduleModal from "@/components/inspector/AdjustInspectionScheduleModal";
 
 export default function InspectorInspectionsPage() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -24,6 +25,7 @@ export default function InspectorInspectionsPage() {
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedInspectionForReschedule, setSelectedInspectionForReschedule] = useState<any | null>(null);
 
   const fetchInspections = async () => {
     setIsLoading(true);
@@ -194,7 +196,18 @@ export default function InspectorInspectionsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                {insp.status !== 'COMPLETED' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInspectionForReschedule(insp)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/60 text-[#022C4F] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Adjust assigned inspection date & time"
+                  >
+                    <Clock size={13} className="text-[#022C4F]" />
+                    <span>Adjust Time</span>
+                  </button>
+                )}
                 <Link
                   href={`/inspector/dashboard/inspections/${insp.id}`}
                   className="px-4 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-2"
@@ -214,6 +227,18 @@ export default function InspectorInspectionsPage() {
             No inspection records match your current filter selection.
           </p>
         </div>
+      )}
+
+      {/* Adjust Inspection Schedule Modal */}
+      {selectedInspectionForReschedule && (
+        <AdjustInspectionScheduleModal
+          isOpen={!!selectedInspectionForReschedule}
+          onClose={() => setSelectedInspectionForReschedule(null)}
+          inspection={selectedInspectionForReschedule}
+          onScheduleUpdated={() => {
+            fetchInspections();
+          }}
+        />
       )}
     </div>
   );

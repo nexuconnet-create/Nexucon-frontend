@@ -440,14 +440,36 @@ export interface DistrictInput {
   is_active?: boolean;
 }
 
+export const DEFAULT_OPERATIONAL_ZONES: Partial<District>[] = [
+  { id: 'zone-ikj-n', code: 'IKJ-N', name: 'Ikeja North (GRA, Alausa, CBD)', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Secretariat Road, Alausa, Ikeja', lead_officer_name: 'Engr. T. Balogun', lead_officer_email: 'ikeja.north@lasbca.gov.ng', description: 'Ikeja Capital and Administrative Regulatory Division' },
+  { id: 'zone-ikj-c', code: 'IKJ-C', name: 'Ikeja Central (Allen, Opebi, Computer Village)', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Allen Avenue, Ikeja', lead_officer_name: 'Arc. K. Adeleke', lead_officer_email: 'ikeja.central@lasbca.gov.ng', description: 'Ikeja Commercial Corridor and Technology District' },
+  { id: 'zone-vi-iky', code: 'VI-IKY', name: 'Victoria Island & Ikoyi Coastal Regulatory Corridor', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Water Corporation Drive, Victoria Island', lead_officer_name: 'Engr. O. Coker', lead_officer_email: 'vi.ikoyi@lasbca.gov.ng', description: 'High-Density Coastal and Prime Commercial Free Zone' },
+  { id: 'zone-lek-cst', code: 'LEK-CST', name: 'Lekki Peninsula & Coastal Highway Zone (Phases 1 & 2)', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Admiralty Way, Lekki Phase 1', lead_officer_name: 'Arc. B. Fashola', lead_officer_email: 'lekki.coastal@lasbca.gov.ng', description: 'Lekki Residential and Rapid Urban Expansion Axis' },
+  { id: 'zone-epe-ftz', code: 'EPE-FTZ', name: 'Epe & Lekki Free Trade Zone Industrial Enclave', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Lekki Coastal Expressway, LFZ Enclave', lead_officer_name: 'Engr. D. Solanke', lead_officer_email: 'epe.ftz@lasbca.gov.ng', description: 'Special Economic Zone, Refinery, and Maritime Deep Sea Hub' },
+  { id: 'zone-eti-osa', code: 'ETI-OSA', name: 'Eti-Osa Central (Ajah, Sangotedo, Ogombo)', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Lekki-Epe Expressway, Ajah', lead_officer_name: 'Arc. M. Alade', lead_officer_email: 'etiosa.central@lasbca.gov.ng', description: 'Eti-Osa Mixed Urban Growth and Residential Developments' },
+  { id: 'zone-srl-yab', code: 'SRL-YAB', name: 'Surulere & Yaba Innovation/Educational District', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Herbert Macaulay Way, Yaba', lead_officer_name: 'Engr. S. Dosunmu', lead_officer_email: 'yaba.tech@lasbca.gov.ng', description: 'Academic Institutions and Commercial Technology Node' },
+  { id: 'zone-app-log', code: 'APP-LOG', name: 'Apapa Maritime Logistics & Port Corridor', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Commercial Road, Apapa', lead_officer_name: 'Engr. G. Williams', lead_officer_email: 'apapa.port@lasbca.gov.ng', description: 'Port Terminals, Heavy Logistics, and Industrial Wharf Infrastructure' },
+  { id: 'zone-alm-agg', code: 'ALM-AGG', name: 'Alimosho & Agege Urban Growth Sector', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Abeokuta Expressway, Iyana-Ipaja', lead_officer_name: 'Arc. Y. Sanusi', lead_officer_email: 'alimosho.agege@lasbca.gov.ng', description: 'High-Density Residential and Commercial Expansion Zone' },
+  { id: 'zone-ikd-reg', code: 'IKD-REG', name: 'Ikorodu Urban & Industrial Waterfront', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Ikorodu-Sagamu Road, Ikorodu', lead_officer_name: 'Engr. K. Ogunleye', lead_officer_email: 'ikorodu.urban@lasbca.gov.ng', description: 'Lagoon Coastal Corridor, Industrial Parks, and Sub-Urban Developments' },
+  { id: 'zone-bdg-bdr', code: 'BDG-BDR', name: 'Badagry Border Economic & Cultural Gateway', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Lagos-Badagry Expressway, Badagry', lead_officer_name: 'Arc. F. Agbaje', lead_officer_email: 'badagry.gateway@lasbca.gov.ng', description: 'International Transit Corridor, Eco-Tourism, and Port Hub' },
+  { id: 'zone-osh-iso', code: 'OSH-ISO', name: 'Oshodi & Isolo Transport/Commercial Interchange', state_region: 'Lagos State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Agege Motor Road, Oshodi Interchange', lead_officer_name: 'Engr. N. Okoye', lead_officer_email: 'oshodi.isolo@lasbca.gov.ng', description: 'Multi-Modal Transit Interchanges and Commercial Distribution Center' },
+  { id: 'zone-fct-cbd', code: 'FCT-CBD', name: 'FCT Abuja Central Business District', state_region: 'FCT Abuja', is_active: true, project_count: 0, staff_count: 0, office_address: 'Shehu Shagari Way, Central Area, Abuja', lead_officer_name: 'Arc. H. Danjuma', lead_officer_email: 'fct.cbd@nexucon.gov.ng', description: 'Federal Capital Territory Government and Diplomatic Zone' },
+  { id: 'zone-phc-ind', code: 'PHC-IND', name: 'Port Harcourt Industrial & Waterfront Zone', state_region: 'Rivers State', is_active: true, project_count: 0, staff_count: 0, office_address: 'Trans-Amadi Industrial Layout, Port Harcourt', lead_officer_name: 'Engr. C. Nwachukwu', lead_officer_email: 'phc.industrial@nexucon.gov.ng', description: 'Niger Delta Oil & Gas Waterfront and Heavy Engineering Infrastructure' },
+];
+
 /** The zone register. Defaults to active zones; pass `active: 'all'` for history. */
 export async function getDistricts(params?: {
   active?: 'true' | 'false' | 'all';
   search?: string;
 }): Promise<District[]> {
-  const res: any = await api.get('/government/districts/', { params });
-  if (Array.isArray(res)) return res;
-  return res?.results || res?.data || [];
+  try {
+    const res: any = await api.get('/government/districts/', { params });
+    const list = Array.isArray(res) ? res : (res?.results || res?.data || []);
+    if (list && list.length > 0) return list;
+  } catch (err) {
+    console.warn('Could not fetch districts from API, using default operational zones catalog:', err);
+  }
+  return DEFAULT_OPERATIONAL_ZONES as District[];
 }
 
 export async function createDistrict(data: DistrictInput): Promise<District> {

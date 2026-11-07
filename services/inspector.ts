@@ -955,3 +955,14 @@ export async function getProjectInspectors(projectId: string): Promise<ProjectIn
     return [];
   }
 }
+
+/**
+ * Adjust/reschedule assigned inspection date & time from inspector dashboard or inspection page.
+ */
+export async function rescheduleInspectorInspection(
+  id: string,
+  payload: { scheduled_date: string; reason?: string }
+): Promise<Inspection> {
+  const res: any = await api.post(`/inspections/${id}/reschedule/`, payload);
+  return res?.data || res;
+}
