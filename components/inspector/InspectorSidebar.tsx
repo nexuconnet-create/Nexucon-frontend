@@ -30,6 +30,7 @@ import {
   FileText,
   Bell,
   Settings,
+  User,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -117,7 +118,8 @@ const SECTIONS: NavSection[] = [
       { name: "Site Documents", href: "/inspector/dashboard/documents", icon: FolderOpen },
       { name: "Inspection Reports", href: "/inspector/dashboard/reports", icon: FileText },
       { name: "Alerts & Notices", href: "/inspector/dashboard/notifications", icon: Bell },
-      { name: "Inspector Profile", href: "/inspector/dashboard/settings", icon: Settings },
+      { name: "Inspector Profile", href: "/inspector/dashboard/profile", icon: User },
+      { name: "Station Settings", href: "/inspector/dashboard/settings", icon: Settings },
     ]
   }
 ];

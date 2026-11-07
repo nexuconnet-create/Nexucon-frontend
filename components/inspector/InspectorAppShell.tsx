@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import InspectorHeader from "./InspectorHeader";
 import InspectorSidebar from "./InspectorSidebar";
 import InspectorMobileNav from "./InspectorMobileNav";
+import UsernameActivationModal from "@/components/dashboard/UsernameActivationModal";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface InspectorAppShellProps {
@@ -66,6 +67,9 @@ export default function InspectorAppShell({ children }: InspectorAppShellProps) 
 
       {/* Touch Bottom Navigation */}
       <InspectorMobileNav />
+
+      {/* Username Activation Popup Modal */}
+      <UsernameActivationModal />
     </div>
   );
 }

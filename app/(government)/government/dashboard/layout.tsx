@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import GovernmentSidebar from "@/components/dashboard/GovernmentSidebar";
 import Toast from "@/components/Toast";
+import UsernameActivationModal from "@/components/dashboard/UsernameActivationModal";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
@@ -31,7 +32,15 @@ export default function GovernmentLayout({
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.replace('/government/login');
+        const currentPath =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/government/dashboard/command-center";
+        const hasActivation = currentPath.includes("activate_username=true");
+        const loginUrl = hasActivation
+          ? `/government/login?activate_username=true&redirect=${encodeURIComponent(currentPath)}`
+          : `/government/login?redirect=${encodeURIComponent(currentPath)}`;
+        router.replace(loginUrl);
         return;
       }
       const role = (user.role_name || '').toLowerCase();
@@ -161,6 +170,7 @@ export default function GovernmentLayout({
       </div>
 
       <Toast />
+      <UsernameActivationModal />
 
       {/* Floating Contextual Help Button */}
       <button 

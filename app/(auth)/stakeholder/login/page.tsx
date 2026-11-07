@@ -1,21 +1,34 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, EyeOff, Eye, Building2, Calendar, CreditCard, ShieldCheck, ShieldAlert } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ChevronLeft, EyeOff, Eye, Building2, Calendar, CreditCard, ShieldCheck, ShieldAlert, Sparkles } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
-export default function StakeholderLogin() {
+function StakeholderLoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, logout, user, isLoading, error: authError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [homeUrl, setHomeUrl] = useState("/");
+
+  const redirectParam = searchParams?.get("redirect") || "";
+  const isUsernameActivation =
+    searchParams?.get("activate_username") === "true" ||
+    searchParams?.get("activate-username") === "true" ||
+    redirectParam.includes("activate_username=true");
+
+  useEffect(() => {
+    if (isUsernameActivation && typeof window !== "undefined") {
+      sessionStorage.setItem("nexucon_activate_username", "true");
+    }
+  }, [isUsernameActivation]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -41,13 +54,14 @@ export default function StakeholderLogin() {
       const localOnboarded = typeof window !== 'undefined' && cleanEmail
         ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`) 
         : null;
+      const targetUrl = redirectParam || (isUsernameActivation ? '/stakeholder?activate_username=true' : '/stakeholder');
       if (user.is_onboarded || localOnboarded) {
-        router.push('/stakeholder');
+        router.push(targetUrl);
       } else {
         router.push('/stakeholder/onboarding');
       }
     }
-  }, [user, isLoading, router, logout]);
+  }, [user, isLoading, router, logout, redirectParam, isUsernameActivation]);
 
   const handleModalClose = () => {
     const cleanEmail = (user?.email || formData.email).trim().toLowerCase();
@@ -55,8 +69,9 @@ export default function StakeholderLogin() {
       ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`) 
       : null;
     
+    const targetUrl = redirectParam || (isUsernameActivation ? '/stakeholder?activate_username=true' : '/stakeholder');
     if (user?.is_onboarded || localOnboarded) {
-      router.push('/stakeholder');
+      router.push(targetUrl);
     } else {
       router.push('/stakeholder/onboarding');
     }
@@ -210,6 +225,17 @@ export default function StakeholderLogin() {
             <p className="text-xs sm:text-sm font-medium text-gray-500 leading-relaxed">
               Sign in as a Client, Developer, Contractor, Licensed Professional, or Consultant to manage regulatory activities.
             </p>
+            {isUsernameActivation && (
+              <div className="mt-4 p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5 shadow-sm">
+                <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-extrabold text-[#022C4F]">Username Activation</p>
+                  <p className="text-blue-800 mt-0.5">
+                    Sign in to claim and activate your official Nexucon handle. An activation popup modal will appear automatically upon login.
+                  </p>
+                </div>
+              </div>
+            )}
             {authError && (
               <div className="mt-4 text-xs sm:text-sm text-red-700 bg-red-50 p-3.5 rounded-xl border border-red-200 flex items-start gap-2.5 shadow-sm">
                 <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -300,5 +326,13 @@ export default function StakeholderLogin() {
         message="Stakeholder Login Successful!"
       />
     </div>
+  );
+}
+
+export default function StakeholderLogin() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center text-gray-400">Loading...</div>}>
+      <StakeholderLoginContent />
+    </Suspense>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import StakeholderSidebar from "@/components/dashboard/StakeholderSidebar";
 import Toast from "@/components/Toast";
+import UsernameActivationModal from "@/components/dashboard/UsernameActivationModal";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
@@ -24,7 +25,15 @@ export default function StakeholderLayout({
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.replace('/stakeholder/login');
+        const currentPath =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/stakeholder";
+        const hasActivation = currentPath.includes("activate_username=true");
+        const loginUrl = hasActivation
+          ? `/stakeholder/login?activate_username=true&redirect=${encodeURIComponent(currentPath)}`
+          : `/stakeholder/login?redirect=${encodeURIComponent(currentPath)}`;
+        router.replace(loginUrl);
         return;
       }
       const role = (user.role_name || '').toLowerCase();
@@ -158,6 +167,7 @@ export default function StakeholderLayout({
       </div>
 
       <Toast />
+      <UsernameActivationModal />
 
       {/* Floating Contextual Help Button */}
       <button 

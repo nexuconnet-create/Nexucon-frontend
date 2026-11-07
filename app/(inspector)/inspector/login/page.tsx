@@ -15,6 +15,11 @@ function InspectorLoginContent() {
 
   const queryEmail = searchParams?.get("email") || "";
   const isNewUser = searchParams?.get("new") === "true";
+  const redirectParam = searchParams?.get("redirect") || "";
+  const isUsernameActivation =
+    searchParams?.get("activate_username") === "true" ||
+    searchParams?.get("activate-username") === "true" ||
+    redirectParam.includes("activate_username=true");
 
   const [email, setEmail] = useState(queryEmail);
   const [password, setPassword] = useState("");
@@ -41,7 +46,10 @@ function InspectorLoginContent() {
     if (isNewUser) {
       setNeedsPasswordChange(true);
     }
-  }, [queryEmail, isNewUser]);
+    if (isUsernameActivation && typeof window !== "undefined") {
+      sessionStorage.setItem("nexucon_activate_username", "true");
+    }
+  }, [queryEmail, isNewUser, isUsernameActivation]);
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -55,13 +63,14 @@ function InspectorLoginContent() {
       const localOnboarded = typeof window !== 'undefined' && cleanEmail
         ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`)
         : null;
+      const targetUrl = redirectParam || (isUsernameActivation ? "/inspector/dashboard?activate_username=true" : "/inspector/dashboard");
       if (user.is_onboarded || localOnboarded) {
-        router.replace('/inspector/dashboard');
+        router.replace(targetUrl);
       } else {
         router.replace('/inspector/onboarding');
       }
     }
-  }, [user, isLoading, router, logout]);
+  }, [user, isLoading, router, logout, redirectParam, isUsernameActivation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,14 +90,18 @@ function InspectorLoginContent() {
       // 1. Direct standard login attempt with backend
       const loginRes: any = await login({ email: cleanEmail, password: cleanPassword, portal: 'inspector' });
       if (loginRes === true) {
+        if (isUsernameActivation && typeof window !== "undefined") {
+          sessionStorage.setItem("nexucon_activate_username", "true");
+        }
         const onboardingDone = typeof window !== 'undefined'
           ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`)
           : null;
 
+        const targetUrl = redirectParam || (isUsernameActivation ? "/inspector/dashboard?activate_username=true" : "/inspector/dashboard");
         if (!onboardingDone) {
           router.replace("/inspector/onboarding");
         } else {
-          router.replace("/inspector/dashboard");
+          router.replace(targetUrl);
         }
         return;
       }
@@ -348,6 +361,20 @@ function InspectorLoginContent() {
                       </Link>
                     </div>
                   )}
+                </div>
+              )}
+
+              {isUsernameActivation && (
+                <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 flex items-start gap-3 text-xs text-sky-950 shadow-sm animate-in fade-in duration-200">
+                  <Sparkles className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-extrabold text-[#022C4F]">
+                      Username Activation Requested
+                    </p>
+                    <p className="text-sky-800 mt-0.5 leading-relaxed">
+                      Please sign in to claim and activate your official Nexucon username handle. An activation popup modal will appear automatically upon login.
+                    </p>
+                  </div>
                 </div>
               )}
 

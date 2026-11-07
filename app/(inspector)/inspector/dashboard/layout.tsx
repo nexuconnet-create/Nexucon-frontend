@@ -18,7 +18,15 @@ export default function InspectorDashboardLayout({
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
-        router.replace('/inspector/login');
+        const currentPath =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/inspector/dashboard";
+        const hasActivation = currentPath.includes("activate_username=true");
+        const loginUrl = hasActivation
+          ? `/inspector/login?activate_username=true&redirect=${encodeURIComponent(currentPath)}`
+          : `/inspector/login?redirect=${encodeURIComponent(currentPath)}`;
+        router.replace(loginUrl);
         return;
       }
       const role = (user.role_name || '').toLowerCase();

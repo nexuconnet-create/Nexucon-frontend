@@ -1,20 +1,33 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, EyeOff, Eye, ShieldCheck, Landmark, FileCheck2, Scale, AlertCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ChevronLeft, EyeOff, Eye, ShieldCheck, Landmark, FileCheck2, Scale, AlertCircle, Sparkles } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import LoginSuccessModal from "@/components/dashboard/LoginSuccessModal";
 
-export default function GovernmentLogin() {
+function GovernmentLoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, logout, user, isLoading, error: authError } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  const redirectParam = searchParams?.get("redirect") || "";
+  const isUsernameActivation =
+    searchParams?.get("activate_username") === "true" ||
+    searchParams?.get("activate-username") === "true" ||
+    redirectParam.includes("activate_username=true");
+
+  useEffect(() => {
+    if (isUsernameActivation && typeof window !== "undefined") {
+      sessionStorage.setItem("nexucon_activate_username", "true");
+    }
+  }, [isUsernameActivation]);
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -26,9 +39,10 @@ export default function GovernmentLogin() {
         logout();
         return;
       }
-      router.push('/government/dashboard/command-center');
+      const targetUrl = redirectParam || (isUsernameActivation ? '/government/dashboard/command-center?activate_username=true' : '/government/dashboard/command-center');
+      router.push(targetUrl);
     }
-  }, [user, isLoading, router, logout]);
+  }, [user, isLoading, router, logout, redirectParam, isUsernameActivation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +192,17 @@ export default function GovernmentLogin() {
             <p className="text-xs sm:text-sm font-medium text-gray-500 leading-relaxed">
               Sign in as an Agency Head, Director, or Building Control official to review plans, issue permits, and oversee jurisdiction compliance.
             </p>
+            {isUsernameActivation && (
+              <div className="mt-4 p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-2.5 shadow-sm">
+                <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-extrabold text-[#022C4F]">Username Activation</p>
+                  <p className="text-blue-800 mt-0.5">
+                    Sign in to claim and activate your official Nexucon handle. A setup modal will appear right after login.
+                  </p>
+                </div>
+              </div>
+            )}
             {authError && (
               <div className="mt-4 flex items-center gap-2 text-xs sm:text-sm text-red-600 bg-red-50 p-3.5 rounded-xl border border-red-200">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
@@ -269,8 +294,23 @@ export default function GovernmentLogin() {
 
       <LoginSuccessModal 
         isOpen={showSuccessModal} 
-        onClose={() => router.push('/government/dashboard/command-center')} 
+        onClose={() =>
+          router.push(
+            redirectParam ||
+              (isUsernameActivation
+                ? "/government/dashboard/command-center?activate_username=true"
+                : "/government/dashboard/command-center")
+          )
+        } 
       />
     </div>
+  );
+}
+
+export default function GovernmentLogin() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center text-gray-400">Loading...</div>}>
+      <GovernmentLoginContent />
+    </Suspense>
   );
 }

@@ -224,12 +224,20 @@ export default function InspectorHeader({ onOpenMobileMenu }: InspectorHeaderPro
 
                 <div className="space-y-1 text-xs font-medium">
                   <Link
-                    href="/inspector/dashboard/settings"
+                    href="/inspector/dashboard/profile"
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-700 hover:bg-slate-100 hover:text-[#022C4F] transition-colors"
                   >
                     <User size={15} />
-                    <span>Inspector Profile & Key</span>
+                    <span>Inspector Profile &amp; Username</span>
+                  </Link>
+                  <Link
+                    href="/inspector/dashboard/settings"
+                    onClick={() => setIsProfileOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-700 hover:bg-slate-100 hover:text-[#022C4F] transition-colors"
+                  >
+                    <Shield size={15} />
+                    <span>Station Settings &amp; Keys</span>
                   </Link>
                   <a
                     href="https://nexucon.net/government/login"
