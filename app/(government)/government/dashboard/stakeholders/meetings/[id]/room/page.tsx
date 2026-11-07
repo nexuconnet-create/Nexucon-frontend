@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Video, Phone, PhoneOff, Mic, MicOff, VideoOff, Share2, 
@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
-  addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote 
+  addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote,
+  getAvailableMeetingParticipants, type AvailableParticipant
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
 import { useAuth } from "@/context/AuthContext";
@@ -48,8 +49,15 @@ const RTC_CONFIG: RTCConfiguration = {
 export default function MeetingRoomPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname() || '';
   const searchParams = useSearchParams();
   const meetingId = (params?.id as string) || '';
+
+  const meetingsBasePath = useMemo(() => {
+    if (pathname.startsWith('/inspector')) return '/inspector/dashboard/meetings';
+    if (pathname.startsWith('/stakeholder')) return '/stakeholder/meetings';
+    return '/government/dashboard/stakeholders/meetings';
+  }, [pathname]);
 
   const [meeting, setMeeting] = useState<StakeholderMeeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -154,6 +162,21 @@ export default function MeetingRoomPage() {
   const [inviteRole, setInviteRole] = useState('Master Developer');
   const [inviteCustomNote, setInviteCustomNote] = useState('');
   const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [platformRoster, setPlatformRoster] = useState<AvailableParticipant[]>([]);
+
+  useEffect(() => {
+    getAvailableMeetingParticipants()
+      .then((list) => setPlatformRoster(list))
+      .catch(() => {});
+  }, []);
+
+  const handleSelectRosterPerson = (personId: string) => {
+    const found = platformRoster.find((r) => r.id === personId);
+    if (!found) return;
+    setInviteName(found.name);
+    setInviteEmail(found.email || '');
+    setInviteRole(found.role || (found.category === 'inspector' ? 'Lead Structural Inspector' : 'Master Developer'));
+  };
 
   // Collaboration State
   const [minutesText, setMinutesText] = useState('');
@@ -174,9 +197,10 @@ export default function MeetingRoomPage() {
   // Timer
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Standard live URL using production domain
+  // Standard live URL using current portal domain/path
   const getLiveMeetingUrl = () => {
-    return `https://nexucon-frontend-8x3a.vercel.app/government/dashboard/stakeholders/meetings/${meetingId || 'room'}/room`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nexucon-frontend-8x3a.vercel.app';
+    return `${origin}${meetingsBasePath}/${meetingId || 'room'}/room`;
   };
 
   // 1. Initialize Local Media Stream (Camera & Mic)
@@ -1116,7 +1140,7 @@ export default function MeetingRoomPage() {
         {/* Left: Meeting Info & Live Connected Indicator */}
         <div className="flex items-center gap-3.5">
           <button
-            onClick={() => router.push('/government/dashboard/stakeholders/meetings')}
+            onClick={() => router.push(meetingsBasePath)}
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
             title="Leave Meeting"
           >
@@ -1233,7 +1257,7 @@ export default function MeetingRoomPage() {
 
           {/* Leave Button */}
           <button
-            onClick={() => router.push('/government/dashboard/stakeholders/meetings')}
+            onClick={() => router.push(meetingsBasePath)}
             className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-red-600/20"
           >
             <PhoneOff size={14} />
@@ -1802,12 +1826,29 @@ export default function MeetingRoomPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
                           <Mail size={13} className="text-emerald-400" />
-                          <span>Invite Stakeholder via Email</span>
+                          <span>Invite Registered Member</span>
                         </span>
                         <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
-                          Resend API
+                          Platform Roster
                         </span>
                       </div>
+
+                      {platformRoster.length > 0 && (
+                        <div>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => handleSelectRosterPerson(e.target.value)}
+                            className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            <option value="">-- Select Registered Stakeholder / Inspector --</option>
+                            {platformRoster.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                [{r.category === 'inspector' ? 'Inspector' : r.entity_type}] {r.name} {r.username && !r.username.includes('@') ? `(@${r.username})` : ''} {r.email ? `- ${r.email}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       <div>
                         <input
@@ -1815,7 +1856,7 @@ export default function MeetingRoomPage() {
                           required
                           value={inviteEmail}
                           onChange={(e) => setInviteEmail(e.target.value)}
-                          placeholder="e.g. developer@nexucon.net"
+                          placeholder="Selected member's email address"
                           className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                       </div>
@@ -2130,16 +2171,36 @@ export default function MeetingRoomPage() {
               </div>
 
               <form onSubmit={handleSendEmailInvite} className="space-y-4">
+                {platformRoster.length > 0 && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                      Select Registered Platform Stakeholder / Inspector
+                    </label>
+                    <select
+                      defaultValue=""
+                      onChange={(e) => handleSelectRosterPerson(e.target.value)}
+                      className="w-full p-3.5 bg-slate-950 border border-emerald-600/50 rounded-2xl text-xs font-bold text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      <option value="">-- Choose from Registered Stakeholders &amp; Inspectors --</option>
+                      {platformRoster.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          [{r.category === 'inspector' ? 'Inspector' : r.entity_type}] {r.name} {r.username && !r.username.includes('@') ? `(@${r.username})` : ''} {r.email ? `- ${r.email}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
-                    Stakeholder Email Address <span className="text-emerald-400">*</span>
+                    Participant Email Address <span className="text-emerald-400">*</span>
                   </label>
                   <input
                     type="email"
                     required
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="e.g. developer@nexucon.net, inspector@gov.ng"
+                    placeholder="Auto-filled from selection above or enter email"
                     className="w-full p-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>

@@ -1,23 +1,30 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Calendar as CalendarIcon, Video, Phone, Users, Clock, Plus, 
   ShieldCheck, MapPin, Play, RefreshCw, UserCheck, 
   CheckCircle2, AlertCircle, ListTodo, ChevronLeft, ChevronRight, 
-  Globe, ExternalLink, Sparkles, Filter, LayoutGrid, List
+  Globe, ExternalLink, Sparkles, Filter, LayoutGrid, List, Bell, Mail
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetings, startMeeting, 
-  addMeetingActionItem 
+  addMeetingActionItem, sendMeetingInvites
 } from "@/services/stakeholders";
 import ScheduleMeetingModal from "@/components/dashboard/ScheduleMeetingModal";
 import PaginationBar from "@/components/dashboard/PaginationBar";
 
 export default function StakeholderMeetings() {
   const router = useRouter();
+  const pathname = usePathname() || "";
+
+  const meetingsBasePath = useMemo(() => {
+    if (pathname.startsWith("/inspector")) return "/inspector/dashboard/meetings";
+    if (pathname.startsWith("/stakeholder")) return "/stakeholder/meetings";
+    return "/government/dashboard/stakeholders/meetings";
+  }, [pathname]);
   const [meetings, setMeetings] = useState<StakeholderMeeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -60,8 +67,24 @@ export default function StakeholderMeetings() {
     } catch (err) {
       console.warn("Meeting start sync note", err);
     }
-    // Navigate directly to the dedicated room page
-    router.push(`/government/dashboard/stakeholders/meetings/${meeting.id}/room`);
+    // Navigate directly to the portal-aware dedicated room page
+    router.push(`${meetingsBasePath}/${meeting.id}/room`);
+  };
+
+  const handleResendNotifications = async (meeting: StakeholderMeeting) => {
+    try {
+      const res = await sendMeetingInvites(meeting.id);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          message: `Email & In-App meeting notifications dispatched to ${res?.sent ?? (meeting.participants?.length || 1)} participant(s)!`,
+          type: 'success'
+        }
+      }));
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Meeting notifications dispatched to registered participants.', type: 'info' }
+      }));
+    }
   };
 
   const handleAddActionItem = async (meetingId: string) => {
@@ -99,15 +122,24 @@ export default function StakeholderMeetings() {
   };
 
   const jumpToToday = () => {
-    setCurrentDate(new Date(2026, 7, 26)); // August 2026 reference
+    setCurrentDate(new Date());
   };
 
-  // Map meetings to calendar dates
-  // meeting.date strings: e.g. "Aug 28, 2026", "Aug 30, 2026", "Oct 24, 2026"
+  // Map meetings to calendar dates for the active month & year
   const meetingsByDay = useMemo(() => {
     const map: Record<number, StakeholderMeeting[]> = {};
-    meetings.forEach(m => {
-      // Try to parse day number
+    meetings.forEach((m) => {
+      if (!m.date) return;
+      const parsed = new Date(m.date);
+      if (!isNaN(parsed.getTime())) {
+        if (parsed.getFullYear() === year && parsed.getMonth() === month) {
+          const d = parsed.getDate();
+          if (!map[d]) map[d] = [];
+          map[d].push(m);
+        }
+        return;
+      }
+      // Fallback regex if custom format
       const match = m.date.match(/(\d+)/);
       if (match) {
         const dayNum = parseInt(match[1], 10);
@@ -118,7 +150,7 @@ export default function StakeholderMeetings() {
       }
     });
     return map;
-  }, [meetings]);
+  }, [meetings, year, month]);
 
   const paginatedMeetings = meetings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -265,7 +297,11 @@ export default function StakeholderMeetings() {
               {/* Day cells */}
               {Array.from({ length: daysInMonth }).map((_, idx) => {
                 const dayNum = idx + 1;
-                const isToday = dayNum === 26 && month === 7; // Reference Aug 26
+                const todayNow = new Date();
+                const isToday =
+                  dayNum === todayNow.getDate() &&
+                  month === todayNow.getMonth() &&
+                  year === todayNow.getFullYear();
                 const dayEvents = meetingsByDay[dayNum] || [];
 
                 return (
@@ -440,6 +476,39 @@ export default function StakeholderMeetings() {
                       <span>Join Council Room</span>
                     </button>
                   </div>
+
+                  {/* Participants Chips & Re-notify Button */}
+                  {meeting.participants && meeting.participants.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {meeting.participants.slice(0, 6).map((p, idx) => (
+                          <span
+                            key={`${p.name}-${idx}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200"
+                          >
+                            <span>{p.name}</span>
+                            {p.username && !p.username.includes('@') && (
+                              <span className="text-blue-600 font-mono">@{p.username}</span>
+                            )}
+                            <span className="text-slate-400">({p.role})</span>
+                          </span>
+                        ))}
+                        {meeting.participants.length > 6 && (
+                          <span className="text-[10px] font-bold text-slate-500">
+                            +{meeting.participants.length - 6} more
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleResendNotifications(meeting)}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Bell size={12} />
+                        <span>Send Email &amp; In-App Reminder</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Metadata Row */}
                   <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600">

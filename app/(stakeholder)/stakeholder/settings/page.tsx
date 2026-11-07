@@ -23,6 +23,7 @@ import {
   FileBadge
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import UsernameSettingsCard from "@/components/dashboard/UsernameSettingsCard";
 
 export default function StakeholderSettingsPage() {
   const { user } = useAuth();
@@ -85,6 +86,9 @@ export default function StakeholderSettingsPage() {
         {/* Subtle background glow */}
         <div className="absolute right-0 top-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
       </div>
+
+      {/* Username Login & Auto-Generator Card */}
+      <UsernameSettingsCard />
 
       {/* Quick Nav Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

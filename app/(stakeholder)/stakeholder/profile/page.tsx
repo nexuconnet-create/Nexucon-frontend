@@ -19,6 +19,7 @@ import {
   Layers
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import UsernameSettingsCard from "@/components/dashboard/UsernameSettingsCard";
 
 export default function StakeholderProfilePage() {
   const { user } = useAuth();
@@ -120,7 +121,8 @@ export default function StakeholderProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-5xl">
+      <div className="max-w-5xl space-y-6">
+        <UsernameSettingsCard />
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}

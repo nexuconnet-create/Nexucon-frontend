@@ -5,6 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 
 export interface User {
   id: string;
+  username?: string;
+  needs_username_update?: boolean;
   email: string;
   first_name: string;
   last_name: string;
@@ -218,7 +220,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (credentials: any) => {
     setIsLoading(true);
     setError(null);
-    const email = credentials.email?.trim().toLowerCase();
+    const identifier = (credentials.username || credentials.email || '').trim().toLowerCase();
+    const email = identifier;
     const password = credentials.password;
 
     // Detect target portal from credentials, pathname, or hostname
@@ -226,7 +229,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const payload = {
       ...credentials,
-      email,
+      username: identifier,
+      email: identifier,
       password,
       portal: targetPortal || undefined,
     };
@@ -358,7 +362,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     }
 
-    setError('Invalid email or password. Please check your credentials.');
+    setError('Invalid username/email or password. Please check your credentials.');
     setIsLoading(false);
     return false;
   };

@@ -30,17 +30,14 @@ export default function GovernmentLogin() {
     }
   }, [user, isLoading, router, logout]);
 
-  const validateEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
-    if (!formData.email) {
-      newErrors.email = "Agency Email is required";
-    } else if (!validateEmail(formData.email)) {
-      newErrors.email = "Valid Email Address is required";
+    const identifier = formData.email.trim().replace(/^@+/, '');
+    if (!identifier) {
+      newErrors.email = "Username or Agency Email is required";
+    } else if (identifier.length < 3) {
+      newErrors.email = "Enter a valid username or email address";
     }
     if (!formData.password) {
       newErrors.password = "Password is required";
@@ -50,7 +47,8 @@ export default function GovernmentLogin() {
 
     if (Object.keys(newErrors).length === 0) {
       const success = await login({
-        email: formData.email.trim(),
+        username: identifier,
+        email: identifier,
         password: formData.password,
         portal: 'government'
       });
@@ -192,13 +190,13 @@ export default function GovernmentLogin() {
           <form className="flex flex-col h-full lg:h-auto" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-5 mb-8">
               <div className="flex flex-col gap-2 relative">
-                <label className="text-sm font-bold text-[#022C4F]">Official Agency Email Address</label>
+                <label className="text-sm font-bold text-[#022C4F]">Username or Official Agency Email</label>
                 <input
-                  type="email"
+                  type="text"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`w-full px-4 py-3.5 rounded-xl border ${errors.email ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  placeholder="name@agency.gov.ng"
+                  placeholder="username or name@agency.gov.ng"
                   autoFocus
                 />
                 {errors.email && (

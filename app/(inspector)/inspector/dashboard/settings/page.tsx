@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/services/api";
+import UsernameSettingsCard from "@/components/dashboard/UsernameSettingsCard";
 import {
   getInspectorDashboard,
   getInspectorAccreditation,
@@ -164,6 +165,9 @@ export default function InspectorSettingsPage() {
           <p>{identityError}</p>
         </div>
       )}
+
+      {/* Username Login & Auto-Generator Card */}
+      <UsernameSettingsCard />
 
       {/* Profile Card */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">

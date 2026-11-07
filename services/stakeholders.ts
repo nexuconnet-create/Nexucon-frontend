@@ -12,6 +12,8 @@ export interface Developer {
   primary_contact_name: string;
   primary_contact_email?: string;
   primary_contact_phone?: string;
+  email?: string;
+  username?: string;
   color_theme: string;
   is_active: boolean;
   is_blacklisted: boolean;
@@ -29,6 +31,8 @@ export interface Contractor {
   compliance_score: number;
   active_permits: number;
   specialties: string[];
+  email?: string;
+  username?: string;
   color_theme: string;
   is_blacklisted: boolean;
   created_at?: string;
@@ -43,6 +47,8 @@ export interface Consultant {
   active_roles_count: number;
   hq_location: string;
   description?: string;
+  email?: string;
+  username?: string;
   color_theme: string;
   created_at?: string;
 }
@@ -58,6 +64,7 @@ export interface Inspector {
   pass_rate: string;
   ncrs_issued: number;
   email?: string;
+  username?: string;
   user?: string;
   invite_code?: string;
   temporary_password?: string;
@@ -76,7 +83,23 @@ export interface LicensedProfessional {
   expiry_date: string;
   active_projects_count: number;
   is_verified: boolean;
+  email?: string;
+  username?: string;
   created_at?: string;
+}
+
+export interface AvailableParticipant {
+  id: string;
+  identifier?: string;
+  user_id?: string | null;
+  name: string;
+  username?: string | null;
+  email: string;
+  role: string;
+  category: 'inspector' | 'stakeholder' | 'government';
+  entity_type: string;
+  organization?: string;
+  status?: string;
 }
 
 export interface ProjectStakeholderTeam {
@@ -123,7 +146,19 @@ export interface StakeholderMeeting {
   room_id: string;
   google_meet_url?: string;
   status: 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled';
-  participants: Array<{ name: string; role: string; status: string }>;
+  participants: Array<{
+    id?: string;
+    user_id?: string | null;
+    name: string;
+    username?: string | null;
+    email?: string;
+    role: string;
+    category?: string;
+    entity_type?: string;
+    organization?: string;
+    status: string;
+    joined_at?: string;
+  }>;
   action_items?: MeetingActionItem[];
   minutes_notes?: string;
   created_at?: string;
@@ -406,11 +441,122 @@ export const getMeetingById = async (id: string): Promise<StakeholderMeeting | n
   }
 };
 
-export const scheduleMeeting = async (data: Partial<StakeholderMeeting> & { bypass_agency_head_check?: boolean }): Promise<StakeholderMeeting> => {
+export const scheduleMeeting = async (data: Partial<StakeholderMeeting> & { bypass_agency_head_check?: boolean; send_invite_emails?: boolean }): Promise<StakeholderMeeting> => {
   // The meeting_reference is issued server-side (StakeholderMeeting.generate_mtg_id).
   // If scheduling fails we surface the backend error — no fabricated meeting record is returned.
   const response = await api.post('/stakeholders/meetings/', data);
   return unwrapItem<StakeholderMeeting>(response);
+};
+
+export const getAvailableMeetingParticipants = async (params?: { search?: string; category?: string }): Promise<AvailableParticipant[]> => {
+  try {
+    const response = await api.get('/stakeholders/meetings/available-participants/', { params });
+    const list = unwrapList<AvailableParticipant>(response);
+    if (list.length > 0) return list;
+  } catch (err) {
+    console.warn('Fallback aggregating available meeting participants from stakeholder endpoints', err);
+  }
+
+  // Fallback aggregation from individual registries if unified endpoint is empty
+  const [inspectors, developers, contractors, consultants, professionals] = await Promise.all([
+    getInspectors().catch(() => []),
+    getDevelopers().catch(() => []),
+    getContractors().catch(() => []),
+    getConsultants().catch(() => []),
+    getLicensedProfessionals().catch(() => []),
+  ]);
+
+  const combined: AvailableParticipant[] = [];
+  const seen = new Set<string>();
+
+  const pushUnique = (item: AvailableParticipant) => {
+    const key = (item.email || item.username || `${item.category}:${item.name}`).toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    combined.push(item);
+  };
+
+  inspectors.forEach((ins) => {
+    pushUnique({
+      id: ins.id,
+      identifier: ins.inspector_id,
+      name: ins.name,
+      username: ins.username || null,
+      email: ins.email || '',
+      role: ins.role_title || 'Field Inspector',
+      category: 'inspector',
+      entity_type: 'Inspector',
+      organization: ins.assigned_zone ? `Zone: ${ins.assigned_zone}` : 'Inspectorate Division',
+      status: ins.invitation_status || 'Active',
+    });
+  });
+
+  developers.forEach((dev) => {
+    pushUnique({
+      id: dev.id,
+      identifier: dev.developer_id,
+      name: dev.primary_contact_name || dev.name,
+      username: dev.username || null,
+      email: dev.email || dev.primary_contact_email || '',
+      role: 'Developer',
+      category: 'stakeholder',
+      entity_type: 'Developer',
+      organization: dev.name,
+      status: dev.status,
+    });
+  });
+
+  contractors.forEach((con) => {
+    pushUnique({
+      id: con.id,
+      identifier: con.contractor_id,
+      name: con.name,
+      username: con.username || null,
+      email: con.email || '',
+      role: con.contractor_type || 'Contractor',
+      category: 'stakeholder',
+      entity_type: 'Contractor',
+      organization: con.name,
+      status: con.status,
+    });
+  });
+
+  consultants.forEach((cns) => {
+    pushUnique({
+      id: cns.id,
+      identifier: cns.consultant_id,
+      name: cns.name,
+      username: cns.username || null,
+      email: cns.email || '',
+      role: cns.specialty || 'Consultant',
+      category: 'stakeholder',
+      entity_type: 'Consultant',
+      organization: cns.name,
+      status: cns.status,
+    });
+  });
+
+  professionals.forEach((prof) => {
+    pushUnique({
+      id: prof.id,
+      identifier: prof.license_id,
+      name: prof.name,
+      username: prof.username || null,
+      email: prof.email || '',
+      role: `${prof.role_title} (${prof.license_authority})`,
+      category: 'stakeholder',
+      entity_type: 'Licensed Professional',
+      organization: prof.firm_name,
+      status: prof.license_status,
+    });
+  });
+
+  return combined;
+};
+
+export const sendMeetingInvites = async (meetingId: string): Promise<any> => {
+  const response = await api.post(`/stakeholders/meetings/${meetingId}/send-invites/`);
+  return unwrapItem<any>(response);
 };
 
 export const startMeeting = async (id: string): Promise<any> => {

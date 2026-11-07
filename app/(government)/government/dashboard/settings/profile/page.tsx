@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Settings, Save, Upload, MapPin, Mail, Phone, Building, Globe, ShieldCheck, CheckCircle2, RefreshCw } from "lucide-react";
 import { AgencyProfile, getAgencyProfile, updateAgencyProfile } from "@/services/settings";
+import UsernameSettingsCard from "@/components/dashboard/UsernameSettingsCard";
 
 export default function AgencyProfilePage() {
   const [profile, setProfile] = useState<AgencyProfile>({
@@ -94,7 +95,8 @@ export default function AgencyProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-6">
+        <UsernameSettingsCard />
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}

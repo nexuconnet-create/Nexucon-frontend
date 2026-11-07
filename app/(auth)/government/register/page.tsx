@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useRef, KeyboardEvent, ClipboardEvent, useEffect } from "react";
-import { ChevronLeft, ChevronRight, EyeOff, Eye, CheckCircle2, ShieldCheck, Landmark, Building2, MapPin, Lock, Mail } from "lucide-react";
+import { ChevronLeft, ChevronRight, EyeOff, Eye, CheckCircle2, ShieldCheck, Landmark, Building2, MapPin, Lock, Mail, Sparkles, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Country, State } from "country-state-city";
 import { CustomSelect } from "@/components/CustomSelect";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/services/api";
 
 export default function GovernmentRegister() {
   const { register, verifyEmail, resendVerificationCode, isLoading, error: authError } = useAuth();
@@ -19,13 +20,15 @@ export default function GovernmentRegister() {
   const [resendMessage, setResendMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
-    fullName: '', email: '', phone: '', role: 'government',
+    fullName: '', username: '', email: '', phone: '', role: 'government',
     agencyName: '', agencyWebsite: '', jurisdictionLevel: '', department: '',
     country: 'NG', stateRegion: 'Lagos', officeAddress: '',
     password: '', confirmPassword: '',
     termsAccepted: false, privacyAccepted: false, marketingAccepted: false,
     otp: ['', '', '', '', '', '']
   });
+  const [usernameSuggestions, setUsernameSuggestions] = useState<string[]>([]);
+  const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -54,9 +57,53 @@ export default function GovernmentRegister() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  const validateUsername = (val: string): string | null => {
+    const clean = val.trim().replace(/^@+/, '').toLowerCase();
+    if (!clean) return "Username is required (no user can register without a username)";
+    if (clean.length < 3) return "Username must be at least 3 characters";
+    if (clean.length > 35) return "Username cannot exceed 35 characters";
+    if (clean.includes('@')) return "Username cannot contain '@' or be an email address";
+    if (!/^[a-z0-9_.-]+$/.test(clean)) return "Use only letters, numbers, underscores (_), dots (.), or hyphens (-)";
+    return null;
+  };
+
+  const handleAutoGenerateUsername = async () => {
+    setIsGeneratingUsername(true);
+    try {
+      const parts = formData.fullName.trim().split(/\s+/);
+      const res: any = await api.post('/auth/generate-username/', {
+        first_name: parts[0] || '',
+        last_name: parts.slice(1).join(' ') || '',
+        email: formData.email,
+        role: 'gov',
+      });
+      const payload = res?.data?.data || res?.data || {};
+      if (payload.username) {
+        handleInputChange('username', payload.username);
+      }
+      if (Array.isArray(payload.suggestions)) {
+        setUsernameSuggestions(payload.suggestions);
+      }
+    } catch {
+      const base = (
+        formData.fullName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') ||
+        formData.email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '_') ||
+        'gov_officer'
+      ).slice(0, 20);
+      const rand = Math.floor(100 + Math.random() * 900);
+      const gen = `${base}_${rand}`;
+      handleInputChange('username', gen);
+      setUsernameSuggestions([gen, `gov_${base}`, `${base}_lasg`]);
+    } finally {
+      setIsGeneratingUsername(false);
+    }
+  };
+
   const handleNextStep1 = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = "Full Name is required";
+    const usernameError = validateUsername(formData.username);
+    if (usernameError) newErrors.username = usernameError;
     if (!formData.email.trim() || !validateEmail(formData.email)) newErrors.email = "Valid Email Address is required";
     if (!formData.phone.trim()) newErrors.phone = "Phone Number is required";
 
@@ -124,6 +171,7 @@ export default function GovernmentRegister() {
     setShowTermsModal(false);
 
     const userData = {
+      username: formData.username.trim().replace(/^@+/, '').toLowerCase(),
       email: formData.email.trim().toLowerCase(),
       password: formData.password,
       first_name: formData.fullName.split(' ')[0] || '',
@@ -350,6 +398,53 @@ export default function GovernmentRegister() {
                   placeholder="Engr. Arc. Olawale Sanwo"
                 />
                 {errors.fullName && <span className="text-[11px] text-red-500 font-bold">{errors.fullName}</span>}
+              </div>
+
+              <div className="flex flex-col gap-1.5 relative">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#022C4F]">
+                    Platform Login Username <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerateUsername}
+                    disabled={isGeneratingUsername}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                  >
+                    {isGeneratingUsername ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    Auto-Generate Username
+                  </button>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-mono font-bold text-sm">@</span>
+                  <input
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => handleInputChange('username', e.target.value.replace(/\s+/g, '').replace(/^@+/, '').toLowerCase())}
+                    className={`w-full pl-8 pr-4 py-3 rounded-xl border ${errors.username ? 'border-red-500' : 'border-gray-300'} text-sm font-mono font-bold focus:outline-none focus:border-[#022C4F]`}
+                    placeholder="olawale_sanwo"
+                  />
+                </div>
+                {usernameSuggestions.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Suggestions:</span>
+                    {usernameSuggestions.map((sug) => (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => handleInputChange('username', sug)}
+                        className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-md border cursor-pointer transition-colors ${
+                          formData.username === sug
+                            ? 'bg-[#022C4F] text-white border-[#022C4F]'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-blue-300'
+                        }`}
+                      >
+                        @{sug}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {errors.username && <span className="text-[11px] text-red-500 font-bold">{errors.username}</span>}
               </div>
 
               <div className="flex flex-col gap-1.5 relative">

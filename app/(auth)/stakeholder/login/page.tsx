@@ -49,12 +49,8 @@ export default function StakeholderLogin() {
     }
   }, [user, isLoading, router, logout]);
 
-  const validateEmail = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
   const handleModalClose = () => {
-    const cleanEmail = formData.email.trim().toLowerCase();
+    const cleanEmail = (user?.email || formData.email).trim().toLowerCase();
     const localOnboarded = typeof window !== 'undefined' 
       ? localStorage.getItem(`nexucon_onboarding_completed_${cleanEmail}`) 
       : null;
@@ -69,10 +65,11 @@ export default function StakeholderLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
-    if (!formData.email) {
-      newErrors.email = "Email Address is required";
-    } else if (!validateEmail(formData.email)) {
-      newErrors.email = "Valid Email Address is required";
+    const identifier = formData.email.trim().replace(/^@+/, '');
+    if (!identifier) {
+      newErrors.email = "Username or Email Address is required";
+    } else if (identifier.length < 3) {
+      newErrors.email = "Enter a valid username or email address";
     }
     if (!formData.password) {
       newErrors.password = "Password is required";
@@ -82,7 +79,8 @@ export default function StakeholderLogin() {
 
     if (Object.keys(newErrors).length === 0) {
       const success = await login({
-        email: formData.email.trim(),
+        username: identifier,
+        email: identifier,
         password: formData.password,
         portal: 'stakeholder'
       });
@@ -224,13 +222,13 @@ export default function StakeholderLogin() {
           <form className="flex flex-col h-full lg:h-auto" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-5 mb-8">
               <div className="flex flex-col gap-2 relative">
-                <label className="text-sm font-bold text-[#022C4F]">Official Email Address</label>
+                <label className="text-sm font-bold text-[#022C4F]">Username or Official Email Address</label>
                 <input
-                  type="email"
+                  type="text"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`w-full px-4 py-3.5 rounded-xl border ${errors.email ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:border-[#022C4F] focus:ring-1 focus:ring-[#022C4F] transition-all text-sm font-medium`}
-                  placeholder="name@company.com"
+                  placeholder="username or name@company.com"
                 />
                 {errors.email && (
                   <span className="absolute right-0 -top-1 sm:top-0 text-[10px] sm:text-xs text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shadow-sm z-10">

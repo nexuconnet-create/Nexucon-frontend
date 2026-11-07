@@ -37,6 +37,7 @@ import {
   ExternalLink,
   X,
   MessageSquare,
+  Video,
 } from "lucide-react";
 
 interface InspectorSidebarProps {
@@ -70,6 +71,7 @@ const SECTIONS: NavSection[] = [
       { name: "Field Inspections", href: "/inspector/dashboard/inspections", icon: ClipboardCheck },
       { name: "Evidence Vault", href: "/inspector/dashboard/evidence", icon: Layers },
       { name: "Agency Dispatch & Chat", href: "/inspector/dashboard/messages", icon: MessageSquare, badge: "Live" },
+      { name: "Council Meetings & Calls", href: "/inspector/dashboard/meetings", icon: Video, badge: "Meet" },
       { name: "Triple Connect Live", href: "/inspector/dashboard/triple-connect", icon: Radio, badge: "Stream" },
     ]
   },

@@ -6,7 +6,7 @@ export interface Notification {
   recipient?: string;
   recipient_name?: string;
   recipient_role: string;
-  category: 'CRITICAL' | 'APPLICATIONS' | 'INSPECTIONS' | 'COMPLIANCE' | 'APPROVALS' | 'EMERGENCY' | 'OVERDUE' | 'BIM' | 'GPR' | 'DOCUMENTS' | 'MILESTONES' | 'GENERAL';
+  category: 'CRITICAL' | 'APPLICATIONS' | 'INSPECTIONS' | 'COMPLIANCE' | 'APPROVALS' | 'EMERGENCY' | 'OVERDUE' | 'BIM' | 'GPR' | 'DOCUMENTS' | 'MILESTONES' | 'MEETINGS' | 'STAKEHOLDERS' | 'GENERAL';
   event_type?: string;
   title: string;
   message: string;
@@ -78,6 +78,7 @@ export interface UnreadCounts {
   approvals: number;
   emergency: number;
   overdue: number;
+  meetings?: number;
 }
 
 const unwrapList = <T>(res: any): T[] => {

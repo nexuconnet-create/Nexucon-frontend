@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, KeyRound, CheckCircle2, ChevronLeft, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, KeyRound, CheckCircle2, ChevronLeft, ExternalLink, Sparkles, RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/services/api";
 
@@ -27,6 +27,8 @@ function InspectorLoginContent() {
   const [isAccountActivated, setIsAccountActivated] = useState(false);
   const [inviteCredential, setInviteCredential] = useState("");
   const [showInviteCredential, setShowInviteCredential] = useState(false);
+  const [activationUsername, setActivationUsername] = useState("");
+  const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -66,11 +68,11 @@ function InspectorLoginContent() {
     setErrorMessage(null);
     setIsAccountActivated(false);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = email.trim().replace(/^@+/, '').toLowerCase();
     const cleanPassword = password.trim();
 
     if (!cleanEmail || !cleanPassword) {
-      setErrorMessage("Please provide both official email address and password / invite code.");
+      setErrorMessage("Please provide both your username / official email address and password / invite code.");
       return;
     }
 
@@ -194,6 +196,7 @@ function InspectorLoginContent() {
     try {
       const res: any = await api.post("/settings/users/accept-invite/", {
         email: cleanEmail,
+        username: activationUsername.trim().replace(/^@+/, "").toLowerCase() || undefined,
         password: newPassword,
         invite_code: cleanCredential,
         temp_password: cleanCredential,
@@ -352,14 +355,14 @@ function InspectorLoginContent() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-bold text-[#022C4F] uppercase tracking-wider">
-                    Official Email Address
+                    Username or Official Email Address
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="inspector.officer@nexucon.gov.ng"
+                    placeholder="insp_username or inspector.officer@nexucon.gov.ng"
                     className="w-full px-4 py-3.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#022C4F] focus:ring-2 focus:ring-[#022C4F]/10 transition-all text-sm font-medium text-[#0F181F] placeholder:text-gray-400 bg-white"
                   />
                 </div>
@@ -513,6 +516,44 @@ function InspectorLoginContent() {
                   <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
                     Found in your dispatch notice or appointment email from the Agency Directorate.
                   </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-[#022C4F] uppercase tracking-wider">
+                      Platform Username
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsGeneratingUsername(true);
+                        try {
+                          const res: any = await api.post("/auth/generate-username/", {
+                            email: email.trim(),
+                            role: "inspector",
+                          });
+                          const gen = res?.data?.data?.username || res?.data?.username;
+                          if (gen) setActivationUsername(gen);
+                        } catch {
+                          const base = (email.split("@")[0] || "inspector").replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+                          setActivationUsername(`insp_${base}_${Math.floor(100 + Math.random() * 900)}`);
+                        } finally {
+                          setIsGeneratingUsername(false);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0284C7] hover:underline cursor-pointer"
+                    >
+                      {isGeneratingUsername ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                      Auto-Generate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={activationUsername}
+                    onChange={(e) => setActivationUsername(e.target.value.replace(/\s+/g, "").replace(/^@+/, "").toLowerCase())}
+                    placeholder="e.g. insp_adeleke (auto-generated if left blank)"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-[#022C4F] text-sm font-mono text-[#0F181F] bg-white"
+                  />
                 </div>
 
                 <div>

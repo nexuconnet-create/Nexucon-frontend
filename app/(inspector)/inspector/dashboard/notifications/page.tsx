@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Bell,
   AlertTriangle,
@@ -8,9 +9,13 @@ import {
   Building2,
   RefreshCw,
   Activity,
+  Video,
+  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import { getInspectorDashboard } from "@/services/inspector";
 import { RecentActivityItem } from "@/services/inspector";
+import { getNotifications, markNotificationRead, Notification } from "@/services/notifications";
 import { dateTimeOr, orDash } from "@/lib/display";
 
 /**
@@ -33,6 +38,7 @@ import { dateTimeOr, orDash } from "@/lib/display";
  */
 export default function InspectorNotificationsPage() {
   const [activity, setActivity] = useState<RecentActivityItem[]>([]);
+  const [personalAlerts, setPersonalAlerts] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -40,8 +46,12 @@ export default function InspectorNotificationsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await getInspectorDashboard();
+      const [data, notifs] = await Promise.all([
+        getInspectorDashboard().catch(() => null),
+        getNotifications({ scope: "me" }).catch(() => []),
+      ]);
       setActivity(Array.isArray(data?.recent_activity) ? data.recent_activity : []);
+      setPersonalAlerts(Array.isArray(notifs) ? notifs : []);
     } catch (err: any) {
       setActivity([]);
       setLoadError(
@@ -51,6 +61,17 @@ export default function InspectorNotificationsPage() {
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+      setPersonalAlerts((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+    } catch {
+      // ignore
     }
   };
 
@@ -101,6 +122,86 @@ export default function InspectorNotificationsPage() {
           <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
         </button>
       </div>
+
+      {personalAlerts.length > 0 && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-3">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-bold text-[#022C4F] uppercase tracking-wider flex items-center gap-2">
+              <Video size={16} className="text-[#0284C7]" />
+              Meeting Invitations &amp; Direct Dispatches ({personalAlerts.filter((n) => !n.is_read).length} Unread)
+            </h2>
+            <Link
+              href="/inspector/dashboard/meetings"
+              className="text-xs font-bold text-[#0284C7] hover:underline flex items-center gap-1"
+            >
+              Open Meetings Hub <ExternalLink size={12} />
+            </Link>
+          </div>
+          {personalAlerts.map((alert) => {
+            const isMeeting = alert.category === "MEETINGS" || alert.event_type === "MEETING_SCHEDULED";
+            const targetUrl = isMeeting
+              ? alert.metadata?.meeting_id
+                ? `/inspector/dashboard/meetings/${alert.metadata.meeting_id}/room`
+                : "/inspector/dashboard/meetings"
+              : alert.action_url || "/inspector/dashboard/settings";
+
+            return (
+              <div
+                key={alert.id}
+                className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  !alert.is_read
+                    ? "bg-sky-50/70 border-sky-200"
+                    : "bg-slate-50 border-slate-200/70"
+                }`}
+              >
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                    isMeeting ? "bg-[#022C4F] text-white" : "bg-white border border-slate-200 text-[#0284C7]"
+                  }`}>
+                    {isMeeting ? <Video size={18} /> : <Bell size={18} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#0284C7]/10 text-[#0284C7]">
+                        {alert.category}
+                      </span>
+                      {!alert.is_read && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                          New
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-400">
+                        {dateTimeOr(alert.created_at, "")}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-[#022C4F]">{alert.title}</h3>
+                    <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{alert.message}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {!alert.is_read && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkRead(alert.id)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 flex items-center gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 size={13} /> Mark Read
+                    </button>
+                  )}
+                  <Link
+                    href={targetUrl}
+                    onClick={() => !alert.is_read && handleMarkRead(alert.id)}
+                    className="px-3.5 py-2 rounded-xl bg-[#022C4F] hover:bg-[#033a66] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isMeeting ? "Join Meeting Room" : "View Details"}
+                    <ExternalLink size={13} />
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
