@@ -1,6 +1,16 @@
 import api from './api';
 import { getDistricts as settingsGetDistricts, type District } from './settings';
 
+export interface DeveloperProjectSummary {
+  id: string;
+  name: string;
+  reference_number: string;
+  status: string;
+  location: string;
+  estimated_value?: string | null;
+  project_type?: string;
+}
+
 export interface Developer {
   id: string;
   developer_id: string;
@@ -17,6 +27,7 @@ export interface Developer {
   color_theme: string;
   is_active: boolean;
   is_blacklisted: boolean;
+  projects?: DeveloperProjectSummary[];
   created_at?: string;
 }
 
@@ -292,6 +303,11 @@ export const getDevelopers = async (params?: Record<string, any>): Promise<Devel
 export const createDeveloper = async (data: Partial<Developer>): Promise<Developer> => {
   const response = await api.post('/stakeholders/developers/', data);
   return unwrapItem<Developer>(response);
+};
+
+export const syncAllDevelopers = async (): Promise<{ message: string; total_synced: number }> => {
+  const response = await api.post('/stakeholders/developers/sync-all/');
+  return response.data;
 };
 
 export const getContractors = async (params?: Record<string, any>): Promise<Contractor[]> => {
