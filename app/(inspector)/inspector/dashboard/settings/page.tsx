@@ -36,6 +36,27 @@ export default function InspectorSettingsPage() {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  const handleSendResetEmail = async () => {
+    if (!user?.email) return;
+    setIsSendingResetEmail(true);
+    setPasswordError(null);
+    try {
+      await api.post("/auth/password-reset/", { email: user.email });
+      setResetEmailSent(true);
+      setTimeout(() => setResetEmailSent(false), 8000);
+    } catch (err: any) {
+      setPasswordError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to dispatch password recovery instructions. Please try again."
+      );
+    } finally {
+      setIsSendingResetEmail(false);
+    }
+  };
 
   // Real identity and real sync figures. This page used to print
   // "Engr. A. Adeleke", "Badge #LAG-INS-042", "Lagos State Building Control
@@ -296,6 +317,12 @@ export default function InspectorSettingsPage() {
           <span>Security & Authentication Credentials</span>
         </h3>
 
+        {resetEmailSent && (
+          <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium">
+            Password recovery instructions have been dispatched to <strong>{user?.email}</strong>. Check your inbox to choose a new password.
+          </div>
+        )}
+
         {passwordSaved && (
           <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
             Password updated successfully.
@@ -310,9 +337,19 @@ export default function InspectorSettingsPage() {
 
         <form onSubmit={handleSavePassword} className="space-y-4 pt-2">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-              Current Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Current Password
+              </label>
+              <button
+                type="button"
+                onClick={handleSendResetEmail}
+                disabled={isSendingResetEmail}
+                className="text-[11px] text-[#022C4F] hover:underline font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isSendingResetEmail ? "Sending Link..." : "Forgot password?"}
+              </button>
+            </div>
             <input
               type="password"
               value={currentPassword}
@@ -353,13 +390,31 @@ export default function InspectorSettingsPage() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isUpdatingPassword || !currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}
-            className="px-6 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 shadow-sm flex items-center gap-2"
-          >
-            {isUpdatingPassword ? "Updating..." : "Update Password"}
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={isUpdatingPassword || !currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}
+              className="px-6 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
+            >
+              {isUpdatingPassword ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Updating...</span>
+                </>
+              ) : (
+                "Update Password"
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSendResetEmail}
+              disabled={isSendingResetEmail}
+              className="text-xs text-slate-600 hover:text-[#022C4F] font-semibold underline text-center cursor-pointer disabled:opacity-50"
+            >
+              {isSendingResetEmail ? "Transmitting..." : "Send Reset Link via Email"}
+            </button>
+          </div>
         </form>
       </div>
 

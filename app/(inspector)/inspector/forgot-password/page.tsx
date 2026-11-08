@@ -3,23 +3,38 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Mail, ArrowRight, ArrowLeft, ShieldCheck, CheckCircle2, ExternalLink } from "lucide-react";
+import { Mail, ArrowRight, ArrowLeft, ShieldCheck, CheckCircle2, ExternalLink, AlertCircle, KeyRound, Sparkles } from "lucide-react";
+import api from "@/services/api";
 
 export default function InspectorForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const cleanId = identifier.trim();
+    if (!cleanId) return;
 
     setIsSubmitting(true);
-    // Dispatched via generic timing to prevent account enumeration
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setErrorMessage(null);
+
+    try {
+      await api.post("/auth/password-reset/", {
+        email: cleanId,
+      });
       setIsSubmitted(true);
-    }, 1000);
+    } catch (err: any) {
+      console.error("Inspector password reset error:", err);
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "Failed to dispatch password recovery instructions. Please check your credentials and try again.";
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -58,21 +73,28 @@ export default function InspectorForgotPasswordPage() {
                   Password Recovery
                 </h1>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Enter your accredited inspector email. If an active record is registered, instructions to securely reset your credentials will be dispatched.
+                  Enter your accredited inspector email or username. If an active record is registered, instructions to securely reset your credentials will be dispatched.
                 </p>
               </div>
+
+              {errorMessage && (
+                <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0 text-red-600" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2">
-                    Official Email
+                    Official Email or Username
                   </label>
                   <div className="relative">
                     <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="inspector@agency.gov.ng"
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="inspector@agency.gov.ng or username"
                       required
                       className="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 pl-11 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#022C4F]"
                     />
@@ -82,7 +104,7 @@ export default function InspectorForgotPasswordPage() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || !email.trim()}
+                  disabled={isSubmitting || !identifier.trim()}
                   className="w-full h-12 rounded-xl bg-[#022C4F] hover:bg-[#022C4F]/90 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
@@ -105,7 +127,7 @@ export default function InspectorForgotPasswordPage() {
                 Recovery Email Dispatched
               </h2>
               <p className="text-xs text-slate-600 leading-relaxed mb-8">
-                If an account exists for <strong className="text-slate-900">{email}</strong>, a secure one-time password reset link has been transmitted. Check your inbox and spam folder.
+                If an account exists for <strong className="text-slate-900">{identifier}</strong>, a secure one-time password reset link and verification code have been transmitted. Check your inbox and spam folder.
               </p>
               <Link
                 href="/inspector/login"

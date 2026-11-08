@@ -44,6 +44,27 @@ export default function InspectorProfilePage() {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  const handleSendResetEmail = async () => {
+    if (!user?.email) return;
+    setIsSendingResetEmail(true);
+    setPasswordError(null);
+    try {
+      await api.post("/auth/password-reset/", { email: user.email });
+      setResetEmailSent(true);
+      setTimeout(() => setResetEmailSent(false), 8000);
+    } catch (err: any) {
+      setPasswordError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to dispatch password recovery instructions. Please try again."
+      );
+    } finally {
+      setIsSendingResetEmail(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -264,6 +285,13 @@ export default function InspectorProfilePage() {
           </div>
         </div>
 
+        {resetEmailSent && (
+          <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0 text-sky-600" />
+            <span>Password recovery instructions have been sent to <strong>{user?.email}</strong>. Check your inbox to set a new password.</span>
+          </div>
+        )}
+
         {passwordSaved && (
           <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
             <CheckCircle2 size={16} className="shrink-0" />
@@ -280,9 +308,19 @@ export default function InspectorProfilePage() {
 
         <form onSubmit={handleSavePassword} className="space-y-4 max-w-md">
           <div>
-            <label className="text-xs font-semibold text-gray-700 block mb-1">
-              Current Password
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-gray-700 block">
+                Current Password
+              </label>
+              <button
+                type="button"
+                onClick={handleSendResetEmail}
+                disabled={isSendingResetEmail}
+                className="text-[11px] text-[#022C4F] hover:underline font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isSendingResetEmail ? "Sending Link..." : "Forgot password?"}
+              </button>
+            </div>
             <input
               type="password"
               value={currentPassword}
@@ -318,20 +356,31 @@ export default function InspectorProfilePage() {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={isUpdatingPassword}
-            className="px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {isUpdatingPassword ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" />
-                <span>Updating Password...</span>
-              </>
-            ) : (
-              <span>Save New Password</span>
-            )}
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={isUpdatingPassword}
+              className="px-5 py-2.5 rounded-xl bg-[#022C4F] hover:bg-[#033c6c] text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isUpdatingPassword ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <span>Save New Password</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSendResetEmail}
+              disabled={isSendingResetEmail}
+              className="text-xs text-slate-600 hover:text-[#022C4F] font-semibold underline text-center cursor-pointer disabled:opacity-50"
+            >
+              {isSendingResetEmail ? "Transmitting..." : "Send Reset Link via Email"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
