@@ -108,7 +108,18 @@ export interface ProjectStakeholderTeam {
   project_name: string;
   location: string;
   status: string;
-  team_data: Record<string, { name: string; role: string; initials: string }>;
+  project_id?: string | null;
+  total_members?: number;
+  team_data: Record<string, {
+    name: string;
+    role: string;
+    initials: string;
+    organization?: string;
+    email?: string;
+    phone?: string;
+    license_number?: string;
+    source?: string;
+  }>;
   created_at?: string;
 }
 
@@ -403,6 +414,11 @@ export const removeTeamMember = async (teamId: string, roleKey: string): Promise
     role_key: roleKey
   });
   return unwrapItem<ProjectStakeholderTeam>(response);
+};
+
+export const syncAllProjectTeams = async (): Promise<{ message: string; total_synced: number }> => {
+  const response = await api.post('/stakeholders/teams/sync-all/');
+  return response.data;
 };
 
 export const getBlacklistRecords = async (): Promise<BlacklistRecord[]> => {

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { 
   ProjectStakeholderTeam, getProjectTeams, 
-  removeTeamMember 
+  removeTeamMember, syncAllProjectTeams 
 } from "@/services/stakeholders";
 import AddTeamMemberModal from "@/components/dashboard/AddTeamMemberModal";
 import PaginationBar from "@/components/dashboard/PaginationBar";
@@ -19,6 +19,7 @@ export default function ProjectTeamsMatrix() {
   const [teams, setTeams] = useState<ProjectStakeholderTeam[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<ProjectStakeholderTeam | null>(null);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
 
@@ -42,6 +43,23 @@ export default function ProjectTeamsMatrix() {
     fetchTeams();
     setCurrentPage(1);
   }, [fetchTeams]);
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await syncAllProjectTeams();
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: res.message || 'Project teams synchronized successfully', type: 'success' }
+      }));
+      await fetchTeams();
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Failed to sync project teams', type: 'error' }
+      }));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleRemoveMember = async (teamId: string, roleKey: string) => {
     try {
@@ -74,10 +92,20 @@ export default function ProjectTeamsMatrix() {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={handleSyncAll}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            title="Sync all teams from registered projects"
+          >
+            <RefreshCw size={14} className={isSyncing ? "animate-spin text-blue-600" : "text-gray-500"} />
+            <span>{isSyncing ? "Syncing Matrix..." : "Sync Projects"}</span>
+          </button>
+
           <button 
             onClick={fetchTeams}
             className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors bg-white cursor-pointer"
-            title="Refresh"
+            title="Refresh list"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
           </button>
@@ -94,6 +122,41 @@ export default function ProjectTeamsMatrix() {
               placeholder="Search by project, ref, or location..." 
               className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm bg-white"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Stats Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 max-w-6xl">
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Project Teams</p>
+            <p className="text-xl font-bold text-[#022C4F] mt-0.5">{teams.length}</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+            <Building2 size={18} />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Assigned Positions</p>
+            <p className="text-xl font-bold text-emerald-600 mt-0.5">
+              {teams.reduce((acc, t) => acc + Object.keys(t.team_data || {}).length, 0)}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <HardHat size={18} />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Active Construction</p>
+            <p className="text-xl font-bold text-blue-700 mt-0.5">
+              {teams.filter(t => t.status === 'Active Construction' || t.status === 'Under Construction' || t.status === 'ACTIVE').length}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+            <ShieldCheck size={18} />
           </div>
         </div>
       </div>
@@ -142,7 +205,7 @@ export default function ProjectTeamsMatrix() {
                   </button>
 
                   <Link 
-                    href="/government/dashboard/projects/all"
+                    href={proj.project_id ? `/government/dashboard/projects/view/${proj.project_id}` : '/government/dashboard/projects/all'}
                     className="flex items-center justify-center gap-1 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 transition-colors text-xs cursor-pointer"
                   >
                     View Project <ChevronRight size={13} />
@@ -180,6 +243,11 @@ export default function ProjectTeamsMatrix() {
                             <p className="text-xs font-bold text-gray-900 truncate">
                               {member.name}
                             </p>
+                            {member.organization && (
+                              <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                                {member.organization}
+                              </p>
+                            )}
                           </div>
                         </div>
 
