@@ -276,7 +276,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'inspector' } as any;
             }
             if (userRole.includes('agency') || userRole.includes('director') || userRole.includes('executive')) {
-              const msg = "Access Denied: Government Agency accounts cannot access the Stakeholder portal. Please log in at the Government Command Center (https://government.nexucon.net).";
+              const msg = "Access Denied: Government Agency accounts cannot access the Stakeholder portal. Please log in at the Government Command Center (https://nexucon.net/government/login).";
               setError(msg);
               setIsLoading(false);
               return { success: false, isRoleMismatch: true, message: msg, allowedPortal: 'government' } as any;

@@ -47,13 +47,6 @@ export function middleware(request: NextRequest) {
         targetUrl.protocol = 'https:';
         return NextResponse.redirect(targetUrl);
       }
-      if (pathname.startsWith('/government')) {
-        const targetUrl = new URL(request.url);
-        targetUrl.hostname = 'government.nexucon.net';
-        targetUrl.port = '';
-        targetUrl.protocol = 'https:';
-        return NextResponse.redirect(targetUrl);
-      }
       if (pathname.startsWith('/stakeholder')) {
         const targetUrl = new URL(request.url);
         targetUrl.hostname = 'stakeholder.nexucon.net';

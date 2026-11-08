@@ -71,7 +71,7 @@ export default function StakeholderLayout({
             </p>
             <div className="flex flex-col gap-3">
               <a
-                href={isInspector ? "https://inspector.nexucon.net" : "https://government.nexucon.net"}
+                href={isInspector ? "https://inspector.nexucon.net" : "https://nexucon.net/government/login"}
                 className="w-full py-3 px-4 bg-[#022C4F] text-white rounded-xl font-bold text-sm hover:bg-[#033c6c] transition-all shadow-md"
               >
                 Go to {isInspector ? "Inspector Terminal" : "Government Command Center"}

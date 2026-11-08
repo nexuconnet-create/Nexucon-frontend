@@ -57,7 +57,7 @@ export default function InspectorDashboardLayout({
             </p>
             <div className="flex flex-col gap-3">
               <a
-                href={isGov ? "https://government.nexucon.net" : "https://stakeholder.nexucon.net"}
+                href={isGov ? "https://nexucon.net/government/login" : "https://stakeholder.nexucon.net"}
                 className="w-full py-3 px-4 bg-[#022C4F] text-white rounded-xl font-bold text-sm hover:bg-[#033c6c] transition-all shadow-md"
               >
                 Go to {isGov ? "Government Command Center" : "Stakeholder Portal"}
