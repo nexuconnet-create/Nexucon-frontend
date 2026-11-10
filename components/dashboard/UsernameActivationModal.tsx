@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   AtSign,
   Sparkles,
@@ -8,12 +8,11 @@ import {
   AlertCircle,
   X,
   RefreshCw,
-  ArrowRight,
   ShieldCheck,
   Check,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import api from "@/services/api";
 
 interface UsernameActivationModalProps {
@@ -27,7 +26,6 @@ export default function UsernameActivationModal({
 }: UsernameActivationModalProps) {
   const { user, refreshUser } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
 
   const [isOpen, setIsOpen] = useState(false);
   const [username, setUsername] = useState("");
@@ -41,11 +39,49 @@ export default function UsernameActivationModal({
     text: string;
   } | null>(null);
 
-  const currentUsername = user?.username || "";
+  const hasCheckedRef = useRef(false);
+
+  const currentUsername = (user?.username || "").trim();
+  const currentEmail = (user?.email || "").trim().toLowerCase();
+
+  // Check if username is unset or still default email
   const isUsernameUnset =
     !currentUsername ||
     currentUsername.includes("@") ||
-    (user?.email && currentUsername.toLowerCase() === user.email.toLowerCase());
+    (currentEmail && currentUsername.toLowerCase() === currentEmail);
+
+  // Check if user has already worked through activation
+  const userHasCompletedActivation =
+    !isUsernameUnset && user?.needs_username_update === false;
+
+  const userKey =
+    user?.id || user?.email
+      ? `nexucon_username_modal_shown_${user.id || user.email}`
+      : null;
+
+  const cleanParamFromUrl = useCallback(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("nexucon_activate_username");
+      try {
+        const url = new URL(window.location.href);
+        if (
+          url.searchParams.has("activate_username") ||
+          url.searchParams.has("activate-username") ||
+          url.searchParams.has("action")
+        ) {
+          url.searchParams.delete("activate_username");
+          url.searchParams.delete("activate-username");
+          url.searchParams.delete("action");
+          const newSearch = url.searchParams.toString()
+            ? `?${url.searchParams.toString()}`
+            : "";
+          window.history.replaceState({}, "", `${pathname}${newSearch}`);
+        }
+      } catch (err) {
+        console.warn("Could not clean URL search params:", err);
+      }
+    }
+  }, [pathname]);
 
   // Determine if modal should open automatically
   useEffect(() => {
@@ -59,6 +95,7 @@ export default function UsernameActivationModal({
     let queryRequested = false;
     let sessionRequested = false;
     let sessionDismissed = false;
+    let alreadyShownOnce = false;
 
     if (typeof window !== "undefined") {
       const sp = new URLSearchParams(window.location.search);
@@ -71,21 +108,68 @@ export default function UsernameActivationModal({
         sessionStorage.getItem("nexucon_activate_username") === "true";
       sessionDismissed =
         sessionStorage.getItem("nexucon_username_modal_dismissed") === "true";
+
+      if (userKey) {
+        alreadyShownOnce = localStorage.getItem(userKey) === "true";
+      }
     }
 
-    const needsActivation = user.needs_username_update || isUsernameUnset;
-
-    if (queryRequested || sessionRequested) {
-      setIsOpen(true);
+    // 1. If user has ALREADY worked through activation, NEVER open popup!
+    if (userHasCompletedActivation) {
+      if (queryRequested || sessionRequested) {
+        cleanParamFromUrl();
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("nexucon_activate_username");
+          window.dispatchEvent(
+            new CustomEvent("show-toast", {
+              detail: {
+                message: `Your username handle (@${currentUsername}) is already active and verified.`,
+                type: "info",
+              },
+            })
+          );
+        }
+      }
+      setIsOpen(false);
       return;
     }
 
-    if (needsActivation && !sessionDismissed) {
+    // 2. If user clicked mail activation link (?activate_username=true) and hasn't completed it yet:
+    if (queryRequested || sessionRequested) {
       setIsOpen(true);
+      if (userKey && typeof window !== "undefined") {
+        localStorage.setItem(userKey, "true");
+      }
+      cleanParamFromUrl();
+      return;
     }
-  }, [user, forceOpen, isUsernameUnset, pathname]);
 
-  // Listen to manual open triggers from custom events
+    // 3. For existing users: modal should ONLY popup ONCE across their account lifetime
+    // If it has already popped up once for this user, or was dismissed in this session, DO NOT open again!
+    if (alreadyShownOnce || sessionDismissed) {
+      return;
+    }
+
+    // 4. If the user still needs username update, pop up ONCE and record it immediately
+    const needsActivation = user.needs_username_update || isUsernameUnset;
+    if (needsActivation && !hasCheckedRef.current) {
+      hasCheckedRef.current = true;
+      setIsOpen(true);
+      if (userKey && typeof window !== "undefined") {
+        localStorage.setItem(userKey, "true");
+      }
+    }
+  }, [
+    user,
+    forceOpen,
+    isUsernameUnset,
+    userHasCompletedActivation,
+    userKey,
+    currentUsername,
+    cleanParamFromUrl,
+  ]);
+
+  // Listen to manual open triggers from custom events (e.g. Profile or Settings button)
   useEffect(() => {
     const handleOpen = () => {
       setIsSuccess(false);
@@ -109,7 +193,7 @@ export default function UsernameActivationModal({
           email: user.email || "",
           role: user.role_name || "",
         });
-        const data = res?.data?.data || res?.data || {};
+        const data = res?.data?.data || res?.data || res || {};
         const primary = data.username || "";
         const list: string[] = Array.isArray(data.suggestions)
           ? data.suggestions
@@ -153,23 +237,12 @@ export default function UsernameActivationModal({
     }
   }, [isOpen, username, primarySuggestion, handleFetchSuggestions]);
 
-  const cleanParamFromUrl = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("nexucon_activate_username");
-      const sp = new URLSearchParams(window.location.search);
-      if (sp.get("activate_username") || sp.get("activate-username") || sp.get("action")) {
-        sp.delete("activate_username");
-        sp.delete("activate-username");
-        sp.delete("action");
-        const query = sp.toString() ? `?${sp.toString()}` : "";
-        window.history.replaceState({}, "", `${pathname}${query}`);
-      }
-    }
-  };
-
   const handleDismiss = () => {
     if (typeof window !== "undefined") {
       sessionStorage.setItem("nexucon_username_modal_dismissed", "true");
+      if (userKey) {
+        localStorage.setItem(userKey, "true");
+      }
     }
     cleanParamFromUrl();
     setIsOpen(false);
@@ -204,14 +277,18 @@ export default function UsernameActivationModal({
       const res: any = await api.post("/auth/update-username/", {
         username: clean,
       });
-      const data = res?.data;
-      if (data?.success !== false) {
+      const resData = res?.data !== undefined ? res.data : res;
+      if (resData?.success !== false) {
         setUsername(clean);
         setIsSuccess(true);
         cleanParamFromUrl();
 
         if (typeof window !== "undefined") {
           sessionStorage.setItem("nexucon_username_modal_dismissed", "true");
+          if (userKey) {
+            localStorage.setItem(userKey, "true");
+            localStorage.setItem(`nexucon_username_activated_${user?.id || user?.email}`, "true");
+          }
           window.dispatchEvent(
             new CustomEvent("show-toast", {
               detail: {
@@ -231,17 +308,24 @@ export default function UsernameActivationModal({
       } else {
         setStatusMsg({
           type: "error",
-          text: data?.message || "Could not activate username.",
+          text: resData?.message || "Could not activate username.",
         });
       }
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.detail ||
-        err?.response?.data?.errors?.username?.[0] ||
-        err?.message ||
-        "Failed to update username. Please try another handle.";
-      setStatusMsg({ type: "error", text: msg });
+      if (err?.response?.status === 404) {
+        setStatusMsg({
+          type: "error",
+          text: "Username service is currently reloading on the server. Please retry in a few moments.",
+        });
+      } else {
+        const msg =
+          err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          err?.response?.data?.errors?.username?.[0] ||
+          err?.message ||
+          "Failed to update username. Please try another handle.";
+        setStatusMsg({ type: "error", text: msg });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -500,4 +584,3 @@ export default function UsernameActivationModal({
     </div>
   );
 }
-

@@ -97,34 +97,48 @@ export default function UsernameSettingsCard() {
     setIsSaving(true);
     try {
       const res: any = await api.post("/auth/update-username/", { username: clean });
-      const data = res?.data;
-      if (data?.success !== false) {
+      const resData = res?.data !== undefined ? res.data : res;
+      if (resData?.success !== false) {
         setUsername(clean);
         await refreshUser();
-        setStatusMsg({
-          type: "success",
-          text: `Username updated to @${clean}. You can now sign in using "${clean}".`,
-        });
         if (typeof window !== "undefined") {
+          const userKey = user?.id || user?.email ? `nexucon_username_modal_shown_${user.id || user.email}` : null;
+          if (userKey) {
+            localStorage.setItem(userKey, "true");
+            localStorage.setItem(`nexucon_username_activated_${user?.id || user?.email}`, "true");
+          }
+          sessionStorage.setItem("nexucon_username_modal_dismissed", "true");
           window.dispatchEvent(
             new CustomEvent("show-toast", {
               detail: { message: `Username updated to @${clean}`, type: "success" },
             })
           );
         }
+        setStatusMsg({
+          type: "success",
+          text: `Username updated to @${clean}. You can now sign in using "${clean}".`,
+        });
       } else {
         setStatusMsg({
           type: "error",
-          text: data?.message || "Could not update username.",
+          text: resData?.message || "Could not update username.",
         });
       }
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.detail ||
-        err?.message ||
-        "Failed to update username. Please try another username.";
-      setStatusMsg({ type: "error", text: msg });
+      if (err?.response?.status === 404) {
+        setStatusMsg({
+          type: "error",
+          text: "Username service is currently reloading on the server. Please retry in a moment.",
+        });
+      } else {
+        const msg =
+          err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          err?.response?.data?.errors?.username?.[0] ||
+          err?.message ||
+          "Failed to update username. Please try another username.";
+        setStatusMsg({ type: "error", text: msg });
+      }
     } finally {
       setIsSaving(false);
     }
