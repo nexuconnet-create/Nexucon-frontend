@@ -13,8 +13,8 @@ interface SignalMessage {
 const meetingSignalStore: Record<string, SignalMessage[]> = {};
 
 // Signaling messages allow peers to exchange SDP offer/answer and ICE candidates.
-// Keep messages for 60 seconds to allow slow/jittered multi-peer negotiation.
-const SIGNAL_TTL_MS = 60 * 1000;
+// Keep messages for 90 seconds to allow slow/jittered multi-peer negotiation.
+const SIGNAL_TTL_MS = 90 * 1000;
 
 function pruneStore(meetingId: string) {
   const messages = meetingSignalStore[meetingId];
@@ -79,9 +79,9 @@ export async function POST(
     meetingSignalStore[meetingId].push(newMsg);
     pruneStore(meetingId);
 
-    // Keep up to 250 signal messages for multi-party mesh
-    if (meetingSignalStore[meetingId].length > 250) {
-      meetingSignalStore[meetingId] = meetingSignalStore[meetingId].slice(-250);
+    // Keep up to 1000 signal messages for multi-party mesh
+    if (meetingSignalStore[meetingId].length > 1000) {
+      meetingSignalStore[meetingId] = meetingSignalStore[meetingId].slice(-1000);
     }
 
     return NextResponse.json({ status: 'success', messageId: newMsg.id });

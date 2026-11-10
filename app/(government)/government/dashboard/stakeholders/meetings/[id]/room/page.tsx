@@ -514,7 +514,8 @@ export default function MeetingRoomPage() {
               isMicOn,
               isVideoOn,
               isHandRaised
-            }
+            },
+            meetingParticipants: meeting?.participants || []
           })
         });
         if (res.ok) {
@@ -524,6 +525,12 @@ export default function MeetingRoomPage() {
             // Connect to peers already in the room (deterministic initiator).
             maybeConnectToPeers(data.participants);
             trackLivePeers(data.participants);
+          }
+          if (data && data.screenSharingPeerId !== undefined) {
+            setRemoteScreenSharePeerId(data.screenSharingPeerId);
+            if (data.screenSharingPeerId && data.screenSharingPeerId !== peerIdRef.current) {
+              setLayoutMode('spotlight');
+            }
           }
           if (data && data.votes) {
             setQuorumVotes(data.votes);
@@ -580,25 +587,21 @@ export default function MeetingRoomPage() {
               const pc = getOrCreatePeerConnection(peerId);
 
               if (msg.type === 'offer') {
-                let pc = getOrCreatePeerConnection(peerId);
+                const pc = getOrCreatePeerConnection(peerId);
                 // Glare guard: if we already have a pending local offer, only
                 // the designated initiator (higher peer id) keeps theirs.
                 if (pc.signalingState === 'have-local-offer' && peerIdRef.current > peerId) {
                   continue;
                 }
-                if (pc.signalingState === 'stable' && pc.remoteDescription) {
-                  // Already connected, yet this peer is offering again — it restarted.
-                  try { pc.close(); } catch (e) {}
-                  delete peerConnectionsRef.current[peerId];
-                  pendingCandidatesRef.current[peerId] = [];
-                  pc = getOrCreatePeerConnection(peerId);
-                }
-                if (!pc.remoteDescription || pc.signalingState !== 'stable') {
+                // Handle initial offer or renegotiation offer without destroying the connection
+                try {
                   await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
                   await flushPendingCandidates(peerId);
                   const answer = await pc.createAnswer();
                   await pc.setLocalDescription(answer);
                   await postSignal(peerId, 'answer', answer);
+                } catch (offerErr) {
+                  console.warn(`Error negotiating offer from ${peerId}:`, offerErr);
                 }
               } else if (msg.type === 'answer') {
                 if (pc.localDescription && pc.signalingState !== 'stable') {
@@ -652,17 +655,10 @@ export default function MeetingRoomPage() {
     };
     window.addEventListener('pagehide', leaveOnUnload);
 
-    // Track which remote peer ids are still present; close connections to
-    // peers that left the meeting.
-    const livePeerIds = new Set<string>([peerIdRef.current]);
+    // Track which remote peer ids are still present; only cleanup truly closed connections
     const trackLivePeers = (remoteList: any[]) => {
-      livePeerIds.clear();
-      livePeerIds.add(peerIdRef.current);
-      for (const p of remoteList || []) {
-        if (p.peerId) livePeerIds.add(p.peerId);
-      }
       for (const [otherId, pc] of Object.entries(peerConnectionsRef.current)) {
-        if (!livePeerIds.has(otherId)) {
+        if (pc.connectionState === 'closed') {
           try { pc.close(); } catch (e) {}
           delete peerConnectionsRef.current[otherId];
           setRemoteStreams(prev => {
@@ -692,7 +688,8 @@ export default function MeetingRoomPage() {
               isVideoOn: isVideoOnRef.current,
               isHandRaised: isHandRaisedRef.current,
               isScreenSharing: isScreenSharingRef.current
-            }
+            },
+            meetingParticipants: meeting?.participants || []
           })
         });
         if (res.ok) {
@@ -704,6 +701,9 @@ export default function MeetingRoomPage() {
           }
           if (data && data.screenSharingPeerId !== undefined) {
             setRemoteScreenSharePeerId(data.screenSharingPeerId);
+            if (data.screenSharingPeerId && data.screenSharingPeerId !== peerIdRef.current) {
+              setLayoutMode('spotlight');
+            }
           }
           if (data && data.votes) {
             setQuorumVotes(data.votes);
@@ -743,7 +743,7 @@ export default function MeetingRoomPage() {
     };
   }, [meetingId, currentUser, mediaStatus]);
 
-  const updateParticipantsFromData = (remoteList: any[]) => {
+  const updateParticipantsFromData = (remoteList: any[], meetingRoster?: any[]) => {
     setParticipants(prev => {
       const merged: ConnectedParticipant[] = [];
       const seen = new Set<string>();
@@ -764,8 +764,10 @@ export default function MeetingRoomPage() {
         isScreenSharing
       });
       seen.add(peerIdRef.current);
+      if (currentUser.email) seen.add(currentUser.email.toLowerCase());
+      if (currentUser.name) seen.add(currentUser.name.toLowerCase().trim());
 
-      // 2. Add remote participants strictly keyed by peerId
+      // 2. Add remote participants strictly keyed by peerId or email
       for (const p of remoteList || []) {
         const cleanName = (p.name || '').replace('(You)', '').trim();
         const pPeerId = p.peerId || p.id;
@@ -774,9 +776,11 @@ export default function MeetingRoomPage() {
           continue;
         }
 
-        const dedupeKey = pPeerId || `p-${cleanName.toLowerCase()}`;
+        const dedupeKey = pPeerId || (p.email ? p.email.toLowerCase() : `p-${cleanName.toLowerCase()}`);
         if (!seen.has(dedupeKey)) {
           seen.add(dedupeKey);
+          if (p.email) seen.add(p.email.toLowerCase());
+          if (cleanName) seen.add(cleanName.toLowerCase());
 
           merged.push({
             id: pPeerId || `p-${cleanName}`,
@@ -795,11 +799,42 @@ export default function MeetingRoomPage() {
         }
       }
 
+      // 3. Add scheduled roster participants from meeting
+      const scheduledList = meetingRoster || meeting?.participants || [];
+      for (const mp of scheduledList) {
+        if (!mp || !mp.name) continue;
+        const cleanMpName = mp.name.replace('(You)', '').trim();
+        const mpEmail = (mp.email || '').toLowerCase();
+        const mpNameKey = cleanMpName.toLowerCase();
+
+        if (seen.has(mpEmail) || seen.has(mpNameKey)) continue;
+
+        seen.add(mpNameKey);
+        if (mpEmail) seen.add(mpEmail);
+
+        merged.push({
+          id: `sched-${mpEmail || mpNameKey.replace(/\s+/g, '-')}`,
+          name: cleanMpName,
+          email: mp.email || '',
+          role: mp.role || 'Stakeholder Representative',
+          time: 'Scheduled',
+          status: 'Dispatched',
+          isLocalUser: false,
+          isMicOn: false,
+          isVideoOn: false,
+          isHandRaised: false,
+          isScreenSharing: false
+        });
+      }
+
       // Preserve locally-added invitees that presence engine doesn't know yet
       for (const prevP of prev) {
         if (prevP.isLocalUser) continue;
-        if (prevP.status === 'Dispatched' && !merged.some(m => m.id === prevP.id || (m.email && prevP.email && m.email.toLowerCase() === prevP.email.toLowerCase()))) {
+        const prevEmail = (prevP.email || '').toLowerCase();
+        const prevName = prevP.name.replace('(You)', '').trim().toLowerCase();
+        if (!seen.has(prevEmail) && !seen.has(prevName) && !seen.has(prevP.id)) {
           merged.push(prevP);
+          seen.add(prevP.id);
         }
       }
 
@@ -1168,6 +1203,9 @@ export default function MeetingRoomPage() {
       const data = await getMeetingById(meetingId);
       if (data) {
         setMeeting(data);
+        if (data.participants && Array.isArray(data.participants) && data.participants.length > 0) {
+          updateParticipantsFromData([], data.participants);
+        }
         setMinutesText(data.minutes_notes || 'Agenda: Technical stage-gate signoff for Level 5 slab casting. GPR concrete scan review indicates structural integrity compliance.');
         setActionItems(data.action_items || [
           { id: 'act-1', title: 'Submit 28-day concrete core compressive test certificate', assignee_name: 'David Rivera (Apex)', due_date: 'Sep 2, 2026', is_completed: false },
@@ -1660,11 +1698,20 @@ export default function MeetingRoomPage() {
   const activeInRoomCount = participants.filter(p => p.status === 'Live In Room').length;
 
   const handleGlobalInteraction = () => {
-    if (typeof window !== 'undefined' && ((window as any).AudioContext || (window as any).webkitAudioContext)) {
+    if (typeof window !== 'undefined') {
+      document.querySelectorAll('audio, video').forEach((el: any) => {
+        if (el.paused && el.srcObject) {
+          el.play().catch(() => {});
+        }
+      });
       const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-      const ctx = new AudioCtx();
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
+      if (AudioCtx) {
+        try {
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
+        } catch (e) {}
       }
     }
   };
@@ -1716,7 +1763,7 @@ export default function MeetingRoomPage() {
               </span>
               <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>LIVE ({activeInRoomCount} IN ROOM)</span>
+                <span>LIVE ({activeInRoomCount} IN ROOM{participants.length > activeInRoomCount ? ` • ${participants.length} ROSTER` : ''})</span>
               </span>
               <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
                 ⏱️ {formatElapsed(elapsedSeconds)}
@@ -1973,37 +2020,55 @@ export default function MeetingRoomPage() {
                               <span>Stop Sharing</span>
                             </button>
                           </div>
-                        ) : (!isScreenSharing && remoteScreenSharePeerId && remoteStreams[remoteScreenSharePeerId]) ? (
-                          <div className="relative w-full h-full flex items-center justify-center bg-black/80 rounded-2xl overflow-hidden border border-blue-500/40">
-                            <video
-                              autoPlay
-                              playsInline
-                              ref={(el) => {
-                                const stream = remoteStreams[remoteScreenSharePeerId];
-                                if (el && stream && el.srcObject !== stream) {
-                                  el.srcObject = stream;
-                                  el.play().catch(() => {});
-                                }
-                              }}
-                              className="w-full h-full object-contain rounded-2xl"
-                            />
-                            <div className="absolute top-3 left-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xl">
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                              <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST</span>
-                              <span className="text-[10px] text-blue-400 font-bold bg-blue-500/20 px-2 py-0.5 rounded">
-                                {participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId)?.name || 'Presenter'}
-                              </span>
+                        ) : (!isScreenSharing && remoteScreenSharePeerId) ? (() => {
+                          const presenterStream = remoteStreams[remoteScreenSharePeerId] 
+                            || Object.entries(remoteStreams).find(([k]) => k === remoteScreenSharePeerId || k.includes(remoteScreenSharePeerId) || remoteScreenSharePeerId.includes(k))?.[1]
+                            || (Object.values(remoteStreams).length === 1 ? Object.values(remoteStreams)[0] : null);
+                          const presenterParticipant = participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId);
+                          const presenterName = presenterParticipant?.name || 'Council Presenter';
+
+                          return (
+                            <div className="relative w-full h-full flex items-center justify-center bg-black/90 rounded-2xl overflow-hidden border border-blue-500/40">
+                              {presenterStream ? (
+                                <video
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  ref={(el) => {
+                                    if (el && presenterStream && el.srcObject !== presenterStream) {
+                                      el.srcObject = presenterStream;
+                                      el.play().catch(() => {});
+                                    }
+                                  }}
+                                  className="w-full h-full object-contain rounded-2xl"
+                                />
+                              ) : (
+                                <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
+                                  <div className="w-20 h-20 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-blue-400 animate-pulse">
+                                    <Share2 size={36} />
+                                  </div>
+                                  <h3 className="text-lg font-bold text-white">Receiving Screen Broadcast...</h3>
+                                  <p className="text-xs text-slate-400 font-mono">Connecting to presenter feed ({presenterName})</p>
+                                </div>
+                              )}
+                              <div className="absolute top-3 left-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xl z-10">
+                                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                                <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST</span>
+                                <span className="text-[10px] text-blue-400 font-bold bg-blue-500/20 px-2 py-0.5 rounded">
+                                  {presenterName}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setLayoutMode('grid')}
+                                className="absolute top-3 right-3 px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer border border-slate-700 z-10"
+                              >
+                                <LayoutGrid size={13} />
+                                <span>Switch to Grid</span>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setLayoutMode('grid')}
-                              className="absolute top-3 right-3 px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer border border-slate-700"
-                            >
-                              <LayoutGrid size={13} />
-                              <span>Switch to Grid</span>
-                            </button>
-                          </div>
-                        ) : isVideoOn && localStream ? (
+                          );
+                        })() : isVideoOn && localStream ? (
                           <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
                             <video
                               ref={attachLocalVideo}
@@ -2123,8 +2188,10 @@ export default function MeetingRoomPage() {
                     }`}>
                       {participants.map((p, idx) => {
                         // Remote streams are keyed by the signaling peerId,
-                        // which is also the participant id from presence.
-                        const remoteStream = !p.isLocalUser ? remoteStreams[p.id] : null;
+                        // or by participant id from presence.
+                        const remoteStream = !p.isLocalUser 
+                          ? (remoteStreams[p.peerId || ''] || remoteStreams[p.id] || Object.entries(remoteStreams).find(([k]) => k === p.peerId || k === p.id)?.[1] || null)
+                          : null;
 
                         return (
                           <div
@@ -2212,13 +2279,18 @@ export default function MeetingRoomPage() {
                                 <video
                                   autoPlay
                                   playsInline
+                                  muted
                                   ref={(el) => {
                                     if (el && el.srcObject !== remoteStream) {
                                       el.srcObject = remoteStream;
                                       el.play().catch(() => {});
                                     }
                                   }}
-                                  className="w-full h-full object-cover rounded-2xl"
+                                  className={`w-full h-full rounded-2xl ${
+                                    p.isScreenSharing || p.peerId === remoteScreenSharePeerId || p.id === remoteScreenSharePeerId
+                                      ? 'object-contain bg-black'
+                                      : 'object-cover'
+                                  }`}
                                 />
                               ) : (
                                 <div className="flex flex-col items-center text-center p-3">
@@ -2973,11 +3045,16 @@ export default function MeetingRoomPage() {
                         .filter(msg => {
                           if (msg.sender && msg.sender.startsWith('[Transcript]')) return false;
                           if (!msg.isPrivate) return true;
-                          const isSender = msg.sender === currentUser.name || (currentUser.email && msg.senderEmail === currentUser.email) || (msg.senderPeerId && msg.senderPeerId === peerIdRef.current);
-                          const isRecipient = (msg.recipientName && (msg.recipientName === currentUser.name || currentUser.name.includes(msg.recipientName))) || 
-                            (currentUser.email && msg.recipientEmail && msg.recipientEmail === currentUser.email) || 
+                          const cleanCurrentName = currentUser.name.replace(/\(You\)/gi, '').trim().toLowerCase();
+                          const msgSenderName = (msg.sender || '').replace(/\(You\)/gi, '').trim().toLowerCase();
+                          const msgRecipName = (msg.recipientName || '').replace(/\(You\)/gi, '').trim().toLowerCase();
+                          const isSender = msgSenderName === cleanCurrentName || 
+                            (currentUser.email && msg.senderEmail && msg.senderEmail.toLowerCase() === currentUser.email.toLowerCase()) || 
+                            (msg.senderPeerId && msg.senderPeerId === peerIdRef.current);
+                          const isRecipient = (msgRecipName && (msgRecipName === cleanCurrentName || cleanCurrentName.includes(msgRecipName) || msgRecipName.includes(cleanCurrentName))) || 
+                            (currentUser.email && msg.recipientEmail && msg.recipientEmail.toLowerCase() === currentUser.email.toLowerCase()) || 
                             (msg.recipientId && (msg.recipientId === peerIdRef.current || msg.recipientId === 'user-local'));
-                          return isSender || isRecipient;
+                          return Boolean(isSender || isRecipient);
                         })
                         .map((msg, idx) => (
                           <div 

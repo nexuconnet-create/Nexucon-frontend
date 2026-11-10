@@ -39,12 +39,20 @@ export default function MeetingCallRoomModal({
               <p className="text-xs text-slate-400 font-medium">Host: {meeting.initiator_name} • Room: {meeting.room_id}</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/government/dashboard/stakeholders/meetings/${meeting.id}/room`}
+              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Enter Live Council Stage</span>
+            </a>
+            <button 
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Video Feeds Grid */}

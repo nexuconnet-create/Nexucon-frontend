@@ -57,12 +57,12 @@ export async function GET(
   const store = getStore(meetingId);
 
   const now = Date.now();
-  // Filter out truly dead participants after 60 seconds of inactivity
+  // Keep live participants up to 90s and preserve dispatched/scheduled roster entries
   store.participants = store.participants
-    .filter(p => (now - p.lastSeen <= 60 * 1000) || p.id.startsWith('p-seed-'))
+    .filter(p => (now - p.lastSeen <= 90 * 1000) || p.id.startsWith('p-seed-') || p.status === 'Dispatched')
     .map(p => {
-      // Mark as Dispatched if no heartbeat for 25s (room heartbeats every 2.5s)
-      if (now - p.lastSeen > 25 * 1000 && !p.id.startsWith('p-seed-')) {
+      // Mark as Dispatched if no heartbeat for 45s (room heartbeats every 2.5s)
+      if (now - p.lastSeen > 45 * 1000 && !p.id.startsWith('p-seed-') && p.status === 'Live In Room') {
         return { ...p, status: 'Dispatched' as const };
       }
       return p;
@@ -101,6 +101,34 @@ export async function POST(
     const { action, participant, vote, message } = body;
     const now = Date.now();
     const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Optional seeding of meeting participants from Django meeting roster
+    if (body.meetingParticipants && Array.isArray(body.meetingParticipants)) {
+      for (const mp of body.meetingParticipants) {
+        if (!mp || !mp.name) continue;
+        const mpName = mp.name.replace('(You)', '').trim();
+        const mpEmail = mp.email || '';
+        const exists = store.participants.some(
+          p => (mpEmail && p.email && p.email.toLowerCase() === mpEmail.toLowerCase()) ||
+               (p.name && p.name.toLowerCase() === mpName.toLowerCase())
+        );
+        if (!exists) {
+          store.participants.push({
+            id: `p-roster-${mpEmail || mpName.toLowerCase().replace(/\s+/g, '-')}`,
+            name: mpName,
+            email: mpEmail,
+            role: mp.role || 'Stakeholder Representative',
+            time: 'Scheduled',
+            status: 'Dispatched',
+            lastSeen: 0,
+            isMicOn: false,
+            isVideoOn: false,
+            isHandRaised: false,
+            isScreenSharing: false
+          });
+        }
+      }
+    }
 
     if (action === 'join' || action === 'heartbeat') {
       if (participant && participant.name) {
@@ -188,15 +216,21 @@ export async function POST(
     } else if (action === 'leave') {
       const pPeerId = participant?.peerId || '';
       if (pPeerId) {
-        store.participants = store.participants.filter(
-          p => p.peerId !== pPeerId && p.id !== pPeerId
-        );
+        const found = store.participants.find(p => p.peerId === pPeerId || p.id === pPeerId);
+        if (found) {
+          found.status = 'Dispatched';
+          found.lastSeen = 0;
+        }
         if (store.screenSharingPeerId === pPeerId) {
           store.screenSharingPeerId = null;
         }
       } else {
         const pName = (participant?.name || '').replace('(You)', '').trim();
-        store.participants = store.participants.filter(p => !p.name.includes(pName));
+        const found = store.participants.find(p => p.name.includes(pName));
+        if (found) {
+          found.status = 'Dispatched';
+          found.lastSeen = 0;
+        }
       }
     } else if (action === 'vote') {
       if (vote && vote.voter_name && store.votes) {
