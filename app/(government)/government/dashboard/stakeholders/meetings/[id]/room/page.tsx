@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 
 interface ConnectedParticipant {
   id: string;
+  peerId?: string;
   name: string;
   email: string;
   role: string;
@@ -35,6 +36,7 @@ interface ConnectedParticipant {
   isMicOn?: boolean;
   isVideoOn?: boolean;
   isHandRaised?: boolean;
+  isScreenSharing?: boolean;
   stream?: MediaStream;
 }
 
@@ -137,6 +139,18 @@ export default function MeetingRoomPage() {
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const lastSignalTimestampRef = useRef<number>(0);
+  const seenSignalIdsRef = useRef<Set<string>>(new Set());
+  const [remoteScreenSharePeerId, setRemoteScreenSharePeerId] = useState<string | null>(null);
+
+  // Synchronized state refs so presence heartbeats never tear down signaling connections
+  const isMicOnRef = useRef(isMicOn);
+  const isVideoOnRef = useRef(isVideoOn);
+  const isHandRaisedRef = useRef(isHandRaised);
+  const isScreenSharingRef = useRef(isScreenSharing);
+  useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+  useEffect(() => { isVideoOnRef.current = isVideoOn; }, [isVideoOn]);
+  useEffect(() => { isHandRaisedRef.current = isHandRaised; }, [isHandRaised]);
+  useEffect(() => { isScreenSharingRef.current = isScreenSharing; }, [isScreenSharing]);
 
   // Unique per-tab peer identity for WebRTC signaling. Display names are NOT
   // unique (two participants may share a name, and every tab defaults to the
@@ -292,44 +306,50 @@ export default function MeetingRoomPage() {
       localStream.getAudioTracks().forEach(track => {
         track.enabled = isMicOn;
       });
-
-      // While screen sharing, the screen track replaces the camera track on
-      // every peer sender so remote participants see the shared screen live.
-      const screenTrack = isScreenSharing && screenStream ? screenStream.getVideoTracks()[0] : null;
-
-      // Synchronize local tracks to all active peer connections
-      Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
-        // Ensure local tracks are attached (covers peers connected before
-        // getUserMedia resolved).
-        let attachedNow = false;
-        localStream.getTracks().forEach(track => {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === track.kind);
-          if (!sender) {
-            try {
-              pc.addTrack(track, localStream);
-              attachedNow = true;
-            } catch (e) {}
-          }
-        });
-
-        // Attaching a track to an already-negotiated connection changes the
-        // transceiver direction — that only takes effect after a fresh offer.
-        if (attachedNow && pc.signalingState === 'stable' && (pc.localDescription || pc.remoteDescription)) {
-          pc.createOffer()
-            .then(offer => pc.setLocalDescription(offer))
-            .then(() => postSignal(otherId, 'offer', pc.localDescription))
-            .catch(() => {});
-        }
-
-        pc.getSenders().forEach(sender => {
-          if (!sender.track || sender.track.kind !== 'video') return;
-          const target = screenTrack || localStream.getVideoTracks()[0];
-          if (target && sender.track !== target) {
-            sender.replaceTrack(target).catch(() => {});
-          }
-        });
-      });
     }
+
+    // While screen sharing, the screen track replaces the camera track on
+    // every peer sender so remote participants see the shared screen live.
+    const screenTrack = isScreenSharing && screenStream ? screenStream.getVideoTracks()[0] : null;
+
+    // Synchronize local tracks to all active peer connections
+    Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
+      let attachedNow = false;
+      const tracksToAttach: MediaStreamTrack[] = [];
+      if (localStream) {
+        tracksToAttach.push(...localStream.getTracks());
+      }
+      if (screenTrack && !tracksToAttach.includes(screenTrack)) {
+        tracksToAttach.push(screenTrack);
+      }
+
+      tracksToAttach.forEach(track => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === track.kind);
+        if (!sender) {
+          try {
+            pc.addTrack(track, (localStream || screenStream)!);
+            attachedNow = true;
+          } catch (e) {}
+        }
+      });
+
+      // Attaching a track to an already-negotiated connection changes the
+      // transceiver direction — that only takes effect after a fresh offer.
+      if (attachedNow && pc.signalingState === 'stable' && (pc.localDescription || pc.remoteDescription)) {
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .then(() => postSignal(otherId, 'offer', pc.localDescription))
+          .catch(() => {});
+      }
+
+      pc.getSenders().forEach(sender => {
+        if (!sender.track || sender.track.kind !== 'video') return;
+        const target = screenTrack || (localStream ? localStream.getVideoTracks()[0] : null);
+        if (target && sender.track !== target) {
+          sender.replaceTrack(target).catch(() => {});
+        }
+      });
+    });
   }, [isVideoOn, isMicOn, localStream, isScreenSharing, screenStream]);
 
   // 2. WebRTC Peer Connection Helper
@@ -340,19 +360,33 @@ export default function MeetingRoomPage() {
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
 
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        try { pc.close(); } catch (e) {}
+        delete peerConnectionsRef.current[peerId];
+      }
+    };
+
     // Attach local tracks with addTrack ONLY. Pre-creating transceivers with
     // addTransceiver and then calling addTrack makes Chrome refuse to
     // associate those transceivers with a remote offer's m-sections, so the
     // generated answer is recvonly and the remote peer never receives our
-    // audio/video (verified empirically). When there is no local media yet,
+    // audio/video. When there is no local media yet,
     // recvonly transceivers still let us receive the other side.
-    const stream = localStreamRef.current;
-    if (stream) {
-      stream.getTracks().forEach(track => {
+    const activeStream = (isScreenSharing && screenStream) ? screenStream : localStreamRef.current;
+    if (activeStream) {
+      activeStream.getTracks().forEach(track => {
         try {
-          pc.addTrack(track, stream);
+          pc.addTrack(track, activeStream);
         } catch (e) {}
       });
+      if (isScreenSharing && localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach(track => {
+          if (!pc.getSenders().some(s => s.track && s.track.kind === 'audio')) {
+            try { pc.addTrack(track, localStreamRef.current!); } catch (e) {}
+          }
+        });
+      }
     } else {
       try {
         pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -374,7 +408,7 @@ export default function MeetingRoomPage() {
           if (!existing.getTracks().some(t => t.id === event.track.id)) {
             existing.addTrack(event.track);
           }
-          return { ...prev, [peerId]: existing };
+          return { ...prev, [peerId]: new MediaStream(existing.getTracks()) };
         }
         return { ...prev, [peerId]: stream };
       });
@@ -433,13 +467,20 @@ export default function MeetingRoomPage() {
   // created per pair — no glare/rollback needed.
   const maybeConnectToPeers = (remoteList: any[]) => {
     for (const p of remoteList || []) {
-      const rp = p.peerId;
-      if (!rp || rp === peerIdRef.current) continue;
+      const rp = p.peerId || p.id;
+      if (!rp || rp === peerIdRef.current || rp === 'user-local') continue;
       // Only connect to peers that are actually live in the room — stale
       // presence entries (departed tabs) must not produce dead connections.
       if (p.status && p.status !== 'Live In Room') continue;
       const existing = peerConnectionsRef.current[rp];
-      if (existing && (existing.localDescription || existing.remoteDescription)) continue;
+      if (
+        existing &&
+        existing.connectionState !== 'failed' &&
+        existing.connectionState !== 'closed' &&
+        (existing.localDescription || existing.remoteDescription)
+      ) {
+        continue;
+      }
       if (peerIdRef.current > rp) {
         const pc = getOrCreatePeerConnection(rp);
         pc.createOffer()
@@ -522,13 +563,19 @@ export default function MeetingRoomPage() {
     // C. Poll Signaling Engine for WebRTC Peer Negotiation (Every 1.2s)
     const signalInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/meetings/${meetingId}/signal?since=${lastSignalTimestampRef.current}&sender=${encodeURIComponent(peerIdRef.current)}`);
+        const pollSince = Math.max(0, lastSignalTimestampRef.current - 4000);
+        const res = await fetch(`/api/meetings/${meetingId}/signal?since=${pollSince}&sender=${encodeURIComponent(peerIdRef.current)}`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.messages && data.messages.length > 0) {
-            lastSignalTimestampRef.current = data.timestamp || Date.now();
-
             for (const msg of data.messages) {
+              if (seenSignalIdsRef.current.has(msg.id)) continue;
+              seenSignalIdsRef.current.add(msg.id);
+
+              if (msg.timestamp > lastSignalTimestampRef.current) {
+                lastSignalTimestampRef.current = msg.timestamp;
+              }
+
               const peerId = msg.sender;
               const pc = getOrCreatePeerConnection(peerId);
 
@@ -540,9 +587,7 @@ export default function MeetingRoomPage() {
                   continue;
                 }
                 if (pc.signalingState === 'stable' && pc.remoteDescription) {
-                  // Already connected, yet this peer is offering again — it
-                  // restarted (reload/reconnect). Renegotiate on a fresh
-                  // connection instead of ignoring the offer.
+                  // Already connected, yet this peer is offering again — it restarted.
                   try { pc.close(); } catch (e) {}
                   delete peerConnectionsRef.current[peerId];
                   pendingCandidatesRef.current[peerId] = [];
@@ -556,7 +601,6 @@ export default function MeetingRoomPage() {
                   await postSignal(peerId, 'answer', answer);
                 }
               } else if (msg.type === 'answer') {
-                // Only applicable to a pc that actually made an offer.
                 if (pc.localDescription && pc.signalingState !== 'stable') {
                   await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
                   await flushPendingCandidates(peerId);
@@ -568,7 +612,6 @@ export default function MeetingRoomPage() {
                       await pc.addIceCandidate(new RTCIceCandidate(msg.data));
                     } catch (e) {}
                   } else {
-                    // Remote description not set yet — buffer until it is.
                     pendingCandidatesRef.current[peerId] = [
                       ...(pendingCandidatesRef.current[peerId] || []),
                       msg.data
@@ -576,8 +619,6 @@ export default function MeetingRoomPage() {
                   }
                 }
               } else if (msg.type === 'join-peer') {
-                // New peer announced itself; connect per the deterministic
-                // initiator rule (higher peer id sends the offer).
                 maybeConnectToPeers([{ peerId: msg.sender }]);
               }
             }
@@ -633,16 +674,36 @@ export default function MeetingRoomPage() {
       }
     };
 
-    // D. Poll Presence API every 2.5 seconds
+    // D. Continuous Periodic Presence Heartbeat (Every 2.5 seconds)
+    // Sends active tab heartbeat so all participants remain "Live In Room"
     const presenceInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/meetings/${meetingId}/presence`);
+        const res = await fetch(`/api/meetings/${meetingId}/presence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'heartbeat',
+            participant: {
+              peerId: peerIdRef.current,
+              name: currentUser.name,
+              role: currentUser.role,
+              email: currentUser.email,
+              isMicOn: isMicOnRef.current,
+              isVideoOn: isVideoOnRef.current,
+              isHandRaised: isHandRaisedRef.current,
+              isScreenSharing: isScreenSharingRef.current
+            }
+          })
+        });
         if (res.ok) {
           const data = await res.json();
           if (data && data.participants) {
             updateParticipantsFromData(data.participants);
             maybeConnectToPeers(data.participants);
             trackLivePeers(data.participants);
+          }
+          if (data && data.screenSharingPeerId !== undefined) {
+            setRemoteScreenSharePeerId(data.screenSharingPeerId);
           }
           if (data && data.votes) {
             setQuorumVotes(data.votes);
@@ -675,17 +736,11 @@ export default function MeetingRoomPage() {
       clearInterval(signalInterval);
       clearInterval(presenceInterval);
       window.removeEventListener('pagehide', leaveOnUnload);
-      // Tell the room we left so peers tear down our connection promptly.
       leaveOnUnload();
       Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
-      // Clear the map too — otherwise a later effect run would resurrect
-      // closed connections.
       peerConnectionsRef.current = {};
       pendingCandidatesRef.current = {};
     };
-    // Note: localStream is intentionally NOT a dependency — the effect must
-    // not tear down live peer connections when the camera finishes starting
-    // (track attachment goes through localStreamRef / the toggle-sync effect).
   }, [meetingId, currentUser, mediaStatus]);
 
   const updateParticipantsFromData = (remoteList: any[]) => {
@@ -696,6 +751,7 @@ export default function MeetingRoomPage() {
       // 1. Add current local user
       merged.push({
         id: 'user-local',
+        peerId: peerIdRef.current,
         name: `${currentUser.name} (You)`,
         email: currentUser.email,
         role: currentUser.role,
@@ -704,37 +760,27 @@ export default function MeetingRoomPage() {
         isLocalUser: true,
         isMicOn,
         isVideoOn,
-        isHandRaised
+        isHandRaised,
+        isScreenSharing
       });
       seen.add(peerIdRef.current);
 
-      // 2. Add remote participants (dedupe by peerId first — display names
-      // are not unique, and every unauthenticated tab shares the default
-      // agency-head identity).
-      for (const p of remoteList) {
+      // 2. Add remote participants strictly keyed by peerId
+      for (const p of remoteList || []) {
         const cleanName = (p.name || '').replace('(You)', '').trim();
-        const cleanEmail = (p.email || '').trim().toLowerCase();
         const pPeerId = p.peerId || p.id;
 
-        // Self is matched by peerId only — display names and emails are NOT
-        // unique, so matching them would hide a remote participant who
-        // happens to share the default agency-head identity.
         if (pPeerId && pPeerId === peerIdRef.current) {
           continue;
         }
-        if (!pPeerId && (cleanName.toLowerCase() === currentUser.name.toLowerCase() || (cleanEmail && cleanEmail === currentUser.email.toLowerCase()))) {
-          continue;
-        }
 
-        const dedupeKey = pPeerId || cleanName.toLowerCase();
+        const dedupeKey = pPeerId || `p-${cleanName.toLowerCase()}`;
         if (!seen.has(dedupeKey)) {
           seen.add(dedupeKey);
-          if (cleanEmail) seen.add(cleanEmail);
 
           merged.push({
-            // Use the signaling peerId as the participant id so the video
-            // grid can look up this peer's remote MediaStream directly.
             id: pPeerId || `p-${cleanName}`,
+            peerId: pPeerId,
             name: cleanName,
             email: p.email || '',
             role: p.role || 'Stakeholder Representative',
@@ -743,16 +789,16 @@ export default function MeetingRoomPage() {
             isLocalUser: false,
             isMicOn: p.isMicOn ?? true,
             isVideoOn: p.isVideoOn ?? false,
-            isHandRaised: p.isHandRaised ?? false
+            isHandRaised: p.isHandRaised ?? false,
+            isScreenSharing: Boolean(p.isScreenSharing)
           });
         }
       }
 
-      // Preserve locally-added invitees ("Dispatched" via email) that the
-      // presence engine does not know about yet.
+      // Preserve locally-added invitees that presence engine doesn't know yet
       for (const prevP of prev) {
         if (prevP.isLocalUser) continue;
-        if (prevP.status === 'Dispatched' && !merged.some(m => m.email && prevP.email && m.email.toLowerCase() === prevP.email.toLowerCase())) {
+        if (prevP.status === 'Dispatched' && !merged.some(m => m.id === prevP.id || (m.email && prevP.email && m.email.toLowerCase() === prevP.email.toLowerCase()))) {
           merged.push(prevP);
         }
       }
@@ -776,8 +822,11 @@ export default function MeetingRoomPage() {
   // Attach the screen share stream whenever the screen-share <video> element mounts.
   const attachScreenShareVideo = (el: HTMLVideoElement | null) => {
     screenShareVideoRef.current = el;
-    if (el && screenStream && el.srcObject !== screenStream) {
-      el.srcObject = screenStream;
+    if (el && screenStream) {
+      el.muted = true;
+      if (el.srcObject !== screenStream) {
+        el.srcObject = screenStream;
+      }
       el.play().catch(() => {});
     }
   };
@@ -785,6 +834,7 @@ export default function MeetingRoomPage() {
   // Ensure screenShareVideoRef keeps track of active screenStream
   useEffect(() => {
     if (screenShareVideoRef.current && screenStream) {
+      screenShareVideoRef.current.muted = true;
       screenShareVideoRef.current.srcObject = screenStream;
       screenShareVideoRef.current.play().catch(() => {});
     }
@@ -797,6 +847,17 @@ export default function MeetingRoomPage() {
       setScreenStream(null);
     }
     setIsScreenSharing(false);
+
+    // Broadcast end of screen share to presence engine
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'screen_share',
+        isScreenSharing: false,
+        participant: { peerId: peerIdRef.current, name: currentUser.name }
+      })
+    }).catch(() => {});
 
     // Restore camera video track on all active peer senders
     const cameraTrack = localStream?.getVideoTracks()[0] || null;
@@ -823,9 +884,22 @@ export default function MeetingRoomPage() {
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
           if (screenShareVideoRef.current) {
+            screenShareVideoRef.current.muted = true;
             screenShareVideoRef.current.srcObject = stream;
             screenShareVideoRef.current.play().catch(() => {});
           }
+
+          // Broadcast active screen share to presence engine immediately
+          fetch(`/api/meetings/${meetingId}/presence`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'screen_share',
+              isScreenSharing: true,
+              participant: { peerId: peerIdRef.current, name: currentUser.name }
+            })
+          }).catch(() => {});
+
           window.dispatchEvent(new CustomEvent('show-toast', {
             detail: { message: 'Screen sharing started (Broadcasting live in 60 FPS)', type: 'success' }
           }));
@@ -837,7 +911,7 @@ export default function MeetingRoomPage() {
             };
 
             // Propagate screen track to all active peer connections
-            Object.values(peerConnectionsRef.current).forEach(pc => {
+            Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
               const senders = pc.getSenders();
               const videoSender = senders.find(s => s.track && s.track.kind === 'video');
               if (videoSender) {
@@ -845,6 +919,12 @@ export default function MeetingRoomPage() {
               } else {
                 try {
                   pc.addTrack(screenTrack, stream);
+                  if (pc.signalingState === 'stable') {
+                    pc.createOffer()
+                      .then(offer => pc.setLocalDescription(offer))
+                      .then(() => postSignal(otherId, 'offer', pc.localDescription))
+                      .catch(() => {});
+                  }
                 } catch (e) {}
               }
             });
@@ -1414,8 +1494,10 @@ export default function MeetingRoomPage() {
 
     let targetParticipant: ConnectedParticipant | undefined;
     if (isPrivate) {
-      targetParticipant = participants.find(p => p.id === chatRecipient || p.email === chatRecipient);
+      targetParticipant = participants.find(p => p.id === chatRecipient || p.peerId === chatRecipient || p.email === chatRecipient);
     }
+
+    const cleanRecipientName = targetParticipant ? targetParticipant.name.replace(' (You)', '').trim() : '';
 
     const msgObj: RoomChatMessage = {
       id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -1426,9 +1508,9 @@ export default function MeetingRoomPage() {
       text: newChatMessage.trim(),
       time,
       isPrivate,
-      recipientName: targetParticipant ? targetParticipant.name : '',
+      recipientName: cleanRecipientName,
       recipientEmail: targetParticipant ? targetParticipant.email : '',
-      recipientId: targetParticipant ? targetParticipant.id : ''
+      recipientId: targetParticipant ? (targetParticipant.peerId || targetParticipant.id) : ''
     };
 
     setChatMessages(prev => [...prev, msgObj]);
@@ -1442,6 +1524,16 @@ export default function MeetingRoomPage() {
         message: msgObj
       })
     }).catch(() => {});
+  };
+
+  // Start direct private chat with a specific participant
+  const handleStartDirectMessage = (targetP: ConnectedParticipant) => {
+    setChatRecipient(targetP.id);
+    setActiveTab('chat');
+    setIsSidebarOpen(true);
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: `Direct messaging started with ${targetP.name}`, type: 'info' }
+    }));
   };
 
   // Helper: Trigger direct browser download of base64 PDF
@@ -1825,7 +1917,7 @@ export default function MeetingRoomPage() {
 
               /* MODE 3: NATIVE IN-PORTAL COUNCIL STAGE */
               <>
-                {layoutMode === 'spotlight' || isScreenSharing ? (
+                {layoutMode === 'spotlight' || isScreenSharing || Boolean(remoteScreenSharePeerId && remoteStreams[remoteScreenSharePeerId]) ? (
                   <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                     
                     {/* Main Spotlight Window */}
@@ -1833,11 +1925,27 @@ export default function MeetingRoomPage() {
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
-                          <span>{isScreenSharing ? 'Active Screen / BIM Model Stream' : 'Spotlight Stage'}</span>
+                          <span>
+                            {isScreenSharing
+                              ? 'Active Screen / BIM Model Stream (You)'
+                              : remoteScreenSharePeerId
+                                ? `Active Screen: ${participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId)?.name || 'Presenter'}`
+                                : 'Spotlight Stage'}
+                          </span>
                         </span>
-                        <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
-                          <Volume2 size={13} className="animate-pulse" /> Live HD Audio Stream
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setLayoutMode(layoutMode === 'spotlight' ? 'grid' : 'spotlight')}
+                            className="text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded-xl border border-slate-700 flex items-center gap-1 cursor-pointer transition-all"
+                          >
+                            <LayoutGrid size={13} />
+                            <span>{layoutMode === 'spotlight' ? 'Grid View' : 'Spotlight'}</span>
+                          </button>
+                          <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-xl border border-emerald-800 flex items-center gap-1">
+                            <Volume2 size={13} className="animate-pulse" /> Live HD Audio Stream
+                          </span>
+                        </div>
                       </div>
 
                       {/* Center Stage Video / BIM Visualization */}
@@ -1848,14 +1956,16 @@ export default function MeetingRoomPage() {
                               ref={attachScreenShareVideo}
                               autoPlay
                               playsInline
+                              muted
                               className="w-full h-full object-contain rounded-2xl"
                             />
                             <div className="absolute top-3 left-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xl">
                               <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                              <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST</span>
+                              <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST (YOU)</span>
                               <span className="text-[10px] text-blue-400 font-bold bg-blue-500/20 px-2 py-0.5 rounded">60 FPS</span>
                             </div>
                             <button
+                              type="button"
                               onClick={stopScreenSharing}
                               className="absolute top-3 right-3 px-3 py-1.5 bg-red-600/90 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
                             >
@@ -1863,13 +1973,35 @@ export default function MeetingRoomPage() {
                               <span>Stop Sharing</span>
                             </button>
                           </div>
-                        ) : isScreenSharing ? (
-                          <div className="text-center space-y-3">
-                            <div className="w-24 h-24 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 animate-pulse">
-                              <Layers size={48} />
+                        ) : (!isScreenSharing && remoteScreenSharePeerId && remoteStreams[remoteScreenSharePeerId]) ? (
+                          <div className="relative w-full h-full flex items-center justify-center bg-black/80 rounded-2xl overflow-hidden border border-blue-500/40">
+                            <video
+                              autoPlay
+                              playsInline
+                              ref={(el) => {
+                                const stream = remoteStreams[remoteScreenSharePeerId];
+                                if (el && stream && el.srcObject !== stream) {
+                                  el.srcObject = stream;
+                                  el.play().catch(() => {});
+                                }
+                              }}
+                              className="w-full h-full object-contain rounded-2xl"
+                            />
+                            <div className="absolute top-3 left-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xl">
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                              <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST</span>
+                              <span className="text-[10px] text-blue-400 font-bold bg-blue-500/20 px-2 py-0.5 rounded">
+                                {participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId)?.name || 'Presenter'}
+                              </span>
                             </div>
-                            <h2 className="text-lg font-black text-white">Revit BIM Model - Level 5 Post-Tensioned Slab Mesh</h2>
-                            <p className="text-xs text-slate-400 font-mono">Live Screen Sharing • 60 FPS • 1080p Crystal Clear</p>
+                            <button
+                              type="button"
+                              onClick={() => setLayoutMode('grid')}
+                              className="absolute top-3 right-3 px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer border border-slate-700"
+                            >
+                              <LayoutGrid size={13} />
+                              <span>Switch to Grid</span>
+                            </button>
                           </div>
                         ) : isVideoOn && localStream ? (
                           <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
@@ -1923,22 +2055,34 @@ export default function MeetingRoomPage() {
                       {participants.map((p, idx) => (
                         <div
                           key={p.id || idx}
-                          className={`min-w-[170px] max-w-[200px] rounded-2xl bg-[#091522] border p-2.5 flex items-center gap-3 transition-all shrink-0 ${
+                          className={`min-w-[170px] max-w-[200px] rounded-2xl bg-[#091522] border p-2.5 flex items-center justify-between gap-2 transition-all shrink-0 ${
                             p.isLocalUser ? 'border-emerald-500/80 bg-emerald-950/20' : 'border-slate-800'
                           }`}
                         >
-                          <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
-                            p.isLocalUser ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-800 text-white border-slate-700'
-                          }`}>
-                            {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                          <div className="flex items-center gap-2.5 truncate">
+                            <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border ${
+                              p.isLocalUser ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-800 text-white border-slate-700'
+                            }`}>
+                              {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-white truncate flex items-center gap-1">
+                                <span>{p.name}</span>
+                                {p.isLocalUser && <span className="text-[9px] text-emerald-400 font-mono">(You)</span>}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
+                            </div>
                           </div>
-                          <div className="truncate">
-                            <p className="text-xs font-bold text-white truncate flex items-center gap-1">
-                              <span>{p.name}</span>
-                              {p.isLocalUser && <span className="text-[9px] text-emerald-400 font-mono">(You)</span>}
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate">{p.role}</p>
-                          </div>
+                          {!p.isLocalUser && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartDirectMessage(p)}
+                              title={`Direct message ${p.name}`}
+                              className="p-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 border border-purple-500/40 text-purple-200 hover:text-white transition-all cursor-pointer shrink-0"
+                            >
+                              <Lock size={10} />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1947,139 +2091,177 @@ export default function MeetingRoomPage() {
                 ) : (
                   
                   /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS WITH LIVE MEDIA */
-                  <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
-                    participants.length <= 1 
-                      ? 'grid-cols-1' 
-                      : participants.length === 2 
-                        ? 'grid-cols-1 sm:grid-cols-2' 
-                        : participants.length <= 4 
-                          ? 'grid-cols-1 sm:grid-cols-2' 
-                          : 'grid-cols-2 lg:grid-cols-3'
-                  }`}>
-                    {participants.map((p, idx) => {
-                      // Remote streams are keyed by the signaling peerId,
-                      // which is also the participant id from presence.
-                      const remoteStream = !p.isLocalUser ? remoteStreams[p.id] : null;
-
-                      return (
-                        <div
-                          key={p.id || idx}
-                          className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
-                            p.isLocalUser
-                              ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
-                              : p.status === 'Live In Room'
-                                ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
-                                : 'bg-[#091522]/80 border border-slate-800'
-                          }`}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Active Remote Screen Share Notification Banner */}
+                    {remoteScreenSharePeerId && !isScreenSharing && (
+                      <div className="bg-gradient-to-r from-blue-950/90 to-indigo-950/90 border border-blue-500/40 rounded-2xl px-4 py-2 flex items-center justify-between text-xs mb-2 shrink-0 shadow-lg">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                          <span className="font-bold text-white">
+                            📺 {participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId)?.name || 'An attendee'} is sharing their screen
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLayoutMode('spotlight')}
+                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow cursor-pointer transition-all"
                         >
-                          {/* Remote audio is played by the global sr-only audio
-                              bridge at the top of the page; a second per-tile
-                              audio element would double the sound. */}
+                          <Maximize2 size={12} />
+                          <span>View Screen Broadcast</span>
+                        </button>
+                      </div>
+                    )}
 
-                          {/* Top Tile Badge */}
-                          <div className="flex items-center justify-between z-10">
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
-                              p.isLocalUser 
-                                ? 'bg-emerald-600 text-white' 
-                                : 'bg-slate-800 text-slate-200 border border-slate-700'
-                            }`}>
-                              {p.isLocalUser && <CheckCircle2 size={11} />}
-                              <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
-                            </span>
+                    <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
+                      participants.length <= 1 
+                        ? 'grid-cols-1' 
+                        : participants.length === 2 
+                          ? 'grid-cols-1 sm:grid-cols-2' 
+                          : participants.length <= 4 
+                            ? 'grid-cols-1 sm:grid-cols-2' 
+                            : 'grid-cols-2 lg:grid-cols-3'
+                    }`}>
+                      {participants.map((p, idx) => {
+                        // Remote streams are keyed by the signaling peerId,
+                        // which is also the participant id from presence.
+                        const remoteStream = !p.isLocalUser ? remoteStreams[p.id] : null;
 
-                            <div className="flex items-center gap-1.5">
-                              {p.isHandRaised && (
-                                <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
-                                  <Hand size={11} /> Hand Raised
-                                </span>
-                              )}
+                        return (
+                          <div
+                            key={p.id || idx}
+                            className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
+                              p.isLocalUser
+                                ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
+                                : p.status === 'Live In Room'
+                                  ? 'bg-[#091522] border-2 border-blue-500/40 shadow-blue-500/10'
+                                  : 'bg-[#091522]/80 border border-slate-800'
+                            }`}
+                          >
+                            {/* Top Tile Badge */}
+                            <div className="flex items-center justify-between z-10">
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow flex items-center gap-1 ${
+                                p.isLocalUser 
+                                  ? 'bg-emerald-600 text-white' 
+                                  : 'bg-slate-800 text-slate-200 border border-slate-700'
+                              }`}>
+                                {p.isLocalUser && <CheckCircle2 size={11} />}
+                                <span>{p.role} {p.isLocalUser ? '(You)' : ''}</span>
+                              </span>
 
-                              {p.isLocalUser ? (
-                                isMicOn ? (
-                                  <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                                    <Volume2 size={12} className="animate-pulse" /> Live Mic
+                              <div className="flex items-center gap-1.5">
+                                {!p.isLocalUser && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartDirectMessage(p);
+                                    }}
+                                    title={`Send private message to ${p.name}`}
+                                    className="px-2 py-0.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 border border-purple-500/40 text-[9px] font-bold text-purple-200 hover:text-white flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                  >
+                                    <Lock size={9} />
+                                    <span>DM</span>
+                                  </button>
+                                )}
+
+                                {p.isHandRaised && (
+                                  <span className="flex items-center gap-1 text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                                    <Hand size={11} /> Hand Raised
                                   </span>
+                                )}
+
+                                {p.isLocalUser ? (
+                                  isMicOn ? (
+                                    <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                      <Volume2 size={12} className="animate-pulse" /> Live Mic
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                      Muted
+                                    </span>
+                                  )
+                                ) : p.status === 'Live In Room' ? (
+                                  p.isMicOn === false ? (
+                                    <span className="flex items-center gap-1 text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
+                                      <MicOff size={12} /> Muted
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Connected
+                                    </span>
+                                  )
                                 ) : (
-                                  <span className="text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                                    Muted
+                                  <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
+                                    Dispatched
                                   </span>
-                                )
-                              ) : p.status === 'Live In Room' ? (
-                                p.isMicOn === false ? (
-                                  <span className="flex items-center gap-1 text-[10px] font-mono text-red-400 bg-red-950/80 px-2 py-0.5 rounded border border-red-800">
-                                    <MicOff size={12} /> Muted
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Connected
-                                  </span>
-                                )
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Center Stage Media: Real Video for Local User OR Real Stream for Remote Users */}
+                            <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
+                              {p.isLocalUser && isVideoOn && localStream ? (
+                                <video
+                                  ref={attachLocalVideo}
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                                />
+                              ) : !p.isLocalUser && remoteStream && remoteStream.getVideoTracks().length > 0 ? (
+                                <video
+                                  autoPlay
+                                  playsInline
+                                  ref={(el) => {
+                                    if (el && el.srcObject !== remoteStream) {
+                                      el.srcObject = remoteStream;
+                                      el.play().catch(() => {});
+                                    }
+                                  }}
+                                  className="w-full h-full object-cover rounded-2xl"
+                                />
                               ) : (
-                                <span className="text-[10px] text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/50 font-mono">
-                                  Dispatched
-                                </span>
+                                <div className="flex flex-col items-center text-center p-3">
+                                  <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                    p.isLocalUser
+                                      ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
+                                      : p.status === 'Live In Room'
+                                        ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
+                                        : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                  }`}>
+                                    {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
+                                    {p.name}
+                                  </h3>
+                                  <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
+                                    {p.email || p.role}
+                                  </p>
+                                </div>
+                              )}
+                              {(p.isScreenSharing || p.id === remoteScreenSharePeerId) && (
+                                <div className="absolute bottom-2 left-2 bg-blue-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shadow">
+                                  <Share2 size={10} /> Sharing Screen
+                                </div>
                               )}
                             </div>
-                          </div>
 
-                          {/* Center Stage Media: Real Video for Local User OR Real Stream for Remote Users */}
-                          <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
-                            {p.isLocalUser && isVideoOn && localStream ? (
-                              <video
-                                ref={attachLocalVideo}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
-                              />
-                            ) : !p.isLocalUser && remoteStream && p.isVideoOn !== false && remoteStream.getVideoTracks().length > 0 ? (
-                              <video
-                                autoPlay
-                                playsInline
-                                ref={(el) => {
-                                  if (el && el.srcObject !== remoteStream) {
-                                    el.srcObject = remoteStream;
-                                    el.play().catch(() => {});
-                                  }
-                                }}
-                                className="w-full h-full object-cover rounded-2xl"
-                              />
-                            ) : (
-                              <div className="flex flex-col items-center text-center p-3">
-                                <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
-                                  p.isLocalUser
-                                    ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
-                                    : p.status === 'Live In Room'
-                                      ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
-                                      : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                }`}>
-                                  {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                                </div>
-                                <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
-                                  {p.name}
-                                </h3>
-                                <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
-                                  {p.email || p.role}
-                                </p>
-                              </div>
-                            )}
+                            {/* Bottom Tile Footer */}
+                            <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
+                              <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
+                                p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
+                              }`}>
+                                <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                                <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {p.time || '10:00 AM'}
+                              </span>
+                            </div>
                           </div>
-
-                          {/* Bottom Tile Footer */}
-                          <div className="flex items-center justify-between text-xs text-slate-400 z-10 pt-2 border-t border-slate-800/80">
-                            <span className={`text-[10px] font-mono font-bold flex items-center gap-1.5 ${
-                              p.status === 'Live In Room' ? 'text-emerald-400' : 'text-blue-400'
-                            }`}>
-                              <span className={`w-2 h-2 rounded-full ${p.status === 'Live In Room' ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                              <span>{p.status === 'Live In Room' ? '● Active In Council Room' : '● Invited via Resend'}</span>
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {p.time || '10:00 AM'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </>
@@ -2417,7 +2599,7 @@ export default function MeetingRoomPage() {
 
                       <div className="space-y-2">
                         {participants.map((p, idx) => (
-                          <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                          <div key={p.id || idx} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
                             p.isLocalUser ? 'bg-emerald-950/30 border-emerald-500/50' : 'bg-slate-900/70 border-slate-800'
                           }`}>
                             <div className="truncate">
@@ -2428,11 +2610,24 @@ export default function MeetingRoomPage() {
                               </p>
                               <p className="text-[10px] text-slate-400 truncate">{p.email} • {p.role}</p>
                             </div>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
-                              p.status === 'Live In Room' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                            }`}>
-                              {p.status}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {!p.isLocalUser && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartDirectMessage(p)}
+                                  className="px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600 border border-purple-500/40 text-[9px] font-bold text-purple-200 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
+                                  title={`Direct message ${p.name}`}
+                                >
+                                  <Lock size={9} />
+                                  <span>DM</span>
+                                </button>
+                              )}
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                                p.status === 'Live In Room' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                              }`}>
+                                {p.status}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2718,9 +2913,23 @@ export default function MeetingRoomPage() {
                         <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">
                           Message Destination:
                         </span>
-                        {chatRecipient !== 'EVERYONE' && (
-                          <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded border border-purple-500/30 flex items-center gap-1">
-                            <Lock size={10} /> Private DM
+                        {chatRecipient !== 'EVERYONE' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded border border-purple-500/30 flex items-center gap-1">
+                              <Lock size={10} /> Private DM
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setChatRecipient('EVERYONE')}
+                              className="text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-700 transition-colors"
+                              title="Switch back to public chat"
+                            >
+                              Public
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 flex items-center gap-1">
+                            Public
                           </span>
                         )}
                       </div>
@@ -2736,7 +2945,7 @@ export default function MeetingRoomPage() {
                       >
                         <option value="EVERYONE">🌐 Everyone (Public Discussion)</option>
                         {participants
-                          .filter(p => !p.isLocalUser && p.name.replace('(You)', '').trim() !== currentUser.name.trim())
+                          .filter(p => !p.isLocalUser && p.id !== 'user-local' && p.peerId !== peerIdRef.current)
                           .map((p) => (
                             <option key={p.id} value={p.id}>
                               🔒 Direct to: {p.name} ({p.role || 'Member'})
@@ -2745,8 +2954,15 @@ export default function MeetingRoomPage() {
                       </select>
 
                       {chatRecipient !== 'EVERYONE' && (
-                        <p className="text-[10px] text-purple-300/80 italic px-1">
-                          Only you and the selected attendee can read this private message.
+                        <p className="text-[10px] text-purple-300/80 italic px-1 flex items-center justify-between">
+                          <span>Only you and the selected attendee can read this private message.</span>
+                          <button
+                            type="button"
+                            onClick={() => setChatRecipient('EVERYONE')}
+                            className="underline hover:text-white ml-2 text-[10px] not-italic"
+                          >
+                            Back to Everyone
+                          </button>
                         </p>
                       )}
                     </div>
@@ -2758,7 +2974,9 @@ export default function MeetingRoomPage() {
                           if (msg.sender && msg.sender.startsWith('[Transcript]')) return false;
                           if (!msg.isPrivate) return true;
                           const isSender = msg.sender === currentUser.name || (currentUser.email && msg.senderEmail === currentUser.email) || (msg.senderPeerId && msg.senderPeerId === peerIdRef.current);
-                          const isRecipient = (msg.recipientName && msg.recipientName === currentUser.name) || (currentUser.email && msg.recipientEmail === currentUser.email) || (msg.recipientId && msg.recipientId === peerIdRef.current);
+                          const isRecipient = (msg.recipientName && (msg.recipientName === currentUser.name || currentUser.name.includes(msg.recipientName))) || 
+                            (currentUser.email && msg.recipientEmail && msg.recipientEmail === currentUser.email) || 
+                            (msg.recipientId && (msg.recipientId === peerIdRef.current || msg.recipientId === 'user-local'));
                           return isSender || isRecipient;
                         })
                         .map((msg, idx) => (
@@ -2798,7 +3016,7 @@ export default function MeetingRoomPage() {
                         placeholder={
                           chatRecipient === 'EVERYONE'
                             ? "Send public message to council..."
-                            : `Send private message to attendee...`
+                            : `Send private message to ${participants.find(p => p.id === chatRecipient)?.name || 'attendee'}...`
                         }
                         className={`flex-1 p-2.5 bg-slate-900 border rounded-xl text-xs text-white focus:outline-none focus:ring-2 ${
                           chatRecipient === 'EVERYONE'

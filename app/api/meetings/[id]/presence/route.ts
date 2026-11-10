@@ -13,8 +13,10 @@ const meetingPresenceStore: Record<string, {
     isMicOn?: boolean;
     isVideoOn?: boolean;
     isHandRaised?: boolean;
+    isScreenSharing?: boolean;
     lastSeen: number;
   }>;
+  screenSharingPeerId?: string | null;
   actionItems?: any[];
   minutesNotes?: string;
   votes?: { yes: number; no: number; total: number; voters: Record<string, string> };
@@ -38,6 +40,7 @@ function getStore(meetingId: string) {
   if (!meetingPresenceStore[cleanId]) {
     meetingPresenceStore[cleanId] = {
       participants: [],
+      screenSharingPeerId: null,
       votes: { yes: 0, no: 0, total: 0, voters: {} },
       chatMessages: []
     };
@@ -53,18 +56,26 @@ export async function GET(
   const meetingId = resolvedParams?.id || 'room';
   const store = getStore(meetingId);
 
-  // Clean stale participants (inactive for more than 12 seconds — the room
-  // heartbeats every 2.5s, so anything older has left the meeting). The old
-  // 15-minute window kept departed participants visible and made live peers
-  // attempt WebRTC connections to ghost peer ids.
   const now = Date.now();
-  store.participants = store.participants.map(p => {
-    // keep seeded or active
-    if (now - p.lastSeen > 12 * 1000 && !p.id.startsWith('p-seed-')) {
-      return { ...p, status: 'Dispatched' as const };
-    }
-    return p;
-  });
+  // Filter out truly dead participants after 60 seconds of inactivity
+  store.participants = store.participants
+    .filter(p => (now - p.lastSeen <= 60 * 1000) || p.id.startsWith('p-seed-'))
+    .map(p => {
+      // Mark as Dispatched if no heartbeat for 25s (room heartbeats every 2.5s)
+      if (now - p.lastSeen > 25 * 1000 && !p.id.startsWith('p-seed-')) {
+        return { ...p, status: 'Dispatched' as const };
+      }
+      return p;
+    });
+
+  if (
+    store.screenSharingPeerId &&
+    !store.participants.some(
+      p => (p.peerId === store.screenSharingPeerId || p.id === store.screenSharingPeerId) && p.status === 'Live In Room'
+    )
+  ) {
+    store.screenSharingPeerId = null;
+  }
 
   return NextResponse.json({
     status: 'success',
@@ -72,6 +83,7 @@ export async function GET(
     participants: store.participants,
     votes: store.votes,
     chatMessages: store.chatMessages,
+    screenSharingPeerId: store.screenSharingPeerId || null,
     timestamp: now
   });
 }
@@ -97,18 +109,26 @@ export async function POST(
         const pRole = participant.role || 'Stakeholder Representative';
         const pPeerId = participant.peerId || '';
 
-        // Match by peerId first — it is the unique per-tab identity used for
-        // WebRTC signaling. Display names/emails are NOT unique (two tabs can
-        // default to the same agency head), so name/email matching alone
-        // collapses distinct participants into one.
+        // Match strictly by peerId: each tab/client has a unique peerId.
+        // Display names and emails are NOT unique (multiple tabs or guests testing),
+        // so never collapse separate peers into one slot.
         let existingIdx = -1;
         if (pPeerId) {
-          existingIdx = store.participants.findIndex(p => p.peerId === pPeerId);
-        }
-        if (existingIdx < 0) {
+          existingIdx = store.participants.findIndex(p => p.peerId === pPeerId || p.id === pPeerId);
+        } else {
           existingIdx = store.participants.findIndex(
-            p => (pEmail && p.email === pEmail) || p.name.toLowerCase() === pName.toLowerCase() || p.name.includes(pName)
+            p => (pEmail && p.email === pEmail) || p.name.toLowerCase() === pName.toLowerCase()
           );
+        }
+
+        const isSharing = participant.isScreenSharing !== undefined
+          ? Boolean(participant.isScreenSharing)
+          : (existingIdx >= 0 ? Boolean(store.participants[existingIdx].isScreenSharing) : false);
+
+        if (isSharing && pPeerId) {
+          store.screenSharingPeerId = pPeerId;
+        } else if (store.screenSharingPeerId === pPeerId && participant.isScreenSharing === false) {
+          store.screenSharingPeerId = null;
         }
 
         if (existingIdx >= 0) {
@@ -122,7 +142,8 @@ export async function POST(
             lastSeen: now,
             isMicOn: participant.isMicOn !== undefined ? participant.isMicOn : store.participants[existingIdx].isMicOn,
             isVideoOn: participant.isVideoOn !== undefined ? participant.isVideoOn : store.participants[existingIdx].isVideoOn,
-            isHandRaised: participant.isHandRaised !== undefined ? participant.isHandRaised : store.participants[existingIdx].isHandRaised
+            isHandRaised: participant.isHandRaised !== undefined ? participant.isHandRaised : store.participants[existingIdx].isHandRaised,
+            isScreenSharing: isSharing
           };
         } else {
           store.participants.push({
@@ -136,30 +157,47 @@ export async function POST(
             lastSeen: now,
             isMicOn: participant.isMicOn ?? true,
             isVideoOn: participant.isVideoOn ?? true,
-            isHandRaised: participant.isHandRaised ?? false
+            isHandRaised: participant.isHandRaised ?? false,
+            isScreenSharing: isSharing
           });
         }
       }
+    } else if (action === 'screen_share') {
+      const pPeerId = participant?.peerId || '';
+      if (body.isScreenSharing) {
+        store.screenSharingPeerId = pPeerId;
+      } else if (store.screenSharingPeerId === pPeerId) {
+        store.screenSharingPeerId = null;
+      }
+      const p = store.participants.find(x => x.peerId === pPeerId || x.id === pPeerId);
+      if (p) {
+        p.isScreenSharing = Boolean(body.isScreenSharing);
+        p.lastSeen = now;
+      }
     } else if (action === 'raise_hand') {
       if (participant && participant.name) {
-        const pName = participant.name.replace('(You)', '').trim();
         const pPeerId = participant.peerId || '';
         const p = pPeerId
-          ? store.participants.find(x => x.peerId === pPeerId)
-          : store.participants.find(x => x.name.includes(pName));
+          ? store.participants.find(x => x.peerId === pPeerId || x.id === pPeerId)
+          : store.participants.find(x => x.name.includes(participant.name.replace('(You)', '').trim()));
         if (p) {
           p.isHandRaised = Boolean(participant.isHandRaised);
           p.lastSeen = now;
         }
       }
     } else if (action === 'leave') {
-      // Immediate departure (page unload) — remove the participant instead
-      // of waiting for the staleness window.
       const pPeerId = participant?.peerId || '';
-      const pName = (participant?.name || '').replace('(You)', '').trim();
-      store.participants = store.participants.filter(
-        p => !(pPeerId && p.peerId === pPeerId) && !(pPeerId ? false : p.name.includes(pName))
-      );
+      if (pPeerId) {
+        store.participants = store.participants.filter(
+          p => p.peerId !== pPeerId && p.id !== pPeerId
+        );
+        if (store.screenSharingPeerId === pPeerId) {
+          store.screenSharingPeerId = null;
+        }
+      } else {
+        const pName = (participant?.name || '').replace('(You)', '').trim();
+        store.participants = store.participants.filter(p => !p.name.includes(pName));
+      }
     } else if (action === 'vote') {
       if (vote && vote.voter_name && store.votes) {
         const voter = vote.voter_name;
@@ -175,7 +213,8 @@ export async function POST(
       }
     } else if (action === 'chat') {
       if (message && message.text) {
-        store.chatMessages?.push({
+        if (!store.chatMessages) store.chatMessages = [];
+        store.chatMessages.push({
           id: message.id || `msg-${now}-${Math.floor(Math.random() * 1000)}`,
           sender: message.sender || 'Council Member',
           senderEmail: message.senderEmail || '',
@@ -188,6 +227,11 @@ export async function POST(
           recipientEmail: message.recipientEmail || '',
           recipientId: message.recipientId || ''
         });
+
+        // Keep last 250 messages
+        if (store.chatMessages.length > 250) {
+          store.chatMessages = store.chatMessages.slice(-250);
+        }
       }
     }
 
@@ -195,7 +239,8 @@ export async function POST(
       status: 'success',
       participants: store.participants,
       votes: store.votes,
-      chatMessages: store.chatMessages
+      chatMessages: store.chatMessages,
+      screenSharingPeerId: store.screenSharingPeerId || null
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
