@@ -18,7 +18,19 @@ const meetingPresenceStore: Record<string, {
   actionItems?: any[];
   minutesNotes?: string;
   votes?: { yes: number; no: number; total: number; voters: Record<string, string> };
-  chatMessages?: Array<{ sender: string; role: string; text: string; time: string }>;
+  chatMessages?: Array<{
+    id?: string;
+    sender: string;
+    senderEmail?: string;
+    senderPeerId?: string;
+    role: string;
+    text: string;
+    time: string;
+    isPrivate?: boolean;
+    recipientName?: string;
+    recipientEmail?: string;
+    recipientId?: string;
+  }>;
 }> = {};
 
 function getStore(meetingId: string) {
@@ -164,10 +176,17 @@ export async function POST(
     } else if (action === 'chat') {
       if (message && message.text) {
         store.chatMessages?.push({
+          id: message.id || `msg-${now}-${Math.floor(Math.random() * 1000)}`,
           sender: message.sender || 'Council Member',
+          senderEmail: message.senderEmail || '',
+          senderPeerId: message.senderPeerId || '',
           role: message.role || 'Stakeholder',
           text: message.text,
-          time: timeString
+          time: message.time || timeString,
+          isPrivate: Boolean(message.isPrivate),
+          recipientName: message.recipientName || '',
+          recipientEmail: message.recipientEmail || '',
+          recipientId: message.recipientId || ''
         });
       }
     }

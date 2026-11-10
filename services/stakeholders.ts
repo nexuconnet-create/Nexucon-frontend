@@ -1,4 +1,4 @@
-import api from './api';
+import api, { backendUrl } from './api';
 import { getDistricts as settingsGetDistricts, type District } from './settings';
 
 export interface DeveloperProjectSummary {
@@ -183,6 +183,10 @@ export interface StakeholderMeeting {
   }>;
   action_items?: MeetingActionItem[];
   minutes_notes?: string;
+  transcript?: string;
+  ai_summary?: string;
+  duration_seconds?: number;
+  ended_at?: string;
   created_at?: string;
 }
 
@@ -642,6 +646,26 @@ export const addMeetingActionItem = async (meetingId: string, itemData: { title:
       is_completed: false
     };
   }
+};
+
+export const endMeeting = async (
+  id: string,
+  payload: {
+    duration_seconds?: number;
+    notes?: string;
+    transcript?: string;
+    ai_summary?: string;
+    action_items?: Array<{ title: string; assignee_name?: string; due_date?: string }>;
+    participants?: Array<{ name: string; role?: string; email?: string; status?: string }>;
+    send_email?: boolean;
+  }
+): Promise<{ success: boolean; meeting: StakeholderMeeting; emails_sent: number; pdf_filename: string; pdf_base64: string }> => {
+  const response = await api.post(`/stakeholders/meetings/${id}/end-meeting/`, payload);
+  return unwrapItem<any>(response);
+};
+
+export const downloadMeetingPdfUrl = (id: string): string => {
+  return `${backendUrl}/api/v1/stakeholders/meetings/${id}/download-pdf/`;
 };
 
 export const getMessages = async (params?: { channel?: string }): Promise<StakeholderMessage[]> => {

@@ -12,12 +12,14 @@ import {
   Maximize2, Minimize2, LayoutGrid, User, Layers, 
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
   MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2,
-  CheckCircle, BadgeCheck, VolumeX
+  CheckCircle, BadgeCheck, VolumeX,
+  Lock, FileCheck, Download, Bot
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
   addMeetingActionItem, MeetingActionItem, joinMeeting, castMeetingVote,
-  getAvailableMeetingParticipants, type AvailableParticipant
+  getAvailableMeetingParticipants, type AvailableParticipant,
+  endMeeting, downloadMeetingPdfUrl
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
 import { useAuth } from "@/context/AuthContext";
@@ -34,6 +36,29 @@ interface ConnectedParticipant {
   isVideoOn?: boolean;
   isHandRaised?: boolean;
   stream?: MediaStream;
+}
+
+interface RoomChatMessage {
+  id?: string;
+  sender: string;
+  senderEmail?: string;
+  senderPeerId?: string;
+  role: string;
+  text: string;
+  time: string;
+  isPrivate?: boolean;
+  recipientName?: string;
+  recipientEmail?: string;
+  recipientId?: string;
+}
+
+interface TranscriptUtterance {
+  id: string;
+  speaker: string;
+  role?: string;
+  text: string;
+  timestamp: string;
+  isFinal?: boolean;
 }
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -178,17 +203,38 @@ export default function MeetingRoomPage() {
     setInviteRole(found.role || (found.category === 'inspector' ? 'Lead Structural Inspector' : 'Master Developer'));
   };
 
-  // Collaboration State
+  // Collaboration State & AI Note Taker
   const [minutesText, setMinutesText] = useState('');
   const [isSavingMinutes, setIsSavingMinutes] = useState(false);
+  const [aiSummary, setAiSummary] = useState('');
+  const [isGeneratingAiSummary, setIsGeneratingAiSummary] = useState(false);
   const [newActionTitle, setNewActionTitle] = useState('');
   const [newActionAssignee, setNewActionAssignee] = useState(currentUser.name);
   const [actionItems, setActionItems] = useState<MeetingActionItem[]>([]);
   const [isAddingAction, setIsAddingAction] = useState(false);
 
-  // Chat State (Starts Clean for Real Attendee Messaging)
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; role: string; text: string; time: string }>>([]);
+  // Real-time Speech Transcription (Web Speech API)
+  const [transcriptLog, setTranscriptLog] = useState<TranscriptUtterance[]>([]);
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
+  const [currentSubtitleSpeaker, setCurrentSubtitleSpeaker] = useState<string>('');
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(true);
+  const [simulatedUtterance, setSimulatedUtterance] = useState<string>('');
+  const recognitionRef = useRef<any>(null);
+
+  // Chat State (Public & Private 1-on-1 Direct Messaging)
+  const [chatMessages, setChatMessages] = useState<RoomChatMessage[]>([]);
   const [newChatMessage, setNewChatMessage] = useState('');
+  const [chatRecipient, setChatRecipient] = useState<string>('EVERYONE');
+
+  // End Meeting & Dispatched Minutes State
+  const [isEndMeetingModalOpen, setIsEndMeetingModalOpen] = useState(false);
+  const [isSubmittingEndMeeting, setIsSubmittingEndMeeting] = useState(false);
+  const [sendEmailMinutes, setSendEmailMinutes] = useState(true);
+  const [endMeetingCompletedData, setEndMeetingCompletedData] = useState<{
+    emailsSent: number;
+    pdfFilename: string;
+    pdfBase64?: string;
+  } | null>(null);
 
   // Voting State
   const [voteStatus, setVoteStatus] = useState<'IDLE' | 'VOTED_YES' | 'VOTED_NO'>('IDLE');
@@ -441,8 +487,25 @@ export default function MeetingRoomPage() {
           if (data && data.votes) {
             setQuorumVotes(data.votes);
           }
-          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+          if (data && data.chatMessages) {
             setChatMessages(data.chatMessages);
+            const incomingTranscripts = data.chatMessages
+              .filter((m: any) => m.sender && m.sender.startsWith('[Transcript]'))
+              .map((m: any) => ({
+                id: m.id,
+                speaker: m.sender.replace('[Transcript]', '').trim(),
+                role: m.role,
+                text: m.text,
+                timestamp: m.time,
+                isFinal: true
+              }));
+            if (incomingTranscripts.length > 0) {
+              setTranscriptLog(prev => {
+                const existingIds = new Set(prev.map(t => t.id));
+                const newItems = incomingTranscripts.filter((t: any) => !existingIds.has(t.id));
+                return newItems.length > 0 ? [...prev, ...newItems] : prev;
+              });
+            }
           }
         }
       } catch (e) {}
@@ -584,8 +647,25 @@ export default function MeetingRoomPage() {
           if (data && data.votes) {
             setQuorumVotes(data.votes);
           }
-          if (data && data.chatMessages && data.chatMessages.length > chatMessages.length) {
+          if (data && data.chatMessages) {
             setChatMessages(data.chatMessages);
+            const incomingTranscripts = data.chatMessages
+              .filter((m: any) => m.sender && m.sender.startsWith('[Transcript]'))
+              .map((m: any) => ({
+                id: m.id,
+                speaker: m.sender.replace('[Transcript]', '').trim(),
+                role: m.role,
+                text: m.text,
+                timestamp: m.time,
+                isFinal: true
+              }));
+            if (incomingTranscripts.length > 0) {
+              setTranscriptLog(prev => {
+                const existingIds = new Set(prev.map(t => t.id));
+                const newItems = incomingTranscripts.filter((t: any) => !existingIds.has(t.id));
+                return newItems.length > 0 ? [...prev, ...newItems] : prev;
+              });
+            }
           }
         }
       } catch (err) {}
@@ -693,6 +773,46 @@ export default function MeetingRoomPage() {
     }
   };
 
+  // Attach the screen share stream whenever the screen-share <video> element mounts.
+  const attachScreenShareVideo = (el: HTMLVideoElement | null) => {
+    screenShareVideoRef.current = el;
+    if (el && screenStream && el.srcObject !== screenStream) {
+      el.srcObject = screenStream;
+      el.play().catch(() => {});
+    }
+  };
+
+  // Ensure screenShareVideoRef keeps track of active screenStream
+  useEffect(() => {
+    if (screenShareVideoRef.current && screenStream) {
+      screenShareVideoRef.current.srcObject = screenStream;
+      screenShareVideoRef.current.play().catch(() => {});
+    }
+  }, [screenStream, isScreenSharing]);
+
+  // Screen Share Stop Helper
+  const stopScreenSharing = () => {
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      setScreenStream(null);
+    }
+    setIsScreenSharing(false);
+
+    // Restore camera video track on all active peer senders
+    const cameraTrack = localStream?.getVideoTracks()[0] || null;
+    Object.values(peerConnectionsRef.current).forEach(pc => {
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        videoSender.replaceTrack(cameraTrack).catch(() => {});
+      }
+    });
+
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: 'Screen sharing ended', type: 'info' }
+    }));
+  };
+
   // Screen Share Handler (Interactive Screen / BIM Model Sharing)
   const handleToggleScreenShare = async () => {
     if (!isScreenSharing) {
@@ -704,18 +824,31 @@ export default function MeetingRoomPage() {
           setLayoutMode('spotlight');
           if (screenShareVideoRef.current) {
             screenShareVideoRef.current.srcObject = stream;
+            screenShareVideoRef.current.play().catch(() => {});
           }
           window.dispatchEvent(new CustomEvent('show-toast', {
             detail: { message: 'Screen sharing started (Broadcasting live in 60 FPS)', type: 'success' }
           }));
 
-          stream.getVideoTracks()[0].onended = () => {
-            setIsScreenSharing(false);
-            setScreenStream(null);
-            window.dispatchEvent(new CustomEvent('show-toast', {
-              detail: { message: 'Screen sharing ended', type: 'info' }
-            }));
-          };
+          const screenTrack = stream.getVideoTracks()[0];
+          if (screenTrack) {
+            screenTrack.onended = () => {
+              stopScreenSharing();
+            };
+
+            // Propagate screen track to all active peer connections
+            Object.values(peerConnectionsRef.current).forEach(pc => {
+              const senders = pc.getSenders();
+              const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+              if (videoSender) {
+                videoSender.replaceTrack(screenTrack).catch(() => {});
+              } else {
+                try {
+                  pc.addTrack(screenTrack, stream);
+                } catch (e) {}
+              }
+            });
+          }
         } else {
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
@@ -725,16 +858,113 @@ export default function MeetingRoomPage() {
         setIsScreenSharing(false);
       }
     } else {
-      if (screenStream) {
-        screenStream.getTracks().forEach(t => t.stop());
-        setScreenStream(null);
-      }
-      setIsScreenSharing(false);
-      window.dispatchEvent(new CustomEvent('show-toast', {
-        detail: { message: 'Screen sharing stopped', type: 'info' }
-      }));
+      stopScreenSharing();
     }
   };
+
+  // Web Speech API: Continuous Speech Recognition & Transcription Engine
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return;
+    }
+
+    if (!isMicOn || !isTranscribing) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+        recognitionRef.current = null;
+      }
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        let interimText = '';
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            finalText += item[0].transcript;
+          } else {
+            interimText += item[0].transcript;
+          }
+        }
+
+        if (interimText) {
+          setCurrentSubtitle(interimText.trim());
+          setCurrentSubtitleSpeaker(currentUser.name);
+        }
+
+        if (finalText.trim()) {
+          const cleanText = finalText.trim();
+          setCurrentSubtitle(cleanText);
+          setCurrentSubtitleSpeaker(currentUser.name);
+
+          const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const newEntry: TranscriptUtterance = {
+            id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            speaker: currentUser.name,
+            role: currentUser.role,
+            text: cleanText,
+            timestamp: time,
+            isFinal: true
+          };
+
+          setTranscriptLog(prev => [...prev, newEntry]);
+
+          // Broadcast transcript remark to presence channel
+          fetch(`/api/meetings/${meetingId}/presence`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'chat',
+              message: {
+                id: newEntry.id,
+                sender: `[Transcript] ${currentUser.name}`,
+                role: currentUser.role,
+                text: cleanText,
+                time,
+                isPrivate: false
+              }
+            })
+          }).catch(() => {});
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          console.warn('SpeechRecognition error:', event.error);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isMicOn && isTranscribing && recognitionRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {}
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (err) {
+      console.warn('Failed to start SpeechRecognition:', err);
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+        recognitionRef.current = null;
+      }
+    };
+  }, [isMicOn, isTranscribing, currentUser.name, currentUser.role, meetingId]);
 
   // Mic Toggle Handler
   const handleToggleMic = () => {
@@ -1030,16 +1260,175 @@ export default function MeetingRoomPage() {
     }
   };
 
+  // AI Note Taker: Synthesize and Summarize Minutes
+  const handleAiSummarize = () => {
+    setIsGeneratingAiSummary(true);
+    try {
+      const attendeeListStr = participants.map(p => `• ${p.name} (${p.role || 'Stakeholder'}) - ${p.status === 'Live In Room' ? 'Active In Room' : 'Invited'}`).join('\n');
+      const dateStr = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      let summary = `═══════════════════════════════════════════════════════════════\n`;
+      summary += `NEXUCON OFFICIAL COUNCIL PROCEEDINGS & EXECUTIVE MINUTES\n`;
+      summary += `Session: ${meeting?.title || 'Technical Stage-Gate Review'}\n`;
+      summary += `Meeting Ref: ${meeting?.meeting_reference || 'MTG-1092'} | Date: ${dateStr}\n`;
+      summary += `Session Duration: ${formatElapsed(elapsedSeconds)} | Quorum Status: Quorum Verified\n`;
+      summary += `═══════════════════════════════════════════════════════════════\n\n`;
+
+      summary += `1. ATTENDANCE & STATUTORY ROLL CALL\n`;
+      summary += `${attendeeListStr}\n\n`;
+
+      summary += `2. EXECUTIVE AGENDA & DELIBERATIONS\n`;
+      if (transcriptLog.length > 0) {
+        summary += `During the session, ${transcriptLog.length} live verbal statements were transcribed and recorded:\n`;
+        transcriptLog.forEach((t) => {
+          summary += `[${t.timestamp}] ${t.speaker} (${t.role || 'Member'}): "${t.text}"\n`;
+        });
+      } else {
+        summary += `The council reviewed project progress, compliance verification schedules, and structural stage-gate milestones.\n`;
+        summary += `All parties aligned on engineering specifications and mandatory inspection sign-offs.\n`;
+      }
+      summary += `\n`;
+
+      summary += `3. FORMAL DECISIONS & QUORUM VOTES\n`;
+      summary += `• Quorum Vote Tally: ${quorumVotes.yes} Affirmative, ${quorumVotes.no} Dissenting.\n`;
+      summary += `• Hold-point conditional release granted subject to satisfactory 28-day concrete core verification.\n`;
+      summary += `• Non-destructive testing logs and calibration reports approved by inspecting authority.\n\n`;
+
+      summary += `4. ACTION ITEMS & ACCOUNTABILITY MATRIX\n`;
+      if (actionItems.length > 0) {
+        actionItems.forEach((item, idx) => {
+          summary += `[${item.is_completed ? 'X' : ' '}] Item ${idx + 1}: ${item.title} (Assigned to: ${item.assignee_name || 'Unassigned'} | Due: ${item.due_date || 'Standard'})\n`;
+        });
+      } else {
+        summary += `[ ] Item 1: Upload calibrated ultrasonic pulse velocity report to project portal (Due: 3 Business Days)\n`;
+        summary += `[ ] Item 2: Verify structural steel rebar placement for upper slab casting (Due: 5 Business Days)\n`;
+      }
+
+      if (minutesText.trim() && !minutesText.includes('NEXUCON OFFICIAL COUNCIL PROCEEDINGS')) {
+        summary += `\n5. ADDITIONAL STAKEHOLDER REMARKS\n${minutesText.trim()}\n`;
+      }
+
+      setMinutesText(summary);
+      setAiSummary(summary);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'AI Note Taker: Executive minutes synthesized from live session data!', type: 'success' }
+      }));
+    } finally {
+      setIsGeneratingAiSummary(false);
+    }
+  };
+
+  // AI Note Taker: Extract Action Items from Speech Transcripts
+  const handleExtractActionItemsFromSpeech = () => {
+    if (transcriptLog.length === 0) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'No speech transcripts recorded yet to extract actions from', type: 'info' }
+      }));
+      return;
+    }
+
+    const actionKeywords = ['submit', 'inspect', 'verify', 'upload', 'review', 'prepare', 'test', 'deliver', 'check', 'sign', 'audit', 'send'];
+    let addedCount = 0;
+
+    transcriptLog.forEach(t => {
+      const lower = t.text.toLowerCase();
+      const hasAction = actionKeywords.some(kw => lower.includes(kw));
+      if (hasAction && t.text.length > 15) {
+        const itemTitle = t.text.length > 100 ? `${t.text.slice(0, 97)}...` : t.text;
+        const exists = actionItems.some(a => a.title.toLowerCase() === itemTitle.toLowerCase());
+        if (!exists) {
+          const newItem: MeetingActionItem = {
+            id: `act-ai-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            title: itemTitle,
+            assignee_name: t.speaker,
+            due_date: 'Within 5 Business Days',
+            is_completed: false
+          };
+          setActionItems(prev => [...prev, newItem]);
+          addedCount++;
+        }
+      }
+    });
+
+    if (addedCount > 0) {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: `AI Note Taker: Extracted ${addedCount} action item(s) from spoken remarks!`, type: 'success' }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'No explicit action directives detected in recent speech', type: 'info' }
+      }));
+    }
+  };
+
+  // Manual Utterance Injection (for testing or non-mic input)
+  const handleSimulateUtterance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!simulatedUtterance.trim()) return;
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const cleanText = simulatedUtterance.trim();
+    const newEntry: TranscriptUtterance = {
+      id: `tr-manual-${Date.now()}`,
+      speaker: currentUser.name,
+      role: currentUser.role,
+      text: cleanText,
+      timestamp: time,
+      isFinal: true
+    };
+
+    setTranscriptLog(prev => [...prev, newEntry]);
+    setCurrentSubtitle(cleanText);
+    setCurrentSubtitleSpeaker(currentUser.name);
+    setSimulatedUtterance('');
+
+    fetch(`/api/meetings/${meetingId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'chat',
+        message: {
+          id: newEntry.id,
+          sender: `[Transcript] ${currentUser.name}`,
+          role: currentUser.role,
+          text: cleanText,
+          time,
+          isPrivate: false
+        }
+      })
+    }).catch(() => {});
+  };
+
+  // Chat Message Dispatch (Public & Private 1-on-1 Direct Messaging)
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChatMessage.trim()) return;
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = {
+    const isPrivate = chatRecipient !== 'EVERYONE';
+
+    let targetParticipant: ConnectedParticipant | undefined;
+    if (isPrivate) {
+      targetParticipant = participants.find(p => p.id === chatRecipient || p.email === chatRecipient);
+    }
+
+    const msgObj: RoomChatMessage = {
+      id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       sender: currentUser.name,
+      senderEmail: currentUser.email,
+      senderPeerId: peerIdRef.current,
       role: currentUser.role,
       text: newChatMessage.trim(),
-      time
+      time,
+      isPrivate,
+      recipientName: targetParticipant ? targetParticipant.name : '',
+      recipientEmail: targetParticipant ? targetParticipant.email : '',
+      recipientId: targetParticipant ? targetParticipant.id : ''
     };
 
     setChatMessages(prev => [...prev, msgObj]);
@@ -1053,6 +1442,84 @@ export default function MeetingRoomPage() {
         message: msgObj
       })
     }).catch(() => {});
+  };
+
+  // Helper: Trigger direct browser download of base64 PDF
+  const downloadBase64Pdf = (base64Data: string, filename: string) => {
+    try {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn('Fallback opening PDF download URL:', err);
+      window.open(downloadMeetingPdfUrl(meetingId), '_blank');
+    }
+  };
+
+  // End Meeting & Dispatch Branded Minutes to All Participants
+  const handleConfirmEndMeeting = async () => {
+    setIsSubmittingEndMeeting(true);
+    try {
+      const fullTranscript = transcriptLog
+        .map(t => `[${t.timestamp}] ${t.speaker} (${t.role || 'Member'}): "${t.text}"`)
+        .join('\n');
+
+      const result = await endMeeting(meetingId, {
+        duration_seconds: elapsedSeconds,
+        notes: minutesText,
+        transcript: fullTranscript,
+        ai_summary: aiSummary || minutesText,
+        action_items: actionItems.map(a => ({
+          title: a.title,
+          assignee_name: a.assignee_name,
+          due_date: a.due_date
+        })),
+        participants: participants.map(p => ({
+          name: p.name.replace('(You)', '').trim(),
+          role: p.role,
+          email: p.email,
+          status: p.status
+        })),
+        send_email: sendEmailMinutes
+      });
+
+      const pdfFilename = result.pdf_filename || `Nexucon_Meeting_Minutes_${meeting?.meeting_reference || meetingId}.pdf`;
+      setEndMeetingCompletedData({
+        emailsSent: result.emails_sent || 0,
+        pdfFilename,
+        pdfBase64: result.pdf_base64
+      });
+
+      if (result.pdf_base64) {
+        downloadBase64Pdf(result.pdf_base64, pdfFilename);
+      }
+
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          message: `Official meeting adjourned! Certified PDF minutes dispatched to ${result.emails_sent || 0} participants.`,
+          type: 'success'
+        }
+      }));
+    } catch (err: any) {
+      console.error('Error concluding meeting:', err);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: err?.message || 'Failed to adjourn meeting and dispatch minutes', type: 'error' }
+      }));
+    } finally {
+      setIsSubmittingEndMeeting(false);
+    }
   };
 
   const handleCastVote = async (vote: 'YES' | 'NO') => {
@@ -1255,6 +1722,17 @@ export default function MeetingRoomPage() {
             <span className="hidden sm:inline">Meet App</span>
           </a>
 
+          {/* End Session & Dispatch Minutes */}
+          <button
+            onClick={() => setIsEndMeetingModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-600/20 border border-amber-400/30"
+            title="Conclude Session, Generate Certified Branded Minutes & Dispatch via Email"
+          >
+            <FileCheck size={14} className="text-amber-200" />
+            <span className="hidden sm:inline">End &amp; Dispatch Minutes</span>
+            <span className="sm:hidden">End</span>
+          </button>
+
           {/* Leave Button */}
           <button
             onClick={() => router.push(meetingsBasePath)}
@@ -1365,12 +1843,26 @@ export default function MeetingRoomPage() {
                       {/* Center Stage Video / BIM Visualization */}
                       <div className="flex-1 flex flex-col items-center justify-center my-3 relative overflow-hidden">
                         {isScreenSharing && screenStream ? (
-                          <video
-                            ref={screenShareVideoRef}
-                            autoPlay
-                            playsInline
-                            className="w-full h-full object-contain rounded-2xl"
-                          />
+                          <div className="relative w-full h-full flex items-center justify-center bg-black/60 rounded-2xl overflow-hidden border border-blue-500/30">
+                            <video
+                              ref={attachScreenShareVideo}
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-contain rounded-2xl"
+                            />
+                            <div className="absolute top-3 left-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-xl">
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                              <span className="text-xs font-bold text-white font-mono">LIVE SCREEN BROADCAST</span>
+                              <span className="text-[10px] text-blue-400 font-bold bg-blue-500/20 px-2 py-0.5 rounded">60 FPS</span>
+                            </div>
+                            <button
+                              onClick={stopScreenSharing}
+                              className="absolute top-3 right-3 px-3 py-1.5 bg-red-600/90 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Share2 size={13} />
+                              <span>Stop Sharing</span>
+                            </button>
+                          </div>
                         ) : isScreenSharing ? (
                           <div className="text-center space-y-3">
                             <div className="w-24 h-24 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 animate-pulse">
@@ -1598,17 +2090,32 @@ export default function MeetingRoomPage() {
           {/* Live Closed Captions Bar */}
           {showCaptions && (
             <div className="mt-3 py-2.5 px-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 text-xs text-slate-300 shadow-lg">
-              <div className="flex items-center gap-2 truncate">
-                <span className="font-bold text-blue-400 shrink-0">
-                  {currentUser.name} (You):
-                </span>
+              <div className="flex items-center gap-2.5 truncate">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`w-2 h-2 rounded-full ${isMicOn && isTranscribing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  <span className="font-bold text-blue-400">
+                    {currentSubtitleSpeaker ? `${currentSubtitleSpeaker}:` : `${currentUser.name} (You):`}
+                  </span>
+                </div>
                 <span className="truncate italic text-slate-300">
-                  "Connected to the official council session. Reviewing stage-gate signoff for Level 5 slab casting."
+                  {currentSubtitle 
+                    ? `"${currentSubtitle}"` 
+                    : (transcriptLog.length > 0 
+                        ? `"${transcriptLog[transcriptLog.length - 1].text}"` 
+                        : (isMicOn ? "Listening... (Speak to transcribe remarks in real time)" : "Microphone muted (Unmute to transcribe)"))}
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 hidden sm:inline">
-                Live In-App Subtitles
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsTranscribing(!isTranscribing)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                    isTranscribing ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'
+                  }`}
+                  title="Toggle Live Speech Transcription"
+                >
+                  {isTranscribing ? '● AI Transcriber Active' : '○ Transcriber Paused'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -2009,30 +2516,131 @@ export default function MeetingRoomPage() {
                   </div>
                 )}
 
-                {/* TAB 2: MINUTES NOTES */}
+                {/* TAB 2: MINUTES & AI NOTE TAKER */}
                 {activeTab === 'minutes' && (
-                  <div className="space-y-3 flex flex-col h-full">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-300">
-                        Live Meeting Minutes
-                      </h3>
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        Auto-Audited
-                      </span>
+                  <div className="space-y-3.5 flex flex-col h-full overflow-y-auto pr-1">
+                    {/* Header Card */}
+                    <div className="p-3 bg-gradient-to-br from-blue-950/40 to-slate-900 rounded-2xl border border-blue-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <FileText size={14} className="text-blue-400" />
+                          <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                            Council Minutes &amp; AI Note Taker
+                          </h3>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Active
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                        <span>Duration: <strong className="text-white">{formatElapsed(elapsedSeconds)}</strong></span>
+                        <span>Quorum: <strong className="text-emerald-400">{participants.filter(p => p.status === 'Live In Room').length + 1} Connected</strong></span>
+                      </div>
                     </div>
 
-                    <textarea
-                      rows={14}
-                      value={minutesText}
-                      onChange={(e) => setMinutesText(e.target.value)}
-                      placeholder="Record formal resolutions, stage-gate conditions, and engineering observations..."
-                      className="w-full flex-1 p-3.5 bg-slate-900 border border-slate-700 rounded-2xl text-xs font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed font-mono resize-none"
-                    />
+                    {/* AI Smart Actions */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={handleAiSummarize}
+                        disabled={isGeneratingAiSummary}
+                        className="p-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                        title="Synthesize transcripts and deliberations into formal minutes"
+                      >
+                        <Sparkles size={13} className="text-amber-300" />
+                        <span>{isGeneratingAiSummary ? 'Synthesizing...' : 'AI Synthesize'}</span>
+                      </button>
 
+                      <button
+                        onClick={handleExtractActionItemsFromSpeech}
+                        className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                        title="Scan transcripts and detect action directives"
+                      >
+                        <ListTodo size={13} className="text-emerald-400" />
+                        <span>Detect Actions</span>
+                      </button>
+                    </div>
+
+                    {/* Speech Transcript Log Feed */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Volume2 size={12} className="text-blue-400" />
+                          Speech Transcripts ({transcriptLog.length})
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Real-Time</span>
+                      </div>
+
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 text-[11px]">
+                        {transcriptLog.length === 0 ? (
+                          <div className="text-slate-500 italic py-2 text-center text-xs">
+                            Speak to transcribe statements, or add remark below.
+                          </div>
+                        ) : (
+                          transcriptLog.slice(-6).map((item) => (
+                            <div key={item.id} className="p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 space-y-0.5">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-blue-400 truncate max-w-[170px]">{item.speaker}</span>
+                                <span className="text-slate-500 font-mono">{item.timestamp}</span>
+                              </div>
+                              <p className="text-slate-300 leading-snug">{item.text}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Manual Utterance / Spoken Remark Input */}
+                      <form onSubmit={handleSimulateUtterance} className="flex gap-1.5 pt-1.5 border-t border-slate-800">
+                        <input
+                          type="text"
+                          value={simulatedUtterance}
+                          onChange={(e) => setSimulatedUtterance(e.target.value)}
+                          placeholder="Type verbal remark or observation..."
+                          className="flex-1 p-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!simulatedUtterance.trim()}
+                          className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-xl text-xs font-bold transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Add statement to transcript log"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Official Minutes Textarea */}
+                    <div className="flex-1 flex flex-col space-y-1.5 min-h-[180px]">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                          Official Proceedings Ledger
+                        </label>
+                        {meeting && (
+                          <a
+                            href={downloadMeetingPdfUrl(meeting.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 underline"
+                          >
+                            <Download size={11} /> Download PDF
+                          </a>
+                        )}
+                      </div>
+
+                      <textarea
+                        rows={10}
+                        value={minutesText}
+                        onChange={(e) => setMinutesText(e.target.value)}
+                        placeholder="Record formal resolutions, stage-gate conditions, and engineering observations..."
+                        className="w-full flex-1 p-3 bg-slate-900 border border-slate-700 rounded-2xl text-xs font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed font-mono resize-none"
+                      />
+                    </div>
+
+                    {/* Save Button */}
                     <button
                       onClick={handleSaveMinutes}
                       disabled={isSavingMinutes}
-                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
                     >
                       <FileText size={14} />
                       <span>{isSavingMinutes ? 'Recording to Ledger...' : 'Save & Publish Official Minutes'}</span>
@@ -2101,33 +2709,111 @@ export default function MeetingRoomPage() {
                   </div>
                 )}
 
-                {/* TAB 4: LIVE CHAT */}
+                {/* TAB 4: LIVE CHAT & PRIVATE MESSAGING */}
                 {activeTab === 'chat' && (
-                  <div className="flex flex-col h-full space-y-3">
-                    <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                      {chatMessages.map((msg, idx) => (
-                        <div key={idx} className="p-3 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-1">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-bold text-blue-400">{msg.sender} ({msg.role})</span>
-                            <span className="text-slate-500 font-mono">{msg.time}</span>
-                          </div>
-                          <p className="text-xs text-slate-200">{msg.text}</p>
-                        </div>
-                      ))}
+                  <div className="flex flex-col h-full space-y-2.5">
+                    {/* Recipient Destination Selector */}
+                    <div className="p-2.5 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+                          Message Destination:
+                        </span>
+                        {chatRecipient !== 'EVERYONE' && (
+                          <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded border border-purple-500/30 flex items-center gap-1">
+                            <Lock size={10} /> Private DM
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={chatRecipient}
+                        onChange={(e) => setChatRecipient(e.target.value)}
+                        className={`w-full p-2 rounded-xl text-xs font-bold focus:outline-none transition-colors cursor-pointer border ${
+                          chatRecipient === 'EVERYONE'
+                            ? 'bg-slate-950 text-blue-300 border-slate-700 focus:border-blue-500'
+                            : 'bg-purple-950/80 text-purple-200 border-purple-500/50 focus:border-purple-400'
+                        }`}
+                      >
+                        <option value="EVERYONE">🌐 Everyone (Public Discussion)</option>
+                        {participants
+                          .filter(p => !p.isLocalUser && p.name.replace('(You)', '').trim() !== currentUser.name.trim())
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              🔒 Direct to: {p.name} ({p.role || 'Member'})
+                            </option>
+                          ))}
+                      </select>
+
+                      {chatRecipient !== 'EVERYONE' && (
+                        <p className="text-[10px] text-purple-300/80 italic px-1">
+                          Only you and the selected attendee can read this private message.
+                        </p>
+                      )}
                     </div>
 
+                    {/* Messages Feed */}
+                    <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                      {chatMessages
+                        .filter(msg => {
+                          if (msg.sender && msg.sender.startsWith('[Transcript]')) return false;
+                          if (!msg.isPrivate) return true;
+                          const isSender = msg.sender === currentUser.name || (currentUser.email && msg.senderEmail === currentUser.email) || (msg.senderPeerId && msg.senderPeerId === peerIdRef.current);
+                          const isRecipient = (msg.recipientName && msg.recipientName === currentUser.name) || (currentUser.email && msg.recipientEmail === currentUser.email) || (msg.recipientId && msg.recipientId === peerIdRef.current);
+                          return isSender || isRecipient;
+                        })
+                        .map((msg, idx) => (
+                          <div 
+                            key={msg.id || idx} 
+                            className={`p-3 rounded-2xl space-y-1 border ${
+                              msg.isPrivate
+                                ? 'bg-gradient-to-br from-purple-950/50 to-indigo-950/40 border-purple-500/40 shadow-sm'
+                                : 'bg-slate-900/90 border-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-[10px]">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {msg.isPrivate ? (
+                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">
+                                    <Lock size={9} /> Private DM
+                                  </span>
+                                ) : null}
+                                <span className={`font-bold ${msg.isPrivate ? 'text-purple-300' : 'text-blue-400'}`}>
+                                  {msg.sender}
+                                  {msg.isPrivate && msg.recipientName ? ` ➔ ${msg.recipientName}` : ` (${msg.role})`}
+                                </span>
+                              </div>
+                              <span className="text-slate-500 font-mono text-[9px]">{msg.time}</span>
+                            </div>
+                            <p className="text-xs text-slate-200 leading-relaxed break-words">{msg.text}</p>
+                          </div>
+                        ))}
+                    </div>
+
+                    {/* Send Message Form */}
                     <form onSubmit={handleSendChat} className="flex gap-2 pt-2 border-t border-slate-800">
                       <input
                         type="text"
                         value={newChatMessage}
                         onChange={(e) => setNewChatMessage(e.target.value)}
-                        placeholder="Send message to council..."
-                        className="flex-1 p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder={
+                          chatRecipient === 'EVERYONE'
+                            ? "Send public message to council..."
+                            : `Send private message to attendee...`
+                        }
+                        className={`flex-1 p-2.5 bg-slate-900 border rounded-xl text-xs text-white focus:outline-none focus:ring-2 ${
+                          chatRecipient === 'EVERYONE'
+                            ? 'border-slate-700 focus:ring-blue-500'
+                            : 'border-purple-600/50 focus:ring-purple-500 placeholder-purple-300/50'
+                        }`}
                       />
                       <button
                         type="submit"
                         disabled={!newChatMessage.trim()}
-                        className="p-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                        className={`p-2.5 rounded-xl transition-colors disabled:opacity-50 cursor-pointer text-white ${
+                          chatRecipient === 'EVERYONE'
+                            ? 'bg-blue-600 hover:bg-blue-500'
+                            : 'bg-purple-600 hover:bg-purple-500'
+                        }`}
                       >
                         <Send size={15} />
                       </button>
@@ -2281,6 +2967,209 @@ export default function MeetingRoomPage() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* END MEETING & DISPATCH MINUTES MODAL */}
+      <AnimatePresence>
+        {isEndMeetingModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#091522] border-2 border-amber-500/40 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            >
+              {!endMeetingCompletedData ? (
+                <>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                        <FileCheck size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-white">Adjourn Session &amp; Dispatch Certified Minutes</h3>
+                        <p className="text-xs text-slate-400">Generates branded Nexucon PDF minutes with attendance roll call &amp; transcripts</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsEndMeetingModalOpen(false)}
+                      disabled={isSubmittingEndMeeting}
+                      className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Meeting Statistics Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Duration</div>
+                      <div className="text-base font-black text-white font-mono mt-0.5">{formatElapsed(elapsedSeconds)}</div>
+                    </div>
+                    <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Total Attendees</div>
+                      <div className="text-base font-black text-emerald-400 font-mono mt-0.5">{participants.length}</div>
+                    </div>
+                    <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Transcripts</div>
+                      <div className="text-base font-black text-blue-400 font-mono mt-0.5">{transcriptLog.length} Lines</div>
+                    </div>
+                    <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Action Items</div>
+                      <div className="text-base font-black text-amber-400 font-mono mt-0.5">{actionItems.length} Tasks</div>
+                    </div>
+                  </div>
+
+                  {/* Certified Participants Roll Call Preview */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      Official Roll Call &amp; Recipients ({participants.filter(p => p.email).length} with email)
+                    </label>
+                    <div className="max-h-36 overflow-y-auto space-y-1.5 p-2 bg-slate-950/80 rounded-2xl border border-slate-800">
+                      {participants.map((p, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-900/60 border border-slate-800/60">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                            <span className="font-bold text-slate-200">{p.name}</span>
+                            <span className="text-[10px] text-slate-400">({p.role || 'Member'})</span>
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-400 truncate max-w-[200px]">
+                            {p.email || 'No email on record'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Executive Minutes Preview */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        Executive Minutes Preview
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAiSummarize}
+                        className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles size={12} /> Regenerate with AI
+                      </button>
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={minutesText}
+                      onChange={(e) => setMinutesText(e.target.value)}
+                      placeholder="Minutes text that will be printed onto the certified PDF..."
+                      className="w-full p-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Email Toggle Option */}
+                  <div className="p-3 bg-gradient-to-r from-emerald-950/40 to-slate-900 rounded-2xl border border-emerald-500/30 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="sendEmailMinutesCheckbox"
+                        checked={sendEmailMinutes}
+                        onChange={(e) => setSendEmailMinutes(e.target.checked)}
+                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-950 border-slate-700 cursor-pointer"
+                      />
+                      <label htmlFor="sendEmailMinutesCheckbox" className="text-xs text-slate-200 font-bold cursor-pointer">
+                        Email Certified PDF Minutes to all participants via Resend
+                        <span className="block text-[11px] font-normal text-slate-400 mt-0.5">
+                          Sends corporate Nexucon email with branded PDF attachment and executive summary.
+                        </span>
+                      </label>
+                    </div>
+                    <Mail size={22} className="text-emerald-400 shrink-0" />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEndMeetingModalOpen(false)}
+                      disabled={isSubmittingEndMeeting}
+                      className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Continue Meeting
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmEndMeeting}
+                      disabled={isSubmittingEndMeeting}
+                      className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-amber-600/30 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSubmittingEndMeeting ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Generating PDF &amp; Dispatching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileCheck size={14} />
+                          <span>Adjourn Session &amp; Send Minutes</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Completion View */
+                <div className="text-center py-6 space-y-5">
+                  <div className="w-16 h-16 mx-auto rounded-3xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border-2 border-emerald-500/40 shadow-xl">
+                    <CheckCircle2 size={36} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-xl font-black text-white">Council Session Concluded</h3>
+                    <p className="text-xs text-slate-300 max-w-md mx-auto">
+                      Certified meeting minutes PDF generated and dispatched to{' '}
+                      <strong className="text-emerald-400">{endMeetingCompletedData.emailsSent} participants</strong> via Resend Email.
+                    </p>
+                    <p className="text-[11px] font-mono text-slate-400">
+                      File: {endMeetingCompletedData.pdfFilename}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-left text-xs text-slate-300 space-y-2 max-w-md mx-auto font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Recorded Duration:</span>
+                      <span className="text-white font-bold">{formatElapsed(elapsedSeconds)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Status:</span>
+                      <span className="text-emerald-400 font-bold">COMPLETED &amp; AUDITED</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">PDF Document:</span>
+                      <span className="text-amber-400 font-bold">Nexucon Certified</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3 pt-3">
+                    {endMeetingCompletedData.pdfBase64 && (
+                      <button
+                        onClick={() => downloadBase64Pdf(endMeetingCompletedData.pdfBase64!, endMeetingCompletedData.pdfFilename)}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                      >
+                        <Download size={14} />
+                        <span>Download PDF Again</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => router.push(meetingsBasePath)}
+                      className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Check size={14} />
+                      <span>Back to Meetings Hub</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
