@@ -125,6 +125,8 @@ export default function MeetingRoomPage() {
   const screenShareVideoRef = useRef<HTMLVideoElement | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => { screenStreamRef.current = screenStream; }, [screenStream]);
   // Mirror of localStream for callbacks that must not re-run when media
   // resolves (the signaling effect must never tear down live peer
   // connections just because the camera finished starting up).
@@ -746,7 +748,9 @@ export default function MeetingRoomPage() {
   const updateParticipantsFromData = (remoteList: any[], meetingRoster?: any[]) => {
     setParticipants(prev => {
       const merged: ConnectedParticipant[] = [];
-      const seen = new Set<string>();
+      const seenPeerIds = new Set<string>();
+      const claimedRosterEmails = new Set<string>();
+      const claimedRosterNames = new Set<string>();
 
       // 1. Add current local user
       merged.push({
@@ -763,29 +767,28 @@ export default function MeetingRoomPage() {
         isHandRaised,
         isScreenSharing
       });
-      seen.add(peerIdRef.current);
-      if (currentUser.email) seen.add(currentUser.email.toLowerCase());
-      if (currentUser.name) seen.add(currentUser.name.toLowerCase().trim());
+      seenPeerIds.add(peerIdRef.current);
+      if (currentUser.email) claimedRosterEmails.add(currentUser.email.toLowerCase().trim());
+      if (currentUser.name) claimedRosterNames.add(currentUser.name.replace('(You)', '').trim().toLowerCase());
 
-      // 2. Add remote participants strictly keyed by peerId or email
+      // 2. Add remote participants strictly keyed by peerId
       for (const p of remoteList || []) {
         const cleanName = (p.name || '').replace('(You)', '').trim();
         const pPeerId = p.peerId || p.id;
 
-        if (pPeerId && pPeerId === peerIdRef.current) {
+        if (!pPeerId || pPeerId === peerIdRef.current || pPeerId === 'user-local') {
           continue;
         }
 
-        const dedupeKey = pPeerId || (p.email ? p.email.toLowerCase() : `p-${cleanName.toLowerCase()}`);
-        if (!seen.has(dedupeKey)) {
-          seen.add(dedupeKey);
-          if (p.email) seen.add(p.email.toLowerCase());
-          if (cleanName) seen.add(cleanName.toLowerCase());
+        if (!seenPeerIds.has(pPeerId)) {
+          seenPeerIds.add(pPeerId);
+          if (p.email) claimedRosterEmails.add(p.email.toLowerCase().trim());
+          if (cleanName) claimedRosterNames.add(cleanName.toLowerCase());
 
           merged.push({
-            id: pPeerId || `p-${cleanName}`,
+            id: pPeerId,
             peerId: pPeerId,
-            name: cleanName,
+            name: cleanName || 'Council Member',
             email: p.email || '',
             role: p.role || 'Stakeholder Representative',
             time: p.time || p.joined_at || '10:00 AM',
@@ -799,18 +802,21 @@ export default function MeetingRoomPage() {
         }
       }
 
-      // 3. Add scheduled roster participants from meeting
+      // 3. Add scheduled roster participants from meeting who have NOT joined yet
       const scheduledList = meetingRoster || meeting?.participants || [];
       for (const mp of scheduledList) {
         if (!mp || !mp.name) continue;
         const cleanMpName = mp.name.replace('(You)', '').trim();
-        const mpEmail = (mp.email || '').toLowerCase();
+        const mpEmail = (mp.email || '').toLowerCase().trim();
         const mpNameKey = cleanMpName.toLowerCase();
 
-        if (seen.has(mpEmail) || seen.has(mpNameKey)) continue;
+        // If someone with this email or name is already in the room, don't duplicate
+        if ((mpEmail && claimedRosterEmails.has(mpEmail)) || claimedRosterNames.has(mpNameKey)) {
+          continue;
+        }
 
-        seen.add(mpNameKey);
-        if (mpEmail) seen.add(mpEmail);
+        claimedRosterNames.add(mpNameKey);
+        if (mpEmail) claimedRosterEmails.add(mpEmail);
 
         merged.push({
           id: `sched-${mpEmail || mpNameKey.replace(/\s+/g, '-')}`,
@@ -827,14 +833,15 @@ export default function MeetingRoomPage() {
         });
       }
 
-      // Preserve locally-added invitees that presence engine doesn't know yet
+      // 4. Preserve locally-added invitees that presence engine hasn't synced yet
       for (const prevP of prev) {
         if (prevP.isLocalUser) continue;
-        const prevEmail = (prevP.email || '').toLowerCase();
+        const prevKey = prevP.peerId || prevP.id;
+        const prevEmail = (prevP.email || '').toLowerCase().trim();
         const prevName = prevP.name.replace('(You)', '').trim().toLowerCase();
-        if (!seen.has(prevEmail) && !seen.has(prevName) && !seen.has(prevP.id)) {
+        if (!seenPeerIds.has(prevKey) && !(prevEmail && claimedRosterEmails.has(prevEmail)) && !claimedRosterNames.has(prevName)) {
           merged.push(prevP);
-          seen.add(prevP.id);
+          seenPeerIds.add(prevKey);
         }
       }
 
@@ -877,10 +884,14 @@ export default function MeetingRoomPage() {
 
   // Screen Share Stop Helper
   const stopScreenSharing = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(t => t.stop());
+    }
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
       setScreenStream(null);
     }
+    screenStreamRef.current = null;
     setIsScreenSharing(false);
 
     // Broadcast end of screen share to presence engine
@@ -895,12 +906,18 @@ export default function MeetingRoomPage() {
     }).catch(() => {});
 
     // Restore camera video track on all active peer senders
-    const cameraTrack = localStream?.getVideoTracks()[0] || null;
-    Object.values(peerConnectionsRef.current).forEach(pc => {
-      const senders = pc.getSenders();
-      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-      if (videoSender) {
-        videoSender.replaceTrack(cameraTrack).catch(() => {});
+    const cameraTrack = localStreamRef.current?.getVideoTracks()[0] || null;
+    Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
+      pc.getSenders().forEach(sender => {
+        if (sender.track && sender.track.kind === 'video') {
+          sender.replaceTrack(cameraTrack).catch(() => {});
+        }
+      });
+      if (pc.signalingState === 'stable') {
+        pc.createOffer()
+          .then(offer => pc.setLocalDescription(offer))
+          .then(() => postSignal(otherId, 'offer', pc.localDescription))
+          .catch(() => {});
       }
     });
 
@@ -915,14 +932,10 @@ export default function MeetingRoomPage() {
       try {
         if (navigator.mediaDevices?.getDisplayMedia) {
           const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+          screenStreamRef.current = stream;
           setScreenStream(stream);
           setIsScreenSharing(true);
           setLayoutMode('spotlight');
-          if (screenShareVideoRef.current) {
-            screenShareVideoRef.current.muted = true;
-            screenShareVideoRef.current.srcObject = stream;
-            screenShareVideoRef.current.play().catch(() => {});
-          }
 
           // Broadcast active screen share to presence engine immediately
           fetch(`/api/meetings/${meetingId}/presence`, {
@@ -947,20 +960,33 @@ export default function MeetingRoomPage() {
 
             // Propagate screen track to all active peer connections
             Object.entries(peerConnectionsRef.current).forEach(([otherId, pc]) => {
-              const senders = pc.getSenders();
-              const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-              if (videoSender) {
-                videoSender.replaceTrack(screenTrack).catch(() => {});
-              } else {
-                try {
-                  pc.addTrack(screenTrack, stream);
-                  if (pc.signalingState === 'stable') {
-                    pc.createOffer()
-                      .then(offer => pc.setLocalDescription(offer))
-                      .then(() => postSignal(otherId, 'offer', pc.localDescription))
-                      .catch(() => {});
-                  }
-                } catch (e) {}
+              let replaced = false;
+              pc.getSenders().forEach(sender => {
+                if (sender.track && sender.track.kind === 'video') {
+                  sender.replaceTrack(screenTrack).catch(() => {});
+                  replaced = true;
+                }
+              });
+
+              if (!replaced) {
+                const videoTransceiver = pc.getTransceivers().find(
+                  t => t.receiver.track.kind === 'video' || t.sender.track?.kind === 'video'
+                );
+                if (videoTransceiver) {
+                  videoTransceiver.direction = 'sendrecv';
+                  videoTransceiver.sender.replaceTrack(screenTrack).catch(() => {});
+                } else {
+                  try {
+                    pc.addTrack(screenTrack, stream);
+                  } catch (e) {}
+                }
+              }
+
+              if (pc.signalingState === 'stable') {
+                pc.createOffer()
+                  .then(offer => pc.setLocalDescription(offer))
+                  .then(() => postSignal(otherId, 'offer', pc.localDescription))
+                  .catch(() => {});
               }
             });
           }
@@ -1566,11 +1592,12 @@ export default function MeetingRoomPage() {
 
   // Start direct private chat with a specific participant
   const handleStartDirectMessage = (targetP: ConnectedParticipant) => {
-    setChatRecipient(targetP.id);
+    const targetKey = targetP.peerId || targetP.id;
+    setChatRecipient(targetKey);
     setActiveTab('chat');
     setIsSidebarOpen(true);
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { message: `Direct messaging started with ${targetP.name}`, type: 'info' }
+      detail: { message: `Private direct messaging started with ${targetP.name}`, type: 'info' }
     }));
   };
 
@@ -1997,10 +2024,19 @@ export default function MeetingRoomPage() {
 
                       {/* Center Stage Video / BIM Visualization */}
                       <div className="flex-1 flex flex-col items-center justify-center my-3 relative overflow-hidden">
-                        {isScreenSharing && screenStream ? (
+                        {isScreenSharing && (screenStream || screenStreamRef.current) ? (
                           <div className="relative w-full h-full flex items-center justify-center bg-black/60 rounded-2xl overflow-hidden border border-blue-500/30">
                             <video
-                              ref={attachScreenShareVideo}
+                              ref={(el) => {
+                                const stream = screenStream || screenStreamRef.current;
+                                if (el && stream) {
+                                  el.muted = true;
+                                  if (el.srcObject !== stream) {
+                                    el.srcObject = stream;
+                                  }
+                                  el.play().catch(() => {});
+                                }
+                              }}
                               autoPlay
                               playsInline
                               muted
@@ -2020,12 +2056,15 @@ export default function MeetingRoomPage() {
                               <span>Stop Sharing</span>
                             </button>
                           </div>
-                        ) : (!isScreenSharing && remoteScreenSharePeerId) ? (() => {
-                          const presenterStream = remoteStreams[remoteScreenSharePeerId] 
-                            || Object.entries(remoteStreams).find(([k]) => k === remoteScreenSharePeerId || k.includes(remoteScreenSharePeerId) || remoteScreenSharePeerId.includes(k))?.[1]
-                            || (Object.values(remoteStreams).length === 1 ? Object.values(remoteStreams)[0] : null);
-                          const presenterParticipant = participants.find(p => p.id === remoteScreenSharePeerId || p.peerId === remoteScreenSharePeerId);
-                          const presenterName = presenterParticipant?.name || 'Council Presenter';
+                        ) : (!isScreenSharing && (remoteScreenSharePeerId || participants.some(p => !p.isLocalUser && p.isScreenSharing))) ? (() => {
+                          const sharingParticipant = participants.find(
+                            p => !p.isLocalUser && (p.isScreenSharing || p.peerId === remoteScreenSharePeerId || p.id === remoteScreenSharePeerId)
+                          );
+                          const effectiveId = sharingParticipant?.peerId || sharingParticipant?.id || remoteScreenSharePeerId;
+                          const presenterStream = (effectiveId ? remoteStreams[effectiveId] : null)
+                            || Object.entries(remoteStreams).find(([k]) => effectiveId && (k === effectiveId || k.includes(effectiveId) || effectiveId.includes(k)))?.[1]
+                            || (Object.values(remoteStreams).find(s => s && s.getVideoTracks().length > 0) || null);
+                          const presenterName = sharingParticipant?.name || 'Council Presenter';
 
                           return (
                             <div className="relative w-full h-full flex items-center justify-center bg-black/90 rounded-2xl overflow-hidden border border-blue-500/40">
@@ -2035,8 +2074,10 @@ export default function MeetingRoomPage() {
                                   playsInline
                                   muted
                                   ref={(el) => {
-                                    if (el && presenterStream && el.srcObject !== presenterStream) {
-                                      el.srcObject = presenterStream;
+                                    if (el && presenterStream) {
+                                      if (el.srcObject !== presenterStream) {
+                                        el.srcObject = presenterStream;
+                                      }
                                       el.play().catch(() => {});
                                     }
                                   }}
@@ -2267,7 +2308,24 @@ export default function MeetingRoomPage() {
 
                             {/* Center Stage Media: Real Video for Local User OR Real Stream for Remote Users */}
                             <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
-                              {p.isLocalUser && isVideoOn && localStream ? (
+                              {p.isLocalUser && isScreenSharing && (screenStream || screenStreamRef.current) ? (
+                                <video
+                                  ref={(el) => {
+                                    const stream = screenStream || screenStreamRef.current;
+                                    if (el && stream) {
+                                      el.muted = true;
+                                      if (el.srcObject !== stream) {
+                                        el.srcObject = stream;
+                                      }
+                                      el.play().catch(() => {});
+                                    }
+                                  }}
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  className="w-full h-full object-contain rounded-2xl bg-black"
+                                />
+                              ) : p.isLocalUser && isVideoOn && localStream ? (
                                 <video
                                   ref={attachLocalVideo}
                                   autoPlay
@@ -2281,8 +2339,10 @@ export default function MeetingRoomPage() {
                                   playsInline
                                   muted
                                   ref={(el) => {
-                                    if (el && el.srcObject !== remoteStream) {
-                                      el.srcObject = remoteStream;
+                                    if (el && remoteStream) {
+                                      if (el.srcObject !== remoteStream) {
+                                        el.srcObject = remoteStream;
+                                      }
                                       el.play().catch(() => {});
                                     }
                                   }}
@@ -3009,7 +3069,7 @@ export default function MeetingRoomPage() {
                       <select
                         value={chatRecipient}
                         onChange={(e) => setChatRecipient(e.target.value)}
-                        className={`w-full p-2 rounded-xl text-xs font-bold focus:outline-none transition-colors cursor-pointer border ${
+                        className={`w-full p-2.5 rounded-xl text-xs font-bold focus:outline-none transition-colors cursor-pointer border ${
                           chatRecipient === 'EVERYONE'
                             ? 'bg-slate-950 text-blue-300 border-slate-700 focus:border-blue-500'
                             : 'bg-purple-950/80 text-purple-200 border-purple-500/50 focus:border-purple-400'
@@ -3018,11 +3078,14 @@ export default function MeetingRoomPage() {
                         <option value="EVERYONE">🌐 Everyone (Public Discussion)</option>
                         {participants
                           .filter(p => !p.isLocalUser && p.id !== 'user-local' && p.peerId !== peerIdRef.current)
-                          .map((p) => (
-                            <option key={p.id} value={p.id}>
-                              🔒 Direct to: {p.name} ({p.role || 'Member'})
-                            </option>
-                          ))}
+                          .map((p) => {
+                            const targetVal = p.peerId || p.id;
+                            return (
+                              <option key={targetVal} value={targetVal}>
+                                🔒 Direct to: {p.name} ({p.role || 'Member'}) {p.status === 'Live In Room' ? '● Live' : '○ Scheduled'}
+                              </option>
+                            );
+                          })}
                       </select>
 
                       {chatRecipient !== 'EVERYONE' && (
@@ -3031,7 +3094,7 @@ export default function MeetingRoomPage() {
                           <button
                             type="button"
                             onClick={() => setChatRecipient('EVERYONE')}
-                            className="underline hover:text-white ml-2 text-[10px] not-italic"
+                            className="underline hover:text-white ml-2 text-[10px] not-italic font-bold"
                           >
                             Back to Everyone
                           </button>
@@ -3056,32 +3119,64 @@ export default function MeetingRoomPage() {
                             (msg.recipientId && (msg.recipientId === peerIdRef.current || msg.recipientId === 'user-local'));
                           return Boolean(isSender || isRecipient);
                         })
-                        .map((msg, idx) => (
-                          <div 
-                            key={msg.id || idx} 
-                            className={`p-3 rounded-2xl space-y-1 border ${
-                              msg.isPrivate
-                                ? 'bg-gradient-to-br from-purple-950/50 to-indigo-950/40 border-purple-500/40 shadow-sm'
-                                : 'bg-slate-900/90 border-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-[10px]">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {msg.isPrivate ? (
-                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">
-                                    <Lock size={9} /> Private DM
+                        .map((msg, idx) => {
+                          const cleanCurrentName = currentUser.name.replace(/\(You\)/gi, '').trim().toLowerCase();
+                          const msgSenderName = (msg.sender || '').replace(/\(You\)/gi, '').trim().toLowerCase();
+                          const isMyMessage = msgSenderName === cleanCurrentName || 
+                            (currentUser.email && msg.senderEmail && msg.senderEmail.toLowerCase() === currentUser.email.toLowerCase()) || 
+                            (msg.senderPeerId && msg.senderPeerId === peerIdRef.current);
+
+                          return (
+                            <div 
+                              key={msg.id || idx} 
+                              className={`p-3 rounded-2xl space-y-1.5 border transition-all ${
+                                msg.isPrivate
+                                  ? 'bg-gradient-to-br from-purple-950/60 to-indigo-950/50 border-purple-500/50 shadow-md shadow-purple-950/30'
+                                  : 'bg-slate-900/90 border-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {msg.isPrivate ? (
+                                    <span className="flex items-center gap-1 text-[9px] font-black uppercase text-purple-300 bg-purple-500/25 px-1.5 py-0.5 rounded border border-purple-500/40 shadow-sm">
+                                      <Lock size={9} /> Private DM
+                                    </span>
+                                  ) : null}
+                                  <span className={`font-bold ${msg.isPrivate ? 'text-purple-300' : 'text-blue-400'}`}>
+                                    {msg.sender}
+                                    {msg.isPrivate && msg.recipientName ? ` ➔ ${msg.recipientName}` : ` (${msg.role})`}
                                   </span>
-                                ) : null}
-                                <span className={`font-bold ${msg.isPrivate ? 'text-purple-300' : 'text-blue-400'}`}>
-                                  {msg.sender}
-                                  {msg.isPrivate && msg.recipientName ? ` ➔ ${msg.recipientName}` : ` (${msg.role})`}
-                                </span>
+                                </div>
+                                <span className="text-slate-500 font-mono text-[9px]">{msg.time}</span>
                               </div>
-                              <span className="text-slate-500 font-mono text-[9px]">{msg.time}</span>
+                              <p className="text-xs text-slate-200 leading-relaxed break-words">{msg.text}</p>
+                              {msg.isPrivate && !isMyMessage && (
+                                <div className="flex justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const senderParticipant = participants.find(
+                                        p => (msg.senderPeerId && p.peerId === msg.senderPeerId) ||
+                                             (msg.senderEmail && p.email && p.email.toLowerCase() === msg.senderEmail.toLowerCase()) ||
+                                             (p.name && msg.sender && p.name.replace(/\(You\)/gi, '').trim().toLowerCase() === msg.sender.replace(/\(You\)/gi, '').trim().toLowerCase())
+                                      );
+                                      if (senderParticipant) {
+                                        handleStartDirectMessage(senderParticipant);
+                                      } else if (msg.senderPeerId) {
+                                        setChatRecipient(msg.senderPeerId);
+                                        setActiveTab('chat');
+                                      }
+                                    }}
+                                    className="text-[9px] font-bold text-purple-300 hover:text-white bg-purple-900/40 hover:bg-purple-800/70 px-2 py-0.5 rounded-lg border border-purple-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                                  >
+                                    <Lock size={9} />
+                                    <span>Reply Privately</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                            <p className="text-xs text-slate-200 leading-relaxed break-words">{msg.text}</p>
-                          </div>
-                        ))}
+                          );
+                        })}
                     </div>
 
                     {/* Send Message Form */}
@@ -3093,12 +3188,12 @@ export default function MeetingRoomPage() {
                         placeholder={
                           chatRecipient === 'EVERYONE'
                             ? "Send public message to council..."
-                            : `Send private message to ${participants.find(p => p.id === chatRecipient)?.name || 'attendee'}...`
+                            : `Send private message to ${participants.find(p => p.id === chatRecipient || p.peerId === chatRecipient || p.email === chatRecipient)?.name || 'attendee'}...`
                         }
                         className={`flex-1 p-2.5 bg-slate-900 border rounded-xl text-xs text-white focus:outline-none focus:ring-2 ${
                           chatRecipient === 'EVERYONE'
                             ? 'border-slate-700 focus:ring-blue-500'
-                            : 'border-purple-600/50 focus:ring-purple-500 placeholder-purple-300/50'
+                            : 'border-purple-600/50 focus:ring-purple-500 placeholder-purple-300/60'
                         }`}
                       />
                       <button

@@ -10,7 +10,7 @@ interface SignalMessage {
   timestamp: number;
 }
 
-const meetingSignalStore: Record<string, SignalMessage[]> = {};
+const meetingSignalStore: Record<string, SignalMessage[]> = (globalThis as any).__meetingSignalStore || ((globalThis as any).__meetingSignalStore = {});
 
 // Signaling messages allow peers to exchange SDP offer/answer and ICE candidates.
 // Keep messages for 90 seconds to allow slow/jittered multi-peer negotiation.

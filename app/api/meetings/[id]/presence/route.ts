@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// In-memory real-time state cache per meeting across Vercel execution instances
+// Global singleton real-time state cache per meeting across hot reloads and execution instances
 const meetingPresenceStore: Record<string, {
   participants: Array<{
     id: string;
@@ -33,7 +33,7 @@ const meetingPresenceStore: Record<string, {
     recipientEmail?: string;
     recipientId?: string;
   }>;
-}> = {};
+}> = (globalThis as any).__meetingPresenceStore || ((globalThis as any).__meetingPresenceStore = {});
 
 function getStore(meetingId: string) {
   const cleanId = meetingId || 'default_room';
@@ -138,22 +138,24 @@ export async function POST(
         const pPeerId = participant.peerId || '';
 
         // Match strictly by peerId: each tab/client has a unique peerId.
-        // Display names and emails are NOT unique (multiple tabs or guests testing),
-        // so never collapse separate peers into one slot.
+        // Never hijack an already-active live participant slot.
         let existingIdx = -1;
         if (pPeerId) {
           existingIdx = store.participants.findIndex(p => p.peerId === pPeerId || p.id === pPeerId);
           if (existingIdx === -1) {
-            // Check if there is an unattached roster entry matching email or name
+            // Only claim an unattached roster entry if it is NOT currently active live in room
             existingIdx = store.participants.findIndex(
-              p => (pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) ||
-                   (p.name && p.name.toLowerCase() === pName.toLowerCase())
+              p => (p.status !== 'Live In Room' || !p.peerId || (now - p.lastSeen > 45 * 1000)) &&
+                   ((pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) ||
+                    (p.name && p.name.toLowerCase() === pName.toLowerCase() && p.id.startsWith('p-roster-')))
             );
           }
         } else {
+          // Fallback if client has no peerId: only match unclaimed entries
           existingIdx = store.participants.findIndex(
-            p => (pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) || 
-                 p.name.toLowerCase() === pName.toLowerCase()
+            p => (p.status !== 'Live In Room' || !p.peerId || (now - p.lastSeen > 45 * 1000)) &&
+                 ((pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) || 
+                  (p.name && p.name.toLowerCase() === pName.toLowerCase()))
           );
         }
 
