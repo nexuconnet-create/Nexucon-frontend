@@ -73,7 +73,12 @@ const RTC_CONFIG: RTCConfiguration = {
   ]
 };
 
-export default function MeetingRoomPage() {
+function MeetingRoomContent() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   const params = useParams();
   const router = useRouter();
   const pathname = usePathname() || '';
@@ -187,7 +192,7 @@ export default function MeetingRoomPage() {
       name: `${currentUser.name} (You)`, 
       email: currentUser.email, 
       role: currentUser.role, 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+      time: 'Just now', 
       status: 'Live In Room', 
       isLocalUser: true, 
       isMicOn: true, 
@@ -1019,6 +1024,9 @@ export default function MeetingRoomPage() {
       return;
     }
 
+    let isFatal = false;
+    let restartTimeout: any = null;
+
     try {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
@@ -1080,16 +1088,24 @@ export default function MeetingRoomPage() {
       };
 
       recognition.onerror = (event: any) => {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+          isFatal = true;
+        }
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
           console.warn('SpeechRecognition error:', event.error);
         }
       };
 
       recognition.onend = () => {
+        if (isFatal) return;
         if (isMicOn && isTranscribing && recognitionRef.current) {
-          try {
-            recognition.start();
-          } catch (e) {}
+          restartTimeout = setTimeout(() => {
+            if (isMicOn && isTranscribing && recognitionRef.current && !isFatal) {
+              try {
+                recognition.start();
+              } catch (e) {}
+            }
+          }, 1000);
         }
       };
 
@@ -1100,6 +1116,8 @@ export default function MeetingRoomPage() {
     }
 
     return () => {
+      isFatal = true;
+      if (restartTimeout) clearTimeout(restartTimeout);
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) {}
         recognitionRef.current = null;
@@ -1335,7 +1353,7 @@ export default function MeetingRoomPage() {
           name: inviteName.trim() || inviteEmail.split('@')[0],
           email: inviteEmail.trim(),
           role: inviteRole,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: 'Just now',
           status: 'Dispatched'
         };
 
@@ -1724,6 +1742,8 @@ export default function MeetingRoomPage() {
 
   const activeInRoomCount = participants.filter(p => p.status === 'Live In Room').length;
 
+  const globalAudioCtxRef = useRef<any>(null);
+
   const handleGlobalInteraction = () => {
     if (typeof window !== 'undefined') {
       document.querySelectorAll('audio, video').forEach((el: any) => {
@@ -1734,14 +1754,25 @@ export default function MeetingRoomPage() {
       const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
         try {
-          const ctx = new AudioCtx();
-          if (ctx.state === 'suspended') {
-            ctx.resume().catch(() => {});
+          if (!globalAudioCtxRef.current) {
+            globalAudioCtxRef.current = new AudioCtx();
+          }
+          if (globalAudioCtxRef.current.state === 'suspended') {
+            globalAudioCtxRef.current.resume().catch(() => {});
           }
         } catch (e) {}
       }
     }
   };
+
+  if (!isMounted) {
+    return (
+      <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col items-center justify-center gap-3 select-none font-sans">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="text-xs text-slate-400 font-medium tracking-wide">Connecting to secure council chamber...</span>
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -3566,5 +3597,18 @@ export default function MeetingRoomPage() {
       </AnimatePresence>
 
     </div>
+  );
+}
+
+export default function MeetingRoomPage() {
+  return (
+    <React.Suspense fallback={
+      <div className="fixed inset-0 z-[120] w-screen h-screen bg-[#060D15] text-slate-100 flex flex-col items-center justify-center gap-3 select-none font-sans">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="text-xs text-slate-400 font-medium tracking-wide">Connecting to secure council chamber...</span>
+      </div>
+    }>
+      <MeetingRoomContent />
+    </React.Suspense>
   );
 }
