@@ -10,12 +10,11 @@ interface SignalMessage {
   timestamp: number;
 }
 
-const meetingSignalStore: Record<string, SignalMessage[]> = {};
+const meetingSignalStore: Record<string, SignalMessage[]> = (globalThis as any).__meetingSignalStore || ((globalThis as any).__meetingSignalStore = {});
 
-// Signaling messages only make sense while both peers are still negotiating.
-// Older messages (from peers that reloaded or left) would otherwise be
-// replayed to fresh clients, creating dead peer connections.
-const SIGNAL_TTL_MS = 30 * 1000;
+// Signaling messages allow peers to exchange SDP offer/answer and ICE candidates.
+// Keep messages for 90 seconds to allow slow/jittered multi-peer negotiation.
+const SIGNAL_TTL_MS = 90 * 1000;
 
 function pruneStore(meetingId: string) {
   const messages = meetingSignalStore[meetingId];
@@ -80,9 +79,9 @@ export async function POST(
     meetingSignalStore[meetingId].push(newMsg);
     pruneStore(meetingId);
 
-    // Keep only last 100 signal messages to prevent memory growth
-    if (meetingSignalStore[meetingId].length > 100) {
-      meetingSignalStore[meetingId] = meetingSignalStore[meetingId].slice(-100);
+    // Keep up to 1000 signal messages for multi-party mesh
+    if (meetingSignalStore[meetingId].length > 1000) {
+      meetingSignalStore[meetingId] = meetingSignalStore[meetingId].slice(-1000);
     }
 
     return NextResponse.json({ status: 'success', messageId: newMsg.id });
