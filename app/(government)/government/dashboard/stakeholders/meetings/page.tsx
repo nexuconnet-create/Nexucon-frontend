@@ -274,20 +274,21 @@ export default function StakeholderMeetings() {
 
           {/* Month Calendar Grid Matrix */}
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-            
-            {/* Day of Week Headers */}
-            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/70 text-center text-xs font-black uppercase tracking-wider text-slate-400 py-3">
-              <span>Sun</span>
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-            </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[680px] md:min-w-0">
+                {/* Day of Week Headers */}
+                <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/70 text-center text-xs font-black uppercase tracking-wider text-slate-400 py-3">
+                  <span>Sun</span>
+                  <span>Mon</span>
+                  <span>Tue</span>
+                  <span>Wed</span>
+                  <span>Thu</span>
+                  <span>Fri</span>
+                  <span>Sat</span>
+                </div>
 
-            {/* Days Grid */}
-            <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100">
+                {/* Days Grid */}
+                <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100">
               
               {/* Empty leading padding slots */}
               {Array.from({ length: firstDayIndex }).map((_, idx) => (
@@ -371,8 +372,9 @@ export default function StakeholderMeetings() {
                   </div>
                 );
               })}
+                </div>
+              </div>
             </div>
-
           </div>
 
           {/* Quick Day Event Popover Modal */}

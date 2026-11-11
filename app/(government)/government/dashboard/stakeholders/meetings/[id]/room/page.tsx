@@ -1799,37 +1799,37 @@ function MeetingRoomContent() {
       </div>
       
       {/* Top Header Bar (Full-Bleed Glassmorphism) */}
-      <header className="h-16 px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0">
+      <header className="h-14 sm:h-16 px-2.5 sm:px-4 md:px-5 bg-[#091422]/95 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between z-30 shrink-0 gap-2">
         
         {/* Left: Meeting Info & Live Connected Indicator */}
-        <div className="flex items-center gap-3.5">
+        <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
           <button
             onClick={() => router.push(meetingsBasePath)}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer shrink-0"
             title="Leave Meeting"
           >
             <ArrowLeft size={16} />
             <span className="hidden sm:inline">Exit</span>
           </button>
 
-          <div className="h-6 w-[1px] bg-slate-800 hidden sm:block" />
+          <div className="h-6 w-[1px] bg-slate-800 hidden sm:block shrink-0" />
 
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span className="text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-1.5 sm:px-2 py-0.5 rounded border border-blue-500/30 shrink-0">
                 {meeting?.meeting_reference || 'MTG-1092'}
               </span>
-              <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>LIVE ({activeInRoomCount} IN ROOM{participants.length > activeInRoomCount ? ` • ${participants.length} ROSTER` : ''})</span>
+              <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>LIVE ({activeInRoomCount})</span>
               </span>
-              <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-300 bg-slate-800/60 px-1.5 sm:px-2 py-0.5 rounded shrink-0">
                 ⏱️ {formatElapsed(elapsedSeconds)}
               </span>
             </div>
-            <h1 className="text-sm font-black text-white truncate max-w-[240px] sm:max-w-md mt-0.5 flex items-center gap-2">
-              <span>{meeting?.title || 'Q3 Structural Stage-Gate Deliberation & GPR Review'}</span>
-              <span className="text-[11px] font-normal text-slate-400 hidden md:inline">
+            <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[130px] xs:max-w-[190px] sm:max-w-xs md:max-w-md mt-0.5 flex items-center gap-2">
+              <span className="truncate">{meeting?.title || 'Council Deliberation & Stage-Gate Session'}</span>
+              <span className="text-[11px] font-normal text-slate-400 hidden xl:inline shrink-0">
                 • Connected as <span className="text-emerald-400 font-bold">{currentUser.name}</span>
               </span>
             </h1>
@@ -1837,20 +1837,20 @@ function MeetingRoomContent() {
         </div>
 
         {/* Right Action Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           
           {/* Top Quick Invite Button */}
           <button
             onClick={() => setIsInviteModalOpen(true)}
-            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+            className="p-2 sm:px-3 sm:py-2 md:px-3.5 md:py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
             title="Send Email Invitation via Resend"
           >
             <UserPlus size={15} />
-            <span className="hidden sm:inline">Invite User</span>
+            <span className="hidden md:inline">Invite User</span>
           </button>
 
           {/* Stage Engine Switcher */}
-          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden lg:flex items-center">
+          <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-800 hidden xl:flex items-center">
             <button
               onClick={() => setStageMode('native_council')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -1891,7 +1891,7 @@ function MeetingRoomContent() {
           {/* Layout Mode Toggle */}
           <button
             onClick={() => setLayoutMode(layoutMode === 'grid' ? 'spotlight' : 'grid')}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer hidden sm:flex"
             title={layoutMode === 'grid' ? 'Switch to Spotlight View' : 'Switch to Grid View'}
           >
             <LayoutGrid size={15} />
@@ -1901,7 +1901,7 @@ function MeetingRoomContent() {
           {/* Browser Fullscreen Toggle */}
           <button
             onClick={toggleNativeFullscreen}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer hidden md:flex"
             title={isNativeFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
           >
             {isNativeFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -1912,28 +1912,28 @@ function MeetingRoomContent() {
             href={meetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            className="p-2 sm:px-3 sm:py-2 md:px-3.5 md:py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer hidden sm:flex"
             title="Launch Google Meet App"
           >
             <ExternalLink size={14} />
-            <span className="hidden sm:inline">Meet App</span>
+            <span className="hidden md:inline">Meet App</span>
           </a>
 
           {/* End Session & Dispatch Minutes */}
           <button
             onClick={() => setIsEndMeetingModalOpen(true)}
-            className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-600/20 border border-amber-400/30"
+            className="p-2 sm:px-3 sm:py-2 md:px-3.5 md:py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-600/20 border border-amber-400/30"
             title="Conclude Session, Generate Certified Branded Minutes & Dispatch via Email"
           >
             <FileCheck size={14} className="text-amber-200" />
-            <span className="hidden sm:inline">End &amp; Dispatch Minutes</span>
-            <span className="sm:hidden">End</span>
+            <span className="hidden sm:inline">End &amp; Dispatch</span>
           </button>
 
           {/* Leave Button */}
           <button
             onClick={() => router.push(meetingsBasePath)}
-            className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-red-600/20"
+            className="p-2 sm:px-3.5 sm:py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-red-600/20"
+            title="Leave Meeting"
           >
             <PhoneOff size={14} />
             <span className="hidden sm:inline">Leave</span>
@@ -1947,8 +1947,8 @@ function MeetingRoomContent() {
       <div className="flex-1 flex overflow-hidden relative">
         
         {/* CENTER STAGE: VIDEO MATRIX (Expands to 100% when sidebar is closed) */}
-        <main className={`flex-1 flex flex-col justify-between p-3 sm:p-5 transition-all duration-300 overflow-hidden ${
-          isSidebarOpen ? 'lg:pr-2' : 'pr-3 sm:pr-5'
+        <main className={`flex-1 flex flex-col justify-between p-2 sm:p-4 md:p-5 transition-all duration-300 overflow-hidden ${
+          isSidebarOpen ? 'lg:pr-2' : ''
         }`}>
           
           {/* Stage Area */}
@@ -2249,14 +2249,14 @@ function MeetingRoomContent() {
                       </div>
                     )}
 
-                    <div className={`flex-1 grid gap-3 sm:gap-4 overflow-y-auto p-1 ${
+                    <div className={`flex-1 grid gap-2 sm:gap-3 md:gap-4 overflow-y-auto p-1 ${
                       participants.length <= 1 
                         ? 'grid-cols-1' 
                         : participants.length === 2 
                           ? 'grid-cols-1 sm:grid-cols-2' 
                           : participants.length <= 4 
-                            ? 'grid-cols-1 sm:grid-cols-2' 
-                            : 'grid-cols-2 lg:grid-cols-3'
+                            ? 'grid-cols-2' 
+                            : 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4'
                     }`}>
                       {participants.map((p, idx) => {
                         // Remote streams are keyed by the signaling peerId,
@@ -2268,7 +2268,7 @@ function MeetingRoomContent() {
                         return (
                           <div
                             key={p.id || idx}
-                            className={`relative rounded-3xl p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[190px] sm:min-h-[220px] ${
+                            className={`relative rounded-2xl sm:rounded-3xl p-2.5 sm:p-4 flex flex-col justify-between overflow-hidden shadow-2xl transition-all min-h-[145px] xs:min-h-[175px] sm:min-h-[200px] md:min-h-[220px] ${
                               p.isLocalUser
                                 ? 'bg-gradient-to-b from-[#091522] to-[#040A10] border-2 border-emerald-500/70 shadow-emerald-500/10'
                                 : p.status === 'Live In Room'
@@ -2384,20 +2384,20 @@ function MeetingRoomContent() {
                                   }`}
                                 />
                               ) : (
-                                <div className="flex flex-col items-center text-center p-3">
-                                  <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full font-black text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                <div className="flex flex-col items-center text-center p-2 sm:p-3">
+                                  <div className={`w-12 h-12 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full font-black text-sm xs:text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
                                     p.isLocalUser
-                                      ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-4 ring-emerald-500/30'
+                                      ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-2 xs:ring-4 ring-emerald-500/30'
                                       : p.status === 'Live In Room'
-                                        ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-4 ring-blue-500/30'
+                                        ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-2 xs:ring-4 ring-blue-500/30'
                                         : 'bg-slate-800 text-slate-300 border border-slate-700'
                                   }`}>
                                     {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                                   </div>
-                                  <h3 className="text-xs sm:text-sm font-bold text-white mt-2.5 truncate max-w-[180px]">
+                                  <h3 className="text-[11px] xs:text-xs sm:text-sm font-bold text-white mt-1.5 sm:mt-2.5 truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[180px]">
                                     {p.name}
                                   </h3>
-                                  <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[190px]">
+                                  <p className="text-[9px] xs:text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[190px]">
                                     {p.email || p.role}
                                   </p>
                                 </div>
@@ -2434,15 +2434,15 @@ function MeetingRoomContent() {
 
           {/* Live Closed Captions Bar */}
           {showCaptions && (
-            <div className="mt-3 py-2.5 px-4 bg-slate-950/90 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 text-xs text-slate-300 shadow-lg">
-              <div className="flex items-center gap-2.5 truncate">
+            <div className="mt-2 sm:mt-3 py-2 sm:py-2.5 px-3 sm:px-4 bg-slate-950/90 border border-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-between gap-2 sm:gap-3 text-xs text-slate-300 shadow-lg">
+              <div className="flex items-center gap-2 truncate min-w-0">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className={`w-2 h-2 rounded-full ${isMicOn && isTranscribing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                  <span className="font-bold text-blue-400">
+                  <span className="font-bold text-blue-400 text-[11px] sm:text-xs">
                     {currentSubtitleSpeaker ? `${currentSubtitleSpeaker}:` : `${currentUser.name} (You):`}
                   </span>
                 </div>
-                <span className="truncate italic text-slate-300">
+                <span className="truncate italic text-slate-300 text-[11px] sm:text-xs">
                   {currentSubtitle 
                     ? `"${currentSubtitle}"` 
                     : (transcriptLog.length > 0 
@@ -2453,104 +2453,105 @@ function MeetingRoomContent() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => setIsTranscribing(!isTranscribing)}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                  className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
                     isTranscribing ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'
                   }`}
                   title="Toggle Live Speech Transcription"
                 >
-                  {isTranscribing ? '● AI Transcriber Active' : '○ Transcriber Paused'}
+                  <span className="hidden xs:inline">{isTranscribing ? '● AI Transcriber Active' : '○ Transcriber Paused'}</span>
+                  <span className="xs:hidden">{isTranscribing ? '● AI' : '○ Off'}</span>
                 </button>
               </div>
             </div>
           )}
 
           {/* FLOATING BOTTOM CONTROL DOCK */}
-          <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+          <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1.5 sm:gap-3 flex-wrap">
             
             {/* Meeting Link Copy Action */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => {
                   const liveLink = getLiveMeetingUrl();
                   navigator.clipboard.writeText(liveLink);
                   window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `Live room link copied (${liveLink})!`, type: 'success' } }));
                 }}
-                className="px-3.5 py-2 rounded-2xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-600/40 text-blue-300 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-950/50"
+                className="p-2 sm:px-3 sm:py-2 md:px-3.5 md:py-2 rounded-xl sm:rounded-2xl bg-blue-950/60 hover:bg-blue-900/80 border border-blue-600/40 text-blue-300 text-xs font-bold flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer shadow-lg shadow-blue-950/50"
                 title="Copy Live Production Meeting Link"
               >
-                <Copy size={14} className="text-blue-400" />
-                <span className="font-mono text-[11px]">Copy Live Portal Link</span>
+                <Copy size={15} className="text-blue-400 shrink-0" />
+                <span className="font-mono text-[11px] hidden md:inline">Copy Live Link</span>
               </button>
             </div>
 
             {/* Core Media Controls */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3">
               
               {/* Mic Toggle */}
               <button
                 onClick={handleToggleMic}
-                className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold shadow-lg ${
                   isMicOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
                     : 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30'
                 }`}
                 title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
               >
-                {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
-                <span className="hidden md:inline">{isMicOn ? 'Mute' : 'Unmute'}</span>
+                {isMicOn ? <Mic size={17} /> : <MicOff size={17} />}
+                <span className="hidden lg:inline">{isMicOn ? 'Mute' : 'Unmute'}</span>
               </button>
 
               {/* Video Toggle */}
               <button
                 onClick={handleToggleVideo}
-                className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold shadow-lg ${
                   isVideoOn 
                     ? 'bg-slate-800 hover:bg-slate-700 text-white' 
                     : 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30'
                 }`}
                 title={isVideoOn ? 'Turn Off Camera' : 'Turn On Camera'}
               >
-                {isVideoOn ? <Video size={18} /> : <VideoOff size={18} />}
-                <span className="hidden md:inline">{isVideoOn ? 'Stop Video' : 'Start Video'}</span>
+                {isVideoOn ? <Video size={17} /> : <VideoOff size={17} />}
+                <span className="hidden lg:inline">{isVideoOn ? 'Stop Video' : 'Start Video'}</span>
               </button>
 
               {/* Screen Share Toggle */}
               <button
                 onClick={handleToggleScreenShare}
-                className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shadow-lg ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold shadow-lg ${
                   isScreenSharing 
                     ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-blue-600/30' 
                     : 'bg-slate-800 hover:bg-slate-700 text-white'
                 }`}
                 title={isScreenSharing ? 'Stop Screen Sharing' : 'Share BIM / Screen'}
               >
-                <Share2 size={18} />
-                <span className="hidden md:inline">{isScreenSharing ? 'Sharing Screen' : 'Share Screen'}</span>
+                <Share2 size={17} />
+                <span className="hidden lg:inline">{isScreenSharing ? 'Sharing' : 'Share'}</span>
               </button>
 
               {/* Raise Hand Toggle */}
               <button
                 onClick={handleToggleRaiseHand}
-                className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold ${
                   isHandRaised 
                     ? 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/30' 
                     : 'bg-slate-800 hover:bg-slate-700 text-white'
                 }`}
                 title={isHandRaised ? 'Lower Hand' : 'Raise Hand'}
               >
-                <Hand size={18} />
-                <span className="hidden md:inline">{isHandRaised ? 'Hand Raised' : 'Raise Hand'}</span>
+                <Hand size={17} />
+                <span className="hidden lg:inline">{isHandRaised ? 'Raised' : 'Raise Hand'}</span>
               </button>
 
               {/* Captions Toggle */}
               <button
                 onClick={() => setShowCaptions(!showCaptions)}
-                className={`p-3.5 rounded-2xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold ${
                   showCaptions ? 'bg-blue-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
                 }`}
                 title="Toggle Live Subtitles"
               >
-                <Subtitles size={18} />
+                <Subtitles size={17} />
               </button>
 
             </div>
@@ -2559,15 +2560,20 @@ function MeetingRoomContent() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className={`p-3.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer relative ${
                   isSidebarOpen 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                 }`}
                 title={isSidebarOpen ? 'Collapse Side Panel' : 'Expand Side Panel'}
               >
-                <MessageSquare size={18} />
+                <MessageSquare size={17} />
                 <span className="hidden sm:inline">Collaboration &amp; People</span>
+                {participants.length > 0 && (
+                  <span className="sm:hidden px-1.5 py-0.2 bg-blue-500 text-white text-[9px] font-bold rounded-full">
+                    {participants.length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -2578,13 +2584,38 @@ function MeetingRoomContent() {
         {/* RIGHT COLLAPSIBLE COLLABORATION & INVITATION DRAWER */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <motion.aside
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 390, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="h-full bg-[#08121E]/95 border-l border-slate-800/90 flex flex-col shadow-2xl overflow-hidden shrink-0 z-20"
-            >
+            <>
+              {/* Mobile / Tablet Touch-Out Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+              />
+
+              <motion.aside
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] md:w-[420px] max-w-full lg:static lg:inset-auto lg:h-full lg:w-[380px] xl:w-[420px] bg-[#08121E] border-l border-slate-800 flex flex-col shadow-2xl overflow-hidden shrink-0"
+              >
+                {/* Mobile / Tablet Header with Close X */}
+                <div className="p-3 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between lg:hidden shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Users size={15} className="text-blue-400" />
+                    <span className="text-xs font-black uppercase tracking-wider text-white">Council Collaboration</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                    title="Close Drawer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               {/* Drawer Tabs */}
               <div className="p-2.5 bg-slate-900/90 border-b border-slate-800 grid grid-cols-5 gap-1">
                 <button
@@ -3244,7 +3275,8 @@ function MeetingRoomContent() {
 
               </div>
             </motion.aside>
-          )}
+          </>
+        )}
         </AnimatePresence>
 
       </div>
