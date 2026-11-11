@@ -143,9 +143,17 @@ export async function POST(
         let existingIdx = -1;
         if (pPeerId) {
           existingIdx = store.participants.findIndex(p => p.peerId === pPeerId || p.id === pPeerId);
+          if (existingIdx === -1) {
+            // Check if there is an unattached roster entry matching email or name
+            existingIdx = store.participants.findIndex(
+              p => (pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) ||
+                   (p.name && p.name.toLowerCase() === pName.toLowerCase())
+            );
+          }
         } else {
           existingIdx = store.participants.findIndex(
-            p => (pEmail && p.email === pEmail) || p.name.toLowerCase() === pName.toLowerCase()
+            p => (pEmail && p.email && p.email.toLowerCase() === pEmail.toLowerCase()) || 
+                 p.name.toLowerCase() === pName.toLowerCase()
           );
         }
 
