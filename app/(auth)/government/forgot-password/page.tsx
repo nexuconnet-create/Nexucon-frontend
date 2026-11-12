@@ -32,7 +32,7 @@ export default function GovernmentForgotPasswordPage() {
 
     setIsLoading(true);
     try {
-      await api.post("/auth/password-reset/", { email: cleanEmail });
+      await api.post("/auth/password-reset/", { email: cleanEmail, portal: "government" });
       setIsSuccess(true);
     } catch (err: any) {
       console.error("Government password reset error:", err);
