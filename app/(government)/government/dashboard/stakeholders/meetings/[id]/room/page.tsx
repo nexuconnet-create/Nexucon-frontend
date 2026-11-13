@@ -37,8 +37,104 @@ interface ConnectedParticipant {
   isVideoOn?: boolean;
   isHandRaised?: boolean;
   isScreenSharing?: boolean;
+  backgroundId?: string;
+  backgroundUrl?: string;
   stream?: MediaStream;
 }
+
+export interface VirtualBackground {
+  id: string;
+  name: string;
+  description: string;
+  category: 'Executive' | 'Site' | 'Office' | 'Special';
+  url: string;
+  localUrl: string;
+  thumbnail: string;
+}
+
+export const MEETING_BACKGROUNDS: VirtualBackground[] = [
+  {
+    id: 'none',
+    name: 'Stealth Navy (Default)',
+    description: 'Clean dark stage for focused technical deliberations',
+    category: 'Special',
+    url: '',
+    localUrl: '',
+    thumbnail: ''
+  },
+  {
+    id: 'blur',
+    name: 'Studio Blur',
+    description: 'Subtle optical depth-of-field blur',
+    category: 'Special',
+    url: 'blur',
+    localUrl: 'blur',
+    thumbnail: ''
+  },
+  {
+    id: 'bg-1',
+    name: 'Executive Glass Boardroom',
+    description: 'High-level council conference suite with panoramic glass',
+    category: 'Executive',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587965/WhatsApp_Image_2026-11-13_at_12.47.39_2_vjbge2.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_1.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587965/WhatsApp_Image_2026-11-13_at_12.47.39_2_vjbge2.jpg'
+  },
+  {
+    id: 'bg-2',
+    name: 'Architectural Construction Site',
+    description: 'Active engineering project site & structural horizon',
+    category: 'Site',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587964/WhatsApp_Image_2026-11-13_at_12.47.38_qlijuw.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_2.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587964/WhatsApp_Image_2026-11-13_at_12.47.38_qlijuw.jpg'
+  },
+  {
+    id: 'bg-3',
+    name: 'Metropolitan City Skyline',
+    description: 'High-rise urban commercial skyline & city view',
+    category: 'Executive',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587963/WhatsApp_Image_2026-11-13_at_12.47.38_2_eztywg.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_3.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587963/WhatsApp_Image_2026-11-13_at_12.47.38_2_eztywg.jpg'
+  },
+  {
+    id: 'bg-4',
+    name: 'Contemporary Engineering Studio',
+    description: 'Modern architectural design & BIM modeling workspace',
+    category: 'Office',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587963/WhatsApp_Image_2026-11-13_at_12.47.39_bbxo6u.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_4.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587963/WhatsApp_Image_2026-11-13_at_12.47.39_bbxo6u.jpg'
+  },
+  {
+    id: 'bg-5',
+    name: 'Corporate Directorate Suite',
+    description: 'Official regulatory & governance executive headquarters',
+    category: 'Executive',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587962/WhatsApp_Image_2026-11-13_at_12.47.38_1_kkvo0d.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_5.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587962/WhatsApp_Image_2026-11-13_at_12.47.38_1_kkvo0d.jpg'
+  },
+  {
+    id: 'bg-6',
+    name: 'Strategic Infrastructure Command',
+    description: 'High-tech monitoring & public works operations center',
+    category: 'Site',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587962/WhatsApp_Image_2026-11-13_at_12.47.38_3_hwgohz.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_6.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587962/WhatsApp_Image_2026-11-13_at_12.47.38_3_hwgohz.jpg'
+  },
+  {
+    id: 'bg-7',
+    name: 'State Regulatory Briefing Chamber',
+    description: 'Statutory planning & physical development deliberation room',
+    category: 'Office',
+    url: 'https://res.cloudinary.com/depeqzb6z/image/upload/v1794587961/WhatsApp_Image_2026-11-13_at_12.47.39_1_yszg5h.jpg',
+    localUrl: '/images/meeting-backgrounds/bg_7.jpg',
+    thumbnail: 'https://res.cloudinary.com/depeqzb6z/image/upload/c_thumb,w_300,h_200,g_center/v1794587961/WhatsApp_Image_2026-11-13_at_12.47.39_1_yszg5h.jpg'
+  }
+];
 
 interface RoomChatMessage {
   id?: string;
@@ -148,6 +244,69 @@ function MeetingRoomContent() {
   const lastSignalTimestampRef = useRef<number>(0);
   const seenSignalIdsRef = useRef<Set<string>>(new Set());
   const [remoteScreenSharePeerId, setRemoteScreenSharePeerId] = useState<string | null>(null);
+
+  // Virtual Background Management (Under Video Section & User Call)
+  const [selectedBgId, setSelectedBgId] = useState<string>('none');
+  const [bgTarget, setBgTarget] = useState<'both' | 'stage' | 'tile'>('both');
+  const [isBgModalOpen, setIsBgModalOpen] = useState(false);
+
+  // Synchronized refs for background presence heartbeats
+  const selectedBgIdRef = useRef(selectedBgId);
+  const bgTargetRef = useRef(bgTarget);
+  useEffect(() => { selectedBgIdRef.current = selectedBgId; }, [selectedBgId]);
+  useEffect(() => { bgTargetRef.current = bgTarget; }, [bgTarget]);
+
+  // Load saved virtual background preference on client mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nexucon_meeting_virtual_bg');
+      if (saved && MEETING_BACKGROUNDS.some(b => b.id === saved)) {
+        setSelectedBgId(saved);
+      }
+      const savedTarget = localStorage.getItem('nexucon_meeting_bg_target') as any;
+      if (savedTarget && ['both', 'stage', 'tile'].includes(savedTarget)) {
+        setBgTarget(savedTarget);
+      }
+    }
+  }, []);
+
+  const activeBg = useMemo(() => {
+    return MEETING_BACKGROUNDS.find(b => b.id === selectedBgId) || MEETING_BACKGROUNDS[0];
+  }, [selectedBgId]);
+
+  const activeBgUrl = activeBg?.url || activeBg?.localUrl || '';
+  const activeBgUrlRef = useRef(activeBgUrl);
+  useEffect(() => { activeBgUrlRef.current = activeBgUrl; }, [activeBgUrl]);
+
+  // Retry Device Access (Camera & Mic) when permission was previously denied
+  const handleRetryMediaPermissions = async () => {
+    setMediaStatus('pending');
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        setIsVideoOn(true);
+        setIsMicOn(true);
+        setMediaStatus('ready');
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: { message: 'Camera & Microphone connected successfully!', type: 'success' }
+        }));
+      }
+    } catch (err) {
+      console.warn("Retry failed:", err);
+      setMediaStatus('denied');
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { message: 'Permission still blocked. Please click the lock icon (🔒) in your browser URL bar to allow access.', type: 'error' }
+      }));
+    }
+  };
 
   // Synchronized state refs so presence heartbeats never tear down signaling connections
   const isMicOnRef = useRef(isMicOn);
@@ -520,7 +679,9 @@ function MeetingRoomContent() {
               email: currentUser.email,
               isMicOn,
               isVideoOn,
-              isHandRaised
+              isHandRaised,
+              backgroundId: selectedBgIdRef.current,
+              backgroundUrl: activeBgUrlRef.current
             },
             meetingParticipants: meeting?.participants || []
           })
@@ -694,7 +855,9 @@ function MeetingRoomContent() {
               isMicOn: isMicOnRef.current,
               isVideoOn: isVideoOnRef.current,
               isHandRaised: isHandRaisedRef.current,
-              isScreenSharing: isScreenSharingRef.current
+              isScreenSharing: isScreenSharingRef.current,
+              backgroundId: selectedBgIdRef.current,
+              backgroundUrl: activeBgUrlRef.current
             },
             meetingParticipants: meeting?.participants || []
           })
@@ -802,7 +965,9 @@ function MeetingRoomContent() {
             isMicOn: p.isMicOn ?? true,
             isVideoOn: p.isVideoOn ?? false,
             isHandRaised: p.isHandRaised ?? false,
-            isScreenSharing: Boolean(p.isScreenSharing)
+            isScreenSharing: Boolean(p.isScreenSharing),
+            backgroundId: (p as any).backgroundId,
+            backgroundUrl: (p as any).backgroundUrl
           });
         }
       }
@@ -1885,6 +2050,20 @@ function MeetingRoomContent() {
             </button>
           </div>
 
+          {/* Virtual Background Quick Button */}
+          <button
+            onClick={() => setIsBgModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow ${
+              selectedBgId !== 'none'
+                ? 'bg-blue-600/30 border-blue-500/50 text-blue-200 hover:bg-blue-600/50'
+                : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Configure Video & Stage Background"
+          >
+            <Sparkles size={13} className={selectedBgId !== 'none' ? 'text-amber-400' : 'text-slate-400'} />
+            <span className="hidden sm:inline">Backgrounds</span>
+          </button>
+
           {/* Layout Mode Toggle */}
           <button
             onClick={() => setLayoutMode(layoutMode === 'grid' ? 'spotlight' : 'grid')}
@@ -2019,11 +2198,49 @@ function MeetingRoomContent() {
 
               /* MODE 3: NATIVE IN-PORTAL COUNCIL STAGE */
               <>
+                {/* Camera / Mic Permission Denied Guided Banner */}
+                {mediaStatus === 'denied' && (
+                  <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-amber-200 mb-2 shrink-0 shadow-lg">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <ShieldAlert size={18} />
+                      </div>
+                      <div>
+                        <span className="font-bold text-white block">Camera / Microphone Permission Required:</span>
+                        <span className="text-amber-200/90 text-[11px]">
+                          Your browser blocked automatic media access. Click the <strong>lock / site settings icon (🔒)</strong> in your browser address bar and set Camera &amp; Microphone to <strong>&quot;Allow&quot;</strong>.
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRetryMediaPermissions}
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shrink-0 cursor-pointer transition-all shadow"
+                    >
+                      Retry Connection
+                    </button>
+                  </div>
+                )}
+
                 {layoutMode === 'spotlight' || isScreenSharing || Boolean(remoteScreenSharePeerId && remoteStreams[remoteScreenSharePeerId]) ? (
                   <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                     
                     {/* Main Spotlight Window */}
-                    <div className="flex-1 bg-gradient-to-b from-[#0B1726] to-[#04080F] rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl">
+                    <div 
+                      className="flex-1 rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl transition-all"
+                      style={
+                        (bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur'
+                          ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                          : { background: 'linear-gradient(to bottom, #0B1726, #04080F)' }
+                      }
+                    >
+                      {/* Ambient Overlay for Stage Background */}
+                      {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur' && (
+                        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] pointer-events-none" />
+                      )}
+                      {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl === 'blur' && (
+                        <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-md pointer-events-none" />
+                      )}
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
@@ -2138,7 +2355,14 @@ function MeetingRoomContent() {
                             </div>
                           );
                         })() : isVideoOn && localStream ? (
-                          <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
+                          <div 
+                            className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700"
+                            style={
+                              (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur'
+                                ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                : undefined
+                            }
+                          >
                             <video
                               ref={attachLocalVideo}
                               autoPlay
@@ -2146,9 +2370,14 @@ function MeetingRoomContent() {
                               muted
                               className="w-full h-full object-cover transform -scale-x-100"
                             />
-                            <div className="absolute bottom-3 left-3 bg-slate-950/90 px-3 py-1 rounded-lg text-xs font-bold text-white border border-slate-800 flex items-center gap-1.5">
+                            <div className="absolute bottom-3 left-3 bg-slate-950/90 px-3 py-1 rounded-lg text-xs font-bold text-white border border-slate-800 flex items-center gap-1.5 shadow-lg">
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                               <span>{currentUser.name} (You)</span>
+                              {activeBg?.id !== 'none' && (
+                                <span className="text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                                  <Sparkles size={10} /> {activeBg.name}
+                                </span>
+                              )}
                             </div>
                             {isHandRaised && (
                               <div className="absolute top-3 right-3 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 shadow-lg shadow-amber-500/40 animate-bounce">
@@ -2157,20 +2386,38 @@ function MeetingRoomContent() {
                             )}
                           </div>
                         ) : (
-                          <div className="text-center space-y-3">
-                            <div className="w-28 h-28 mx-auto rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-4xl flex items-center justify-center shadow-2xl ring-8 ring-emerald-500/20">
-                              {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                            </div>
-                            <h2 className="text-xl font-black text-white">{currentUser.name}</h2>
-                            <p className="text-xs text-slate-400 font-medium">{currentUser.role}</p>
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
-                              <CheckCircle size={13} /> Active in council database
-                            </span>
-                            {isHandRaised && (
-                              <div className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 text-slate-950 font-black text-xs rounded-full shadow-lg shadow-amber-500/30 animate-pulse">
-                                <Hand size={14} /> <span>Hand Raised to Speak</span>
-                              </div>
+                          <div 
+                            className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col items-center justify-center p-6 text-center"
+                            style={
+                              (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur'
+                                ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                : undefined
+                            }
+                          >
+                            {(bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur' && (
+                              <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
                             )}
+                            <div className="relative z-10 space-y-3">
+                              <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-3xl sm:text-4xl flex items-center justify-center shadow-2xl ring-8 ring-emerald-500/20">
+                                {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <h2 className="text-xl font-black text-white">{currentUser.name}</h2>
+                              <p className="text-xs text-slate-300 font-medium">{currentUser.role}</p>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
+                                <CheckCircle size={13} /> Active in council database
+                              </span>
+                              {activeBg?.id !== 'none' && (
+                                <div className="text-[11px] text-amber-300 font-semibold bg-slate-900/90 px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5 shadow">
+                                  <Sparkles size={11} className="text-amber-400" />
+                                  <span>Virtual Background: {activeBg.name}</span>
+                                </div>
+                              )}
+                              {isHandRaised && (
+                                <div className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 text-slate-950 font-black text-xs rounded-full shadow-lg shadow-amber-500/30 animate-pulse">
+                                  <Hand size={14} /> <span>Hand Raised to Speak</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2225,7 +2472,22 @@ function MeetingRoomContent() {
                 ) : (
                   
                   /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS WITH LIVE MEDIA */
-                  <div className="flex-1 flex flex-col overflow-hidden">
+                  <div 
+                    className="flex-1 flex flex-col overflow-hidden relative rounded-3xl p-1 sm:p-2 transition-all"
+                    style={
+                      (bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur'
+                        ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                        : undefined
+                    }
+                  >
+                    {/* Ambient Stage Overlay */}
+                    {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur' && (
+                      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] pointer-events-none rounded-3xl" />
+                    )}
+                    {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl === 'blur' && (
+                      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-md pointer-events-none rounded-3xl" />
+                    )}
+
                     {/* Active Remote Screen Share Notification Banner */}
                     {remoteScreenSharePeerId && !isScreenSharing && (
                       <div className="bg-gradient-to-r from-blue-950/90 to-indigo-950/90 border border-blue-500/40 rounded-2xl px-4 py-2 flex items-center justify-between text-xs mb-2 shrink-0 shadow-lg">
@@ -2335,7 +2597,16 @@ function MeetingRoomContent() {
                             </div>
 
                             {/* Center Stage Media: Real Video for Local User OR Real Stream for Remote Users */}
-                            <div className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40">
+                            <div 
+                              className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40"
+                              style={
+                                (p.isLocalUser && (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur')
+                                  ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                  : (!p.isLocalUser && (p as any).backgroundUrl)
+                                    ? { backgroundImage: `url(${(p as any).backgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                                    : undefined
+                              }
+                            >
                               {p.isLocalUser && isScreenSharing && (screenStream || screenStreamRef.current) ? (
                                 <video
                                   ref={(el) => {
@@ -2381,22 +2652,33 @@ function MeetingRoomContent() {
                                   }`}
                                 />
                               ) : (
-                                <div className="flex flex-col items-center text-center p-2 sm:p-3">
-                                  <div className={`w-12 h-12 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full font-black text-sm xs:text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
-                                    p.isLocalUser
-                                      ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-2 xs:ring-4 ring-emerald-500/30'
-                                      : p.status === 'Live In Room'
-                                        ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-2 xs:ring-4 ring-blue-500/30'
-                                        : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                  }`}>
-                                    {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                <div className="relative w-full h-full flex flex-col items-center justify-center text-center p-2 sm:p-3 overflow-hidden">
+                                  {((p.isLocalUser && (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur') || (!p.isLocalUser && (p as any).backgroundUrl)) && (
+                                    <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
+                                  )}
+                                  <div className="relative z-10 flex flex-col items-center">
+                                    <div className={`w-12 h-12 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full font-black text-sm xs:text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
+                                      p.isLocalUser
+                                        ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white ring-2 xs:ring-4 ring-emerald-500/30'
+                                        : p.status === 'Live In Room'
+                                          ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white ring-2 xs:ring-4 ring-blue-500/30'
+                                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                    }`}>
+                                      {p.name.replace('(You)', '').trim().split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <h3 className="text-[11px] xs:text-xs sm:text-sm font-bold text-white mt-1.5 sm:mt-2.5 truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[180px]">
+                                      {p.name}
+                                    </h3>
+                                    <p className="text-[9px] xs:text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[190px]">
+                                      {p.email || p.role}
+                                    </p>
+                                    {p.isLocalUser && activeBg?.id !== 'none' && (
+                                      <span className="text-[8px] xs:text-[9px] text-amber-300 font-semibold bg-slate-950/80 px-2 py-0.5 rounded-full border border-amber-500/30 mt-1 inline-flex items-center gap-1 shadow">
+                                        <Sparkles size={9} className="text-amber-400" />
+                                        <span>{activeBg.name}</span>
+                                      </span>
+                                    )}
                                   </div>
-                                  <h3 className="text-[11px] xs:text-xs sm:text-sm font-bold text-white mt-1.5 sm:mt-2.5 truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[180px]">
-                                    {p.name}
-                                  </h3>
-                                  <p className="text-[9px] xs:text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[190px]">
-                                    {p.email || p.role}
-                                  </p>
                                 </div>
                               )}
                               {(p.isScreenSharing || p.id === remoteScreenSharePeerId) && (
@@ -2549,6 +2831,20 @@ function MeetingRoomContent() {
                 title="Toggle Live Subtitles"
               >
                 <Subtitles size={17} />
+              </button>
+
+              {/* Virtual Background Toggle */}
+              <button
+                onClick={() => setIsBgModalOpen(true)}
+                className={`p-2.5 xs:p-3 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold shadow-lg ${
+                  selectedBgId !== 'none'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white ring-2 ring-blue-400/50 shadow-blue-600/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+                title="Choose Video Call & Stage Background"
+              >
+                <Sparkles size={17} className={selectedBgId !== 'none' ? 'text-amber-300 animate-pulse' : ''} />
+                <span className="hidden lg:inline">Background</span>
               </button>
 
             </div>
@@ -3277,6 +3573,243 @@ function MeetingRoomContent() {
         </AnimatePresence>
 
       </div>
+
+      {/* VIRTUAL BACKGROUND SELECTION MODAL */}
+      <AnimatePresence>
+        {isBgModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-[#091522] border-2 border-slate-700/80 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
+                    <Sparkles size={18} className="text-amber-300" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                      <span>Video &amp; Stage Virtual Backgrounds</span>
+                      <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 rounded border border-amber-500/40 uppercase">
+                        Certified
+                      </span>
+                    </h2>
+                    <p className="text-[11px] text-slate-400">
+                      Choose a certified background to display under the meeting video stage and your video call.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBgModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 overflow-y-auto space-y-4">
+                
+                {/* Live Preview Card */}
+                <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                    <span>Live Video Preview</span>
+                    <span className="text-emerald-400 text-[10px] flex items-center gap-1 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Active: {activeBg.name}
+                    </span>
+                  </div>
+
+                  <div 
+                    className="relative w-full h-44 sm:h-52 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center"
+                    style={activeBgUrl && activeBgUrl !== 'blur' ? {
+                      backgroundImage: `url(${activeBgUrl})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    } : {
+                      background: 'radial-gradient(circle, #0B1726 0%, #030712 100%)'
+                    }}
+                  >
+                    {activeBgUrl === 'blur' && (
+                      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+                    )}
+                    {activeBgUrl && activeBgUrl !== 'blur' && (
+                      <div className="absolute inset-0 bg-slate-950/30 pointer-events-none" />
+                    )}
+
+                    {isVideoOn && localStream ? (
+                      <video
+                        ref={(el) => {
+                          if (el && localStream) {
+                            el.srcObject = localStream;
+                            el.play().catch(() => {});
+                          }
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100 opacity-90"
+                      />
+                    ) : (
+                      <div className="relative z-10 flex flex-col items-center text-center space-y-2 p-4 bg-slate-950/70 backdrop-blur-md rounded-2xl border border-slate-800/80 shadow-2xl">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-xl flex items-center justify-center shadow-lg ring-4 ring-emerald-500/20">
+                          {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-white">{currentUser.name} (You)</div>
+                          <div className="text-[10px] text-slate-400 font-medium">{currentUser.role}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="absolute bottom-2.5 left-2.5 bg-slate-950/90 px-2.5 py-1 rounded-lg text-[10px] font-bold text-white border border-slate-800 flex items-center gap-1.5 shadow">
+                      <Sparkles size={11} className="text-amber-400" />
+                      <span>{activeBg.name}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Target Scope Switcher */}
+                <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/80">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+                    Apply Background To:
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'both', label: 'Stage & Video Tile', desc: 'Full immersive experience' },
+                      { id: 'stage', label: 'Stage Backdrop Only', desc: 'Under meeting video area' },
+                      { id: 'tile', label: 'My Video Tile Only', desc: 'Behind your video call' },
+                    ].map((scope) => (
+                      <button
+                        key={scope.id}
+                        type="button"
+                        onClick={() => {
+                          setBgTarget(scope.id as any);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('nexucon_meeting_bg_target', scope.id);
+                          }
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          bgTarget === scope.id
+                            ? 'bg-blue-600/20 border-blue-500 text-white ring-1 ring-blue-500'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">{scope.label}</div>
+                        <div className="text-[9px] text-slate-500">{scope.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Presets Gallery */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                    <span>Available Backgrounds</span>
+                    <span className="text-[10px] text-slate-500 font-normal">7 Presets + Default &amp; Blur</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {MEETING_BACKGROUNDS.map((bg) => {
+                      const isSelected = selectedBgId === bg.id;
+                      return (
+                        <button
+                          key={bg.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBgId(bg.id);
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('nexucon_meeting_virtual_bg', bg.id);
+                            }
+                          }}
+                          className={`group relative rounded-xl overflow-hidden border-2 text-left transition-all cursor-pointer flex flex-col ${
+                            isSelected
+                              ? 'border-blue-500 ring-2 ring-blue-400/40 shadow-xl shadow-blue-950/50'
+                              : 'border-slate-800 hover:border-slate-600 bg-slate-900/40'
+                          }`}
+                        >
+                          {/* Image / Swatch Area */}
+                          <div className="h-24 sm:h-28 w-full relative overflow-hidden bg-slate-950 flex items-center justify-center">
+                            {bg.id === 'none' ? (
+                              <div className="w-full h-full bg-gradient-to-br from-slate-900 to-[#020b14] flex flex-col items-center justify-center p-2 text-center">
+                                <MonitorPlay size={24} className="text-slate-500 mb-1" />
+                                <span className="text-[10px] font-bold text-slate-400">Stealth Dark</span>
+                              </div>
+                            ) : bg.id === 'blur' ? (
+                              <div className="w-full h-full bg-gradient-to-tr from-blue-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-2 text-center backdrop-blur-md">
+                                <Sparkles size={24} className="text-amber-400 mb-1" />
+                                <span className="text-[10px] font-bold text-slate-300">Studio Blur</span>
+                              </div>
+                            ) : (
+                              <>
+                                <img
+                                  src={bg.thumbnail || bg.url || bg.localUrl}
+                                  alt={bg.name}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-slate-950/80 text-blue-300 border border-slate-700/80">
+                                  {bg.category}
+                                </span>
+                              </>
+                            )}
+
+                            {isSelected && (
+                              <div className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg ring-2 ring-white/50">
+                                <Check size={13} strokeWidth={3} />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Text */}
+                          <div className="p-2 sm:p-2.5 bg-[#091522] flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="text-[11px] font-bold text-white truncate group-hover:text-blue-300 transition-colors">
+                                {bg.name}
+                              </div>
+                              <div className="text-[9px] text-slate-400 line-clamp-1 mt-0.5">
+                                {bg.description}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-5 py-3 border-t border-slate-800 flex items-center justify-between bg-slate-950/70">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBgId('none');
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('nexucon_meeting_virtual_bg', 'none');
+                    }
+                  }}
+                  className="text-xs text-slate-400 hover:text-white font-medium cursor-pointer transition-colors"
+                >
+                  Reset to Default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBgModalOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
+                >
+                  Apply &amp; Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* QUICK INVITE MODAL DIALOG */}
       <AnimatePresence>

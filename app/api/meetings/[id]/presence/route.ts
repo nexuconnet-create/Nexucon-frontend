@@ -14,6 +14,8 @@ const meetingPresenceStore: Record<string, {
     isVideoOn?: boolean;
     isHandRaised?: boolean;
     isScreenSharing?: boolean;
+    backgroundId?: string;
+    backgroundUrl?: string;
     lastSeen: number;
   }>;
   screenSharingPeerId?: string | null;
@@ -181,7 +183,9 @@ export async function POST(
             isMicOn: participant.isMicOn !== undefined ? participant.isMicOn : store.participants[existingIdx].isMicOn,
             isVideoOn: participant.isVideoOn !== undefined ? participant.isVideoOn : store.participants[existingIdx].isVideoOn,
             isHandRaised: participant.isHandRaised !== undefined ? participant.isHandRaised : store.participants[existingIdx].isHandRaised,
-            isScreenSharing: isSharing
+            isScreenSharing: isSharing,
+            backgroundId: participant.backgroundId !== undefined ? participant.backgroundId : store.participants[existingIdx].backgroundId,
+            backgroundUrl: participant.backgroundUrl !== undefined ? participant.backgroundUrl : store.participants[existingIdx].backgroundUrl
           };
         } else {
           store.participants.push({
@@ -196,7 +200,9 @@ export async function POST(
             isMicOn: participant.isMicOn ?? true,
             isVideoOn: participant.isVideoOn ?? true,
             isHandRaised: participant.isHandRaised ?? false,
-            isScreenSharing: isSharing
+            isScreenSharing: isSharing,
+            backgroundId: participant.backgroundId,
+            backgroundUrl: participant.backgroundUrl
           });
         }
       }
