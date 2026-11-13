@@ -1250,11 +1250,8 @@ function MeetingRoomContent() {
         if (data.participants && Array.isArray(data.participants) && data.participants.length > 0) {
           updateParticipantsFromData([], data.participants);
         }
-        setMinutesText(data.minutes_notes || 'Agenda: Technical stage-gate signoff for Level 5 slab casting. GPR concrete scan review indicates structural integrity compliance.');
-        setActionItems(data.action_items || [
-          { id: 'act-1', title: 'Submit 28-day concrete core compressive test certificate', assignee_name: 'David Rivera (Apex)', due_date: 'Sep 2, 2026', is_completed: false },
-          { id: 'act-2', title: 'Upload drone photogrammetry mesh for Grid 4 revision', assignee_name: 'Marcus Chen (Inspector)', due_date: 'Aug 31, 2026', is_completed: true }
-        ]);
+        setMinutesText(data.minutes_notes || (data.agenda ? `Meeting Focus & Agenda:\n${data.agenda}` : ''));
+        setActionItems(data.action_items && Array.isArray(data.action_items) ? data.action_items : []);
       }
     } catch (err) {
       console.error("Failed to load meeting details", err);

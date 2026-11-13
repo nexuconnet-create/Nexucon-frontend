@@ -11,6 +11,7 @@ import {
   getAvailableMeetingParticipants,
   type AvailableParticipant
 } from '@/services/stakeholders';
+import { getProjects, type Project } from '@/services/projects';
 import { sendEmailViaResend } from '@/services/email';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
@@ -66,14 +67,11 @@ export default function ScheduleMeetingModal({
 
   const [title, setTitle] = useState('');
   const [agenda, setAgenda] = useState('');
-  const [projectName, setProjectName] = useState('Central Metro Transit Hub');
-  const [customProjectName, setCustomProjectName] = useState('');
-  const [availableProjects, setAvailableProjects] = useState<string[]>([
-    'Central Metro Transit Hub',
-    'Eko Atlantic Phase 4 Tower',
-    'Lekki Deep Sea Logistics Park',
-    'Mainland Commercial Viaduct',
-  ]);
+  const [projectsList, setProjectsList] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [projectName, setProjectName] = useState<string>('');
+  const [customProjectName, setCustomProjectName] = useState<string>('');
+  const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(true);
 
   // Date & Time Selectors
   const [selectedIsoDate, setSelectedIsoDate] = useState<string>(getTodayIso());
@@ -99,38 +97,31 @@ export default function ScheduleMeetingModal({
     let mounted = true;
     const loadRosterAndProjects = async () => {
       setIsLoadingRoster(true);
+      setIsLoadingProjects(true);
       try {
-        const [participantsData, projectsRes] = await Promise.all([
+        const [participantsData, fetchedProjects] = await Promise.all([
           getAvailableMeetingParticipants(),
-          api.get('/projects/').catch(() => null),
+          getProjects(),
         ]);
         if (!mounted) return;
         setRoster(participantsData);
 
-        if (projectsRes) {
-          const rawList = Array.isArray(projectsRes.data)
-            ? projectsRes.data
-            : Array.isArray(projectsRes.data?.results)
-            ? projectsRes.data.results
-            : Array.isArray(projectsRes.data?.data)
-            ? projectsRes.data.data
-            : [];
-          const names = Array.from(
-            new Set(
-              rawList
-                .map((p: any) => p.name || p.title || p.project_name)
-                .filter(Boolean)
-            )
-          ) as string[];
-          if (names.length > 0) {
-            setAvailableProjects(names);
-            setProjectName((prev) => (names.includes(prev) ? prev : names[0]));
-          }
+        const list = Array.isArray(fetchedProjects) ? fetchedProjects : [];
+        setProjectsList(list);
+        if (list.length > 0) {
+          setSelectedProjectId(list[0].id);
+          setProjectName(list[0].name);
+        } else {
+          setSelectedProjectId('__custom__');
+          setProjectName('__custom__');
         }
       } catch (err) {
-        console.warn('Failed to load meeting participants roster', err);
+        console.warn('Failed to load meeting participants roster or projects', err);
       } finally {
-        if (mounted) setIsLoadingRoster(false);
+        if (mounted) {
+          setIsLoadingRoster(false);
+          setIsLoadingProjects(false);
+        }
       }
     };
 
@@ -196,8 +187,17 @@ export default function ScheduleMeetingModal({
 
   const formattedDate = formatIsoToDisplayDate(selectedIsoDate);
   const computedTimeSlot = `${startTime} - ${endTime}`;
-  const resolvedProjectName =
-    projectName === '__custom__' ? customProjectName.trim() : projectName.trim();
+
+  const selectedProject = useMemo(() => {
+    return projectsList.find((p) => p.id === selectedProjectId) || null;
+  }, [projectsList, selectedProjectId]);
+
+  const resolvedProjectName = useMemo(() => {
+    if (selectedProjectId === '__custom__' || projectName === '__custom__') {
+      return customProjectName.trim();
+    }
+    return selectedProject?.name || projectName.trim();
+  }, [selectedProjectId, customProjectName, selectedProject, projectName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +283,7 @@ export default function ScheduleMeetingModal({
       const createdMeeting = await scheduleMeeting({
         title: title.trim(),
         agenda: agenda.trim() || 'Official technical review and inter-agency coordination session.',
-        project_name: resolvedProjectName || 'Central Metro Transit Hub',
+        project_name: resolvedProjectName || (selectedProject ? selectedProject.name : 'General Statutory Review'),
         date: formattedDate,
         time_slot: computedTimeSlot,
         meeting_type: meetingType,
@@ -332,7 +332,7 @@ export default function ScheduleMeetingModal({
                   </tr>
                   <tr>
                     <td style="padding: 6px 0; color: #94a3b8;">Project:</td>
-                    <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${resolvedProjectName || 'General Regulatory Review'}</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #ffffff;">${resolvedProjectName || 'General Regulatory Review'}${selectedProject?.reference_number ? ` [${selectedProject.reference_number}]` : ''}</td>
                   </tr>
                   <tr>
                     <td style="padding: 6px 0; color: #94a3b8;">Format:</td>
@@ -459,30 +459,116 @@ export default function ScheduleMeetingModal({
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
-                    Project / Site
-                  </label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                      Project / Site <span className="text-red-500">*</span>
+                    </label>
+                    {projectsList.length > 0 && (
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        {projectsList.length} Active {projectsList.length === 1 ? 'Project' : 'Projects'}
+                      </span>
+                    )}
+                  </div>
+
                   <select
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
+                    value={selectedProjectId || (projectName === '__custom__' ? '__custom__' : projectName)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__custom__') {
+                        setSelectedProjectId('__custom__');
+                        setProjectName('__custom__');
+                      } else {
+                        const p = projectsList.find((proj) => proj.id === val || proj.name === val);
+                        if (p) {
+                          setSelectedProjectId(p.id);
+                          setProjectName(p.name);
+                        } else {
+                          setSelectedProjectId(val);
+                          setProjectName(val);
+                        }
+                      }
+                    }}
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                   >
-                    {availableProjects.map((proj) => (
-                      <option key={proj} value={proj}>
-                        {proj}
+                    {projectsList.length === 0 && !isLoadingProjects && (
+                      <option value="__custom__">No pre-registered projects found (Enter custom site name)</option>
+                    )}
+                    {projectsList.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.name} ({proj.reference_number || (proj as any).project_number || 'Project'})
                       </option>
                     ))}
                     <option value="__custom__">+ Enter Custom Project Name...</option>
                   </select>
-                  {projectName === '__custom__' && (
+
+                  {(selectedProjectId === '__custom__' || projectName === '__custom__') && (
                     <input
                       type="text"
                       value={customProjectName}
                       onChange={(e) => setCustomProjectName(e.target.value)}
-                      placeholder="Type project or site name..."
+                      placeholder="Type custom project or site name..."
                       className="w-full mt-2 p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                  )}
+
+                  {/* Ongoing Project Details Card */}
+                  {selectedProject && selectedProjectId !== '__custom__' && (
+                    <div className="mt-2.5 p-3.5 bg-gradient-to-br from-slate-50 to-blue-50/50 border border-blue-100 rounded-xl space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[11px] font-black uppercase text-blue-900 tracking-wider flex items-center gap-1.5">
+                            <Building2 size={13} className="text-blue-600 shrink-0" />
+                            <span>{selectedProject.name}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span>Ref: <strong className="text-slate-700">{selectedProject.reference_number || (selectedProject as any).project_number || 'PRJ-NXC'}</strong></span>
+                            <span>•</span>
+                            <span className="capitalize">{selectedProject.project_type || 'Commercial'}</span>
+                            {selectedProject.number_of_floors ? (
+                              <>
+                                <span>•</span>
+                                <span>{selectedProject.number_of_floors} Floors</span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md border shrink-0 ${
+                          selectedProject.status === 'ACTIVE' || selectedProject.status === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
+                          {selectedProject.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[10px] pt-2 border-t border-slate-200/60 text-slate-600">
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Location &amp; LGA:</span>
+                          <span className="font-semibold text-slate-700 truncate block">
+                            {selectedProject.site_address || selectedProject.lga ? `${selectedProject.site_address || ''}${selectedProject.lga ? ` (${selectedProject.lga})` : ''}` : 'State Jurisdiction'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Regulatory Authority:</span>
+                          <span className="font-semibold text-slate-700 truncate block">
+                            {selectedProject.regulatory_authority || (selectedProject as any).agency_name || 'Ministry of Physical Planning'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Developer / Org:</span>
+                          <span className="font-semibold text-slate-700 truncate block">
+                            {selectedProject.developer_organization || selectedProject.developer_name || selectedProject.client_name || 'Registered Developer'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Permit Status:</span>
+                          <span className="font-semibold text-slate-700 truncate block">
+                            {selectedProject.permit_number ? `Permit #${selectedProject.permit_number}` : (selectedProject.permit_status || 'Under Stage-Gate Review')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
