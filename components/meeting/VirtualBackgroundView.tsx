@@ -373,3 +373,4 @@ export const VirtualBackgroundView: React.FC<VirtualBackgroundViewProps> = ({
     </div>
   );
 };
+

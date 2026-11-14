@@ -163,7 +163,16 @@ export default function ScheduleMeetingModal({
     [roster]
   );
 
-  if (!isOpen) return null;
+  const selectedProject = useMemo(() => {
+    return projectsList.find((p) => p.id === selectedProjectId) || null;
+  }, [projectsList, selectedProjectId]);
+
+  const resolvedProjectName = useMemo(() => {
+    if (selectedProjectId === '__custom__' || projectName === '__custom__') {
+      return customProjectName.trim();
+    }
+    return selectedProject?.name || projectName.trim();
+  }, [selectedProjectId, customProjectName, selectedProject, projectName]);
 
   const toggleParticipant = (id: string) => {
     setSelectedIds((prev) =>
@@ -187,17 +196,6 @@ export default function ScheduleMeetingModal({
 
   const formattedDate = formatIsoToDisplayDate(selectedIsoDate);
   const computedTimeSlot = `${startTime} - ${endTime}`;
-
-  const selectedProject = useMemo(() => {
-    return projectsList.find((p) => p.id === selectedProjectId) || null;
-  }, [projectsList, selectedProjectId]);
-
-  const resolvedProjectName = useMemo(() => {
-    if (selectedProjectId === '__custom__' || projectName === '__custom__') {
-      return customProjectName.trim();
-    }
-    return selectedProject?.name || projectName.trim();
-  }, [selectedProjectId, customProjectName, selectedProject, projectName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,6 +377,8 @@ export default function ScheduleMeetingModal({
     { id: 'In-Person Council' as const, label: 'Council Chambers', icon: MapPin, desc: 'Physical boardroom session' },
   ];
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[150] overflow-hidden">
       {/* Backdrop */}
@@ -524,7 +524,7 @@ export default function ScheduleMeetingModal({
                           <div className="text-[10px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
                             <span>Ref: <strong className="text-slate-700">{selectedProject.reference_number || (selectedProject as any).project_number || 'PRJ-NXC'}</strong></span>
                             <span>•</span>
-                            <span className="capitalize">{selectedProject.project_type || 'Commercial'}</span>
+                            <span className="capitalize">{typeof selectedProject.project_type === 'string' ? selectedProject.project_type : 'Commercial'}</span>
                             {selectedProject.number_of_floors ? (
                               <>
                                 <span>•</span>
@@ -538,7 +538,7 @@ export default function ScheduleMeetingModal({
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-blue-50 text-blue-700 border-blue-200'
                         }`}>
-                          {selectedProject.status}
+                          {String(selectedProject.status || 'ACTIVE')}
                         </span>
                       </div>
 
