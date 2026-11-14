@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -23,6 +23,7 @@ import {
 } from "@/services/stakeholders";
 import { sendEmailViaResend } from "@/services/email";
 import { useAuth } from "@/context/AuthContext";
+import { VirtualBackgroundView } from "@/components/meeting/VirtualBackgroundView";
 
 interface ConnectedParticipant {
   id: string;
@@ -270,9 +271,29 @@ function MeetingRoomContent() {
     return MEETING_BACKGROUNDS.find(b => b.id === selectedBgId) || MEETING_BACKGROUNDS[0];
   }, [selectedBgId]);
 
-  const activeBgUrl = activeBg?.url || activeBg?.localUrl || '';
+  const activeBgUrl = activeBg?.localUrl || activeBg?.url || '';
   const activeBgUrlRef = useRef(activeBgUrl);
   useEffect(() => { activeBgUrlRef.current = activeBgUrl; }, [activeBgUrl]);
+
+  // WebRTC processed video stream sync for virtual background
+  const processedLocalStreamRef = useRef<MediaStream | null>(null);
+  const handleProcessedLocalStream = useCallback((processedStream: MediaStream | null) => {
+    processedLocalStreamRef.current = processedStream;
+    const targetTrack = processedStream 
+      ? processedStream.getVideoTracks()[0] 
+      : localStreamRef.current?.getVideoTracks()[0];
+    if (!targetTrack) return;
+
+    Object.values(peerConnectionsRef.current).forEach((pc) => {
+      try {
+        const senders = pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender && videoSender.track !== targetTrack) {
+          videoSender.replaceTrack(targetTrack).catch(() => {});
+        }
+      } catch (e) {}
+    });
+  }, []);
 
   // Active Browser Permission Listener: automatically reconnects when user toggles permission in browser
   useEffect(() => {
@@ -2391,20 +2412,14 @@ function MeetingRoomContent() {
                             </div>
                           );
                         })() : isVideoOn && localStream ? (
-                          <div 
-                            className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700"
-                            style={
-                              activeBgUrl && activeBgUrl !== 'blur'
-                                ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                                : undefined
-                            }
-                          >
-                            <video
-                              ref={attachLocalVideo}
-                              autoPlay
-                              playsInline
-                              muted
-                              className="w-full h-full object-cover transform -scale-x-100"
+                          <div className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950">
+                            <VirtualBackgroundView
+                              stream={localStream}
+                              isVideoOn={isVideoOn}
+                              selectedBgId={selectedBgId}
+                              backgroundUrl={activeBgUrl}
+                              isMirror={true}
+                              onProcessedStream={handleProcessedLocalStream}
                             />
                             {/* Quick Change Background Trigger */}
                             <button
@@ -2437,11 +2452,11 @@ function MeetingRoomContent() {
                             style={
                               activeBgUrl && activeBgUrl !== 'blur'
                                 ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                                : undefined
+                                : { background: 'radial-gradient(circle, #0B1726 0%, #030712 100%)' }
                             }
                           >
                             {activeBgUrl && activeBgUrl !== 'blur' && (
-                              <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/40 pointer-events-none" />
                             )}
                             <div className="relative z-10 space-y-3">
                               <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-3xl sm:text-4xl flex items-center justify-center shadow-2xl ring-8 ring-emerald-500/20">
@@ -2667,13 +2682,14 @@ function MeetingRoomContent() {
                                   className="w-full h-full object-contain rounded-2xl bg-black"
                                 />
                               ) : p.isLocalUser && isVideoOn && localStream ? (
-                                <div className="relative w-full h-full">
-                                  <video
-                                    ref={attachLocalVideo}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                                <div className="relative w-full h-full rounded-2xl overflow-hidden bg-slate-950">
+                                  <VirtualBackgroundView
+                                    stream={localStream}
+                                    isVideoOn={isVideoOn}
+                                    selectedBgId={selectedBgId}
+                                    backgroundUrl={activeBgUrl}
+                                    isMirror={true}
+                                    onProcessedStream={handleProcessedLocalStream}
                                   />
                                   <button
                                     type="button"
@@ -2707,7 +2723,7 @@ function MeetingRoomContent() {
                               ) : (
                                 <div className="relative w-full h-full flex flex-col items-center justify-center text-center p-2 sm:p-3 overflow-hidden">
                                   {((p.isLocalUser && activeBgUrl && activeBgUrl !== 'blur') || (!p.isLocalUser && (p as any).backgroundUrl)) && (
-                                    <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/40 pointer-events-none" />
                                   )}
                                   <div className="relative z-10 flex flex-col items-center">
                                     <div className={`w-12 h-12 xs:w-16 xs:h-16 sm:w-20 sm:h-20 rounded-full font-black text-sm xs:text-xl sm:text-2xl flex items-center justify-center shadow-2xl ${
@@ -3681,49 +3697,40 @@ function MeetingRoomContent() {
                     </span>
                   </div>
 
-                  <div 
-                    className="relative w-full h-44 sm:h-52 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center"
-                    style={activeBgUrl && activeBgUrl !== 'blur' ? {
-                      backgroundImage: `url(${activeBgUrl})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                    } : {
-                      background: 'radial-gradient(circle, #0B1726 0%, #030712 100%)'
-                    }}
-                  >
-                    {activeBgUrl === 'blur' && (
-                      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-                    )}
-                    {activeBgUrl && activeBgUrl !== 'blur' && (
-                      <div className="absolute inset-0 bg-slate-950/30 pointer-events-none" />
-                    )}
-
+                  <div className="relative w-full h-44 sm:h-52 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center bg-slate-950">
                     {isVideoOn && localStream ? (
-                      <video
-                        ref={(el) => {
-                          if (el && localStream) {
-                            el.srcObject = localStream;
-                            el.play().catch(() => {});
-                          }
-                        }}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover transform -scale-x-100 opacity-90"
+                      <VirtualBackgroundView
+                        stream={localStream}
+                        isVideoOn={isVideoOn}
+                        selectedBgId={selectedBgId}
+                        backgroundUrl={activeBgUrl}
+                        isMirror={true}
                       />
                     ) : (
-                      <div className="relative z-10 flex flex-col items-center text-center space-y-2 p-4 bg-slate-950/70 backdrop-blur-md rounded-2xl border border-slate-800/80 shadow-2xl">
-                        <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-xl flex items-center justify-center shadow-lg ring-4 ring-emerald-500/20">
-                          {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-xs font-black text-white">{currentUser.name} (You)</div>
-                          <div className="text-[10px] text-slate-400 font-medium">{currentUser.role}</div>
+                      <div 
+                        className="relative z-10 w-full h-full flex flex-col items-center justify-center text-center p-4"
+                        style={
+                          activeBgUrl && activeBgUrl !== 'blur'
+                            ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                            : { background: 'radial-gradient(circle, #0B1726 0%, #030712 100%)' }
+                        }
+                      >
+                        {activeBgUrl && activeBgUrl !== 'blur' && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/40 pointer-events-none" />
+                        )}
+                        <div className="relative z-10 space-y-2 flex flex-col items-center">
+                          <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 text-white font-black text-xl flex items-center justify-center shadow-lg ring-4 ring-emerald-500/20">
+                            {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="bg-slate-950/85 px-3 py-1 rounded-full border border-slate-800">
+                            <div className="text-xs font-black text-white">{currentUser.name} (You)</div>
+                            <div className="text-[10px] text-slate-400 font-medium">{currentUser.role}</div>
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    <div className="absolute bottom-2.5 left-2.5 bg-slate-950/90 px-2.5 py-1 rounded-lg text-[10px] font-bold text-white border border-slate-800 flex items-center gap-1.5 shadow">
+                    <div className="absolute bottom-2.5 left-2.5 bg-slate-950/90 px-2.5 py-1 rounded-lg text-[10px] font-bold text-white border border-slate-800 flex items-center gap-1.5 shadow z-10">
                       <Sparkles size={11} className="text-amber-400" />
                       <span>{activeBg.name}</span>
                     </div>
@@ -3748,6 +3755,9 @@ function MeetingRoomContent() {
                             setSelectedBgId(bg.id);
                             if (typeof window !== 'undefined') {
                               localStorage.setItem('nexucon_meeting_virtual_bg', bg.id);
+                              window.dispatchEvent(new CustomEvent('show-toast', {
+                                detail: { message: `Virtual background applied: ${bg.name}`, type: 'success' }
+                              }));
                             }
                           }}
                           className={`group relative rounded-xl overflow-hidden border-2 text-left transition-all cursor-pointer flex flex-col ${
