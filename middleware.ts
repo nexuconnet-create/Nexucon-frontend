@@ -4,6 +4,41 @@ export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const hostname = request.headers.get('host') || '';
   const pathname = url.pathname;
+  const origin = request.headers.get('origin') || '';
+
+  const isAllowedOrigin = origin && (
+    origin.endsWith('nexucon.net') ||
+    origin.endsWith('nexucon.com') ||
+    origin.includes('localhost') ||
+    origin.includes('127.0.0.1')
+  );
+
+  const applyCorsHeaders = (res: NextResponse): NextResponse => {
+    if (isAllowedOrigin) {
+      res.headers.set('Access-Control-Allow-Origin', origin);
+      res.headers.set('Access-Control-Allow-Credentials', 'true');
+      res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.headers.set(
+        'Access-Control-Allow-Headers',
+        'accept, authorization, content-type, user-agent, x-csrftoken, x-requested-with, rsc, next-router-prefetch, next-router-state-tree, x-portal-type, portal'
+      );
+      res.headers.set('Access-Control-Max-Age', '86400');
+    }
+    return res;
+  };
+
+  // Handle cross-subdomain CORS preflight
+  if (request.method === 'OPTIONS') {
+    const res = new NextResponse(null, { status: 204 });
+    return applyCorsHeaders(res);
+  }
+
+  // Detect Next.js RSC router prefetch/fetch requests
+  const isRsc =
+    url.searchParams.has('_rsc') ||
+    request.headers.get('rsc') === '1' ||
+    request.headers.get('next-router-prefetch') === '1' ||
+    request.headers.get('next-router-state-tree') !== null;
 
   // Skip static files, Next internals, and API requests
   if (
@@ -12,7 +47,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/static') ||
     pathname.includes('.')
   ) {
-    return NextResponse.next();
+    return applyCorsHeaders(NextResponse.next());
   }
 
   // Cross-subdomain routing for Nexucon multi-tenant portals
@@ -36,23 +71,23 @@ export function middleware(request: NextRequest) {
     hostname.includes('ptp.localhost') ||
     hostname.includes('ptp-');
 
-  // If visiting apex domain (nexucon.net) or www with a portal-specific path, redirect to dedicated subdomain
+  // If visiting apex domain (nexucon.net) or www with a portal-specific path, redirect to dedicated subdomain for document navigations
   if (!isInspectorHost && !isGovernmentHost && !isStakeholderHost && !isPtpHost) {
     const isDev = hostname.includes('localhost') || hostname.includes('127.0.0.1');
-    if (!isDev) {
+    if (!isDev && !isRsc) {
       if (pathname.startsWith('/inspector')) {
         const targetUrl = new URL(request.url);
         targetUrl.hostname = 'inspector.nexucon.net';
         targetUrl.port = '';
         targetUrl.protocol = 'https:';
-        return NextResponse.redirect(targetUrl);
+        return applyCorsHeaders(NextResponse.redirect(targetUrl));
       }
       if (pathname.startsWith('/stakeholder')) {
         const targetUrl = new URL(request.url);
         targetUrl.hostname = 'stakeholder.nexucon.net';
         targetUrl.port = '';
         targetUrl.protocol = 'https:';
-        return NextResponse.redirect(targetUrl);
+        return applyCorsHeaders(NextResponse.redirect(targetUrl));
       }
     }
   }
@@ -66,7 +101,7 @@ export function middleware(request: NextRequest) {
 
     // If request is already pointing to /inspector, allow it
     if (pathname.startsWith('/inspector')) {
-      return NextResponse.next();
+      return applyCorsHeaders(NextResponse.next());
     }
 
     // Redirect root or relative paths under inspector domain to /inspector equivalents
@@ -88,7 +123,7 @@ export function middleware(request: NextRequest) {
 
     // If request is already pointing to /stakeholder, allow it
     if (pathname.startsWith('/stakeholder')) {
-      return NextResponse.next();
+      return applyCorsHeaders(NextResponse.next());
     }
 
     // Redirect root to /stakeholder/login so the first page that shows is the login page
@@ -114,7 +149,7 @@ export function middleware(request: NextRequest) {
     }
 
     if (pathname.startsWith('/government')) {
-      return NextResponse.next();
+      return applyCorsHeaders(NextResponse.next());
     }
 
     if (pathname === '/') {
@@ -241,7 +276,7 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
     return applySecurityHeaders(NextResponse.rewrite(url));
   }
 
-  return NextResponse.next();
+  return applyCorsHeaders(NextResponse.next());
 }
 
 export const config = {
