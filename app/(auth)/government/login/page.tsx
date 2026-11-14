@@ -278,13 +278,13 @@ function GovernmentLoginContent() {
               <div className="text-center pt-2">
                 <span className="text-xs text-gray-400">
                   Are you a Government Stakeholder?{" "}
-                  <Link href="/stakeholder/login" className="text-[#022C4F] font-bold hover:underline">
+                  <a href="https://stakeholder.nexucon.net/stakeholder/login" className="text-[#022C4F] font-bold hover:underline">
                     Stakeholder Portal
-                  </Link>
+                  </a>
                   {" "}&bull;{" "}
-                  <Link href="/inspector/login" className="text-[#022C4F] font-bold hover:underline">
+                  <a href="https://inspector.nexucon.net/inspector/login" className="text-[#022C4F] font-bold hover:underline">
                     Inspector Login
-                  </Link>
+                  </a>
                 </span>
               </div>
             </div>

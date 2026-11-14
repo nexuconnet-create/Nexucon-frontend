@@ -35,13 +35,16 @@ export function middleware(request: NextRequest) {
 
   // Detect Next.js RSC router prefetch/fetch requests
   const isRsc =
+    request.url.includes('_rsc=') ||
     url.searchParams.has('_rsc') ||
     request.headers.get('rsc') === '1' ||
     request.headers.get('next-router-prefetch') === '1' ||
-    request.headers.get('next-router-state-tree') !== null;
+    request.headers.get('next-router-state-tree') !== null ||
+    request.headers.get('accept')?.includes('text/x-component');
 
-  // Skip static files, Next internals, and API requests
+  // Skip static files, Next internals, API requests, and internal RSC router prefetches
   if (
+    isRsc ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/static') ||
