@@ -13,7 +13,7 @@ import {
   Subtitles, ChevronRight, ChevronLeft, Hand, Smile,
   MonitorPlay, Camera, Cast, UserPlus, Mail, X, Loader2,
   CheckCircle, BadgeCheck, VolumeX,
-  Lock, FileCheck, Download, Bot
+  Lock, FileCheck, Download, Bot, HelpCircle, Info, Smartphone, Laptop, Compass
 } from "lucide-react";
 import { 
   StakeholderMeeting, getMeetingById, updateMeetingNotes, 
@@ -245,16 +245,16 @@ function MeetingRoomContent() {
   const seenSignalIdsRef = useRef<Set<string>>(new Set());
   const [remoteScreenSharePeerId, setRemoteScreenSharePeerId] = useState<string | null>(null);
 
-  // Virtual Background Management (Under Video Section & User Call)
+  // Virtual Background Management (User Video Call Background)
   const [selectedBgId, setSelectedBgId] = useState<string>('none');
-  const [bgTarget, setBgTarget] = useState<'both' | 'stage' | 'tile'>('both');
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
+  const [isPermissionGuideOpen, setIsPermissionGuideOpen] = useState(false);
+  const [isPermissionBannerDismissed, setIsPermissionBannerDismissed] = useState(false);
+  const [activeGuideTab, setActiveGuideTab] = useState<'chrome' | 'safari' | 'edge' | 'firefox' | 'mobile'>('chrome');
 
   // Synchronized refs for background presence heartbeats
   const selectedBgIdRef = useRef(selectedBgId);
-  const bgTargetRef = useRef(bgTarget);
   useEffect(() => { selectedBgIdRef.current = selectedBgId; }, [selectedBgId]);
-  useEffect(() => { bgTargetRef.current = bgTarget; }, [bgTarget]);
 
   // Load saved virtual background preference on client mount
   useEffect(() => {
@@ -262,10 +262,6 @@ function MeetingRoomContent() {
       const saved = localStorage.getItem('nexucon_meeting_virtual_bg');
       if (saved && MEETING_BACKGROUNDS.some(b => b.id === saved)) {
         setSelectedBgId(saved);
-      }
-      const savedTarget = localStorage.getItem('nexucon_meeting_bg_target') as any;
-      if (savedTarget && ['both', 'stage', 'tile'].includes(savedTarget)) {
-        setBgTarget(savedTarget);
       }
     }
   }, []);
@@ -278,8 +274,32 @@ function MeetingRoomContent() {
   const activeBgUrlRef = useRef(activeBgUrl);
   useEffect(() => { activeBgUrlRef.current = activeBgUrl; }, [activeBgUrl]);
 
+  // Active Browser Permission Listener: automatically reconnects when user toggles permission in browser
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+      const checkAndListen = async (name: 'camera' | 'microphone') => {
+        try {
+          const status = await navigator.permissions.query({ name: name as any });
+          if (status.state === 'denied') {
+            setMediaStatus('denied');
+          }
+          status.onchange = () => {
+            if (status.state === 'granted') {
+              handleRetryMediaPermissions();
+            } else if (status.state === 'denied') {
+              setMediaStatus('denied');
+            }
+          };
+        } catch (e) {}
+      };
+      checkAndListen('camera');
+      checkAndListen('microphone');
+    }
+  }, []);
+
   // Retry Device Access (Camera & Mic) when permission was previously denied
   const handleRetryMediaPermissions = async () => {
+    setIsPermissionBannerDismissed(false);
     setMediaStatus('pending');
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
@@ -2058,10 +2078,10 @@ function MeetingRoomContent() {
                 ? 'bg-blue-600/30 border-blue-500/50 text-blue-200 hover:bg-blue-600/50'
                 : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
-            title="Configure Video & Stage Background"
+            title="Configure Video Call Background"
           >
             <Sparkles size={13} className={selectedBgId !== 'none' ? 'text-amber-400' : 'text-slate-400'} />
-            <span className="hidden sm:inline">Backgrounds</span>
+            <span className="hidden sm:inline">Background</span>
           </button>
 
           {/* Layout Mode Toggle */}
@@ -2118,6 +2138,58 @@ function MeetingRoomContent() {
         </div>
 
       </header>
+
+      {/* IN-APP DEVICE PERMISSION RECOVERY BANNER */}
+      {mediaStatus === 'denied' && !isPermissionBannerDismissed && (
+        <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-b border-amber-500/40 px-3 sm:px-6 py-2.5 sm:py-3 text-amber-200 shadow-2xl relative z-30 shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0 shadow">
+                <ShieldAlert size={20} className="animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs sm:text-sm font-black text-white">
+                    Camera &amp; Microphone Permission Blocked by Browser
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40">
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-amber-200/90 mt-0.5 leading-snug">
+                  Click the <strong>lock / site settings icon (🔒 or 🎛️)</strong> on the left side of your browser address bar, change <strong>Camera</strong> &amp; <strong>Microphone</strong> from &quot;Block&quot; to <strong>&quot;Allow&quot;</strong>, then click Retry.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+              <button
+                type="button"
+                onClick={() => setIsPermissionGuideOpen(true)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              >
+                <HelpCircle size={13} className="text-blue-400" />
+                <span>How to Allow</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleRetryMediaPermissions}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
+              >
+                <RefreshCw size={13} />
+                <span>Retry Connection</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPermissionBannerDismissed(true)}
+                title="Dismiss Banner (Stay in Listen-Only Mode)"
+                className="p-1.5 text-amber-300/70 hover:text-white rounded-lg hover:bg-amber-900/30 transition-colors cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Full-Screen Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -2198,49 +2270,13 @@ function MeetingRoomContent() {
 
               /* MODE 3: NATIVE IN-PORTAL COUNCIL STAGE */
               <>
-                {/* Camera / Mic Permission Denied Guided Banner */}
-                {mediaStatus === 'denied' && (
-                  <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-amber-200 mb-2 shrink-0 shadow-lg">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                        <ShieldAlert size={18} />
-                      </div>
-                      <div>
-                        <span className="font-bold text-white block">Camera / Microphone Permission Required:</span>
-                        <span className="text-amber-200/90 text-[11px]">
-                          Your browser blocked automatic media access. Click the <strong>lock / site settings icon (🔒)</strong> in your browser address bar and set Camera &amp; Microphone to <strong>&quot;Allow&quot;</strong>.
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRetryMediaPermissions}
-                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shrink-0 cursor-pointer transition-all shadow"
-                    >
-                      Retry Connection
-                    </button>
-                  </div>
-                )}
-
                 {layoutMode === 'spotlight' || isScreenSharing || Boolean(remoteScreenSharePeerId && remoteStreams[remoteScreenSharePeerId]) ? (
                   <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                     
                     {/* Main Spotlight Window */}
                     <div 
-                      className="flex-1 rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl transition-all"
-                      style={
-                        (bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur'
-                          ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                          : { background: 'linear-gradient(to bottom, #0B1726, #04080F)' }
-                      }
+                      className="flex-1 bg-gradient-to-b from-[#0B1726] to-[#04080F] rounded-3xl border-2 border-blue-500/50 p-6 flex flex-col justify-between relative overflow-hidden shadow-2xl transition-all"
                     >
-                      {/* Ambient Overlay for Stage Background */}
-                      {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur' && (
-                        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] pointer-events-none" />
-                      )}
-                      {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl === 'blur' && (
-                        <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-md pointer-events-none" />
-                      )}
                       <div className="flex items-center justify-between z-10">
                         <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-xl flex items-center gap-1.5 shadow">
                           <Share2 size={14} />
@@ -2358,7 +2394,7 @@ function MeetingRoomContent() {
                           <div 
                             className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700"
                             style={
-                              (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur'
+                              activeBgUrl && activeBgUrl !== 'blur'
                                 ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                                 : undefined
                             }
@@ -2370,6 +2406,16 @@ function MeetingRoomContent() {
                               muted
                               className="w-full h-full object-cover transform -scale-x-100"
                             />
+                            {/* Quick Change Background Trigger */}
+                            <button
+                              type="button"
+                              onClick={() => setIsBgModalOpen(true)}
+                              className="absolute top-3 left-3 bg-slate-950/85 hover:bg-slate-900 border border-slate-700/80 hover:border-amber-500/50 text-slate-200 hover:text-white px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer z-10"
+                              title="Change Video Call Background"
+                            >
+                              <Sparkles size={12} className="text-amber-400" />
+                              <span>Background</span>
+                            </button>
                             <div className="absolute bottom-3 left-3 bg-slate-950/90 px-3 py-1 rounded-lg text-xs font-bold text-white border border-slate-800 flex items-center gap-1.5 shadow-lg">
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                               <span>{currentUser.name} (You)</span>
@@ -2389,12 +2435,12 @@ function MeetingRoomContent() {
                           <div 
                             className="relative w-full max-w-xl h-64 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col items-center justify-center p-6 text-center"
                             style={
-                              (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur'
+                              activeBgUrl && activeBgUrl !== 'blur'
                                 ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                                 : undefined
                             }
                           >
-                            {(bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur' && (
+                            {activeBgUrl && activeBgUrl !== 'blur' && (
                               <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
                             )}
                             <div className="relative z-10 space-y-3">
@@ -2406,6 +2452,16 @@ function MeetingRoomContent() {
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400">
                                 <CheckCircle size={13} /> Active in council database
                               </span>
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsBgModalOpen(true)}
+                                  className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 text-slate-200 hover:text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow transition-all cursor-pointer"
+                                >
+                                  <Sparkles size={12} className="text-amber-400" />
+                                  <span>Change Background</span>
+                                </button>
+                              </div>
                               {activeBg?.id !== 'none' && (
                                 <div className="text-[11px] text-amber-300 font-semibold bg-slate-900/90 px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5 shadow">
                                   <Sparkles size={11} className="text-amber-400" />
@@ -2472,21 +2528,7 @@ function MeetingRoomContent() {
                 ) : (
                   
                   /* GRID VIEW MATRIX: DYNAMIC INTERACTIVE TILES FOR ALL JOINED PARTICIPANTS WITH LIVE MEDIA */
-                  <div 
-                    className="flex-1 flex flex-col overflow-hidden relative rounded-3xl p-1 sm:p-2 transition-all"
-                    style={
-                      (bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur'
-                        ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                        : undefined
-                    }
-                  >
-                    {/* Ambient Stage Overlay */}
-                    {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl && activeBgUrl !== 'blur' && (
-                      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] pointer-events-none rounded-3xl" />
-                    )}
-                    {(bgTarget === 'both' || bgTarget === 'stage') && activeBgUrl === 'blur' && (
-                      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-md pointer-events-none rounded-3xl" />
-                    )}
+                  <div className="flex-1 flex flex-col overflow-hidden relative rounded-3xl p-1 sm:p-2 transition-all">
 
                     {/* Active Remote Screen Share Notification Banner */}
                     {remoteScreenSharePeerId && !isScreenSharing && (
@@ -2600,7 +2642,7 @@ function MeetingRoomContent() {
                             <div 
                               className="flex-1 flex flex-col items-center justify-center my-2 relative overflow-hidden rounded-2xl bg-black/40"
                               style={
-                                (p.isLocalUser && (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur')
+                                (p.isLocalUser && activeBgUrl && activeBgUrl !== 'blur')
                                   ? { backgroundImage: `url(${activeBgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                                   : (!p.isLocalUser && (p as any).backgroundUrl)
                                     ? { backgroundImage: `url(${(p as any).backgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -2625,13 +2667,24 @@ function MeetingRoomContent() {
                                   className="w-full h-full object-contain rounded-2xl bg-black"
                                 />
                               ) : p.isLocalUser && isVideoOn && localStream ? (
-                                <video
-                                  ref={attachLocalVideo}
-                                  autoPlay
-                                  playsInline
-                                  muted
-                                  className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
-                                />
+                                <div className="relative w-full h-full">
+                                  <video
+                                    ref={attachLocalVideo}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsBgModalOpen(true)}
+                                    className="absolute top-2 left-2 bg-slate-950/80 hover:bg-slate-900 border border-slate-700/80 hover:border-amber-500/50 text-slate-200 hover:text-white px-2 py-0.5 rounded-lg text-[9px] font-bold flex items-center gap-1 shadow transition-all cursor-pointer z-10"
+                                    title="Change Video Call Background"
+                                  >
+                                    <Sparkles size={10} className="text-amber-400" />
+                                    <span>Background</span>
+                                  </button>
+                                </div>
                               ) : !p.isLocalUser && remoteStream && remoteStream.getVideoTracks().length > 0 ? (
                                 <video
                                   autoPlay
@@ -2653,7 +2706,7 @@ function MeetingRoomContent() {
                                 />
                               ) : (
                                 <div className="relative w-full h-full flex flex-col items-center justify-center text-center p-2 sm:p-3 overflow-hidden">
-                                  {((p.isLocalUser && (bgTarget === 'both' || bgTarget === 'tile') && activeBgUrl && activeBgUrl !== 'blur') || (!p.isLocalUser && (p as any).backgroundUrl)) && (
+                                  {((p.isLocalUser && activeBgUrl && activeBgUrl !== 'blur') || (!p.isLocalUser && (p as any).backgroundUrl)) && (
                                     <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm pointer-events-none" />
                                   )}
                                   <div className="relative z-10 flex flex-col items-center">
@@ -2672,11 +2725,15 @@ function MeetingRoomContent() {
                                     <p className="text-[9px] xs:text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[110px] xs:max-w-[150px] sm:max-w-[190px]">
                                       {p.email || p.role}
                                     </p>
-                                    {p.isLocalUser && activeBg?.id !== 'none' && (
-                                      <span className="text-[8px] xs:text-[9px] text-amber-300 font-semibold bg-slate-950/80 px-2 py-0.5 rounded-full border border-amber-500/30 mt-1 inline-flex items-center gap-1 shadow">
+                                    {p.isLocalUser && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setIsBgModalOpen(true)}
+                                        className="text-[8px] xs:text-[9px] text-amber-300 font-semibold bg-slate-950/80 hover:bg-slate-900 px-2 py-0.5 rounded-full border border-amber-500/30 mt-1 inline-flex items-center gap-1 shadow cursor-pointer transition-colors"
+                                      >
                                         <Sparkles size={9} className="text-amber-400" />
-                                        <span>{activeBg.name}</span>
-                                      </span>
+                                        <span>{activeBg?.id !== 'none' ? activeBg.name : 'Choose Background'}</span>
+                                      </button>
                                     )}
                                   </div>
                                 </div>
@@ -2841,7 +2898,7 @@ function MeetingRoomContent() {
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white ring-2 ring-blue-400/50 shadow-blue-600/30'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                 }`}
-                title="Choose Video Call & Stage Background"
+                title="Choose Video Call Background"
               >
                 <Sparkles size={17} className={selectedBgId !== 'none' ? 'text-amber-300 animate-pulse' : ''} />
                 <span className="hidden lg:inline">Background</span>
@@ -3592,13 +3649,13 @@ function MeetingRoomContent() {
                   </div>
                   <div>
                     <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                      <span>Video &amp; Stage Virtual Backgrounds</span>
+                      <span>Video Call Virtual Background</span>
                       <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 rounded border border-amber-500/40 uppercase">
-                        Certified
+                        Certified HD
                       </span>
                     </h2>
                     <p className="text-[11px] text-slate-400">
-                      Choose a certified background to display under the meeting video stage and your video call.
+                      Choose a certified background to display on your personal video call tile.
                     </p>
                   </div>
                 </div>
@@ -3670,39 +3727,6 @@ function MeetingRoomContent() {
                       <Sparkles size={11} className="text-amber-400" />
                       <span>{activeBg.name}</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Target Scope Switcher */}
-                <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/80">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
-                    Apply Background To:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'both', label: 'Stage & Video Tile', desc: 'Full immersive experience' },
-                      { id: 'stage', label: 'Stage Backdrop Only', desc: 'Under meeting video area' },
-                      { id: 'tile', label: 'My Video Tile Only', desc: 'Behind your video call' },
-                    ].map((scope) => (
-                      <button
-                        key={scope.id}
-                        type="button"
-                        onClick={() => {
-                          setBgTarget(scope.id as any);
-                          if (typeof window !== 'undefined') {
-                            localStorage.setItem('nexucon_meeting_bg_target', scope.id);
-                          }
-                        }}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                          bgTarget === scope.id
-                            ? 'bg-blue-600/20 border-blue-500 text-white ring-1 ring-blue-500'
-                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="text-xs font-bold">{scope.label}</div>
-                        <div className="text-[9px] text-slate-500">{scope.desc}</div>
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -3804,6 +3828,261 @@ function MeetingRoomContent() {
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
                 >
                   Apply &amp; Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* BROWSER DEVICE PERMISSION TROUBLESHOOTING GUIDE MODAL */}
+      <AnimatePresence>
+        {isPermissionGuideOpen && (
+          <div className="fixed inset-0 z-[170] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-[#091522] border-2 border-amber-500/50 rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40">
+                    <ShieldAlert size={22} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                      <span>Enable Camera &amp; Microphone Access</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40">
+                        Browser Security
+                      </span>
+                    </h2>
+                    <p className="text-[11px] text-slate-400">
+                      Step-by-step instructions to unblock device permissions in your browser.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPermissionGuideOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Browser Selector Tabs */}
+              <div className="flex border-b border-slate-800 bg-slate-950/40 px-3 overflow-x-auto gap-1">
+                {[
+                  { id: 'chrome', label: 'Chrome / Brave', icon: Globe },
+                  { id: 'safari', label: 'Safari (Mac)', icon: Compass },
+                  { id: 'edge', label: 'Microsoft Edge', icon: Laptop },
+                  { id: 'firefox', label: 'Firefox', icon: Globe },
+                  { id: 'mobile', label: 'Mobile (iOS/Android)', icon: Smartphone },
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeGuideTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveGuideTab(tab.id as any)}
+                      className={`px-3.5 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                        isActive
+                          ? 'border-amber-400 text-amber-300 bg-amber-500/10'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Icon size={14} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Guide Content Body */}
+              <div className="p-5 overflow-y-auto space-y-4 text-xs text-slate-300">
+                {activeGuideTab === 'chrome' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">1</span>
+                        <span>Click the Lock / Site Settings icon in the address bar</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Look at the left end of the URL address bar at the top of your screen (next to <code className="text-amber-300 bg-slate-900 px-1 py-0.5 rounded font-mono">nexucon.net</code>). Click the <strong>lock (🔒)</strong> or <strong>tune sliders (🎛️)</strong> icon.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">2</span>
+                        <span>Set Camera &amp; Microphone toggles to &quot;Allow&quot;</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        In the popup menu, locate <strong>Camera</strong> and <strong>Microphone</strong>. Toggle both switches to <strong className="text-emerald-400">&quot;Allow&quot;</strong> (or click <em>Site Settings</em> and set both to Allow).
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">3</span>
+                        <span>Auto-Detection or Click &quot;Retry Connection&quot;</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Nexucon automatically listens for your permission change and will start your feed instantly. You can also click <strong>Retry Connection</strong> below.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeGuideTab === 'safari' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">1</span>
+                        <span>Open Safari Settings for this Website</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        In the macOS top menu bar, click <strong>Safari &gt; Settings for nexucon.net...</strong> (or right-click the address bar).
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">2</span>
+                        <span>Change Camera &amp; Microphone from &quot;Deny&quot; to &quot;Allow&quot;</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Find the <strong>Camera</strong> and <strong>Microphone</strong> dropdowns and set both to <strong className="text-emerald-400">&quot;Allow&quot;</strong>.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">3</span>
+                        <span>Click &quot;Retry Connection&quot; below</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Return to the meeting room window and click the <strong>Retry Connection</strong> button.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeGuideTab === 'edge' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">1</span>
+                        <span>Click the Lock Icon in Edge Address Bar</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Click the <strong>lock icon (🔒)</strong> on the left side of the address bar.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">2</span>
+                        <span>Permissions for this Site</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Change the <strong>Camera</strong> and <strong>Microphone</strong> dropdowns to <strong className="text-emerald-400">&quot;Allow&quot;</strong>.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">3</span>
+                        <span>Click &quot;Retry Connection&quot; below</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Once updated, click <strong>Retry Connection</strong> to immediately establish live video and audio.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeGuideTab === 'firefox' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">1</span>
+                        <span>Click the Permission Icon in Firefox Address Bar</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Click the crossed-out camera or microphone icon on the left of the URL bar.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">2</span>
+                        <span>Clear Blocked Status</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Click the &quot;X&quot; button next to <em>Blocked Temporarily</em> or change from Blocked to <strong className="text-emerald-400">&quot;Allowed&quot;</strong>.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">3</span>
+                        <span>Click &quot;Retry Connection&quot; below</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        The browser will prompt you to share your devices—choose your camera and microphone, check &quot;Remember this decision&quot;, and click Allow.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeGuideTab === 'mobile' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">iOS</span>
+                        <span>iPhone &amp; iPad (Safari)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Open your device <strong>Settings</strong> app &gt; <strong>Safari</strong> &gt; scroll down to <strong>Camera</strong> &amp; <strong>Microphone</strong> &gt; set to <strong className="text-emerald-400">&quot;Allow&quot;</strong>. Return to the browser and tap Retry Connection.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-white text-xs">
+                        <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">Android</span>
+                        <span>Android (Chrome)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pl-7">
+                        Tap the <strong>lock icon (🔒)</strong> next to the address bar &gt; <strong>Permissions</strong> &gt; toggle <strong>Camera</strong> and <strong>Microphone</strong> ON &gt; tap Retry Connection.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-5 py-3 border-t border-slate-800 flex items-center justify-between bg-slate-950/70">
+                <button
+                  type="button"
+                  onClick={() => setIsPermissionGuideOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Close Guide
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPermissionGuideOpen(false);
+                    handleRetryMediaPermissions();
+                  }}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/30 cursor-pointer"
+                >
+                  <RefreshCw size={13} />
+                  <span>Test &amp; Retry Now</span>
                 </button>
               </div>
             </motion.div>
